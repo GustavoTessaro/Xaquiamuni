@@ -31,7 +31,7 @@ describe('CadastroComponent registration flow', () => {
         provideHttpClientTesting(),
       ],
     }).compileComponents();
-    document.cookie = 'XSRF-TOKEN=test-request-token; path=/';
+    document.cookie = 'XSRF-TOKEN=cookie-token-not-request-token; path=/';
     fixture = TestBed.createComponent(CadastroComponent);
     http = TestBed.inject(HttpTestingController);
     fixture.detectChanges();
@@ -60,18 +60,18 @@ describe('CadastroComponent registration flow', () => {
     http.expectNone('/api/auth/csrf');
   });
 
-  it('requests CSRF before POST, sends only contract fields and native XSRF header', () => {
+  it('sends the CSRF request token before POST, independent of the cookie token', () => {
     fillValidFields(fixture);
     submit(fixture);
 
     const csrfRequest = http.expectOne('/api/auth/csrf');
     expect(csrfRequest.request.method).toBe('GET');
     http.expectNone('/api/auth/register');
-    csrfRequest.flush({ requestToken: 'test-request-token' });
+    csrfRequest.flush({ requestToken: 'request-token-from-response' });
 
     const registerRequest = http.expectOne('/api/auth/register');
     expect(registerRequest.request.method).toBe('POST');
-    expect(registerRequest.request.headers.get('X-XSRF-TOKEN')).toBe('test-request-token');
+    expect(registerRequest.request.headers.get('X-XSRF-TOKEN')).toBe('request-token-from-response');
     expect(registerRequest.request.body).toEqual({
       nomeCompleto: 'Ana Maria Silva',
       cpf: '52998224725',
@@ -199,7 +199,7 @@ describe('CadastroComponent registration flow', () => {
     expect(fixture.nativeElement.querySelector('[role="status"]').textContent)
       .toContain('Enviando');
     submit(fixture);
-    http.expectOne('/api/auth/csrf').flush({ requestToken: 'test-request-token' });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'request-token-from-response' });
     const request = http.expectOne('/api/auth/register');
     http.expectNone('/api/auth/csrf');
     request.flush({ status: 500, detail: 'generic' }, {
@@ -210,7 +210,7 @@ describe('CadastroComponent registration flow', () => {
 });
 
 function completeCsrfAndGetRegisterRequest(http: HttpTestingController) {
-  http.expectOne('/api/auth/csrf').flush({ requestToken: 'test-request-token' });
+  http.expectOne('/api/auth/csrf').flush({ requestToken: 'request-token-from-response' });
   return http.expectOne('/api/auth/register');
 }
 

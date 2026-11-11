@@ -33,8 +33,9 @@ export class CadastroService {
 
   register(request: RegisterClientRequest): Observable<RegisterClientResponse> {
     return this.csrf.getRequestToken().pipe(
-      switchMap(() =>
+      switchMap(({ requestToken }) =>
         this.http.post<RegisterClientResponse>('/api/auth/register', request, {
+          headers: { 'X-XSRF-TOKEN': requestToken },
           observe: 'response',
         }),
       ),
