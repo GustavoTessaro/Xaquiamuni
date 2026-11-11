@@ -91,6 +91,40 @@ public class DbContextRegistrationTests
     }
 
     [Fact]
+    public void AddInfrastructureServices_RegistersScopedTransactionFactorySharingContextWithoutStartingTransaction()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=XaquiamuniTransactionFactoryTest"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructureServices(configuration);
+
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IClienteTransactionFactory));
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var scopedServices = scope.ServiceProvider;
+        var transactionFactory = scopedServices.GetRequiredService<IClienteTransactionFactory>();
+        var dbContext = scopedServices.GetRequiredService<XaquiamuniDbContext>();
+        var userStore = scopedServices.GetRequiredService<IUserStore<XaquiamuniUser>>();
+        var storeContext = userStore.GetType().GetProperty("Context")!.GetValue(userStore);
+        var transactionContext = transactionFactory.GetType()
+            .GetField("_dbContext", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(transactionFactory);
+
+        Assert.Same(dbContext, storeContext);
+        Assert.Same(dbContext, transactionContext);
+        Assert.Equal(System.Data.ConnectionState.Closed, dbContext.Database.GetDbConnection().State);
+        Assert.Null(dbContext.Database.CurrentTransaction);
+    }
+
+    [Fact]
     public void IdentityModel_EnforcesUniqueNormalizedEmailWhenPresent()
     {
         var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()
