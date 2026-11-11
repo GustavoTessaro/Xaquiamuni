@@ -80,6 +80,8 @@ public sealed class EmailOutboxMessage
         LeaseExpiresAtUtc = leaseExpiresAtUtc is null
             ? null
             : RequireUtc(leaseExpiresAtUtc.Value, nameof(leaseExpiresAtUtc));
+
+        ValidateInitialState();
     }
 
     public Guid Id { get; private set; }
@@ -95,6 +97,129 @@ public sealed class EmailOutboxMessage
     public byte[] RowVersion { get; private set; } = [];
 
     public override string ToString() => "[EmailOutboxMessage]";
+
+    public bool TryClaim(DateTimeOffset nowUtc, TimeSpan leaseDuration)
+    {
+        nowUtc = RequireUtc(nowUtc, nameof(nowUtc));
+        if (leaseDuration <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(leaseDuration));
+        }
+
+        var claimable = Status switch
+        {
+            EmailOutboxMessageStatus.Pending => NextAttemptAtUtc <= nowUtc,
+            EmailOutboxMessageStatus.Processing =>
+                LeaseExpiresAtUtc is not null && LeaseExpiresAtUtc.Value <= nowUtc,
+            _ => false
+        };
+
+        if (!claimable)
+        {
+            return false;
+        }
+
+        if (Attempts >= EmailOutboxRetryPolicy.MaximumAttempts)
+        {
+            MoveToDeadLetter();
+            return false;
+        }
+
+        Attempts++;
+        Status = EmailOutboxMessageStatus.Processing;
+        LeaseExpiresAtUtc = nowUtc + leaseDuration;
+        return true;
+    }
+
+    public void Complete(DateTimeOffset completedAtUtc)
+    {
+        EnsureActiveLease(completedAtUtc);
+
+        Status = EmailOutboxMessageStatus.Completed;
+        CompletedAtUtc = completedAtUtc;
+        LeaseExpiresAtUtc = null;
+        ActiveDeduplicationKey = null;
+    }
+
+    public void RetryTransientFailure(DateTimeOffset failedAtUtc, double jitterSample)
+    {
+        EnsureActiveLease(failedAtUtc);
+
+        if (Attempts >= EmailOutboxRetryPolicy.MaximumAttempts)
+        {
+            MoveToDeadLetter();
+            return;
+        }
+
+        var retryDelay = EmailOutboxRetryPolicy.GetRetryDelay(Attempts, jitterSample);
+        NextAttemptAtUtc = failedAtUtc + retryDelay;
+        Status = EmailOutboxMessageStatus.Pending;
+        LeaseExpiresAtUtc = null;
+    }
+
+    public void MarkPermanentFailure(DateTimeOffset failedAtUtc)
+    {
+        EnsureActiveLease(failedAtUtc);
+        MoveToDeadLetter();
+    }
+
+    public void Cancel()
+    {
+        if (Status is not (EmailOutboxMessageStatus.Pending or EmailOutboxMessageStatus.Processing))
+        {
+            throw new InvalidOperationException("Only pending or processing messages can be cancelled.");
+        }
+
+        Status = EmailOutboxMessageStatus.Cancelled;
+        CompletedAtUtc = null;
+        LeaseExpiresAtUtc = null;
+        ActiveDeduplicationKey = null;
+    }
+
+    private void EnsureActiveLease(DateTimeOffset nowUtc)
+    {
+        nowUtc = RequireUtc(nowUtc, nameof(nowUtc));
+        if (Status != EmailOutboxMessageStatus.Processing
+            || LeaseExpiresAtUtc is null
+            || LeaseExpiresAtUtc.Value <= nowUtc)
+        {
+            throw new InvalidOperationException("The message does not have an active processing lease.");
+        }
+    }
+
+    private void MoveToDeadLetter()
+    {
+        Status = EmailOutboxMessageStatus.DeadLetter;
+        CompletedAtUtc = null;
+        LeaseExpiresAtUtc = null;
+    }
+
+    private void ValidateInitialState()
+    {
+        var valid = Status switch
+        {
+            EmailOutboxMessageStatus.Pending =>
+                CompletedAtUtc is null && LeaseExpiresAtUtc is null,
+            EmailOutboxMessageStatus.Processing =>
+                CompletedAtUtc is null && LeaseExpiresAtUtc is not null && Attempts > 0,
+            EmailOutboxMessageStatus.Completed =>
+                CompletedAtUtc is not null
+                && LeaseExpiresAtUtc is null
+                && ActiveDeduplicationKey is null,
+            EmailOutboxMessageStatus.DeadLetter =>
+                CompletedAtUtc is null && LeaseExpiresAtUtc is null,
+            EmailOutboxMessageStatus.Cancelled =>
+                CompletedAtUtc is null
+                && LeaseExpiresAtUtc is null
+                && ActiveDeduplicationKey is null,
+            _ => false
+        };
+
+        if (!valid)
+        {
+            throw new ArgumentException("The initial message state is inconsistent.", nameof(Status));
+        }
+    }
 
     private static DateTimeOffset RequireUtc(DateTimeOffset value, string parameterName)
     {

@@ -83,6 +83,26 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         return new XaquiamuniDbContext(options);
     }
 
+    public async Task EnableReadCommittedSnapshotAsync()
+    {
+        if (!_databaseCreated)
+        {
+            throw new InvalidOperationException("The isolated SQL Server test database is not available.");
+        }
+
+        var masterConnectionString = new SqlConnectionStringBuilder(_connectionString)
+        {
+            InitialCatalog = "master"
+        }.ConnectionString;
+
+        await using var connection = new SqlConnection(masterConnectionString);
+        await connection.OpenAsync().ConfigureAwait(false);
+        await using var command = connection.CreateCommand();
+        command.CommandText =
+            $"ALTER DATABASE {QuoteIdentifier(_databaseName)} SET READ_COMMITTED_SNAPSHOT ON WITH ROLLBACK IMMEDIATE;";
+        await command.ExecuteNonQueryAsync().ConfigureAwait(false);
+    }
+
     public async ValueTask DisposeAsync()
     {
         try
