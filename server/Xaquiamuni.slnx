@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/" />
+  <Folder Name="/src/Api/">
+    <Project Path="src/Api/Xaquiamuni.Api.csproj" />
+  </Folder>
+  <Folder Name="/src/Aplicacao/">
+    <Project Path="src/Aplicacao/Xaquiamuni.Aplicacao.csproj" />
+  </Folder>
+  <Folder Name="/src/Dominio/">
+    <Project Path="src/Dominio/Xaquiamuni.Dominio.csproj" />
+  </Folder>
+  <Folder Name="/src/Infraestrutura/">
+    <Project Path="src/Infraestrutura/Xaquiamuni.Infraestrutura.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Xaquiamuni.Tests/Xaquiamuni.Tests.csproj" />
+  </Folder>
+</Solution>

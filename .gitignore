@@ -1,0 +1,42 @@
+# .NET
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+.vs/
+*.user
+*.suo
+*.cache
+*.sln.docstates
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local.json
+*.secrets.json
+secrets.json
+*.pfx
+*.p12
+*.key
+
+# Node.js and Angular
+node_modules/
+dist/
+.angular/
+coverage/
+.npm/
+*.tsbuildinfo
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+# Logs and temporary files
+*.log
+*.tmp
+
+# Operating system files
+.DS_Store
+Thumbs.db
