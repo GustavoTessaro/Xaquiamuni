@@ -153,6 +153,91 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClienteEndereco", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("Id");
+
+                    b.Property<string>("Bairro")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("Bairro");
+
+                    b.Property<string>("Cep")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("nvarchar(8)")
+                        .HasColumnName("Cep");
+
+                    b.Property<string>("Cidade")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("Cidade");
+
+                    b.Property<Guid>("ClienteUserId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("ClienteUserId");
+
+                    b.Property<string>("Complemento")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .HasColumnName("Complemento");
+
+                    b.Property<bool>("IsDefault")
+                        .HasColumnType("bit")
+                        .HasColumnName("IsDefault");
+
+                    b.Property<string>("Logradouro")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("Logradouro");
+
+                    b.Property<string>("Numero")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)")
+                        .HasColumnName("Numero");
+
+                    b.Property<string>("Uf")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("nvarchar(2)")
+                        .HasColumnName("Uf");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteUserId")
+                        .HasDatabaseName("IX_ClienteEnderecos_ClienteUserId");
+
+                    b.HasIndex(new[] { "ClienteUserId" }, "UX_ClienteEnderecos_DefaultPerClient")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ClienteEnderecos_DefaultPerClient")
+                        .HasFilter("[IsDefault] = 1");
+
+                    b.ToTable("ClienteEnderecos", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClientePerfil", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier")
+                        .HasColumnName("UserId");
+
+                    b.Property<string>("NomeCompleto")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("NomeCompleto");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("ClientePerfis", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -269,6 +354,80 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClienteEndereco", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ClientePerfil", null)
+                        .WithMany()
+                        .HasForeignKey("ClienteUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClientePerfil", b =>
+                {
+                    b.HasOne("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", null)
+                        .WithOne()
+                        .HasForeignKey("Xaquiamuni.Dominio.Entidades.ClientePerfil", "UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Valores.CpfProtegido", "CpfProtegido", b1 =>
+                        {
+                            b1.Property<Guid>("ClientePerfilUserId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<string>("AuthenticationTag")
+                                .IsRequired()
+                                .HasMaxLength(24)
+                                .HasColumnType("nvarchar(24)")
+                                .HasColumnName("CpfAuthenticationTag");
+
+                            b1.Property<string>("Ciphertext")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("nvarchar(16)")
+                                .HasColumnName("CpfCiphertext");
+
+                            b1.Property<string>("EncryptionKeyVersion")
+                                .IsRequired()
+                                .HasMaxLength(32)
+                                .HasColumnType("nvarchar(32)")
+                                .HasColumnName("CpfEncryptionKeyVersion");
+
+                            b1.Property<string>("Fingerprint")
+                                .IsRequired()
+                                .HasMaxLength(64)
+                                .HasColumnType("nvarchar(64)")
+                                .HasColumnName("CpfFingerprint");
+
+                            b1.Property<string>("FingerprintKeyVersion")
+                                .IsRequired()
+                                .HasMaxLength(32)
+                                .HasColumnType("nvarchar(32)")
+                                .HasColumnName("CpfFingerprintKeyVersion");
+
+                            b1.Property<string>("Nonce")
+                                .IsRequired()
+                                .HasMaxLength(16)
+                                .HasColumnType("nvarchar(16)")
+                                .HasColumnName("CpfNonce");
+
+                            b1.HasKey("ClientePerfilUserId");
+
+                            b1.HasIndex("Fingerprint")
+                                .IsUnique()
+                                .HasDatabaseName("UX_ClientePerfis_CpfFingerprint");
+
+                            b1.ToTable("ClientePerfis");
+
+                            b1.WithOwner()
+                                .HasForeignKey("ClientePerfilUserId");
+                        });
+
+                    b.Navigation("CpfProtegido")
                         .IsRequired();
                 });
 #pragma warning restore 612, 618
