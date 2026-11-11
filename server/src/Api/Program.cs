@@ -1,3 +1,4 @@
+using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Infraestrutura;
 
@@ -7,6 +8,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddXaquiamuniAuthentication();
 builder.Services.AddXaquiamuniAuthorization();
 
 var app = builder.Build();
@@ -18,6 +20,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
