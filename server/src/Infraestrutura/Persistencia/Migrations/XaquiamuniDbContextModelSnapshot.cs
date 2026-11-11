@@ -306,6 +306,72 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ActiveDeduplicationKey")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)");
+
+                    b.Property<int>("Attempts")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTimeOffset?>("CompletedAtUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<DateTimeOffset?>("LeaseExpiresAtUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<short>("MessageType")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset>("NextAttemptAtUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<byte[]>("RowVersion")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.Property<short>("Status")
+                        .HasColumnType("smallint");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ActiveDeduplicationKey")
+                        .IsUnique()
+                        .HasDatabaseName("UX_EmailOutbox_ActiveDeduplicationKey")
+                        .HasFilter("[ActiveDeduplicationKey] IS NOT NULL");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_EmailOutbox_UserId");
+
+                    b.HasIndex("Status", "NextAttemptAtUtc", "CreatedAtUtc")
+                        .HasDatabaseName("IX_EmailOutbox_Queue");
+
+                    b.ToTable("EmailOutbox", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_EmailOutbox_Attempts_NonNegative", "[Attempts] >= 0");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_MessageType_Valid", "[MessageType] IN (1)");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_Status_Valid", "[Status] IN (1, 2, 3, 4, 5)");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_Timestamps_Utc", "DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND DATEPART(TZOFFSET, [NextAttemptAtUtc]) = 0 AND ([CompletedAtUtc] IS NULL OR DATEPART(TZOFFSET, [CompletedAtUtc]) = 0) AND ([LeaseExpiresAtUtc] IS NULL OR DATEPART(TZOFFSET, [LeaseExpiresAtUtc]) = 0)");
+                        });
+                });
+
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<System.Guid>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole<System.Guid>", null)
@@ -428,6 +494,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
 
                     b.Navigation("CpfProtegido")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
+                {
+                    b.HasOne("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 #pragma warning restore 612, 618
