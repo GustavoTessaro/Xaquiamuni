@@ -1,0 +1,52 @@
+:host {
+  display: block;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: #334155;
+}
+
+.field-control {
+  display: block;
+  width: 100%;
+  min-height: 2.75rem;
+  border: 1px solid #dbe3dc;
+  border-radius: 0.75rem;
+  background-color: #fff;
+  padding: 0.65rem 0.8rem;
+  color: #17231d;
+  font-size: 0.925rem;
+  outline: none;
+  transition: border-color 150ms ease, box-shadow 150ms ease;
+}
+
+.field-control::placeholder {
+  color: #a0aaa3;
+}
+
+.field-control:focus {
+  border-color: #16784b;
+  box-shadow: 0 0 0 3px rgb(22 120 75 / 12%);
+}
+
+.field-control[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.field-error {
+  margin-top: 0.35rem;
+  color: #b91c1c;
+  font-size: 0.75rem;
+  line-height: 1.15rem;
+}
+
+.field-hint {
+  margin-top: 0.35rem;
+  color: #64748b;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+}
