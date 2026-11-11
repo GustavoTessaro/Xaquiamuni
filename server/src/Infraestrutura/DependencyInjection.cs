@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Identidade;
@@ -42,9 +43,20 @@ public static class DependencyInjection
                 options.Password.RequireLowercase = true;
                 options.Password.RequireUppercase = true;
                 options.Password.RequireNonAlphanumeric = true;
+                options.Lockout.MaxFailedAccessAttempts = 5;
+                options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+                options.Lockout.AllowedForNewUsers = true;
             })
             .AddRoles<IdentityRole<Guid>>()
-            .AddEntityFrameworkStores<XaquiamuniDbContext>();
+            .AddEntityFrameworkStores<XaquiamuniDbContext>()
+            .AddSignInManager();
+
+        services.Replace(ServiceDescriptor.Scoped<SignInManager<XaquiamuniUser>>(serviceProvider =>
+        {
+            var signInManager = ActivatorUtilities.CreateInstance<SignInManager<XaquiamuniUser>>(serviceProvider);
+            signInManager.AuthenticationScheme = XaquiamuniIdentityDefaults.AuthenticationScheme;
+            return signInManager;
+        }));
 
         services.Configure<CpfProtectionOptions>(configuration.GetSection("CpfProtection"));
         services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();

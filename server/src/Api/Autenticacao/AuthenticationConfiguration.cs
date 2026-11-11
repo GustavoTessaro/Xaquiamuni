@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Api.Autenticacao;
 
 public static class AuthenticationConfiguration
 {
-    public const string CookieScheme = CookieAuthenticationDefaults.AuthenticationScheme;
+    public const string CookieScheme = XaquiamuniIdentityDefaults.AuthenticationScheme;
     public const string CookieName = "__Host-Xaquiamuni.Auth";
 
     public static IServiceCollection AddXaquiamuniAuthentication(this IServiceCollection services)
