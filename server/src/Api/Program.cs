@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddXaquiamuniAuthentication();
+builder.Services.AddXaquiamuniAntiforgery();
 builder.Services.AddXaquiamuniAuthorization();
 
 var app = builder.Build();
@@ -24,6 +25,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapXaquiamuniCsrfEndpoint();
 
 app.Run();
 
