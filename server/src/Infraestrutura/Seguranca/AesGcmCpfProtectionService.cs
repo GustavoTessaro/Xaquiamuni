@@ -33,7 +33,7 @@ public sealed class AesGcmCpfProtectionService : ICpfProtectionService
         }
     }
 
-    public ProtectedCpf Protect(Cpf cpf)
+    public CpfProtegido Protect(Cpf cpf)
     {
         ArgumentNullException.ThrowIfNull(cpf);
 
@@ -53,7 +53,7 @@ public sealed class AesGcmCpfProtectionService : ICpfProtectionService
                 GetAssociatedData(_currentEncryptionKeyVersion));
 
             var fingerprint = CreateFingerprint(cpf, _currentFingerprintKeyVersion);
-            return new ProtectedCpf(
+            return new CpfProtegido(
                 Convert.ToBase64String(ciphertext),
                 Convert.ToBase64String(nonce),
                 Convert.ToBase64String(tag),
@@ -67,7 +67,7 @@ public sealed class AesGcmCpfProtectionService : ICpfProtectionService
         }
     }
 
-    public Cpf RecoverForAuthorizedUse(ProtectedCpf protectedCpf)
+    public Cpf RecoverForAuthorizedUse(CpfProtegido protectedCpf)
     {
         ArgumentNullException.ThrowIfNull(protectedCpf);
 

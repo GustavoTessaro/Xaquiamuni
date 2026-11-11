@@ -4,9 +4,9 @@ namespace Xaquiamuni.Aplicacao.Seguranca;
 
 public interface ICpfProtectionService
 {
-    ProtectedCpf Protect(Cpf cpf);
+    CpfProtegido Protect(Cpf cpf);
 
-    Cpf RecoverForAuthorizedUse(ProtectedCpf protectedCpf);
+    Cpf RecoverForAuthorizedUse(CpfProtegido protectedCpf);
 
     string CreateFingerprintForLookup(Cpf cpf);
 }

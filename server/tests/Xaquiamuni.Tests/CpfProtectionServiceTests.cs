@@ -20,7 +20,7 @@ public class CpfProtectionServiceTests
         Assert.Equal(cpf, recoveredCpf);
         Assert.Equal("enc-v1", protectedCpf.EncryptionKeyVersion);
         Assert.Equal("fp-v1", protectedCpf.FingerprintKeyVersion);
-        Assert.Equal("[Protected CPF]", protectedCpf.ToString());
+        Assert.Equal("[CPF protegido]", protectedCpf.ToString());
     }
 
     [Fact]
@@ -151,12 +151,12 @@ public class CpfProtectionServiceTests
         return Assert.IsType<Cpf>(cpf);
     }
 
-    private static ProtectedCpf CopyWith(
-        ProtectedCpf source,
+    private static CpfProtegido CopyWith(
+        CpfProtegido source,
         string? ciphertext = null,
         string? encryptionKeyVersion = null,
         string? fingerprintKeyVersion = null) =>
-        new(
+        new CpfProtegido(
             ciphertext ?? source.Ciphertext,
             source.Nonce,
             source.AuthenticationTag,
