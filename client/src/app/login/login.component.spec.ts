@@ -150,6 +150,42 @@ describe('LoginComponent', () => {
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
   });
 
+  it('updates the login DOM after asynchronous login and session confirmation', () => {
+    const loginResult = new Subject<void>();
+    const sessionResult = new Subject<AuthSession | null>();
+    login.mockReturnValue(loginResult);
+    obterSessao.mockClear();
+    obterSessao
+      .mockReturnValueOnce(of(null))
+      .mockReturnValueOnce(sessionResult);
+    fixture = TestBed.createComponent(LoginComponent);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('form')).not.toBeNull();
+    setValidFields(fixture);
+    submit(fixture);
+    expect(fixture.nativeElement.textContent).toContain('Autenticando sua conta.');
+
+    loginResult.next();
+    loginResult.complete();
+    fixture.detectChanges();
+
+    expect(obterSessao).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.querySelector('[role="status"]').textContent)
+      .toContain('Verificando sua sessão');
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Você está conectado');
+
+    sessionResult.next({ userId: '4c4a31ce-0a27-4c0e-b903-a96f62fb81df' });
+    sessionResult.complete();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Sessão ativa');
+    expect(fixture.nativeElement.textContent).toContain('Você está conectado.');
+    expect(fixture.nativeElement.textContent).toContain('Login realizado com sucesso.');
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+  });
+
   it('does not claim login when /me confirms there is no session', () => {
     login.mockReturnValue(of(undefined));
     obterSessao.mockClear();
