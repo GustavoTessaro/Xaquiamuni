@@ -23,10 +23,14 @@ if (app.Environment.IsDevelopment())
 app.Use(async (context, next) =>
 {
     if (HttpMethods.IsPost(context.Request.Method)
-        && string.Equals(
-            context.Request.Path.Value,
-            AuthEndpoints.RegisterEndpoint,
-            StringComparison.OrdinalIgnoreCase))
+        && (string.Equals(
+                context.Request.Path.Value,
+                AuthEndpoints.RegisterEndpoint,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.Request.Path.Value,
+                AuthEndpoints.LoginEndpoint,
+                StringComparison.OrdinalIgnoreCase)))
     {
         context.Response.Headers.CacheControl = "no-store";
     }

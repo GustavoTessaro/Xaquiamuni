@@ -1,3 +1,4 @@
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 
 namespace Xaquiamuni.Api.Autenticacao;
@@ -5,6 +6,7 @@ namespace Xaquiamuni.Api.Autenticacao;
 public static class AuthEndpoints
 {
     public const string RegisterEndpoint = "/api/auth/register";
+    public const string LoginEndpoint = "/api/auth/login";
 
     public static IEndpointRouteBuilder MapXaquiamuniAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -19,7 +21,46 @@ public static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status409Conflict)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
 
+        endpoints.MapPost(LoginEndpoint, LoginAsync)
+            .AllowAnonymous()
+            .RequireXaquiamuniAntiforgery()
+            .WithName("LoginClient")
+            .WithSummary("Autentica uma conta de cliente.")
+            .WithDescription("Autentica clientes sem revelar se uma conta existe.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status401Unauthorized);
+
         return endpoints;
+    }
+
+    private static async Task<IResult> LoginAsync(
+        LoginClientRequest? request,
+        ILoginCliente loginCliente,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Email) || string.IsNullOrWhiteSpace(request.Senha))
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Requisição inválida",
+                detail: "Informe e-mail e senha.");
+        }
+
+        var result = await loginCliente.ExecuteAsync(
+            new LoginClienteInput
+            {
+                Email = request.Email,
+                Senha = request.Senha
+            },
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Succeeded
+            ? Results.NoContent()
+            : Results.Problem(
+                statusCode: StatusCodes.Status401Unauthorized,
+                title: "Falha na autenticação",
+                detail: "Não foi possível autenticar com os dados informados.");
     }
 
     private static async Task<IResult> RegisterAsync(
@@ -93,6 +134,16 @@ public static class AuthEndpoints
                 detail: "Não foi possível concluir o cadastro neste momento.");
         }
     }
+}
+
+/// <summary>Credenciais públicas usadas para autenticar uma conta de cliente.</summary>
+public sealed record LoginClientRequest
+{
+    /// <summary>E-mail associado à conta.</summary>
+    public string? Email { get; init; }
+
+    /// <summary>Senha da conta.</summary>
+    public string? Senha { get; init; }
 }
 
 /// <summary>Dados públicos necessários para solicitar o cadastro de um cliente.</summary>
