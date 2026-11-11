@@ -125,6 +125,53 @@ public class DbContextRegistrationTests
     }
 
     [Fact]
+    public void AddInfrastructureServices_RegistersCustomerUseCaseAndIdentityAdapterAsScoped()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=XaquiamuniRegistrationTest",
+                ["CpfProtection:CurrentEncryptionKeyVersion"] = "enc-test",
+                ["CpfProtection:EncryptionKeys:enc-test"] = Convert.ToBase64String(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(32)),
+                ["CpfProtection:CurrentFingerprintKeyVersion"] = "fp-test",
+                ["CpfProtection:FingerprintKeys:fp-test"] = Convert.ToBase64String(
+                    System.Security.Cryptography.RandomNumberGenerator.GetBytes(32))
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructureServices(configuration);
+
+        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(ICadastrarCliente)).Lifetime);
+        Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IClienteIdentityService)).Lifetime);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var scoped = scope.ServiceProvider;
+        var useCase = scoped.GetRequiredService<ICadastrarCliente>();
+        var identityAdapter = scoped.GetRequiredService<IClienteIdentityService>();
+        var transactionFactory = scoped.GetRequiredService<IClienteTransactionFactory>();
+        var dbContext = scoped.GetRequiredService<XaquiamuniDbContext>();
+        var identityManager = scoped.GetRequiredService<UserManager<XaquiamuniUser>>();
+        var userStore = scoped.GetRequiredService<IUserStore<XaquiamuniUser>>();
+        var userStoreContext = userStore.GetType().GetProperty("Context")!.GetValue(userStore);
+        var transactionContext = transactionFactory.GetType()
+            .GetField("_dbContext", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!
+            .GetValue(transactionFactory);
+
+        Assert.NotNull(useCase);
+        Assert.NotNull(identityAdapter);
+        Assert.Same(dbContext, userStoreContext);
+        Assert.Same(dbContext, transactionContext);
+        Assert.Equal(System.Data.ConnectionState.Closed, dbContext.Database.GetDbConnection().State);
+        Assert.Null(dbContext.Database.CurrentTransaction);
+        Assert.NotNull(identityManager);
+    }
+
+    [Fact]
     public void IdentityModel_EnforcesUniqueNormalizedEmailWhenPresent()
     {
         var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()

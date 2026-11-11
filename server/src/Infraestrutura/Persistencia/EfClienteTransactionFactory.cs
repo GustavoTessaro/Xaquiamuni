@@ -15,6 +15,11 @@ public sealed class EfClienteTransactionFactory : IClienteTransactionFactory
     public async Task<IClienteTransaction> BeginTransactionAsync(
         CancellationToken cancellationToken = default)
     {
+        if (_dbContext.Database.CurrentTransaction is not null)
+        {
+            throw new InvalidOperationException("Já existe uma transação ativa para este contexto.");
+        }
+
         var transaction = await _dbContext.Database
             .BeginTransactionAsync(cancellationToken)
             .ConfigureAwait(false);

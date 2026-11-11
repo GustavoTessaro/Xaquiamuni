@@ -27,6 +27,9 @@ public static class DependencyInjection
         });
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
+        services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
+        services.AddScoped<CadastroClienteInputValidator>();
+        services.AddScoped<ICadastrarCliente, CadastrarCliente>();
 
         services
             .AddIdentityCore<XaquiamuniUser>(options =>

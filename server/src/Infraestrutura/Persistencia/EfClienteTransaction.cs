@@ -1,3 +1,6 @@
+using System.Data.Common;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xaquiamuni.Aplicacao.Cadastro;
 
@@ -18,16 +21,39 @@ public sealed class EfClienteTransaction : IClienteTransaction
         _transaction = transaction;
     }
 
-    public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfUnavailable();
-        return _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            return await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsDuplicateCpf(exception))
+        {
+            throw new ClienteCpfDuplicadoException();
+        }
+        catch (DbUpdateException)
+        {
+            throw new ClientePersistenceException();
+        }
+        catch (DbException)
+        {
+            throw new ClientePersistenceException();
+        }
     }
 
     public async Task CommitAsync(CancellationToken cancellationToken = default)
     {
         ThrowIfUnavailable();
-        await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await _transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (DbException)
+        {
+            throw new ClientePersistenceException();
+        }
+
         _completed = true;
     }
 
@@ -67,5 +93,21 @@ public sealed class EfClienteTransaction : IClienteTransaction
         {
             throw new InvalidOperationException("A transação já foi concluída.");
         }
+    }
+
+    private static bool IsDuplicateCpf(DbUpdateException exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is SqlException sqlException
+                && sqlException.Errors.Cast<SqlError>().Any(error =>
+                    (error.Number is 2601 or 2627)
+                    && error.Message.Contains("UX_ClientePerfis_CpfFingerprint", StringComparison.OrdinalIgnoreCase)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
