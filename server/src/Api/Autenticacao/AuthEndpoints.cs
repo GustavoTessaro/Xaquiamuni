@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Api.Autorizacao;
@@ -10,6 +11,7 @@ public static class AuthEndpoints
     public const string RegisterEndpoint = "/api/auth/register";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
+    public const string LogoutEndpoint = "/api/auth/logout";
 
     public static IEndpointRouteBuilder MapXaquiamuniAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -43,7 +45,24 @@ public static class AuthEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        endpoints.MapPost(LogoutEndpoint, (Delegate)LogoutAsync)
+            .RequireXaquiamuniAntiforgery()
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .WithName("LogoutClient")
+            .WithSummary("Encerra a sessão de cliente atual.")
+            .WithDescription("Remove o cookie de autenticação da sessão atual do navegador.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return endpoints;
+    }
+
+    private static async Task<IResult> LogoutAsync(HttpContext context)
+    {
+        await context.SignOutAsync(AuthenticationConfiguration.CookieScheme).ConfigureAwait(false);
+        return Results.NoContent();
     }
 
     private static IResult GetCurrentClient(HttpContext context)

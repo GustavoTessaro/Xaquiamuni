@@ -31,6 +31,10 @@ app.Use(async (context, next) =>
             || string.Equals(
                 context.Request.Path.Value,
                 AuthEndpoints.LoginEndpoint,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.Request.Path.Value,
+                AuthEndpoints.LogoutEndpoint,
                 StringComparison.OrdinalIgnoreCase));
     var isCurrentClientRequest =
         HttpMethods.IsGet(context.Request.Method)
