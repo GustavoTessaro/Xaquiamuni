@@ -6,6 +6,10 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
+import { HttpErrorResponse } from '@angular/common/http';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { finalize } from 'rxjs';
+import { CadastroService, RegisterClientRequest } from './cadastro.service';
 import {
   brazilianCpfValidator,
   brazilianEmailValidator,
@@ -14,6 +18,7 @@ import {
   cepValidator,
   normalizedTextValidator,
   optionalNormalizedTextValidator,
+  normalizeRegistrationDigits,
   passwordsMatchValidator,
 } from './registration.validators';
 
@@ -46,7 +51,16 @@ type RegistrationControls = {
 })
 export class CadastroComponent {
   protected readonly submitted = signal(false);
-  protected readonly readyMessage = signal('');
+  protected readonly registering = signal(false);
+  protected readonly successMessage = signal('');
+  protected readonly errorMessage = signal('');
+  protected readonly serverErrors = signal<Record<string, string>>({});
+
+  constructor(private readonly cadastroService: CadastroService) {
+    this.form.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe(() => this.serverErrors.set({}));
+  }
 
   protected readonly form = new FormGroup<RegistrationControls>({
     nomeCompleto: new FormControl('', {
@@ -114,15 +128,122 @@ export class CadastroComponent {
   }
 
   protected submit(): void {
+    if (this.registering()) {
+      return;
+    }
+
     this.submitted.set(true);
-    this.readyMessage.set('');
+    this.successMessage.set('');
+    this.errorMessage.set('');
+    this.serverErrors.set({});
     this.form.markAllAsTouched();
 
     if (this.form.invalid) {
       return;
     }
 
-    this.readyMessage.set('Dados válidos e prontos para a próxima etapa. Nenhum cadastro foi enviado.');
+    const formValue = this.form.getRawValue();
+    const request: RegisterClientRequest = {
+      nomeCompleto: formValue.nomeCompleto,
+      cpf: normalizeRegistrationDigits(formValue.cpf),
+      email: formValue.email,
+      telefone: normalizeRegistrationDigits(formValue.telefone),
+      senha: formValue.senha,
+      enderecoInicial: {
+        cep: normalizeRegistrationDigits(formValue.enderecoInicial.cep),
+        uf: formValue.enderecoInicial.uf,
+        cidade: formValue.enderecoInicial.cidade,
+        bairro: formValue.enderecoInicial.bairro,
+        logradouro: formValue.enderecoInicial.logradouro,
+        numero: formValue.enderecoInicial.numero,
+        complemento: formValue.enderecoInicial.complemento,
+      },
+    };
+
+    this.registering.set(true);
+    this.cadastroService.register(request)
+      .pipe(finalize(() => this.registering.set(false)))
+      .subscribe({
+        next: () => {
+          this.form.reset();
+          this.submitted.set(false);
+          this.successMessage.set(
+            'Cadastro criado. Você poderá continuar usando a conta após as próximas etapas de acesso.',
+          );
+        },
+        error: (error: unknown) => this.handleRegistrationError(error),
+      });
+  }
+
+  protected serverFieldError(field: string): string | null {
+    return this.serverErrors()[field] ?? null;
+  }
+
+  private handleRegistrationError(error: unknown): void {
+    if (!(error instanceof HttpErrorResponse)) {
+      this.errorMessage.set('Não foi possível concluir o cadastro. Tente novamente.');
+      return;
+    }
+
+    if (error.status === 400) {
+      const fieldErrors = this.readFieldErrors(error.error);
+      this.serverErrors.set(fieldErrors);
+      this.errorMessage.set(
+        Object.keys(fieldErrors).length > 0
+          ? 'Revise os campos indicados e tente novamente.'
+          : 'Não foi possível validar os dados. Revise o formulário e tente novamente.',
+      );
+      return;
+    }
+
+    if (error.status === 409) {
+      this.errorMessage.set(
+        'Não foi possível concluir o cadastro com os dados informados. Verifique os dados e tente novamente.',
+      );
+      return;
+    }
+
+    this.errorMessage.set('O serviço está indisponível no momento. Tente novamente.');
+  }
+
+  private readFieldErrors(body: unknown): Record<string, string> {
+    if (typeof body !== 'object' || body === null || !('errors' in body)) {
+      return {};
+    }
+
+    const errors = body.errors;
+    if (typeof errors !== 'object' || errors === null) {
+      return {};
+    }
+
+    const fieldMap: Record<string, string> = {
+      NomeCompleto: 'nomeCompleto',
+      Cpf: 'cpf',
+      Email: 'email',
+      Telefone: 'telefone',
+      Senha: 'senha',
+      'EnderecoInicial.Cep': 'cep',
+      'EnderecoInicial.Uf': 'uf',
+      'EnderecoInicial.Cidade': 'cidade',
+      'EnderecoInicial.Bairro': 'bairro',
+      'EnderecoInicial.Logradouro': 'logradouro',
+      'EnderecoInicial.Numero': 'numero',
+      'EnderecoInicial.Complemento': 'complemento',
+    };
+    const fieldErrors: Record<string, string> = {};
+
+    for (const [serverField, controlName] of Object.entries(fieldMap)) {
+      const messages = (errors as Record<string, unknown>)[serverField];
+      if (Array.isArray(messages)) {
+        const safeMessage = messages.find(
+          (message): message is string => typeof message === 'string',
+        );
+        if (safeMessage) {
+          fieldErrors[controlName] = safeMessage;
+        }
+      }
+    }
+    return fieldErrors;
   }
 
   protected maskCpf(event: Event): void {

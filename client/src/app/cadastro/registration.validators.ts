@@ -41,12 +41,12 @@ export const brazilianPhoneValidator: ValidatorFn = (
     return { brazilianPhone: true };
   }
 
-  const areaCode = Number(phone.slice(0, 2));
+  const areaCode = phone.slice(0, 2);
   const subscriberStart = phone[2];
   const validSubscriber = phone.length === 11
     ? subscriberStart === '9'
     : subscriberStart >= '2' && subscriberStart <= '5';
-  return areaCode >= 11 && areaCode <= 99 && validSubscriber
+  return areaCode[0] !== '0' && areaCode[1] !== '0' && validSubscriber
     ? null
     : { brazilianPhone: true };
 };
