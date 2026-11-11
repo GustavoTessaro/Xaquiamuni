@@ -2,8 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
+using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Infraestrutura;
 
@@ -35,6 +37,9 @@ public static class DependencyInjection
             })
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<XaquiamuniDbContext>();
+
+        services.Configure<CpfProtectionOptions>(configuration.GetSection("CpfProtection"));
+        services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();
 
         return services;
     }
