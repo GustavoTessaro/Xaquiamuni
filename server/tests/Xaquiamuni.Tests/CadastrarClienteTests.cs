@@ -83,6 +83,26 @@ public class CadastrarClienteTests
         Assert.Equal(["role-check", "begin", "identity-create", "rollback"], fixture.Calls);
     }
 
+    [Fact]
+    public async Task ExecuteAsync_QuandoSenhaIdentityRejeitadaRetornaValidacaoEFazRollback()
+    {
+        var fixture = new Fixture();
+        fixture.Identity.CreateResult =
+            ClienteIdentityOperationResult.PasswordValidationFailed(["PasswordTooShort"]);
+
+        var result = await fixture.UseCase.ExecuteAsync(ValidInput());
+
+        Assert.Equal(CadastroClienteStatus.PasswordValidationFailed, result.Status);
+        Assert.Equal(CadastroClienteFailureCategory.IDENTITY, result.FailureCategory);
+        Assert.Equal(CadastroClienteFailureStage.IDENTITY_USER_CREATE, result.FailureStage);
+        Assert.Equal(["PasswordTooShort"], result.SafeDiagnosticCodes);
+        Assert.False(fixture.Transaction.Committed);
+        Assert.Equal(1, fixture.Transaction.RollbackCount);
+        Assert.Null(fixture.Repository.Profile);
+        Assert.Null(fixture.Repository.Address);
+        Assert.Equal(["role-check", "begin", "identity-create", "rollback"], fixture.Calls);
+    }
+
     [Theory]
     [InlineData(ClienteIdentityOperationStatus.Failed, CadastroClienteStatus.RoleAssignmentFailed)]
     [InlineData(ClienteIdentityOperationStatus.PersistenceFailed, CadastroClienteStatus.PersistenceFailed)]

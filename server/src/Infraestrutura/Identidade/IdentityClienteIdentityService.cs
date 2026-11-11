@@ -8,6 +8,15 @@ namespace Xaquiamuni.Infraestrutura.Identidade;
 public sealed class IdentityClienteIdentityService : IClienteIdentityService
 {
     private static readonly string[] EmailIndexNames = ["EmailIndex", "UserNameIndex"];
+    private static readonly HashSet<string> PasswordErrorCodes = new(StringComparer.Ordinal)
+    {
+        "PasswordTooShort",
+        "PasswordRequiresDigit",
+        "PasswordRequiresUpper",
+        "PasswordRequiresLower",
+        "PasswordRequiresNonAlphanumeric",
+        "PasswordRequiresUniqueChars"
+    };
 
     private readonly UserManager<XaquiamuniUser> _userManager;
     private readonly RoleManager<IdentityRole<Guid>> _roleManager;
@@ -87,10 +96,20 @@ public sealed class IdentityClienteIdentityService : IClienteIdentityService
             return ClienteIdentityOperationResult.Success();
         }
 
-        return result.Errors.Any(error =>
-                error.Code is "DuplicateEmail" or "DuplicateUserName")
-            ? ClienteIdentityOperationResult.DuplicateEmail()
-            : ClienteIdentityOperationResult.Failed();
+        var errors = result.Errors.ToArray();
+        if (errors.Any(error =>
+                error.Code is "DuplicateEmail" or "DuplicateUserName"))
+        {
+            return ClienteIdentityOperationResult.DuplicateEmail();
+        }
+
+        if (errors.Length > 0 && errors.All(error => PasswordErrorCodes.Contains(error.Code)))
+        {
+            return ClienteIdentityOperationResult.PasswordValidationFailed(
+                errors.Select(error => error.Code));
+        }
+
+        return ClienteIdentityOperationResult.Failed(errors.Select(error => error.Code));
     }
 
     private static bool IsDuplicateEmail(DbUpdateException exception)

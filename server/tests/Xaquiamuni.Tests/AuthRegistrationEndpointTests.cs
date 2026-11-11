@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -9,6 +10,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Logging;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Api.Autenticacao;
@@ -117,6 +119,34 @@ public class AuthRegistrationEndpointTests
     }
 
     [Fact]
+    public async Task PostRegister_WhenIdentityRejectsPassword_ReturnsSafeValidationProblem()
+    {
+        const string rejectedPassword = "Rejected private password 123!";
+        var invalidInput = ValidInput(senha: rejectedPassword);
+        var fake = new FakeCadastrarCliente(
+            await CreateApplicationResultAsync(
+                invalidInput,
+                CadastroClienteStatus.PasswordValidationFailed));
+        using var factory = CreateFactory(fake);
+        using var client = CreateClient(factory);
+        var token = await GetRequestToken(client);
+
+        using var request = CreateRequest(ValidRequest(senha: rejectedPassword), token);
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        AssertNoStore(response);
+        Assert.Contains("Senha", body, StringComparison.Ordinal);
+        Assert.Contains("A senha não atende aos requisitos de segurança.", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("PasswordTooShort", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(rejectedPassword, body, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana@example.com", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("529.982.247-25", body, StringComparison.Ordinal);
+        Assert.Equal(1, fake.Calls);
+    }
+
+    [Fact]
     public async Task PostRegister_OnSuccessReturnsOnlyPublicIdWithoutSigningIn()
     {
         var result = await CreateApplicationResultAsync(ValidInput());
@@ -149,7 +179,8 @@ public class AuthRegistrationEndpointTests
     {
         var fake = new FakeCadastrarCliente(
             await CreateApplicationResultAsync(ValidInput(), CadastroClienteStatus.PersistenceFailed));
-        using var factory = CreateFactory(fake);
+        using var loggerProvider = new CapturingLoggerProvider();
+        using var factory = CreateFactory(fake, loggerProvider);
         using var client = CreateClient(factory);
         var token = await GetRequestToken(client);
 
@@ -162,6 +193,44 @@ public class AuthRegistrationEndpointTests
         Assert.DoesNotContain("SQL", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("529.982.247-25", body, StringComparison.Ordinal);
         Assert.DoesNotContain("Senha forte", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("PERSISTENCE_TRANSACTION", body, StringComparison.Ordinal);
+        var log = Assert.Single(
+            loggerProvider.Entries,
+            entry => entry.Message.Contains("Client registration could not be completed.", StringComparison.Ordinal));
+        Assert.Contains("Category=PERSISTENCE_TRANSACTION", log.Message, StringComparison.Ordinal);
+        Assert.Contains("Stage=TRANSACTION_SAVE", log.Message, StringComparison.Ordinal);
+        Assert.Null(log.ExceptionType);
+    }
+
+    [Fact]
+    public async Task PostRegister_OnIdentityFailureLogsOnlySafeCodes()
+    {
+        var fake = new FakeCadastrarCliente(
+            await CreateApplicationResultAsync(ValidInput(), CadastroClienteStatus.IdentityCreationFailed));
+        using var loggerProvider = new CapturingLoggerProvider();
+        using var factory = CreateFactory(fake, loggerProvider);
+        using var client = CreateClient(factory);
+        var token = await GetRequestToken(client);
+
+        using var request = CreateRequest(ValidRequest(), token);
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        Assert.DoesNotContain("PasswordTooShort", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("529.982.247-25", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana@example.com", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("Senha forte", body, StringComparison.Ordinal);
+
+        var log = Assert.Single(
+            loggerProvider.Entries,
+            entry => entry.Message.Contains("Client registration could not be completed.", StringComparison.Ordinal));
+        Assert.Contains("Category=IDENTITY", log.Message, StringComparison.Ordinal);
+        Assert.Contains("Stage=IDENTITY_USER_CREATE", log.Message, StringComparison.Ordinal);
+        Assert.Contains("IdentityErrorCodes=UNKNOWN_IDENTITY_ERROR", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("529.982.247-25", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana@example.com", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Senha forte", log.Message, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -169,7 +238,8 @@ public class AuthRegistrationEndpointTests
     {
         var fake = new FakeCadastrarCliente(new InvalidOperationException(
             "Internal details with 529.982.247-25 and secret password"));
-        using var factory = CreateFactory(fake);
+        using var loggerProvider = new CapturingLoggerProvider();
+        using var factory = CreateFactory(fake, loggerProvider);
         using var client = CreateClient(factory);
         var token = await GetRequestToken(client);
 
@@ -182,12 +252,30 @@ public class AuthRegistrationEndpointTests
         Assert.DoesNotContain("Internal details", body, StringComparison.Ordinal);
         Assert.DoesNotContain("529.982.247-25", body, StringComparison.Ordinal);
         Assert.DoesNotContain("secret password", body, StringComparison.Ordinal);
+        Assert.DoesNotContain("CONFIGURATION_INFRASTRUCTURE", body, StringComparison.Ordinal);
+        var log = Assert.Single(
+            loggerProvider.Entries,
+            entry => entry.Message.Contains("Client registration could not be completed.", StringComparison.Ordinal));
+        Assert.Contains("Category=CONFIGURATION_INFRASTRUCTURE", log.Message, StringComparison.Ordinal);
+        Assert.Contains("Stage=USE_CASE_ENTRY", log.Message, StringComparison.Ordinal);
+        Assert.Contains("ExceptionType=INVALID_OPERATION", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Internal details", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("529.982.247-25", log.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret password", log.Message, StringComparison.Ordinal);
+        Assert.Null(log.ExceptionType);
     }
 
-    private static WebApplicationFactory<Program> CreateFactory(FakeCadastrarCliente fake) =>
+    private static WebApplicationFactory<Program> CreateFactory(
+        FakeCadastrarCliente fake,
+        CapturingLoggerProvider? loggerProvider = null) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Testing");
+            if (loggerProvider is not null)
+            {
+                builder.ConfigureLogging(logging => logging.AddProvider(loggerProvider));
+            }
+
             builder.ConfigureAppConfiguration((_, configuration) =>
                 configuration.AddInMemoryCollection(new Dictionary<string, string?>
                 {
@@ -230,6 +318,43 @@ public class AuthRegistrationEndpointTests
 
     private static void AssertNoStore(HttpResponseMessage response) =>
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private sealed class CapturingLoggerProvider : ILoggerProvider
+    {
+        public ConcurrentQueue<CapturedLog> Entries { get; } = new();
+
+        public ILogger CreateLogger(string categoryName) => new CapturingLogger(this);
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class CapturingLogger(CapturingLoggerProvider provider) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull =>
+                null;
+
+            public bool IsEnabled(LogLevel logLevel) => logLevel >= LogLevel.Error;
+
+            public void Log<TState>(
+                LogLevel logLevel,
+                EventId eventId,
+                TState state,
+                Exception? exception,
+                Func<TState, Exception?, string> formatter)
+            {
+                if (IsEnabled(logLevel))
+                {
+                    provider.Entries.Enqueue(new CapturedLog(
+                        formatter(state, exception),
+                        exception?.GetType().Name));
+                }
+            }
+        }
+    }
+
+    private sealed record CapturedLog(string Message, string? ExceptionType);
 
     private static CadastroClienteInput ValidInput(
         string cpf = "529.982.247-25",
@@ -290,6 +415,15 @@ public class AuthRegistrationEndpointTests
         else if (requestedStatus == CadastroClienteStatus.CpfAlreadyRegistered)
         {
             transaction.SaveException = new ClienteCpfDuplicadoException();
+        }
+        else if (requestedStatus == CadastroClienteStatus.IdentityCreationFailed)
+        {
+            identity.CreateResult = ClienteIdentityOperationResult.Failed(["UnknownCustomCode"]);
+        }
+        else if (requestedStatus == CadastroClienteStatus.PasswordValidationFailed)
+        {
+            identity.CreateResult =
+                ClienteIdentityOperationResult.PasswordValidationFailed(["PasswordTooShort"]);
         }
 
         var useCase = new CadastrarCliente(

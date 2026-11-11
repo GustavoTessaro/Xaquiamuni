@@ -106,6 +106,7 @@ public static class AuthEndpoints
         RegisterClientRequest request,
         ICadastrarCliente cadastrarCliente,
         ILogger<Program> logger,
+        HttpContext httpContext,
         CancellationToken cancellationToken)
     {
         var input = new CadastroClienteInput
@@ -138,10 +139,22 @@ public static class AuthEndpoints
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception exception)
         {
-            logger.LogError("Unexpected error while processing client registration.");
-            return RegistrationFailure();
+            var hasFailureContext = CadastroClienteDiagnostics.TryGet(
+                exception,
+                out var failureCategory,
+                out var failureStage);
+            return RegistrationFailure(
+                logger,
+                httpContext,
+                hasFailureContext
+                    ? failureCategory
+                    : CadastroClienteFailureCategory.CONFIGURATION_INFRASTRUCTURE,
+                hasFailureContext
+                    ? failureStage
+                    : CadastroClienteFailureStage.USE_CASE_ENTRY,
+                exception);
         }
 
         return result.Status switch
@@ -156,23 +169,63 @@ public static class AuthEndpoints
                         group => group.Select(error => error.Mensagem).ToArray(),
                         StringComparer.Ordinal),
                 statusCode: StatusCodes.Status400BadRequest),
+            CadastroClienteStatus.PasswordValidationFailed => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["Senha"] = ["A senha não atende aos requisitos de segurança."]
+                },
+                title: "Dados inválidos",
+                statusCode: StatusCodes.Status400BadRequest),
             CadastroClienteStatus.EmailAlreadyRegistered or CadastroClienteStatus.CpfAlreadyRegistered =>
                 Results.Problem(
                     statusCode: StatusCodes.Status409Conflict,
                     title: "Cadastro não concluído",
                     detail: "Não foi possível concluir o cadastro com os dados informados."),
-            _ => RegistrationFailure()
+            _ => RegistrationFailure(
+                logger,
+                httpContext,
+                result.FailureCategory ?? CadastroClienteFailureCategory.CONFIGURATION_INFRASTRUCTURE,
+                result.FailureStage ?? CadastroClienteFailureStage.USE_CASE_ENTRY,
+                null,
+                result.SafeDiagnosticCodes)
         };
-
-        IResult RegistrationFailure()
-        {
-            logger.LogError("Client registration could not be completed.");
-            return Results.Problem(
-                statusCode: StatusCodes.Status500InternalServerError,
-                title: "Falha no cadastro",
-                detail: "Não foi possível concluir o cadastro neste momento.");
-        }
     }
+
+    private static IResult RegistrationFailure(
+        ILogger<Program> logger,
+        HttpContext httpContext,
+        CadastroClienteFailureCategory category,
+        CadastroClienteFailureStage stage,
+        Exception? exception,
+        IReadOnlyList<string>? safeDiagnosticCodes = null)
+    {
+        logger.LogError(
+            "Client registration could not be completed. Category={FailureCategory} Stage={FailureStage} ExceptionType={ExceptionType} IdentityErrorCodes={IdentityErrorCodes} TraceId={TraceId}",
+            category,
+            stage,
+            GetSafeExceptionType(exception),
+            safeDiagnosticCodes is { Count: > 0 }
+                ? string.Join(
+                    ',',
+                    CadastroClienteDiagnostics.SanitizeIdentityErrorCodes(safeDiagnosticCodes))
+                : "NONE",
+            httpContext.TraceIdentifier);
+
+        return Results.Problem(
+            statusCode: StatusCodes.Status500InternalServerError,
+            title: "Falha no cadastro",
+            detail: "Não foi possível concluir o cadastro neste momento.");
+    }
+
+    private static string GetSafeExceptionType(Exception? exception) =>
+        exception switch
+        {
+            null => "NONE",
+            InvalidOperationException => "INVALID_OPERATION",
+            ArgumentException => "ARGUMENT",
+            System.Security.Cryptography.CryptographicException => "CRYPTOGRAPHIC",
+            _ => "OTHER"
+        };
 }
 
 /// <summary>Credenciais públicas usadas para autenticar uma conta de cliente.</summary>

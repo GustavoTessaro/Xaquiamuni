@@ -50,3 +50,31 @@
   font-size: 0.75rem;
   line-height: 1.1rem;
 }
+
+.password-requirements {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  color: #475569;
+  font-size: 0.75rem;
+  line-height: 1.1rem;
+}
+
+.password-requirement {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.password-requirement-status {
+  min-width: 4.5rem;
+  font-weight: 600;
+}
+
+.password-requirement[data-met='true'] .password-requirement-status {
+  color: #166534;
+}
+
+.password-requirement[data-met='false'] .password-requirement-status {
+  color: #475569;
+}

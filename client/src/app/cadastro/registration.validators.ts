@@ -8,6 +8,17 @@ const brazilianStates = new Set([
 
 const digitsOnly = (value: string): string => value.replace(/\D/g, '');
 const normalizedText = (value: string): string => value.trim().replace(/\s+/g, ' ');
+const containsUtf16Character = (
+  value: string,
+  predicate: (character: string) => boolean,
+): boolean => {
+  for (let index = 0; index < value.length; index++) {
+    if (predicate(value.charAt(index))) {
+      return true;
+    }
+  }
+  return false;
+};
 
 export const brazilianCpfValidator: ValidatorFn = (
   control: AbstractControl,
@@ -101,6 +112,68 @@ export const brazilianEmailValidator: ValidatorFn = (
     return { email: true };
   }
   return null;
+};
+
+export interface PasswordRequirement {
+  id: string;
+  label: string;
+  isMet: (password: string) => boolean;
+}
+
+export const registrationPasswordRequirements: readonly PasswordRequirement[] = [
+  {
+    id: 'minLength',
+    label: 'Pelo menos 12 caracteres',
+    isMet: (password) => password.length >= 12,
+  },
+  {
+    id: 'maxLength',
+    label: 'No máximo 256 caracteres',
+    isMet: (password) => password.length <= 256,
+  },
+  {
+    id: 'uppercase',
+    label: 'Uma letra maiúscula',
+    isMet: (password) => containsUtf16Character(password, (character) => /\p{Lu}/u.test(character)),
+  },
+  {
+    id: 'lowercase',
+    label: 'Uma letra minúscula',
+    isMet: (password) => containsUtf16Character(password, (character) => /\p{Ll}/u.test(character)),
+  },
+  {
+    id: 'digit',
+    label: 'Um número',
+    isMet: (password) => containsUtf16Character(password, (character) => /\p{Nd}/u.test(character)),
+  },
+  {
+    id: 'nonAlphanumeric',
+    label: 'Um caractere não alfanumérico (por exemplo, !)',
+    isMet: (password) => containsUtf16Character(
+      password,
+      (character) => !/[\p{L}\p{Nd}]/u.test(character),
+    ),
+  },
+  {
+    id: 'uniqueChars',
+    label: 'Ao menos um caractere único',
+    isMet: (password) => new Set(password.split('')).size >= 1,
+  },
+];
+
+export const identityPasswordValidator: ValidatorFn = (
+  control: AbstractControl,
+): ValidationErrors | null => {
+  const password = String(control.value ?? '');
+  const errors: Record<string, true> = {};
+
+  for (const requirement of registrationPasswordRequirements) {
+    if (!requirement.isMet(password)) {
+      errors[`password${requirement.id[0].toUpperCase()}${requirement.id.slice(1)}`] = true;
+    }
+  }
+
+  return Object.keys(errors).length > 0 ? errors : null;
 };
 
 export const passwordsMatchValidator: ValidatorFn = (

@@ -16,10 +16,12 @@ import {
   brazilianPhoneValidator,
   brazilianUfValidator,
   cepValidator,
+  identityPasswordValidator,
   normalizedTextValidator,
   optionalNormalizedTextValidator,
   normalizeRegistrationDigits,
   passwordsMatchValidator,
+  registrationPasswordRequirements,
 } from './registration.validators';
 
 type AddressControls = {
@@ -50,6 +52,7 @@ type RegistrationControls = {
   templateUrl: './cadastro.component.html',
 })
 export class CadastroComponent {
+  protected readonly passwordRequirements = registrationPasswordRequirements;
   protected readonly submitted = signal(false);
   protected readonly registering = signal(false);
   protected readonly successMessage = signal('');
@@ -81,7 +84,7 @@ export class CadastroComponent {
     }),
     senha: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.maxLength(256)],
+      validators: [Validators.required, identityPasswordValidator],
     }),
     confirmacaoSenha: new FormControl('', {
       nonNullable: true,

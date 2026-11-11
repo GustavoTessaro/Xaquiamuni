@@ -5,10 +5,12 @@ import {
   brazilianPhoneValidator,
   brazilianUfValidator,
   cepValidator,
+  identityPasswordValidator,
   normalizedTextValidator,
   normalizeRegistrationDigits,
   optionalNormalizedTextValidator,
   passwordsMatchValidator,
+  registrationPasswordRequirements,
 } from './registration.validators';
 
 describe('registration validators', () => {
@@ -62,5 +64,66 @@ describe('registration validators', () => {
     expect(passwords.errors).toEqual({ passwordsMismatch: true });
     passwords.controls.confirmacaoSenha.setValue('Senha segura');
     expect(passwords.errors).toBeNull();
+  });
+
+  it('matches the configured Identity password rules', () => {
+    expect(identityPasswordValidator(new FormControl('shortA1!'))).not.toBeNull();
+    expect(identityPasswordValidator(new FormControl('Senha Forte 123!'))).toBeNull();
+    expect(identityPasswordValidator(new FormControl(`A${'a'.repeat(9)}1!`))).toBeNull();
+    expect(identityPasswordValidator(new FormControl(`A${'a'.repeat(253)}1!`))).toBeNull();
+    expect(identityPasswordValidator(new FormControl(`A${'a'.repeat(254)}1!`))).toEqual({
+      passwordMaxLength: true,
+    });
+  });
+
+  it('evaluates supplementary Unicode characters as UTF-16 code units like Identity', () => {
+    const supplementaryUppercase = String.fromCodePoint(0x10400);
+    const supplementaryLowercase = String.fromCodePoint(0x10428);
+    const supplementaryDigit = String.fromCodePoint(0x1d7d9);
+    const password = `${supplementaryUppercase}${supplementaryLowercase}${supplementaryDigit}`;
+    const requirementMet = (id: string): boolean =>
+      registrationPasswordRequirements.find((requirement) => requirement.id === id)!.isMet(password);
+
+    expect(requirementMet('uppercase')).toBe(false);
+    expect(requirementMet('lowercase')).toBe(false);
+    expect(requirementMet('digit')).toBe(false);
+    expect(requirementMet('nonAlphanumeric')).toBe(true);
+    expect(identityPasswordValidator(new FormControl(password))).toEqual({
+      passwordMinLength: true,
+      passwordUppercase: true,
+      passwordLowercase: true,
+      passwordDigit: true,
+    });
+  });
+
+  it('measures supplementary characters by their UTF-16 length for Identity limits', () => {
+    const supplementaryLetter = String.fromCodePoint(0x10400);
+    const supplementarySymbol = String.fromCodePoint(0x1f680);
+    const minLength = registrationPasswordRequirements.find(
+      (requirement) => requirement.id === 'minLength',
+    )!;
+    const maxLength = registrationPasswordRequirements.find(
+      (requirement) => requirement.id === 'maxLength',
+    )!;
+
+    expect(minLength.isMet(supplementaryLetter.repeat(5))).toBe(false);
+    expect(minLength.isMet(supplementaryLetter.repeat(6))).toBe(true);
+    expect(maxLength.isMet(supplementarySymbol.repeat(128))).toBe(true);
+    expect(maxLength.isMet(supplementarySymbol.repeat(129))).toBe(false);
+  });
+
+  it('reports each password requirement without exposing the password', () => {
+    const incompletePassword = 'curta';
+    const failedRequirements = registrationPasswordRequirements
+      .filter((requirement) => !requirement.isMet(incompletePassword))
+      .map((requirement) => requirement.id);
+
+    expect(failedRequirements).toEqual([
+      'minLength',
+      'uppercase',
+      'digit',
+      'nonAlphanumeric',
+    ]);
+    expect(identityPasswordValidator(new FormControl('Senha Forte 123!'))).toBeNull();
   });
 });

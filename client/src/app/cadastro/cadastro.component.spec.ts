@@ -60,6 +60,41 @@ describe('CadastroComponent registration flow', () => {
     http.expectNone('/api/auth/csrf');
   });
 
+  it('updates accessible password requirement indicators while typing', () => {
+    const password = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    password.value = 'curta';
+    password.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    const requirements = fixture.nativeElement.querySelector('#senha-requisitos') as HTMLUListElement;
+    expect(password.getAttribute('aria-describedby')).toContain('senha-requisitos');
+    expect(requirements.textContent).toContain('Pendente');
+    expect(requirements.querySelector('[data-met="false"]')).not.toBeNull();
+
+    password.value = 'Senha Forte 123!';
+    password.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    expect(requirements.querySelectorAll('[data-met="true"]').length).toBe(7);
+  });
+
+  it('blocks registration when password rules fail', () => {
+    fillValidFields(fixture, 'curta');
+    const password = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    password.value = 'curta';
+    password.dispatchEvent(new Event('input', { bubbles: true }));
+    const confirmation = fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement;
+    confirmation.value = 'curta';
+    confirmation.dispatchEvent(new Event('input', { bubbles: true }));
+    submit(fixture);
+
+    expect(fixture.nativeElement.textContent).toContain('Atenda aos requisitos de senha indicados');
+    expect(fixture.nativeElement.querySelector('#senha[aria-invalid="true"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#confirmacaoSenha[aria-invalid="true"]')).toBeNull();
+    http.expectNone('/api/auth/csrf');
+    http.expectNone('/api/auth/register');
+  });
+
   it('sends the CSRF request token before POST, independent of the cookie token', () => {
     fillValidFields(fixture);
     submit(fixture);
@@ -77,7 +112,7 @@ describe('CadastroComponent registration flow', () => {
       cpf: '52998224725',
       email: 'ana@example.com',
       telefone: '11912345678',
-      senha: 'Senha forte sem regras extras',
+      senha: 'Senha forte 123!',
       enderecoInicial: {
         cep: '95000000',
         uf: 'RS',
@@ -216,14 +251,14 @@ function completeCsrfAndGetRegisterRequest(http: HttpTestingController) {
 
 function fillValidFields(
   fixture: ComponentFixture<CadastroComponent>,
-  confirmPassword = 'Senha forte sem regras extras',
+  confirmPassword = 'Senha forte 123!',
 ): void {
   const values: Record<string, string> = {
     nomeCompleto: 'Ana Maria Silva',
     cpf: '52998224725',
     telefone: '11912345678',
     email: 'ana@example.com',
-    senha: 'Senha forte sem regras extras',
+    senha: 'Senha forte 123!',
     confirmacaoSenha: confirmPassword,
     cep: '95000000',
     uf: 'rs',
