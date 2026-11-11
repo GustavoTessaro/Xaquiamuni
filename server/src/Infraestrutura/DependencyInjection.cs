@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Identidade;
@@ -31,6 +32,8 @@ public static class DependencyInjection
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();
+        services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
+        services.AddScoped<ILoginCliente, LoginCliente>();
         services.AddScoped<CadastroClienteInputValidator>();
         services.AddScoped<ICadastrarCliente, CadastrarCliente>();
 
