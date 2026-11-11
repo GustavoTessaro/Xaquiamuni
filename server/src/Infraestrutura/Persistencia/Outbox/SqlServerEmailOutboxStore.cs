@@ -90,6 +90,23 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             AND [RowVersion] = @RowVersion;
         """;
 
+    private const string CancelSql = """
+        DECLARE @NowUtc datetimeoffset(7) =
+            TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00');
+
+        UPDATE [dbo].[EmailOutbox]
+        SET
+            [Status] = @CancelledStatus,
+            [CompletedAtUtc] = NULL,
+            [LeaseExpiresAtUtc] = NULL,
+            [ActiveDeduplicationKey] = NULL
+        WHERE
+            [Id] = @Id
+            AND [Status] = @ProcessingStatus
+            AND [LeaseExpiresAtUtc] > @NowUtc
+            AND [RowVersion] = @RowVersion;
+        """;
+
     private const string DeadLetterSql = """
         DECLARE @NowUtc datetimeoffset(7) =
             TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00');
@@ -213,6 +230,22 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
                 AddParameter(command, "@PendingStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.Pending);
                 AddParameter(command, "@ProcessingStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.Processing);
                 AddParameter(command, "@DelayMilliseconds", SqlDbType.Int, checked((int)delay.TotalMilliseconds));
+            });
+    }
+
+    public Task<bool> CancelAsync(
+        EmailOutboxClaim claim,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(claim);
+        return ExecuteConditionalUpdateAsync(
+            CancelSql,
+            claim,
+            cancellationToken,
+            command =>
+            {
+                AddParameter(command, "@CancelledStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.Cancelled);
+                AddParameter(command, "@ProcessingStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.Processing);
             });
     }
 

@@ -11,6 +11,10 @@ public interface IEmailOutboxStore
         EmailOutboxClaim claim,
         CancellationToken cancellationToken = default);
 
+    Task<bool> CancelAsync(
+        EmailOutboxClaim claim,
+        CancellationToken cancellationToken = default);
+
     Task<bool> RetryAsync(
         EmailOutboxClaim claim,
         double jitterSample,

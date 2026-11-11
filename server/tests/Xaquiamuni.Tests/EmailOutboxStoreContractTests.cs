@@ -1,8 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Infraestrutura;
+using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 
@@ -55,6 +57,20 @@ public sealed class EmailOutboxStoreContractTests
 
         Assert.Same(context, storeContext);
         Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
+    }
+
+    [Fact]
+    public void DependencyInjection_RegistersScopedProcessorWithoutRegisteringSender()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var services = new ServiceCollection();
+        services.AddInfrastructureServices(configuration);
+
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(EmailConfirmationOutboxProcessor));
+
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IEmailSender));
     }
 
     [Fact]

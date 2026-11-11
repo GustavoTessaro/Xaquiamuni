@@ -154,6 +154,72 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         Assert.Equal($"email-confirmation:{userId:N}", persisted.ActiveDeduplicationKey);
     }
 
+    [SqlServerIntegrationFact]
+    public async Task CancelAsync_RequiresCurrentRowVersionAndLeaseAndClearsDeduplication()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await CreateUserAsync(database);
+        await SeedMessageAsync(database, CreatePendingMessage(userId));
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var staleRowVersion = claim.RowVersion.ToArray();
+        staleRowVersion[0] ^= 0xff;
+        var staleClaim = new EmailOutboxClaim(
+            claim.Id,
+            claim.UserId,
+            claim.Attempts,
+            claim.LeaseExpiresAtUtc,
+            staleRowVersion);
+
+        Assert.False(await store.CancelAsync(staleClaim));
+        Assert.True(await store.CancelAsync(claim));
+
+        await using var verification = database.CreateVerificationContext();
+        var persisted = await verification.EmailOutboxMessages.SingleAsync();
+        Assert.Equal(EmailOutboxMessageStatus.Cancelled, persisted.Status);
+        Assert.Null(persisted.CompletedAtUtc);
+        Assert.Null(persisted.LeaseExpiresAtUtc);
+        Assert.Null(persisted.ActiveDeduplicationKey);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task CancelAsync_RejectsExpiredLease()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await CreateUserAsync(database);
+        var message = new EmailOutboxMessage(
+            Guid.NewGuid(),
+            userId,
+            EmailOutboxMessageType.EmailConfirmation,
+            EmailOutboxMessageStatus.Processing,
+            attempts: 1,
+            createdAtUtc: DateTimeOffset.UtcNow.AddMinutes(-5),
+            nextAttemptAtUtc: DateTimeOffset.UtcNow.AddMinutes(-5),
+            activeDeduplicationKey: $"email-confirmation:{userId:N}",
+            leaseExpiresAtUtc: DateTimeOffset.UtcNow.AddMinutes(-1));
+
+        await SeedMessageAsync(database, message);
+
+        var expiredClaim = new EmailOutboxClaim(
+            message.Id,
+            message.UserId,
+            message.Attempts,
+            message.LeaseExpiresAtUtc!.Value,
+            message.RowVersion);
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        Assert.False(await store.CancelAsync(expiredClaim));
+
+        await using var verification = database.CreateVerificationContext();
+        var persisted = await verification.EmailOutboxMessages.SingleAsync();
+        Assert.Equal(EmailOutboxMessageStatus.Processing, persisted.Status);
+        Assert.NotNull(persisted.LeaseExpiresAtUtc);
+        Assert.Equal($"email-confirmation:{userId:N}", persisted.ActiveDeduplicationKey);
+    }
+
     private static async Task<Guid> CreateUserAsync(SqlServerTestDatabase database)
     {
         var email = $"outbox-{Guid.NewGuid():N}@example.test";

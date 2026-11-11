@@ -9,6 +9,7 @@ using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
+using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 using Xaquiamuni.Infraestrutura.Seguranca;
@@ -35,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IEmailOutboxStore, SqlServerEmailOutboxStore>();
+        services.AddScoped<EmailConfirmationOutboxProcessor>();
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();
