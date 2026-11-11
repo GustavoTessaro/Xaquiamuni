@@ -1,6 +1,15 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.13" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.8" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Aplicacao\Xaquiamuni.Aplicacao.csproj" />
     <ProjectReference Include="..\Dominio\Xaquiamuni.Dominio.csproj" />
   </ItemGroup>
