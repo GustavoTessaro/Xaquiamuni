@@ -86,6 +86,29 @@ describe('AuthService', () => {
     expect(error?.status).toBe(401);
   });
 
+  it('gets the CSRF request token before posting email confirmation', () => {
+    let completed = false;
+    const email = 'cliente+tag@example.test';
+    const token = 'token+/=special';
+    service.confirmarEmail(email, token).subscribe(() => {
+      completed = true;
+    });
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    expect(csrf.request.method).toBe('GET');
+    http.expectNone('/api/auth/confirm-email');
+    csrf.flush({ requestToken: 'confirmation-request-token' });
+
+    const confirmation = http.expectOne('/api/auth/confirm-email');
+    expect(confirmation.request.method).toBe('POST');
+    expect(confirmation.request.urlWithParams).toBe('/api/auth/confirm-email');
+    expect(confirmation.request.body).toEqual({ email, token });
+    expect(confirmation.request.headers.get('X-XSRF-TOKEN')).toBe('confirmation-request-token');
+    confirmation.flush(null, { status: 204, statusText: 'No Content' });
+
+    expect(completed).toBe(true);
+  });
+
   it('gets the current session from /me without accepting a user ID', () => {
     let session: unknown;
     service.obterSessao().subscribe((value) => {

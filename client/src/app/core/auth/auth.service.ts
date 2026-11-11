@@ -12,6 +12,11 @@ interface LoginRequest {
   senha: string;
 }
 
+interface EmailConfirmationRequest {
+  email: string;
+  token: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -19,6 +24,10 @@ export class AuthService {
 
   login(email: string, senha: string): Observable<void> {
     return this.postWithCsrf('/api/auth/login', { email, senha });
+  }
+
+  confirmarEmail(email: string, token: string): Observable<void> {
+    return this.postWithCsrf('/api/auth/confirm-email', { email, token });
   }
 
   obterSessao(): Observable<AuthSession | null> {
@@ -35,7 +44,10 @@ export class AuthService {
     return this.postWithCsrf('/api/auth/logout', null);
   }
 
-  private postWithCsrf(url: string, body: LoginRequest | null): Observable<void> {
+  private postWithCsrf(
+    url: string,
+    body: LoginRequest | EmailConfirmationRequest | null,
+  ): Observable<void> {
     return this.csrf.getRequestToken().pipe(
       switchMap(({ requestToken }) =>
         this.http.post<void>(url, body, {

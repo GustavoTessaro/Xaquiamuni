@@ -52,6 +52,81 @@ public sealed class IdentityEmailConfirmationServiceTests
     }
 
     [Fact]
+    public async Task GenerateEmailConfirmationTokenForUserAsync_ReturnsCurrentEmailAndToken()
+    {
+        var userId = Guid.NewGuid();
+        var user = new XaquiamuniUser
+        {
+            Id = userId,
+            Email = "current@example.invalid",
+            EmailConfirmed = false
+        };
+        var userManager = new FakeUserManager(user);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.GenerateEmailConfirmationTokenForUserAsync(userId);
+
+        Assert.Equal(EmailConfirmationTokenStatus.Generated, result.Status);
+        Assert.Equal("current@example.invalid", result.Email);
+        Assert.Equal(FakeUserManager.TestToken, result.Token);
+        Assert.Equal(userId.ToString(), userManager.LastUserId);
+        Assert.Equal(1, userManager.GenerateTokenCalls);
+        Assert.DoesNotContain("current@example.invalid", result.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain(FakeUserManager.TestToken, result.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task GenerateEmailConfirmationTokenForUserAsync_ForMissingUserDoesNotGenerateToken()
+    {
+        var userManager = new FakeUserManager(user: null);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.GenerateEmailConfirmationTokenForUserAsync(Guid.NewGuid());
+
+        Assert.Equal(EmailConfirmationTokenStatus.UserNotFound, result.Status);
+        Assert.Null(result.Email);
+        Assert.Null(result.Token);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+    }
+
+    [Fact]
+    public async Task GenerateEmailConfirmationTokenForUserAsync_ForUserWithoutEmailDoesNotGenerateToken()
+    {
+        var userId = Guid.NewGuid();
+        var userManager = new FakeUserManager(
+            new XaquiamuniUser { Id = userId, Email = null, EmailConfirmed = false });
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.GenerateEmailConfirmationTokenForUserAsync(userId);
+
+        Assert.Equal(EmailConfirmationTokenStatus.EmailMissing, result.Status);
+        Assert.Null(result.Email);
+        Assert.Null(result.Token);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+    }
+
+    [Fact]
+    public async Task GenerateEmailConfirmationTokenForUserAsync_ForConfirmedUserDoesNotGenerateToken()
+    {
+        var userId = Guid.NewGuid();
+        var userManager = new FakeUserManager(
+            new XaquiamuniUser
+            {
+                Id = userId,
+                Email = "current@example.invalid",
+                EmailConfirmed = true
+            });
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.GenerateEmailConfirmationTokenForUserAsync(userId);
+
+        Assert.Equal(EmailConfirmationTokenStatus.AlreadyConfirmed, result.Status);
+        Assert.Null(result.Email);
+        Assert.Null(result.Token);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+    }
+
+    [Fact]
     public async Task ConfirmEmailAsync_WithValidTokenConfirmsUser()
     {
         var user = new XaquiamuniUser { Email = "client@example.invalid", EmailConfirmed = false };
@@ -136,6 +211,7 @@ public sealed class IdentityEmailConfirmationServiceTests
         public int GenerateTokenCalls { get; private set; }
         public int ConfirmTokenCalls { get; private set; }
         public string? LastEmail { get; private set; }
+        public string? LastUserId { get; private set; }
 
         public override Task<XaquiamuniUser?> FindByEmailAsync(string email)
         {
@@ -146,6 +222,20 @@ public sealed class IdentityEmailConfirmationServiceTests
 
             LastEmail = email;
             return Task.FromResult(user);
+        }
+
+        public override Task<XaquiamuniUser?> FindByIdAsync(string userId)
+        {
+            if (FindUserException is not null)
+            {
+                return Task.FromException<XaquiamuniUser?>(FindUserException);
+            }
+
+            LastUserId = userId;
+            return Task.FromResult(
+                user is not null && string.Equals(user.Id.ToString(), userId, StringComparison.Ordinal)
+                    ? user
+                    : null);
         }
 
         public override Task<bool> IsEmailConfirmedAsync(XaquiamuniUser user) =>

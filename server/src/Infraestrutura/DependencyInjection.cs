@@ -7,6 +7,7 @@ using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
+using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
@@ -39,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IdentityRoleInitializer>();
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
+        services.AddSingleton<IEmailConfirmationMessageComposer, EmailConfirmationMessageComposer>();
         services.AddScoped<ILoginCliente, LoginCliente>();
         services.AddScoped<CadastroClienteInputValidator>();
         services.AddScoped<ICadastrarCliente, CadastrarCliente>();
@@ -83,6 +85,8 @@ public static class DependencyInjection
 
         services.Configure<CpfProtectionOptions>(configuration.GetSection("CpfProtection"));
         services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();
+        services.Configure<EmailConfirmationEmailOptions>(
+            configuration.GetSection(EmailConfirmationEmailOptions.SectionName));
 
         return services;
     }

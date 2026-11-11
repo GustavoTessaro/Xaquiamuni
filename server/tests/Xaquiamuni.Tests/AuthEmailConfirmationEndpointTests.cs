@@ -229,6 +229,11 @@ public sealed class AuthEmailConfirmationEndpointTests
             CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
 
+        public Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenForUserAsync(
+            Guid userId,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<EmailConfirmationResult> ConfirmEmailAsync(
             string email,
             string token,
