@@ -20,12 +20,27 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.Use(async (context, next) =>
+{
+    if (HttpMethods.IsPost(context.Request.Method)
+        && string.Equals(
+            context.Request.Path.Value,
+            AuthEndpoints.RegisterEndpoint,
+            StringComparison.OrdinalIgnoreCase))
+    {
+        context.Response.Headers.CacheControl = "no-store";
+    }
+
+    await next(context);
+});
+
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapXaquiamuniCsrfEndpoint();
+app.MapXaquiamuniAuthEndpoints();
 
 app.Run();
 
