@@ -33,11 +33,12 @@ public static class DependencyInjection
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
+        services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
         services.AddScoped<ILoginCliente, LoginCliente>();
         services.AddScoped<CadastroClienteInputValidator>();
         services.AddScoped<ICadastrarCliente, CadastrarCliente>();
 
-        services
+        var identityBuilder = services
             .AddIdentityCore<XaquiamuniUser>(options =>
             {
                 options.User.RequireUniqueEmail = true;
@@ -53,6 +54,20 @@ public static class DependencyInjection
             .AddRoles<IdentityRole<Guid>>()
             .AddEntityFrameworkStores<XaquiamuniDbContext>()
             .AddSignInManager();
+
+        identityBuilder
+            .AddDefaultTokenProviders()
+            .AddTokenProvider<XaquiamuniEmailConfirmationTokenProvider>(
+                XaquiamuniEmailConfirmationTokenProvider.ProviderName);
+        services.Configure<IdentityOptions>(options =>
+        {
+            options.Tokens.EmailConfirmationTokenProvider =
+                XaquiamuniEmailConfirmationTokenProvider.ProviderName;
+        });
+        services.Configure<XaquiamuniEmailConfirmationTokenProviderOptions>(options =>
+        {
+            options.TokenLifespan = TimeSpan.FromHours(24);
+        });
 
         services.Replace(ServiceDescriptor.Scoped<SignInManager<XaquiamuniUser>>(serviceProvider =>
         {

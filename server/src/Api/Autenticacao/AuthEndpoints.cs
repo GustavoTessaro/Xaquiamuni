@@ -9,6 +9,7 @@ namespace Xaquiamuni.Api.Autenticacao;
 public static class AuthEndpoints
 {
     public const string RegisterEndpoint = "/api/auth/register";
+    public const string ConfirmEmailEndpoint = "/api/auth/confirm-email";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
     public const string LogoutEndpoint = "/api/auth/logout";
@@ -24,6 +25,16 @@ public static class AuthEndpoints
             .Produces<RegisterClientResponse>(StatusCodes.Status201Created)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status409Conflict)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        endpoints.MapPost(ConfirmEmailEndpoint, ConfirmEmailAsync)
+            .AllowAnonymous()
+            .RequireXaquiamuniAntiforgery()
+            .WithName("ConfirmClientEmail")
+            .WithSummary("Confirma o e-mail de uma conta de cliente.")
+            .WithDescription("Confirma o e-mail usando o token recebido pelo cliente.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
 
         endpoints.MapPost(LoginEndpoint, LoginAsync)
@@ -101,6 +112,56 @@ public static class AuthEndpoints
                 title: "Falha na autenticação",
                 detail: "Não foi possível autenticar com os dados informados.");
     }
+
+    private static async Task<IResult> ConfirmEmailAsync(
+        ConfirmClientEmailRequest? request,
+        IEmailConfirmationService emailConfirmationService,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request?.Email)
+            || request.Email.Length > ConfirmClientEmailRequest.EmailMaxLength
+            || !ConfirmClientEmailRequest.IsValidEmail(request.Email)
+            || string.IsNullOrWhiteSpace(request.Token)
+            || request.Token.Length > ConfirmClientEmailRequest.TokenMaxLength)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["Request"] = ["Informe um e-mail e um token de confirmação válidos."]
+                },
+                title: "Requisição inválida",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        try
+        {
+            var result = await emailConfirmationService.ConfirmEmailAsync(
+                request.Email.Trim(),
+                request.Token,
+                cancellationToken).ConfigureAwait(false);
+
+            return result.Succeeded
+                ? Results.NoContent()
+                : EmailConfirmationNotCompleted();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            return Results.Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Confirmação não concluída",
+                detail: "Não foi possível confirmar o e-mail neste momento.");
+        }
+    }
+
+    private static IResult EmailConfirmationNotCompleted() =>
+        Results.Problem(
+            statusCode: StatusCodes.Status400BadRequest,
+            title: "Confirmação não concluída",
+            detail: "Não foi possível confirmar o e-mail. Verifique o link e tente novamente.");
 
     private static async Task<IResult> RegisterAsync(
         RegisterClientRequest request,
@@ -262,6 +323,29 @@ public sealed class RegisterClientAddressRequest
     public string? Logradouro { get; init; }
     public string? Numero { get; init; }
     public string? Complemento { get; init; }
+}
+
+/// <summary>Dados necessários para confirmar o e-mail de uma conta de cliente.</summary>
+public sealed record ConfirmClientEmailRequest
+{
+    public const int EmailMaxLength = 256;
+    public const int TokenMaxLength = 4096;
+
+    public string? Email { get; init; }
+    public string? Token { get; init; }
+
+    public static bool IsValidEmail(string email)
+    {
+        var value = email.Trim();
+        var separator = value.LastIndexOf('@');
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            return false;
+        }
+
+        var domain = value.AsSpan(separator + 1);
+        return domain.Contains('.') && !domain.StartsWith('.') && !domain.EndsWith('.');
+    }
 }
 
 /// <summary>Identificador público da conta de cliente criada.</summary>

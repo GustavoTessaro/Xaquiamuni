@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
-using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +56,37 @@ public sealed class IdentitySignInConfigurationTests
         Assert.Equal(5, identityOptions.Lockout.MaxFailedAccessAttempts);
         Assert.Equal(TimeSpan.FromMinutes(15), identityOptions.Lockout.DefaultLockoutTimeSpan);
         Assert.True(identityOptions.Lockout.AllowedForNewUsers);
+        Assert.False(identityOptions.SignIn.RequireConfirmedEmail);
+    }
+
+    [Fact]
+    public void Identity_RegistersDedicatedEmailConfirmationProviderWith24HourLifespan()
+    {
+        using var factory = CreateFactory();
+        var services = factory.Services;
+        using var scope = services.CreateScope();
+        var identityOptions = services.GetRequiredService<IOptions<IdentityOptions>>().Value;
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<XaquiamuniUser>>();
+        var emailConfirmationProvider = scope.ServiceProvider
+            .GetRequiredService<XaquiamuniEmailConfirmationTokenProvider>();
+        var confirmationOptions = services
+            .GetRequiredService<IOptions<XaquiamuniEmailConfirmationTokenProviderOptions>>()
+            .Value;
+        var defaultProviderOptions = services
+            .GetRequiredService<IOptions<DataProtectionTokenProviderOptions>>()
+            .Value;
+        var providerMap = userManager.Options.Tokens.ProviderMap;
+
+        Assert.Equal(
+            XaquiamuniEmailConfirmationTokenProvider.ProviderName,
+            identityOptions.Tokens.EmailConfirmationTokenProvider);
+        Assert.Equal(
+            typeof(XaquiamuniEmailConfirmationTokenProvider),
+            providerMap[XaquiamuniEmailConfirmationTokenProvider.ProviderName].ProviderType);
+        Assert.NotNull(emailConfirmationProvider);
+        Assert.Equal(TimeSpan.FromHours(24), confirmationOptions.TokenLifespan);
+        Assert.Equal(TimeSpan.FromDays(1), defaultProviderOptions.TokenLifespan);
+        Assert.Equal(TokenOptions.DefaultProvider, identityOptions.Tokens.PasswordResetTokenProvider);
         Assert.False(identityOptions.SignIn.RequireConfirmedEmail);
     }
 
