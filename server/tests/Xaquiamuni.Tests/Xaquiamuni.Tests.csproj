@@ -20,6 +20,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Dominio\Xaquiamuni.Dominio.csproj" />
     <ProjectReference Include="..\..\src\Api\Xaquiamuni.Api.csproj" />
     <ProjectReference Include="..\..\src\Infraestrutura\Xaquiamuni.Infraestrutura.csproj" />
   </ItemGroup>
