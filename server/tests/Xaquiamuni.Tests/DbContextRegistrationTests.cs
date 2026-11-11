@@ -172,6 +172,33 @@ public class DbContextRegistrationTests
     }
 
     [Fact]
+    public void AddInfrastructureServices_RegistersRoleInitializerExplicitlyWithoutExecutingIt()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=XaquiamuniRoleInitializerRegistrationTest"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructureServices(configuration);
+
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IdentityRoleInitializer));
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var initializer = scope.ServiceProvider.GetRequiredService<IdentityRoleInitializer>();
+        var context = scope.ServiceProvider.GetRequiredService<XaquiamuniDbContext>();
+
+        Assert.NotNull(initializer);
+        Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
+        Assert.Null(context.Database.CurrentTransaction);
+    }
+
+    [Fact]
     public void IdentityModel_EnforcesUniqueNormalizedEmailWhenPresent()
     {
         var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()

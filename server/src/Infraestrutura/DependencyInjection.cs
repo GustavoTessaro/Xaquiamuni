@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
+        services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
+        services.AddScoped<IdentityRoleInitializer>();
         services.AddScoped<CadastroClienteInputValidator>();
         services.AddScoped<ICadastrarCliente, CadastrarCliente>();
 
