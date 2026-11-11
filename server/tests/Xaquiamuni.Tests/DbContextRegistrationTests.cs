@@ -56,4 +56,22 @@ public class DbContextRegistrationTests
         Assert.Contains(dbContext.Model.GetEntityTypes(), entityType =>
             entityType.ClrType == typeof(IdentityRole<Guid>));
     }
+
+    [Fact]
+    public void IdentityModel_EnforcesUniqueNormalizedEmailWhenPresent()
+    {
+        var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()
+            .UseSqlServer("Server=localhost;Database=XaquiamuniIdentityModelTest")
+            .Options;
+        using var dbContext = new XaquiamuniDbContext(options);
+
+        var userEntity = dbContext.Model.FindEntityType(typeof(XaquiamuniUser));
+        var emailIndex = Assert.Single(userEntity!.GetIndexes(), index =>
+            index.Properties.Count == 1
+            && index.Properties[0].Name == nameof(XaquiamuniUser.NormalizedEmail));
+
+        Assert.True(emailIndex.IsUnique);
+        Assert.Equal("[NormalizedEmail] IS NOT NULL", emailIndex.GetFilter());
+        Assert.Equal("EmailIndex", emailIndex.GetDatabaseName());
+    }
 }

@@ -12,4 +12,15 @@ public sealed class XaquiamuniDbContext
         : base(options)
     {
     }
+
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
+        base.OnModelCreating(builder);
+
+        builder.Entity<XaquiamuniUser>()
+            .HasIndex(user => user.NormalizedEmail)
+            .IsUnique()
+            .HasDatabaseName("EmailIndex")
+            .HasFilter("[NormalizedEmail] IS NOT NULL");
+    }
 }
