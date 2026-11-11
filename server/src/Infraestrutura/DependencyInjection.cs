@@ -8,6 +8,7 @@ using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
+using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Infraestrutura;
@@ -27,8 +28,10 @@ public static class DependencyInjection
                 options.UseSqlServer(connectionString);
             }
         });
+        services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
+        services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();

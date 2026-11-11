@@ -1,3 +1,4 @@
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Valores;
@@ -12,6 +13,7 @@ public sealed class CadastrarCliente : ICadastrarCliente
     private readonly ICpfProtectionService _cpfProtectionService;
     private readonly IClienteIdentityService _identityService;
     private readonly IClienteRepository _clienteRepository;
+    private readonly IEmailConfirmationOutbox _emailConfirmationOutbox;
     private readonly IClienteTransactionFactory _transactionFactory;
 
     public CadastrarCliente(
@@ -19,12 +21,14 @@ public sealed class CadastrarCliente : ICadastrarCliente
         ICpfProtectionService cpfProtectionService,
         IClienteIdentityService identityService,
         IClienteRepository clienteRepository,
+        IEmailConfirmationOutbox emailConfirmationOutbox,
         IClienteTransactionFactory transactionFactory)
     {
         _validator = validator;
         _cpfProtectionService = cpfProtectionService;
         _identityService = identityService;
         _clienteRepository = clienteRepository;
+        _emailConfirmationOutbox = emailConfirmationOutbox;
         _transactionFactory = transactionFactory;
     }
 
@@ -155,6 +159,9 @@ public sealed class CadastrarCliente : ICadastrarCliente
             _clienteRepository.Adicionar(address);
 
             failureCategory = CadastroClienteFailureCategory.PERSISTENCE_TRANSACTION;
+            failureStage = CadastroClienteFailureStage.OUTBOX_ENQUEUE;
+            _emailConfirmationOutbox.EnqueueEmailConfirmation(userId);
+
             failureStage = CadastroClienteFailureStage.TRANSACTION_SAVE;
             await transaction.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             failureStage = CadastroClienteFailureStage.TRANSACTION_COMMIT;

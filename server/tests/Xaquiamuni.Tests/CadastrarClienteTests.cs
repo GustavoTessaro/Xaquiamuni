@@ -1,7 +1,11 @@
+using Microsoft.EntityFrameworkCore;
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Valores;
+using Xaquiamuni.Infraestrutura.Persistencia;
+using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 
 namespace Xaquiamuni.Tests;
 
@@ -10,7 +14,8 @@ public class CadastrarClienteTests
     [Fact]
     public async Task ExecuteAsync_ComDadosValidosCriaClienteEConfirmaAposPersistencia()
     {
-        var fixture = new Fixture();
+        using var dbContext = CreateOutboxContext();
+        var fixture = new Fixture(new EmailConfirmationOutbox(dbContext, new FixedTimeProvider(UtcNow)));
 
         var result = await fixture.UseCase.ExecuteAsync(ValidInput());
 
@@ -21,11 +26,20 @@ public class CadastrarClienteTests
         Assert.NotNull(fixture.Repository.Address);
         Assert.Equal(result.UserId, fixture.Repository.Profile!.UserId);
         Assert.Equal(result.UserId, fixture.Repository.Address!.ClienteUserId);
+        Assert.NotNull(fixture.Outbox.LastUserId);
         Assert.True(fixture.Repository.Address.IsDefault);
+        var outboxMessage = Assert.Single(dbContext.EmailOutboxMessages.Local);
+        Assert.Equal(result.UserId, outboxMessage.UserId);
+        Assert.Equal(EmailOutboxMessageType.EmailConfirmation, outboxMessage.MessageType);
+        Assert.Equal(EmailOutboxMessageStatus.Pending, outboxMessage.Status);
+        Assert.Equal(0, outboxMessage.Attempts);
         Assert.True(fixture.Transaction.Committed);
         Assert.Equal(0, fixture.Transaction.RollbackCount);
         Assert.Equal(
-            ["role-check", "begin", "identity-create", "role-add", "profile-add", "address-add", "save", "commit"],
+            [
+                "role-check", "begin", "identity-create", "role-add", "profile-add",
+                "address-add", "outbox-add", "save", "commit"
+            ],
             fixture.Calls);
         Assert.Equal(1, fixture.CpfProtection.FingerprintCalls);
         Assert.Equal(1, fixture.CpfProtection.ProtectCalls);
@@ -42,6 +56,7 @@ public class CadastrarClienteTests
         Assert.Single(result.ValidationErrors);
         Assert.Empty(fixture.Calls);
         Assert.Equal(0, fixture.TransactionFactory.BeginCalls);
+        Assert.Equal(0, fixture.Outbox.EnqueueCalls);
     }
 
     [Fact]
@@ -150,6 +165,57 @@ public class CadastrarClienteTests
         Assert.Equal(1, fixture.Transaction.RollbackCount);
         Assert.DoesNotContain("52998224725", result.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(ValidInput().Senha!, result.ToString(), StringComparison.Ordinal);
+        Assert.NotNull(fixture.Outbox.LastUserId);
+        Assert.Equal(
+            [
+                "role-check", "begin", "identity-create", "role-add", "profile-add",
+                "address-add", "outbox-add", "save", "rollback"
+            ],
+            fixture.Calls);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_QuandoEnfileiramentoFalhaDesfazCadastroSemSalvarOuConfirmar()
+    {
+        using var dbContext = CreateOutboxContext();
+        var fixture = new Fixture(new EmailConfirmationOutbox(dbContext, new FixedTimeProvider(UtcNow)));
+        fixture.Outbox.EnqueueException = new InvalidOperationException("outbox failure");
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => fixture.UseCase.ExecuteAsync(ValidInput()));
+
+        Assert.False(fixture.Transaction.Committed);
+        Assert.Equal(1, fixture.Transaction.RollbackCount);
+        Assert.True(CadastroClienteDiagnostics.TryGet(exception, out var category, out var stage));
+        Assert.Equal(CadastroClienteFailureCategory.PERSISTENCE_TRANSACTION, category);
+        Assert.Equal(CadastroClienteFailureStage.OUTBOX_ENQUEUE, stage);
+        Assert.Equal(
+            [
+                "role-check", "begin", "identity-create", "role-add", "profile-add",
+                "address-add", "outbox-add", "rollback"
+            ],
+            fixture.Calls);
+        Assert.Single(dbContext.EmailOutboxMessages.Local);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_QuandoCommitFalhaRetornaFalhaEFazRollback()
+    {
+        var fixture = new Fixture();
+        fixture.Transaction.CommitException = new ClientePersistenceException();
+
+        var result = await fixture.UseCase.ExecuteAsync(ValidInput());
+
+        Assert.Equal(CadastroClienteStatus.PersistenceFailed, result.Status);
+        Assert.False(result.Succeeded);
+        Assert.False(fixture.Transaction.Committed);
+        Assert.Equal(1, fixture.Transaction.RollbackCount);
+        Assert.Equal(
+            [
+                "role-check", "begin", "identity-create", "role-add", "profile-add",
+                "address-add", "outbox-add", "save", "commit", "rollback"
+            ],
+            fixture.Calls);
     }
 
     [Fact]
@@ -193,6 +259,17 @@ public class CadastrarClienteTests
         EnderecoInicial = source.EnderecoInicial
     };
 
+    private static XaquiamuniDbContext CreateOutboxContext()
+    {
+        var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()
+            .UseSqlServer("Server=localhost;Database=XaquiamuniCadastroOutboxTest")
+            .Options;
+        return new XaquiamuniDbContext(options);
+    }
+
+    private static readonly DateTimeOffset UtcNow =
+        new(2026, 11, 11, 12, 0, 0, TimeSpan.Zero);
+
     private sealed class Fixture
     {
         public List<string> Calls { get; } = [];
@@ -200,22 +277,46 @@ public class CadastrarClienteTests
         public FakeRepository Repository { get; }
         public FakeTransaction Transaction { get; }
         public FakeTransactionFactory TransactionFactory { get; }
+        public FakeEmailConfirmationOutbox Outbox { get; }
         public FakeCpfProtectionService CpfProtection { get; }
         public CadastrarCliente UseCase { get; }
 
-        public Fixture()
+        public Fixture(IEmailConfirmationOutbox? innerOutbox = null)
         {
             Identity = new FakeIdentityService(Calls);
             Repository = new FakeRepository(Calls);
             Transaction = new FakeTransaction(Calls);
             TransactionFactory = new FakeTransactionFactory(Calls, Transaction);
+            Outbox = new FakeEmailConfirmationOutbox(Calls, innerOutbox);
             CpfProtection = new FakeCpfProtectionService();
             UseCase = new CadastrarCliente(
                 new CadastroClienteInputValidator(),
                 CpfProtection,
                 Identity,
                 Repository,
+                Outbox,
                 TransactionFactory);
+        }
+    }
+
+    private sealed class FakeEmailConfirmationOutbox(
+        List<string> calls,
+        IEmailConfirmationOutbox? innerOutbox) : IEmailConfirmationOutbox
+    {
+        public int EnqueueCalls { get; private set; }
+        public Guid? LastUserId { get; private set; }
+        public Exception? EnqueueException { get; set; }
+
+        public void EnqueueEmailConfirmation(Guid userId)
+        {
+            calls.Add("outbox-add");
+            EnqueueCalls++;
+            LastUserId = userId;
+            innerOutbox?.EnqueueEmailConfirmation(userId);
+            if (EnqueueException is not null)
+            {
+                throw EnqueueException;
+            }
         }
     }
 
@@ -299,6 +400,7 @@ public class CadastrarClienteTests
         public bool Committed { get; private set; }
         public int RollbackCount { get; private set; }
         public Exception? SaveException { get; set; }
+        public Exception? CommitException { get; set; }
 
         public Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         {
@@ -314,6 +416,11 @@ public class CadastrarClienteTests
         public Task CommitAsync(CancellationToken cancellationToken = default)
         {
             calls.Add("commit");
+            if (CommitException is not null)
+            {
+                throw CommitException;
+            }
+
             Committed = true;
             return Task.CompletedTask;
         }
@@ -366,4 +473,9 @@ public class CadastrarClienteTests
             new string('A', 64),
             "enc-v1",
             "fp-v1");
+
+    private sealed class FixedTimeProvider(DateTimeOffset utcNow) : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => utcNow;
+    }
 }

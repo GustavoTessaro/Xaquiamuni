@@ -11,6 +11,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Api.Autenticacao;
@@ -431,6 +432,7 @@ public class AuthRegistrationEndpointTests
             new FakeCpfProtectionService(),
             identity,
             new FakeClienteRepository(),
+            new FakeEmailConfirmationOutbox(),
             new FakeTransactionFactory(transaction));
         return await useCase.ExecuteAsync(input);
     }
@@ -492,6 +494,11 @@ public class AuthRegistrationEndpointTests
     {
         public void Adicionar(ClientePerfil perfil) { }
         public void Adicionar(ClienteEndereco endereco) { }
+    }
+
+    private sealed class FakeEmailConfirmationOutbox : IEmailConfirmationOutbox
+    {
+        public void EnqueueEmailConfirmation(Guid userId) { }
     }
 
     private sealed class FakeTransactionFactory(FakeTransaction transaction) : IClienteTransactionFactory

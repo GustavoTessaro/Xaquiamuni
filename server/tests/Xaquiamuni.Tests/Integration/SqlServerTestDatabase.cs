@@ -1,14 +1,17 @@
 using System.Data;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
+using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Tests.Integration;
@@ -18,6 +21,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     private const string ExpectedInstance = "SQLEXPRESS";
     private readonly string _databaseName;
     private readonly string _connectionString;
+    private readonly EmailOutboxTransactionProbe _emailOutboxTransactionProbe = new();
     private ServiceProvider? _serviceProvider;
     private AsyncServiceScope? _scope;
     private bool _databaseCreated;
@@ -30,8 +34,12 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
     public IServiceProvider Services => _scope?.ServiceProvider
         ?? throw new InvalidOperationException("The SQL Server test database is not initialized.");
+    public Guid? RegistrationTransactionIdAtBegin => _emailOutboxTransactionProbe.TransactionIdAtBegin;
+    public Guid? OutboxTransactionIdAtEnqueue => _emailOutboxTransactionProbe.TransactionIdAtEnqueue;
 
-    public static async Task<SqlServerTestDatabase> CreateAsync(bool failProfilePersistence = false)
+    public static async Task<SqlServerTestDatabase> CreateAsync(
+        bool failProfilePersistence = false,
+        bool failOutboxEnqueue = false)
     {
         var databaseName = $"Xaquiamuni_IntegrationTest_{Guid.NewGuid():N}";
         var masterConnectionString = new SqlConnectionStringBuilder
@@ -57,7 +65,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
         try
         {
-            await database.InitializeAsync(failProfilePersistence).ConfigureAwait(false);
+            await database.InitializeAsync(failProfilePersistence, failOutboxEnqueue).ConfigureAwait(false);
             return database;
         }
         catch
@@ -106,7 +114,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         }
     }
 
-    private async Task InitializeAsync(bool failProfilePersistence)
+    private async Task InitializeAsync(bool failProfilePersistence, bool failOutboxEnqueue)
     {
         var encryptionKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var fingerprintKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
@@ -123,15 +131,33 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
         services.AddInfrastructureServices(configuration);
-        if (failProfilePersistence)
+        services.RemoveAll<IEmailConfirmationOutbox>();
+        services.AddScoped<IEmailConfirmationOutbox>(serviceProvider =>
         {
-            services.RemoveAll<IClienteTransactionFactory>();
-            services.AddScoped<IClienteTransactionFactory>(serviceProvider =>
-                new FailOnFinalSaveTransactionFactory(
-                    new EfClienteTransactionFactory(
-                        serviceProvider.GetRequiredService<XaquiamuniDbContext>())));
-        }
+            var context = serviceProvider.GetRequiredService<XaquiamuniDbContext>();
+            var outbox = new EmailConfirmationOutbox(
+                context,
+                serviceProvider.GetRequiredService<TimeProvider>());
+            return new ProbedEmailConfirmationOutbox(
+                outbox,
+                context,
+                _emailOutboxTransactionProbe,
+                failOutboxEnqueue);
+        });
+        services.RemoveAll<IClienteTransactionFactory>();
+        services.AddScoped<IClienteTransactionFactory>(serviceProvider =>
+        {
+            var context = serviceProvider.GetRequiredService<XaquiamuniDbContext>();
+            IClienteTransactionFactory transactionFactory = new ProbedTransactionFactory(
+                new EfClienteTransactionFactory(context),
+                context,
+                _emailOutboxTransactionProbe);
+            return failProfilePersistence
+                ? new FailOnFinalSaveTransactionFactory(transactionFactory)
+                : transactionFactory;
+        });
 
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
         _scope = _serviceProvider.CreateAsyncScope();
@@ -241,5 +267,45 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
             inner.RollbackAsync(cancellationToken);
 
         public ValueTask DisposeAsync() => inner.DisposeAsync();
+    }
+
+    private sealed class EmailOutboxTransactionProbe
+    {
+        public Guid? TransactionIdAtBegin { get; private set; }
+        public Guid? TransactionIdAtEnqueue { get; private set; }
+
+        public void RecordBegin(Guid? transactionId) => TransactionIdAtBegin = transactionId;
+        public void RecordEnqueue(Guid? transactionId) => TransactionIdAtEnqueue = transactionId;
+    }
+
+    private sealed class ProbedTransactionFactory(
+        IClienteTransactionFactory inner,
+        XaquiamuniDbContext dbContext,
+        EmailOutboxTransactionProbe transactionProbe) : IClienteTransactionFactory
+    {
+        public async Task<IClienteTransaction> BeginTransactionAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var transaction = await inner.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+            transactionProbe.RecordBegin(dbContext.Database.CurrentTransaction?.TransactionId);
+            return transaction;
+        }
+    }
+
+    private sealed class ProbedEmailConfirmationOutbox(
+        IEmailConfirmationOutbox inner,
+        XaquiamuniDbContext dbContext,
+        EmailOutboxTransactionProbe transactionProbe,
+        bool failAfterEnqueue) : IEmailConfirmationOutbox
+    {
+        public void EnqueueEmailConfirmation(Guid userId)
+        {
+            inner.EnqueueEmailConfirmation(userId);
+            transactionProbe.RecordEnqueue(dbContext.Database.CurrentTransaction?.TransactionId);
+            if (failAfterEnqueue)
+            {
+                throw new InvalidOperationException("Injected Outbox enqueue failure.");
+            }
+        }
     }
 }
