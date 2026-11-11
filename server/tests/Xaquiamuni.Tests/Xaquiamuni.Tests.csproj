@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Dominio\Xaquiamuni.Dominio.csproj" />
     <ProjectReference Include="..\..\src\Aplicacao\Xaquiamuni.Aplicacao.csproj" />
+    <ProjectReference Include="..\..\src\Admin\Xaquiamuni.Admin.csproj" />
     <ProjectReference Include="..\..\src\Api\Xaquiamuni.Api.csproj" />
     <ProjectReference Include="..\..\src\Infraestrutura\Xaquiamuni.Infraestrutura.csproj" />
   </ItemGroup>

@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/" />
+  <Folder Name="/src/Admin/">
+    <Project Path="src/Admin/Xaquiamuni.Admin.csproj" />
+  </Folder>
   <Folder Name="/src/Api/">
     <Project Path="src/Api/Xaquiamuni.Api.csproj" />
   </Folder>
