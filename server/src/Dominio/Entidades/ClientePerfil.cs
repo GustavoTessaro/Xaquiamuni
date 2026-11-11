@@ -7,6 +7,10 @@ public sealed class ClientePerfil
 {
     private const int NomeCompletoMaxLength = 150;
 
+    private ClientePerfil()
+    {
+    }
+
     private ClientePerfil(Guid userId, string nomeCompleto, CpfProtegido cpfProtegido)
     {
         UserId = userId;
@@ -14,9 +18,9 @@ public sealed class ClientePerfil
         CpfProtegido = cpfProtegido;
     }
 
-    public Guid UserId { get; }
-    public string NomeCompleto { get; private set; }
-    public CpfProtegido CpfProtegido { get; }
+    public Guid UserId { get; private set; }
+    public string NomeCompleto { get; private set; } = null!;
+    public CpfProtegido CpfProtegido { get; private set; } = null!;
 
     public static ClientePerfil Criar(Guid userId, string? nomeCompleto, CpfProtegido cpfProtegido)
     {
