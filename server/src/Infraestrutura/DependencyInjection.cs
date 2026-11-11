@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Outbox;
@@ -89,6 +91,32 @@ public static class DependencyInjection
         services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();
         services.Configure<EmailConfirmationEmailOptions>(
             configuration.GetSection(EmailConfirmationEmailOptions.SectionName));
+
+        var outboxWorkerSection = configuration.GetSection(EmailOutboxBackgroundServiceOptions.SectionName);
+        services.AddOptions<EmailOutboxBackgroundServiceOptions>()
+            .Bind(outboxWorkerSection)
+            .Validate(
+                options => options.CycleInterval >= EmailOutboxBackgroundServiceOptions.MinimumCycleInterval
+                    && options.CycleInterval <= EmailOutboxBackgroundServiceOptions.MaximumCycleInterval,
+                "Email outbox worker cycle interval is outside the supported range.")
+            .Validate(
+                options => options.BatchSize is >= EmailOutboxBackgroundServiceOptions.MinimumBatchSize
+                    and <= EmailOutboxBackgroundServiceOptions.MaximumBatchSize,
+                "Email outbox worker batch size is outside the supported range.")
+            .ValidateOnStart();
+
+        var outboxWorkerOptions = outboxWorkerSection.Get<EmailOutboxBackgroundServiceOptions>()
+            ?? new EmailOutboxBackgroundServiceOptions();
+        if (outboxWorkerOptions.Enabled)
+        {
+            if (!services.Any(descriptor => descriptor.ServiceType == typeof(IEmailSender)))
+            {
+                throw new InvalidOperationException(
+                    "The email outbox worker requires a configured email sender.");
+            }
+
+            services.AddHostedService<EmailOutboxBackgroundService>();
+        }
 
         return services;
     }

@@ -12,6 +12,116 @@ namespace Xaquiamuni.Tests.Integration;
 public sealed class EmailOutboxStoreSqlServerIntegrationTests
 {
     [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_WithEmptyExclusionListClaimsOneMessage()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await CreateUserAsync(database);
+        var message = CreatePendingMessage(userId);
+        await SeedMessageAsync(database, message);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            batchSize: 1,
+            TimeSpan.FromMinutes(2),
+            excludedMessageIds: Array.Empty<Guid>()));
+
+        Assert.Equal(message.Id, claim.Id);
+        Assert.Equal(1, claim.Attempts);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_ExcludesOneEligibleMessage()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var excludedUserId = await CreateUserAsync(database);
+        var eligibleUserId = await CreateUserAsync(database);
+        var excludedMessage = CreatePendingMessage(excludedUserId);
+        var eligibleMessage = CreatePendingMessage(eligibleUserId);
+        await SeedMessageAsync(database, excludedMessage);
+        await SeedMessageAsync(database, eligibleMessage);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            batchSize: 2,
+            TimeSpan.FromMinutes(2),
+            excludedMessageIds: [excludedMessage.Id]));
+
+        Assert.Equal(eligibleMessage.Id, claim.Id);
+
+        await using var verification = database.CreateVerificationContext();
+        var excludedPersisted = await verification.EmailOutboxMessages
+            .SingleAsync(message => message.Id == excludedMessage.Id);
+        Assert.Equal(EmailOutboxMessageStatus.Pending, excludedPersisted.Status);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_ExcludesMultipleEligibleMessages()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var firstUserId = await CreateUserAsync(database);
+        var secondUserId = await CreateUserAsync(database);
+        var eligibleUserId = await CreateUserAsync(database);
+        var firstExcluded = CreatePendingMessage(firstUserId);
+        var secondExcluded = CreatePendingMessage(secondUserId);
+        var eligibleMessage = CreatePendingMessage(eligibleUserId);
+        await SeedMessageAsync(database, firstExcluded);
+        await SeedMessageAsync(database, secondExcluded);
+        await SeedMessageAsync(database, eligibleMessage);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            batchSize: 3,
+            TimeSpan.FromMinutes(2),
+            excludedMessageIds: [firstExcluded.Id, secondExcluded.Id]));
+
+        Assert.Equal(eligibleMessage.Id, claim.Id);
+
+        await using var verification = database.CreateVerificationContext();
+        var excludedStatuses = await verification.EmailOutboxMessages
+            .Where(message => message.Id == firstExcluded.Id || message.Id == secondExcluded.Id)
+            .Select(message => message.Status)
+            .ToListAsync();
+        Assert.All(excludedStatuses, status => Assert.Equal(EmailOutboxMessageStatus.Pending, status));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_DoesNotReclaimRetriedPendingMessageWhenExcluded()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await CreateUserAsync(database);
+        var message = CreatePendingMessage(userId);
+        await SeedMessageAsync(database, message);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        Assert.True(await store.RetryAsync(claim, jitterSample: 1));
+
+        await using (var makeRetryEligible = database.CreateVerificationContext())
+        {
+            await makeRetryEligible.Database.ExecuteSqlInterpolatedAsync(
+                $"UPDATE [dbo].[EmailOutbox] SET [NextAttemptAtUtc] = {DateTimeOffset.UtcNow.AddMinutes(-1)} WHERE [Id] = {message.Id}");
+        }
+
+        var claims = await store.ClaimDueAsync(
+            batchSize: 1,
+            TimeSpan.FromMinutes(2),
+            excludedMessageIds: [message.Id]);
+
+        Assert.Empty(claims);
+        await using var verification = database.CreateVerificationContext();
+        var persisted = await verification.EmailOutboxMessages.SingleAsync();
+        Assert.Equal(EmailOutboxMessageStatus.Pending, persisted.Status);
+        Assert.Equal(1, persisted.Attempts);
+    }
+
+    [SqlServerIntegrationFact]
     public async Task ClaimDueAsync_WithReadCommittedSnapshot_ClaimsMessageOnlyOnce()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
@@ -30,8 +140,14 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var secondStore = new SqlServerEmailOutboxStore(secondContext);
 
         var results = await Task.WhenAll(
-            firstStore.ClaimDueAsync(batchSize: 1, TimeSpan.FromMinutes(2)),
-            secondStore.ClaimDueAsync(batchSize: 1, TimeSpan.FromMinutes(2)));
+            firstStore.ClaimDueAsync(
+                batchSize: 1,
+                TimeSpan.FromMinutes(2),
+                excludedMessageIds: Array.Empty<Guid>()),
+            secondStore.ClaimDueAsync(
+                batchSize: 1,
+                TimeSpan.FromMinutes(2),
+                excludedMessageIds: Array.Empty<Guid>()));
 
         var claim = Assert.Single(results.SelectMany(result => result));
         Assert.Equal(userId, claim.UserId);

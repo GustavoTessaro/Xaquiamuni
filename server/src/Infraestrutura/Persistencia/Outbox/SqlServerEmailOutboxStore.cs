@@ -22,9 +22,12 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             SELECT TOP (@BatchSize) *
             FROM [dbo].[EmailOutbox] WITH (UPDLOCK, READPAST, ROWLOCK, READCOMMITTEDLOCK)
             WHERE
+            (
                 ([Status] = @PendingStatus AND [NextAttemptAtUtc] <= @NowUtc)
                 OR
                 ([Status] = @ProcessingStatus AND [LeaseExpiresAtUtc] <= @NowUtc)
+            )
+            /* EXCLUDED_MESSAGE_IDS */
             ORDER BY
                 CASE
                     WHEN [Status] = @PendingStatus THEN [NextAttemptAtUtc]
@@ -133,9 +136,16 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
     public async Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
         int batchSize,
         TimeSpan leaseDuration,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<Guid>? excludedMessageIds = null)
     {
         ValidateClaimOptions(batchSize, leaseDuration);
+        var excludedIds = excludedMessageIds?.Distinct().ToArray() ?? [];
+        if (excludedIds.Length > MaximumBatchSize)
+        {
+            throw new ArgumentOutOfRangeException(nameof(excludedMessageIds));
+        }
+
         var connection = GetSqlConnection();
         var closeConnection = connection.State != ConnectionState.Open;
         if (closeConnection)
@@ -150,7 +160,13 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
                 .ConfigureAwait(false);
             await using var command = connection.CreateCommand();
             command.Transaction = transaction;
-            command.CommandText = ClaimSql;
+            var exclusionPredicate = excludedIds.Length == 0
+                ? string.Empty
+                : $"AND [Id] NOT IN ({string.Join(", ", Enumerable.Range(0, excludedIds.Length).Select(index => $"@ExcludedId{index}"))})";
+            command.CommandText = ClaimSql.Replace(
+                "/* EXCLUDED_MESSAGE_IDS */",
+                exclusionPredicate,
+                StringComparison.Ordinal);
             AddParameter(command, "@BatchSize", SqlDbType.Int, batchSize);
             AddParameter(
                 command,
@@ -161,6 +177,10 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             AddParameter(command, "@ProcessingStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.Processing);
             AddParameter(command, "@DeadLetterStatus", SqlDbType.SmallInt, (short)EmailOutboxMessageStatus.DeadLetter);
             AddParameter(command, "@MaximumAttempts", SqlDbType.Int, EmailOutboxRetryPolicy.MaximumAttempts);
+            for (var index = 0; index < excludedIds.Length; index++)
+            {
+                AddParameter(command, $"@ExcludedId{index}", SqlDbType.UniqueIdentifier, excludedIds[index]);
+            }
 
             var claims = new List<EmailOutboxClaim>(batchSize);
             await using (var reader = await command.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false))

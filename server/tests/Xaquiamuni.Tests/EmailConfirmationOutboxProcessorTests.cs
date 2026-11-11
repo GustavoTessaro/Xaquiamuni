@@ -184,7 +184,8 @@ public sealed class EmailConfirmationOutboxProcessorTests
         public Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
             int batchSize,
             TimeSpan leaseDuration,
-            CancellationToken cancellationToken = default) =>
+            CancellationToken cancellationToken = default,
+            IReadOnlyCollection<Guid>? excludedMessageIds = null) =>
             throw new NotSupportedException();
 
         public Task<bool> CompleteAsync(

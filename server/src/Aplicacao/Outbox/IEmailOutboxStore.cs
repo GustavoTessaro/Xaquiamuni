@@ -5,7 +5,8 @@ public interface IEmailOutboxStore
     Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
         int batchSize,
         TimeSpan leaseDuration,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        IReadOnlyCollection<Guid>? excludedMessageIds = null);
 
     Task<bool> CompleteAsync(
         EmailOutboxClaim claim,
