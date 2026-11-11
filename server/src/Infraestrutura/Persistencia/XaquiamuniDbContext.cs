@@ -15,6 +15,9 @@ public sealed class XaquiamuniDbContext
     {
     }
 
+    public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
+    public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
+
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
@@ -123,8 +126,6 @@ public sealed class XaquiamuniDbContext
                 .OnDelete(DeleteBehavior.Restrict)
                 .IsRequired();
 
-            address.HasIndex(entity => entity.ClienteUserId)
-                .HasDatabaseName("IX_ClienteEnderecos_ClienteUserId");
             address.HasIndex(entity => entity.ClienteUserId)
                 .HasDatabaseName("IX_ClienteEnderecos_ClienteUserId");
             address.HasIndex(entity => entity.ClienteUserId, "UX_ClienteEnderecos_DefaultPerClient")

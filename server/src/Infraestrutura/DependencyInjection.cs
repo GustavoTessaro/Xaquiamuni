@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
@@ -24,6 +25,7 @@ public static class DependencyInjection
                 options.UseSqlServer(connectionString);
             }
         });
+        services.AddScoped<IClienteRepository, ClienteRepository>();
 
         services
             .AddIdentityCore<XaquiamuniUser>(options =>

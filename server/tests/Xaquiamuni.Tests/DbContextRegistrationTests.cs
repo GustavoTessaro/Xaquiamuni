@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Identity;
+using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
@@ -55,6 +56,38 @@ public class DbContextRegistrationTests
             entityType.ClrType == typeof(IdentityUserRole<Guid>));
         Assert.Contains(dbContext.Model.GetEntityTypes(), entityType =>
             entityType.ClrType == typeof(IdentityRole<Guid>));
+    }
+
+    [Fact]
+    public void AddInfrastructureServices_RegistersScopedRepositorySharingIdentityDbContext()
+    {
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["ConnectionStrings:SqlServer"] = "Server=localhost;Database=XaquiamuniScopedRepositoryTest"
+            })
+            .Build();
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddInfrastructureServices(configuration);
+
+        var registration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IClienteRepository));
+        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+
+        using var serviceProvider = services.BuildServiceProvider();
+        using var scope = serviceProvider.CreateScope();
+        var scopedServices = scope.ServiceProvider;
+        var repository = scopedServices.GetRequiredService<IClienteRepository>();
+        var dbContext = scopedServices.GetRequiredService<XaquiamuniDbContext>();
+        var userManager = scopedServices.GetRequiredService<UserManager<XaquiamuniUser>>();
+        var userStore = scopedServices.GetRequiredService<IUserStore<XaquiamuniUser>>();
+        var contextProperty = userStore.GetType().GetProperty("Context");
+
+        Assert.NotNull(repository);
+        Assert.NotNull(userManager);
+        Assert.NotNull(contextProperty);
+        Assert.Same(dbContext, contextProperty!.GetValue(userStore));
     }
 
     [Fact]
