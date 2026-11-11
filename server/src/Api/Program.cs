@@ -22,7 +22,8 @@ if (app.Environment.IsDevelopment())
 
 app.Use(async (context, next) =>
 {
-    if (HttpMethods.IsPost(context.Request.Method)
+    var isAuthenticationWrite =
+        HttpMethods.IsPost(context.Request.Method)
         && (string.Equals(
                 context.Request.Path.Value,
                 AuthEndpoints.RegisterEndpoint,
@@ -30,7 +31,15 @@ app.Use(async (context, next) =>
             || string.Equals(
                 context.Request.Path.Value,
                 AuthEndpoints.LoginEndpoint,
-                StringComparison.OrdinalIgnoreCase)))
+                StringComparison.OrdinalIgnoreCase));
+    var isCurrentClientRequest =
+        HttpMethods.IsGet(context.Request.Method)
+        && string.Equals(
+            context.Request.Path.Value,
+            AuthEndpoints.MeEndpoint,
+            StringComparison.OrdinalIgnoreCase);
+
+    if (isAuthenticationWrite || isCurrentClientRequest)
     {
         context.Response.Headers.CacheControl = "no-store";
     }

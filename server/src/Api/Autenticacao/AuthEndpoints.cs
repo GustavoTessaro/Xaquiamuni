@@ -1,5 +1,7 @@
+using System.Security.Claims;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
+using Xaquiamuni.Api.Autorizacao;
 
 namespace Xaquiamuni.Api.Autenticacao;
 
@@ -7,6 +9,7 @@ public static class AuthEndpoints
 {
     public const string RegisterEndpoint = "/api/auth/register";
     public const string LoginEndpoint = "/api/auth/login";
+    public const string MeEndpoint = "/api/auth/me";
 
     public static IEndpointRouteBuilder MapXaquiamuniAuthEndpoints(this IEndpointRouteBuilder endpoints)
     {
@@ -31,7 +34,24 @@ public static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status401Unauthorized);
 
+        endpoints.MapGet(MeEndpoint, GetCurrentClient)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .WithName("GetCurrentClient")
+            .WithSummary("Retorna a identidade da sessão de cliente.")
+            .WithDescription("Retorna somente o identificador do cliente autenticado.")
+            .Produces<CurrentClientResponse>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         return endpoints;
+    }
+
+    private static IResult GetCurrentClient(HttpContext context)
+    {
+        var userIdValue = context.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        return Guid.TryParse(userIdValue, out var userId)
+            ? Results.Ok(new CurrentClientResponse(userId))
+            : Results.Unauthorized();
     }
 
     private static async Task<IResult> LoginAsync(
@@ -145,6 +165,9 @@ public sealed record LoginClientRequest
     /// <summary>Senha da conta.</summary>
     public string? Senha { get; init; }
 }
+
+/// <summary>Identificador público da sessão de cliente autenticada.</summary>
+public sealed record CurrentClientResponse(Guid UserId);
 
 /// <summary>Dados públicos necessários para solicitar o cadastro de um cliente.</summary>
 public sealed class RegisterClientRequest
