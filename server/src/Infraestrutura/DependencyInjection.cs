@@ -92,6 +92,14 @@ public static class DependencyInjection
         services.Configure<EmailConfirmationEmailOptions>(
             configuration.GetSection(EmailConfirmationEmailOptions.SectionName));
 
+        var resendEmailOptions = configuration
+            .GetSection(ResendEmailOptions.SectionName)
+            .Get<ResendEmailOptions>() ?? new ResendEmailOptions();
+        if (resendEmailOptions.Enabled)
+        {
+            services.AddResendEmailSender(configuration);
+        }
+
         var outboxWorkerSection = configuration.GetSection(EmailOutboxBackgroundServiceOptions.SectionName);
         services.AddOptions<EmailOutboxBackgroundServiceOptions>()
             .Bind(outboxWorkerSection)
