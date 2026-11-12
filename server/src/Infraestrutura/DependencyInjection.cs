@@ -39,7 +39,6 @@ public static class DependencyInjection
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationResendOutbox, SqlServerEmailConfirmationResendOutbox>();
         services.AddScoped<IEmailOutboxStore, SqlServerEmailOutboxStore>();
-        services.AddScoped<EmailConfirmationOutboxProcessor>();
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();
@@ -125,6 +124,7 @@ public static class DependencyInjection
                     "The email outbox worker requires a configured email sender.");
             }
 
+            services.AddScoped<EmailConfirmationOutboxProcessor>();
             services.AddHostedService<EmailOutboxBackgroundService>();
         }
 

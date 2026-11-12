@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -17,18 +19,21 @@ public sealed class ResendEmailSenderDependencyInjectionTests
     [Fact]
     public void AddInfrastructureServices_WhenBothFeaturesAreDisabledDoesNotRegisterSenderOrWorker()
     {
-        var services = new ServiceCollection();
-        services.AddInfrastructureServices(CreateConfiguration(resendEnabled: false, workerEnabled: false));
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = Environments.Development
+        });
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.Services.AddInfrastructureServices(
+            CreateConfiguration(resendEnabled: false, workerEnabled: false));
 
+        using var app = builder.Build();
+        Assert.Empty(app.Services.GetServices<IEmailSender>());
         Assert.DoesNotContain(
-            services,
-            descriptor => descriptor.ServiceType == typeof(IEmailSender));
-        using var provider = services.BuildServiceProvider();
-        Assert.DoesNotContain(
-            provider.GetServices<IHostedService>(),
+            app.Services.GetServices<IHostedService>(),
             service => service is EmailOutboxBackgroundService);
         Assert.False(
-            provider.GetRequiredService<IOptions<EmailOutboxBackgroundServiceOptions>>().Value.Enabled);
+            app.Services.GetRequiredService<IOptions<EmailOutboxBackgroundServiceOptions>>().Value.Enabled);
         Assert.False(new ResendEmailOptions().Enabled);
     }
 
@@ -95,21 +100,29 @@ public sealed class ResendEmailSenderDependencyInjectionTests
     [Fact]
     public void AddInfrastructureServices_WhenBothFeaturesAreEnabledRegistersBothIndependently()
     {
-        var services = new ServiceCollection();
-        services.AddInfrastructureServices(
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+        {
+            EnvironmentName = Environments.Development
+        });
+        builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        builder.Services.AddInfrastructureServices(
             CreateConfiguration(
                 resendEnabled: true,
                 workerEnabled: true,
                 SyntheticApiKey,
                 SyntheticFromEmail));
 
-        using var provider = services.BuildServiceProvider();
-        Assert.IsType<ResendEmailSender>(provider.GetRequiredService<IEmailSender>());
-        Assert.Single(provider.GetServices<IHostedService>()
+        using var app = builder.Build();
+        Assert.IsType<ResendEmailSender>(app.Services.GetRequiredService<IEmailSender>());
+        Assert.Single(app.Services.GetServices<IHostedService>()
             .OfType<EmailOutboxBackgroundService>());
-        Assert.True(provider.GetRequiredService<IOptions<ResendEmailOptions>>().Value.Enabled);
+        Assert.True(app.Services.GetRequiredService<IOptions<ResendEmailOptions>>().Value.Enabled);
         Assert.True(
-            provider.GetRequiredService<IOptions<EmailOutboxBackgroundServiceOptions>>().Value.Enabled);
+            app.Services.GetRequiredService<IOptions<EmailOutboxBackgroundServiceOptions>>().Value.Enabled);
+
+        using var scope = app.Services.CreateScope();
+        Assert.IsType<EmailConfirmationOutboxProcessor>(
+            scope.ServiceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
     }
 
     private static IConfiguration CreateConfiguration(
@@ -121,7 +134,8 @@ public sealed class ResendEmailSenderDependencyInjectionTests
         var values = new Dictionary<string, string?>
         {
             [$"{ResendEmailOptions.SectionName}:Enabled"] = resendEnabled.ToString(),
-            ["EmailOutboxWorker:Enabled"] = workerEnabled.ToString()
+            ["EmailOutboxWorker:Enabled"] = workerEnabled.ToString(),
+            ["EmailConfirmation:PublicFrontendBaseUrl"] = "https://frontend.example.test"
         };
         if (apiKey is not null)
         {

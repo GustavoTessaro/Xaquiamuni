@@ -60,16 +60,15 @@ public sealed class EmailOutboxStoreContractTests
     }
 
     [Fact]
-    public void DependencyInjection_RegistersScopedProcessorWithoutRegisteringSender()
+    public void DependencyInjection_DoesNotRegisterProcessorWhenWorkerIsDisabled()
     {
         var configuration = new ConfigurationBuilder().Build();
         var services = new ServiceCollection();
         services.AddInfrastructureServices(configuration);
 
-        var registration = Assert.Single(services, descriptor =>
-            descriptor.ServiceType == typeof(EmailConfirmationOutboxProcessor));
-
-        Assert.Equal(ServiceLifetime.Scoped, registration.Lifetime);
+        Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ServiceType == typeof(EmailConfirmationOutboxProcessor));
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IEmailSender));
     }
 
