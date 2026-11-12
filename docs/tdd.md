@@ -321,13 +321,17 @@ O reenvio HTTP delega ao caso de uso, que consulta a conta não confirmada e a O
 
 **Pix:** pedido pendente → criar cobrança com referência única → exibir QR Code/copia-e-cola → receber evento assinado/autenticado ou consultar API → verificar identificador, valor, recebedor e estado → confirmar idempotentemente → liberar separação. Webhook não confiável ou falha de consulta não marca pagamento como confirmado. Credenciais somente no servidor. Testar em sandbox antes de produção.
 
+#### Recuperação de senha — preparação R7
+
+A Outbox `PasswordReset` captura um fingerprint SHA-256 com separação de propósito do `SecurityStamp` vigente. A geração do token exige o fingerprint esperado e valida a correspondência em tempo constante no mesmo snapshot `XaquiamuniUser` entregue ao provider nativo Identity; o token é, portanto, vinculado à geração validada e mantém validade de 1 hora. O processor, o endpoint e a coordenação transacional da redefinição/invalidação permanecem etapas futuras; nenhum token ou stamp bruto é persistido.
+
 **Entrega:** CEP de destino → verificar área de entrega própria ou retirada elegível → para demais endereços atendidos, cotar Correios com peso/dimensões/origem → registrar opção, custo e prazo aceitos no pedido. Cotação indisponível não deve gerar frete fictício; fallback manual somente após aprovação.
 
 **Fotos:** upload autenticado e validado, limites de tamanho/tipo, geração de identificador interno, remoção segura de metadados quando aplicável; armazenar chave e metadados no SQL, bytes fora do banco se possível. Definir política de visibilidade: fotos publicadas podem ser públicas; arquivos administrativos não.
 
 ## 7. Segurança, privacidade e operação
 
-- ASP.NET Core Identity com hashing de senhas e lockout configurado; recuperação de senha ainda não implementada e permanece como próxima funcionalidade. Nunca armazenar senha reversível.
+- ASP.NET Core Identity com hashing de senhas e lockout configurado; a geração protegida do token de recuperação está implementada, mas o processor, endpoint e redefinição coordenada permanecem pendentes. Nunca armazenar senha reversível.
 - Autenticação F2 usa um cookie `HttpOnly`, `Secure`, `SameSite=Lax`, path `/` e expiração de 8 horas, sem sliding expiration. Login/logout/cadastro/confirmação/reenvio usam antifalsificação; `/me` exige a política de cliente autenticado. `RequireConfirmedEmail` continua `false`.
 - Não há configuração explícita no repositório para persistir e compartilhar chaves de ASP.NET Data Protection; armazenamento persistente e compartilhado entre instâncias deve ser configurado e validado antes da produção.
 - O rate limiter nativo é em memória por processo, aplicado somente ao reenvio: fixed window de 1 minuto, 10 permissões, fila zero. Particiona por `RemoteIpAddress`, normaliza IPv4 mapeado em IPv6 e usa fallback compartilhado quando ausente; não lê headers de forwarding. No deploy atrás de proxy, configurar somente proxies confiáveis e validar o IP remoto efetivo.
@@ -418,7 +422,7 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | PT-17 | Rate limiting | Limites são locais a cada processo e não agregam instâncias; forwarded headers não são confiáveis/configurados | No deploy, documentar proxies confiáveis e avaliar limitador distribuído se houver múltiplas instâncias |
 | PT-18 | Data Protection | Não há chave persistente compartilhada configurada no repositório | Configurar armazenamento protegido e compartilhado, validar rotação, reinício e múltiplas instâncias |
 | PT-19 | Login confirmado | `RequireConfirmedEmail` permanece `false` porque envio real ainda não foi validado | Só avaliar exigência após validar entrega e experiência de recuperação/reenvio |
-| PT-20 | Recuperação de senha | Fluxo ainda não implementado | Tratar como próxima funcionalidade após validação do serviço real de e-mail |
+| PT-20 | Recuperação de senha | Processor, endpoint e coordenação concorrente da redefinição ainda não implementados; envio real não validado | Concluir as etapas R7/R8, validar entrega em ambiente seguro e coordenar invalidação das mensagens antigas |
 
 ### 10.1 Mapa de rastreabilidade resumido
 

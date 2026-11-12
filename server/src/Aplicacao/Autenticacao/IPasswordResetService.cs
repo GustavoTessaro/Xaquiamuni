@@ -8,6 +8,7 @@ public interface IPasswordResetService
 
     Task<PasswordResetTokenResult> GeneratePasswordResetTokenForUserAsync(
         Guid userId,
+        ReadOnlyMemory<byte>? credentialGenerationFingerprint,
         CancellationToken cancellationToken = default);
 
     Task<PasswordResetResult> ResetPasswordAsync(

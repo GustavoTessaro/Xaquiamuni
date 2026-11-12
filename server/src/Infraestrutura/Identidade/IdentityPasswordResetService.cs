@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Xaquiamuni.Aplicacao.Autenticacao;
 
@@ -9,12 +10,18 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
     private const int EmailMaxLength = 256;
     private const int PasswordMaxLength = 256;
     private const int TokenMaxLength = 4096;
+    private const int SecurityStampMaxLength = 256;
 
     private readonly UserManager<XaquiamuniUser> _userManager;
+    private readonly ICredentialGenerationFingerprint _credentialGenerationFingerprint;
 
-    public IdentityPasswordResetService(UserManager<XaquiamuniUser> userManager)
+    public IdentityPasswordResetService(
+        UserManager<XaquiamuniUser> userManager,
+        ICredentialGenerationFingerprint credentialGenerationFingerprint)
     {
-        _userManager = userManager;
+        _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
+        _credentialGenerationFingerprint = credentialGenerationFingerprint
+            ?? throw new ArgumentNullException(nameof(credentialGenerationFingerprint));
     }
 
     public async Task<Guid?> FindConfirmedUserIdByEmailAsync(
@@ -42,17 +49,23 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
 
     public async Task<PasswordResetTokenResult> GeneratePasswordResetTokenForUserAsync(
         Guid userId,
+        ReadOnlyMemory<byte>? credentialGenerationFingerprint,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (userId == Guid.Empty)
+        if (userId == Guid.Empty
+            || credentialGenerationFingerprint is not ReadOnlyMemory<byte> expectedFingerprint
+            || expectedFingerprint.Length != SHA256.HashSizeInBytes)
         {
-            return PasswordResetTokenResult.NotEligible();
+            return PasswordResetTokenResult.InvalidRequest();
         }
 
         var user = await _userManager.FindByIdAsync(userId.ToString()).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        if (user is null || user.Id == Guid.Empty || !IsValidEmailAddress(user.Email))
+        if (user is null
+            || user.Id != userId
+            || !IsValidEmailAddress(user.Email)
+            || !IsValidSecurityStamp(user.SecurityStamp))
         {
             return PasswordResetTokenResult.NotEligible();
         }
@@ -62,8 +75,32 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
             return PasswordResetTokenResult.NotEligible();
         }
 
-        var email = user.Email!;
         cancellationToken.ThrowIfCancellationRequested();
+        var currentFingerprint = _credentialGenerationFingerprint.Compute(user.SecurityStamp!);
+        bool matches;
+        try
+        {
+            if (currentFingerprint.Length != SHA256.HashSizeInBytes)
+            {
+                throw new InvalidOperationException(
+                    "The credential generation fingerprint has an invalid size.");
+            }
+
+            matches = CryptographicOperations.FixedTimeEquals(
+                currentFingerprint,
+                expectedFingerprint.Span);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(currentFingerprint);
+        }
+
+        if (!matches)
+        {
+            return PasswordResetTokenResult.CredentialGenerationMismatch();
+        }
+
+        var email = user.Email!;
         var token = await _userManager.GeneratePasswordResetTokenAsync(user).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         return PasswordResetTokenResult.Generated(email, token);
@@ -137,4 +174,9 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
             && domain[^1] != '.'
             && !domain.Contains("..", StringComparison.Ordinal);
     }
+
+    private static bool IsValidSecurityStamp(string? securityStamp) =>
+        !string.IsNullOrWhiteSpace(securityStamp)
+        && securityStamp.Length <= SecurityStampMaxLength
+        && !securityStamp.Any(char.IsControl);
 }

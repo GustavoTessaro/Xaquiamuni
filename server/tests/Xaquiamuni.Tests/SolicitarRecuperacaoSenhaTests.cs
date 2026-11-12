@@ -230,6 +230,7 @@ public sealed class SolicitarRecuperacaoSenhaTests
 
         public Task<PasswordResetTokenResult> GeneratePasswordResetTokenForUserAsync(
             Guid userId,
+            ReadOnlyMemory<byte>? credentialGenerationFingerprint,
             CancellationToken cancellationToken = default)
         {
             TokenGenerationCalls++;

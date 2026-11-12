@@ -3,7 +3,9 @@ namespace Xaquiamuni.Aplicacao.Autenticacao;
 public enum PasswordResetTokenStatus
 {
     Generated,
-    NotEligible
+    NotEligible,
+    CredentialGenerationMismatch,
+    InvalidRequest
 }
 
 public sealed class PasswordResetTokenResult
@@ -27,6 +29,12 @@ public sealed class PasswordResetTokenResult
 
     public static PasswordResetTokenResult NotEligible() =>
         new(PasswordResetTokenStatus.NotEligible, null, null);
+
+    public static PasswordResetTokenResult CredentialGenerationMismatch() =>
+        new(PasswordResetTokenStatus.CredentialGenerationMismatch, null, null);
+
+    public static PasswordResetTokenResult InvalidRequest() =>
+        new(PasswordResetTokenStatus.InvalidRequest, null, null);
 
     public override string ToString() => $"[PasswordResetToken {Status}]";
 }
