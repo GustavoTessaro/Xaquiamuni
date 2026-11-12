@@ -59,6 +59,7 @@ describe('LoginComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Sessão ativa');
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
     expect(fixture.nativeElement.querySelector('button').textContent).toContain('Sair');
+    expectResendLink(fixture);
   });
 
   it('shows the login form when /me indicates no session', () => {
@@ -230,6 +231,7 @@ describe('LoginComponent', () => {
 
     expect(fixture.nativeElement.querySelector('[role="alert"]').textContent.trim())
       .toBe('E-mail ou senha inválidos.');
+    expectResendLink(fixture);
   });
 
   it('shows safe messages for server and network login failures', () => {
@@ -323,7 +325,23 @@ describe('LoginComponent', () => {
     expect(link).not.toBeNull();
     expect(link.textContent).toContain('Cadastre-se');
   });
+
+  it('offers resend independently of login state without adding personal data to the route', () => {
+    expectResendLink(fixture);
+  });
 });
+
+function expectResendLink(fixture: ComponentFixture<LoginComponent>): void {
+  const link = fixture.nativeElement.querySelector(
+    'a[routerLink="/confirm-email"]',
+  ) as HTMLAnchorElement;
+  expect(link).not.toBeNull();
+  expect(link.parentElement?.textContent).toContain('Não recebeu o e-mail de confirmação?');
+  expect(link.textContent).toContain('Solicitar nova confirmação');
+  expect(link.href).toContain('/confirm-email');
+  expect(new URL(link.href).search).toBe('');
+  expect(new URL(link.href).hash).toBe('');
+}
 
 function setValidFields(fixture: ComponentFixture<LoginComponent>): void {
   setField(fixture, 'email', 'ana@example.test');

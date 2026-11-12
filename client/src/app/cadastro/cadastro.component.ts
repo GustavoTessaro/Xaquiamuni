@@ -9,6 +9,7 @@ import {
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
+import { RouterLink } from '@angular/router';
 import { CadastroService, RegisterClientRequest } from './cadastro.service';
 import {
   brazilianCpfValidator,
@@ -46,7 +47,7 @@ type RegistrationControls = {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [ReactiveFormsModule, RouterLink],
   selector: 'app-cadastro',
   styleUrl: './cadastro.component.css',
   templateUrl: './cadastro.component.html',

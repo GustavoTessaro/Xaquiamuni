@@ -8,6 +8,7 @@ import {
 } from '@angular/common/http';
 import { HttpStatusCode } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { CadastroComponent } from './cadastro.component';
 import { CadastroService } from './cadastro.service';
 import { CsrfService } from '../core/security/csrf.service';
@@ -22,6 +23,7 @@ describe('CadastroComponent registration flow', () => {
       providers: [
         CadastroService,
         CsrfService,
+        provideRouter([]),
         provideHttpClient(
           withXsrfConfiguration({
             cookieName: 'XSRF-TOKEN',
@@ -144,6 +146,13 @@ describe('CadastroComponent registration flow', () => {
     expect(feedback).toContain('Cadastro criado.');
     expect(feedback).not.toContain('e-mail enviado');
     expect(feedback).not.toContain('autenticado');
+    const resendLink = fixture.nativeElement.querySelector(
+      'a[routerLink="/confirm-email"]',
+    ) as HTMLAnchorElement;
+    expect(resendLink.textContent).toContain('Solicitar nova confirmação');
+    expect(resendLink.href).toContain('/confirm-email');
+    expect(new URL(resendLink.href).search).toBe('');
+    expect(new URL(resendLink.href).hash).toBe('');
     expect((fixture.nativeElement.querySelector('#cpf') as HTMLInputElement).value).toBe('');
     expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).value).toBe('');
     expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).value).toBe('');
