@@ -9,7 +9,13 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { AuthService, AuthSession, ResendConfirmationEmailResponse } from './auth.service';
+import {
+  AuthService,
+  AuthSession,
+  ForgotPasswordResponse,
+  ResendConfirmationEmailResponse,
+  ResetPasswordRequest,
+} from './auth.service';
 import { CsrfService } from '../security/csrf.service';
 
 describe('AuthService', () => {
@@ -226,6 +232,283 @@ describe('AuthService', () => {
 
     expect(completed).toBe(true);
     expect(session).toBe(sessionBeforeResend);
+    expect(session).toEqual(sessionResponse);
+    http.expectNone('/api/auth/login');
+    http.expectNone('/api/auth/logout');
+    http.expectNone('/api/auth/me');
+  });
+
+  it('gets the CSRF request token before posting forgot password and preserves the 202 response', () => {
+    let response: ForgotPasswordResponse | undefined;
+    const email = 'cliente+tag@example.test';
+    service.forgotPassword(email).subscribe((value) => {
+      response = value;
+    });
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    expect(csrf.request.method).toBe('GET');
+    http.expectNone('/api/auth/forgot-password');
+    csrf.flush({ requestToken: 'forgot-password-request-token' });
+
+    const forgot = http.expectOne('/api/auth/forgot-password');
+    expect(forgot.request.method).toBe('POST');
+    expect(forgot.request.urlWithParams).toBe('/api/auth/forgot-password');
+    expect(forgot.request.body).toEqual({ email });
+    expect(Object.keys(forgot.request.body as object)).toEqual(['email']);
+    expect(forgot.request.headers.get('X-XSRF-TOKEN')).toBe('forgot-password-request-token');
+    expect(forgot.request.headers.get('X-XSRF-TOKEN')).not.toBe('cookie-token-not-request-token');
+    expect(forgot.request.withCredentials).toBe(false);
+    const message = 'Se existir uma conta elegível, você receberá instruções.';
+    forgot.flush({ message }, { status: 202, statusText: 'Accepted' });
+
+    expect(response).toEqual({ message });
+  });
+
+  it('gets the CSRF request token before posting reset password without transforming its values', () => {
+    let completed = false;
+    const request: ResetPasswordRequest = {
+      email: 'cliente+tag@example.test',
+      token: 'token+/=%& with spaces',
+      newPassword: '  Senha nova válida 987!  ',
+    };
+    service.resetPassword(request).subscribe(() => {
+      completed = true;
+    });
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    expect(csrf.request.method).toBe('GET');
+    http.expectNone('/api/auth/reset-password');
+    csrf.flush({ requestToken: 'reset-password-request-token' });
+
+    const reset = http.expectOne('/api/auth/reset-password');
+    expect(reset.request.method).toBe('POST');
+    expect(reset.request.urlWithParams).toBe('/api/auth/reset-password');
+    expect(reset.request.body).toEqual({
+      email: request.email,
+      token: request.token,
+      newPassword: request.newPassword,
+    });
+    expect(Object.keys(reset.request.body as object)).toEqual([
+      'email',
+      'token',
+      'newPassword',
+    ]);
+    expect(reset.request.body.token).toBe(request.token);
+    expect(reset.request.body.newPassword).toBe(request.newPassword);
+    expect(reset.request.headers.get('X-XSRF-TOKEN')).toBe('reset-password-request-token');
+    expect(reset.request.headers.get('X-XSRF-TOKEN')).not.toBe('cookie-token-not-request-token');
+    expect(reset.request.withCredentials).toBe(false);
+    reset.flush(null, { status: 204, statusText: 'No Content' });
+
+    expect(completed).toBe(true);
+  });
+
+  it('propagates forgot password HTTP 400 and HTTP 429 including Retry-After without retrying', () => {
+    let validationError: HttpErrorResponse | undefined;
+    service.forgotPassword('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        validationError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'forgot-400-token' });
+    http.expectOne('/api/auth/forgot-password').flush(
+      { title: 'Requisição inválida' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    expect(validationError?.status).toBe(400);
+
+    let rateLimitError: HttpErrorResponse | undefined;
+    service.forgotPassword('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        rateLimitError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'forgot-429-token' });
+    http.expectOne('/api/auth/forgot-password').flush(
+      { message: 'Muitas solicitações. Tente novamente mais tarde.' },
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '37' },
+      },
+    );
+
+    expect(rateLimitError?.status).toBe(429);
+    expect(rateLimitError?.headers.get('Retry-After')).toBe('37');
+    expect(rateLimitError?.error).toEqual({
+      message: 'Muitas solicitações. Tente novamente mais tarde.',
+    });
+    http.expectNone('/api/auth/forgot-password');
+  });
+
+  it('propagates reset password validation and policy HTTP 400 responses', () => {
+    const errors: HttpErrorResponse[] = [];
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'invalid-token',
+      newPassword: 'senha-ficticia',
+    }).subscribe({
+      error: (value: HttpErrorResponse) => errors.push(value),
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'reset-400-token' });
+    http.expectOne('/api/auth/reset-password').flush(
+      { detail: 'Não foi possível redefinir a senha.' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'valid-synthetic-token',
+      newPassword: 'senha-fraca',
+    }).subscribe({
+      error: (value: HttpErrorResponse) => errors.push(value),
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'reset-policy-token' });
+    http.expectOne('/api/auth/reset-password').flush(
+      { errors: { NewPassword: ['A senha não atende à política.'] } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(errors.map((error) => error.status)).toEqual([400, 400]);
+    expect(errors[0].error).toEqual({ detail: 'Não foi possível redefinir a senha.' });
+    expect(errors[1].error.errors.NewPassword).toEqual(['A senha não atende à política.']);
+  });
+
+  it('propagates reset password HTTP 429 and preserves Retry-After without retrying', () => {
+    let error: HttpErrorResponse | undefined;
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'valid-synthetic-token',
+      newPassword: '  Senha válida 987!  ',
+    }).subscribe({
+      error: (value: HttpErrorResponse) => {
+        error = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'reset-429-token' });
+    http.expectOne('/api/auth/reset-password').flush(
+      { message: 'Muitas solicitações. Tente novamente mais tarde.' },
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '51' },
+      },
+    );
+
+    expect(error?.status).toBe(429);
+    expect(error?.headers.get('Retry-After')).toBe('51');
+    expect(error?.error.message).toBe('Muitas solicitações. Tente novamente mais tarde.');
+    http.expectNone('/api/auth/reset-password');
+  });
+
+  it('propagates network and HTTP 5xx failures for both recovery methods', () => {
+    let forgotNetworkError: HttpErrorResponse | undefined;
+    service.forgotPassword('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        forgotNetworkError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'forgot-network-token' });
+    http.expectOne('/api/auth/forgot-password').error(new ProgressEvent('error'));
+    expect(forgotNetworkError?.status).toBe(0);
+
+    let forgotServerError: HttpErrorResponse | undefined;
+    service.forgotPassword('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        forgotServerError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'forgot-server-token' });
+    http.expectOne('/api/auth/forgot-password').flush(
+      { title: 'Falha interna' },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+    expect(forgotServerError?.status).toBe(503);
+
+    let resetNetworkError: HttpErrorResponse | undefined;
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'synthetic-token',
+      newPassword: 'Senha válida 987!',
+    }).subscribe({
+      error: (value: HttpErrorResponse) => {
+        resetNetworkError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'reset-network-token' });
+    http.expectOne('/api/auth/reset-password').error(new ProgressEvent('error'));
+    expect(resetNetworkError?.status).toBe(0);
+
+    let resetServerError: HttpErrorResponse | undefined;
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'synthetic-token',
+      newPassword: 'Senha válida 987!',
+    }).subscribe({
+      error: (value: HttpErrorResponse) => {
+        resetServerError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'reset-server-token' });
+    http.expectOne('/api/auth/reset-password').flush(
+      { title: 'Falha interna' },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+    expect(resetServerError?.status).toBe(503);
+  });
+
+  it('calls recovery methods anonymously without login, logout, or session requests', () => {
+    service.forgotPassword('cliente@example.test').subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'anonymous-forgot-token' });
+    http.expectOne('/api/auth/forgot-password').flush(
+      { message: 'Solicitação recebida.' },
+      { status: 202, statusText: 'Accepted' },
+    );
+
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'synthetic-token',
+      newPassword: 'Senha válida 987!',
+    }).subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'anonymous-reset-token' });
+    http.expectOne('/api/auth/reset-password').flush(null, {
+      status: 204,
+      statusText: 'No Content',
+    });
+
+    http.expectNone('/api/auth/login');
+    http.expectNone('/api/auth/logout');
+    http.expectNone('/api/auth/me');
+  });
+
+  it('does not change an established session when calling recovery methods', () => {
+    let session: AuthSession | null = null;
+    service.obterSessao().subscribe((value) => {
+      session = value;
+    });
+    const sessionResponse = { userId: '4c4a31ce-0a27-4c0e-b903-a96f62fb81df' };
+    http.expectOne('/api/auth/me').flush(sessionResponse);
+    const sessionBeforeRecovery = session;
+
+    service.forgotPassword('cliente@example.test').subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'authenticated-forgot-token' });
+    http.expectOne('/api/auth/forgot-password').flush(
+      { message: 'Solicitação recebida.' },
+      { status: 202, statusText: 'Accepted' },
+    );
+
+    service.resetPassword({
+      email: 'cliente@example.test',
+      token: 'synthetic-token',
+      newPassword: 'Senha válida 987!',
+    }).subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'authenticated-reset-token' });
+    http.expectOne('/api/auth/reset-password').flush(null, {
+      status: 204,
+      statusText: 'No Content',
+    });
+
+    expect(session).toBe(sessionBeforeRecovery);
     expect(session).toEqual(sessionResponse);
     http.expectNone('/api/auth/login');
     http.expectNone('/api/auth/logout');

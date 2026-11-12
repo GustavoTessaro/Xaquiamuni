@@ -25,6 +25,20 @@ export interface ResendConfirmationEmailResponse {
   message: string;
 }
 
+export interface ForgotPasswordRequest {
+  email: string;
+}
+
+export interface ForgotPasswordResponse {
+  message: string;
+}
+
+export interface ResetPasswordRequest {
+  email: string;
+  token: string;
+  newPassword: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
@@ -60,6 +74,34 @@ export class AuthService {
 
         return response.body;
       },
+    );
+  }
+
+  forgotPassword(email: string): Observable<ForgotPasswordResponse> {
+    return this.postWithCsrf<ForgotPasswordRequest, ForgotPasswordResponse>(
+      '/api/auth/forgot-password',
+      { email },
+      202,
+      (response) => {
+        if (!response.body || typeof response.body.message !== 'string') {
+          throw new Error('Unexpected authentication response');
+        }
+
+        return response.body;
+      },
+    );
+  }
+
+  resetPassword(request: ResetPasswordRequest): Observable<void> {
+    return this.postWithCsrf<ResetPasswordRequest, void>(
+      '/api/auth/reset-password',
+      {
+        email: request.email,
+        token: request.token,
+        newPassword: request.newPassword,
+      },
+      204,
+      () => undefined,
     );
   }
 
