@@ -9,6 +9,7 @@ using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
+using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Tests;
@@ -472,6 +473,8 @@ public sealed class IdentityPasswordResetServiceTests
         services.Replace(ServiceDescriptor.Scoped<IPasswordResetTransactionCoordinator>(
             serviceProvider => new InMemoryPasswordResetTransactionCoordinator(
                 serviceProvider.GetRequiredService<InMemoryUserStore>())));
+        services.Replace(ServiceDescriptor.Scoped<IPasswordResetOutboxGenerationCancellation>(
+            _ => new InMemoryPasswordResetOutboxGenerationCancellation()));
         if (credentialGenerationFingerprint is not null)
         {
             services.Replace(ServiceDescriptor.Singleton(credentialGenerationFingerprint));
@@ -528,6 +531,19 @@ public sealed class IdentityPasswordResetServiceTests
         public Task RollbackAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    private sealed class InMemoryPasswordResetOutboxGenerationCancellation
+        : IPasswordResetOutboxGenerationCancellation
+    {
+        public Task<int> CancelStaleMessagesAsync(
+            Guid userId,
+            byte[] newGenerationFingerprint,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(0);
+        }
     }
 
     private sealed class ThrowingCredentialGenerationFingerprint(Exception exception)

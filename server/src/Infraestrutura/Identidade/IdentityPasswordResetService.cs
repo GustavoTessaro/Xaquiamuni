@@ -2,6 +2,7 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.Identity;
 using Xaquiamuni.Aplicacao.Autenticacao;
+using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 
 namespace Xaquiamuni.Infraestrutura.Identidade;
 
@@ -15,17 +16,21 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
     private readonly UserManager<XaquiamuniUser> _userManager;
     private readonly ICredentialGenerationFingerprint _credentialGenerationFingerprint;
     private readonly IPasswordResetTransactionCoordinator _transactionCoordinator;
+    private readonly IPasswordResetOutboxGenerationCancellation _outboxGenerationCancellation;
 
     internal IdentityPasswordResetService(
         UserManager<XaquiamuniUser> userManager,
         ICredentialGenerationFingerprint credentialGenerationFingerprint,
-        IPasswordResetTransactionCoordinator transactionCoordinator)
+        IPasswordResetTransactionCoordinator transactionCoordinator,
+        IPasswordResetOutboxGenerationCancellation outboxGenerationCancellation)
     {
         _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
         _credentialGenerationFingerprint = credentialGenerationFingerprint
             ?? throw new ArgumentNullException(nameof(credentialGenerationFingerprint));
         _transactionCoordinator = transactionCoordinator
             ?? throw new ArgumentNullException(nameof(transactionCoordinator));
+        _outboxGenerationCancellation = outboxGenerationCancellation
+            ?? throw new ArgumentNullException(nameof(outboxGenerationCancellation));
     }
 
     public async Task<Guid?> FindConfirmedUserIdByEmailAsync(
@@ -178,6 +183,32 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
                     error.Code.StartsWith("Password", StringComparison.Ordinal))
                     ? PasswordResetResult.InvalidPassword()
                     : PasswordResetResult.InvalidRequest();
+            }
+
+            if (!IsValidSecurityStamp(user.SecurityStamp))
+            {
+                throw new InvalidOperationException(
+                    "Identity did not produce a valid credential generation for the password reset.");
+            }
+
+            var newGenerationFingerprint =
+                _credentialGenerationFingerprint.Compute(user.SecurityStamp!);
+            try
+            {
+                if (newGenerationFingerprint.Length != SHA256.HashSizeInBytes)
+                {
+                    throw new InvalidOperationException(
+                        "The credential generation fingerprint has an invalid size.");
+                }
+
+                await _outboxGenerationCancellation.CancelStaleMessagesAsync(
+                    user.Id,
+                    newGenerationFingerprint,
+                    cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(newGenerationFingerprint);
             }
 
             cancellationToken.ThrowIfCancellationRequested();

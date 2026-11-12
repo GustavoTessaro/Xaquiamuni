@@ -45,11 +45,15 @@ public static class DependencyInjection
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
         services.AddScoped<IPasswordResetTransactionCoordinator, SqlServerPasswordResetTransactionCoordinator>();
+        services.AddScoped<
+            IPasswordResetOutboxGenerationCancellation,
+            SqlServerPasswordResetOutboxGenerationCancellation>();
         services.AddScoped<IPasswordResetService>(serviceProvider =>
             new IdentityPasswordResetService(
                 serviceProvider.GetRequiredService<UserManager<XaquiamuniUser>>(),
                 serviceProvider.GetRequiredService<ICredentialGenerationFingerprint>(),
-                serviceProvider.GetRequiredService<IPasswordResetTransactionCoordinator>()));
+                serviceProvider.GetRequiredService<IPasswordResetTransactionCoordinator>(),
+                serviceProvider.GetRequiredService<IPasswordResetOutboxGenerationCancellation>()));
         services.AddScoped<IPasswordResetOutbox, SqlServerPasswordResetOutbox>();
         services.AddScoped<ISolicitarRecuperacaoSenha, SolicitarRecuperacaoSenha>();
         services.AddScoped<ISolicitarReenvioConfirmacaoEmail, SolicitarReenvioConfirmacaoEmail>();
