@@ -5,14 +5,14 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão | 0.1 — desenho técnico inicial |
+| Versão | 0.2 — arquitetura implementada da confirmação/reenvio de e-mail F2 |
 | Data | 11/11/2026 |
-| Status | **Rascunho técnico para revisão; implementação ainda não autorizada por este documento** |
-| Documento-base | `docs/prd.md`, versão 0.2, fornecida pelo solicitante |
+| Status | **Revisão técnica do fluxo F2 implementado; envio real e recursos restantes ainda pendentes** |
+| Documento-base | `docs/prd.md`, versão 0.3 |
 | Referência estrutural | Projeto NoteKeeper; reaproveitar princípios e organização, **não copiar código ou assumir detalhes não verificados** |
 | Decisão recente | Solicitante concordou em seguir com as propostas iniciais de produção e pagamento, sujeitas a detalhamento |
 
-> **Convenções:** **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia para aprovação; **Pendente** = requer informação, validação ou integração. O PRD v0.2 ainda registra pendências e não deve ser apresentado como integralmente homologado. Este TDD detalha uma arquitetura candidata, sem transformar recursos condicionados em obrigatórios.
+> **Convenções:** **Implementado** = comportamento verificado no código e coberto por testes; **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia ainda sujeita a validação; **Pendente** = requer informação, validação ou integração. A confirmação/reenvio de e-mail é um fluxo F2 implementado; a entrega real, a confirmação obrigatória para login e os módulos condicionados não estão homologados.
 
 ## 1. Resumo e objetivos técnicos
 
@@ -26,6 +26,8 @@ Construir uma aplicação web responsiva com vitrine e compra para clientes e pa
 - **Confirmado:** lote de produto acabado registra fabricação e validade; vencidos não são vendáveis.
 - **Confirmado:** Vacaria tem opção de retirada sem frete e entrega própria por R$ 10, sujeito a delimitação de área, horários e endereço; Correios para localidades atendidas em RS/SC.
 - **Confirmado:** Sicredi é o banco PJ, **não** um provedor de API Pix já homologado.
+- **Implementado na F2:** cadastro cria conta ainda não confirmada e enfileira a solicitação inicial; confirmação usa token Identity com validade de 24 horas; reenvio aplica resposta genérica, cooldown, limite por conta e deduplicação.
+- **Limite atual:** worker e Resend são desabilitados por padrão; não houve envio real de e-mail; `RequireConfirmedEmail` permanece `false`; recuperação de senha ainda não foi implementada.
 - **Proposto:** separar MVP operacional e módulos condicionados; nenhuma integração bancária ou logística deve ser simulada como confirmação real.
 - **Prazo informado:** 30/11/2026; o solicitante conduzirá eventual replanejamento. Não usar a data para suprimir requisitos silenciosamente.
 
@@ -37,11 +39,11 @@ Não projetar marketplace, múltiplas lojas, personalização livre, venda onlin
 
 | ID | Tema | Direção técnica e justificativa | Situação |
 | --- | --- | --- | --- |
-| DT-01 | Frontend | Angular standalone, TypeScript, roteamento por funcionalidade, formulários reativos; aproveitar padrões do NoteKeeper | Proposto; confirmar versões instaladas |
-| DT-02 | UI | Tailwind CSS e componentes acessíveis, visual responsivo com identidade Xaquiamuni; foco em celular | Proposto |
-| DT-03 | Backend | C# / ASP.NET Core .NET 10, API REST, monólito modular com Domain, Application, Infrastructure e Api | Proposto com base no NoteKeeper |
-| DT-04 | Persistência | EF Core e SQL Server; Azure SQL como possibilidade futura, não requisito para desenvolvimento local | Proposto |
-| DT-05 | Identidade | ASP.NET Core Identity para credenciais, autenticação por sessão/cookie seguro ou JWT conforme avaliação de implantação; **não decidir mecanismo de tokens sem revisar o NoteKeeper** | Pendente de escolha final |
+| DT-01 | Frontend | Angular standalone, TypeScript, roteamento por funcionalidade e formulários reativos | Implementado na F2 |
+| DT-02 | UI | Tailwind CSS e componentes acessíveis, visual responsivo com identidade Xaquiamuni e foco em celular | Implementado na F2 |
+| DT-03 | Backend | C# / ASP.NET Core .NET 10, API REST, monólito modular com Domain, Application, Infrastructure e Api | Implementado na F2; módulos restantes são futuros |
+| DT-04 | Persistência | EF Core e SQL Server; Azure SQL como possibilidade futura, não requisito para desenvolvimento local | Implementado na F2; Azure SQL não configurado |
+| DT-05 | Identidade | ASP.NET Core Identity com cookie seguro e antifalsificação para as operações mutáveis; não há JWT no fluxo F2 | Implementado na F2; armazenamento de Data Protection para produção pendente |
 | DT-06 | Permissões | Roles de base (`ADMIN`, `FUNCIONARIO`, `CLIENTE`) + políticas por operação; funcionário inicialmente com acesso mínimo | Proposto; matriz fina pendente |
 | DT-07 | Valores | Cálculos no servidor com `decimal`, armazenamento com precisão explícita; BRL e arredondamento definido por componente | Proposto |
 | DT-08 | Quantidades | Unidade física tipada, conversões explícitas g/kg e ml/L, nunca somar dimensões diferentes | Proposto |
@@ -50,10 +52,10 @@ Não projetar marketplace, múltiplas lojas, personalização livre, venda onlin
 | DT-11 | Imagens | Abstração de armazenamento, adaptador local em desenvolvimento e armazenamento privado/gerenciado em produção | Proposto; serviço pendente |
 | DT-12 | Pagamentos | Interface de provedor, webhooks verificados, idempotência e conciliação; Sicredi ou intermediador apenas após avaliação | Pendente |
 | DT-13 | Frete | Estratégias por modalidade: retirada, entrega local, Correios; cotação externa desacoplada | Proposto; integração pendente |
-| DT-14 | Testes | Testes unitários .NET, integração com SQL Server real, testes de frontend e E2E dos fluxos críticos | Proposto; ferramentas específicas a confirmar |
+| DT-14 | Testes | Testes unitários .NET, testes HTTP com `WebApplicationFactory` e doubles, specs Angular e integração opt-in com SQL Server isolado; validação manual local | Implementado para o fluxo F2; E2E amplo permanece pendente |
 | DT-15 | Deploy | Desenvolvimento local primeiro; configuração por ambiente, CI e hospedagem definidos após verificação de custos e limites | Pendente |
 
-**Controle de versões:** verificar SDK, Angular, TypeScript, EF Core, bibliotecas e lockfiles antes de criar projetos. Não fixar versões menores/patch arbitrariamente nem contornar conflitos com `--force`.
+**Controle de versões:** conferir SDK, Angular, TypeScript, EF Core, bibliotecas e lockfiles antes de adicionar ou atualizar projetos/dependências. Não fixar versões menores/patch arbitrariamente nem contornar conflitos com `--force`.
 
 ## 3. Arquitetura e organização
 
@@ -75,27 +77,29 @@ flowchart LR
 
 Dependências de compilação propostas: `Application → Domain`; `Infrastructure → Application/Domain`; `Api → Application + Infrastructure` somente na composição. Domain não conhece HTTP, EF Core, Identity, provedores ou Angular. Evitar regras de negócio nos controllers e componentes visuais.
 
-### 3.2 Estrutura de repositório proposta
+No fluxo F2, o cadastro chama o caso de uso de aplicação e, na mesma transação SQL, persiste usuário Identity ainda não confirmado, perfil/endereço e uma mensagem inicial `Pending` na Outbox. O worker, quando habilitado, gera o token Identity de 24 horas, compõe o link e solicita o envio ao adaptador `IEmailSender`. O reenvio passa pelo endpoint anônimo protegido por antifalsificação e pelo caso de uso; a persistência SQL decide elegibilidade, cooldown, limite e deduplicação sem revelar o resultado interno.
+
+### 3.2 Estrutura atual do repositório e módulos futuros
 
 ```text
 Xaquiamuni/
-├── client/
-│   ├── src/app/
-│   │   ├── core/                 # sessão, HTTP, guards, tratamento de erros
-│   │   ├── shared/               # componentes, pipes, utilitários de UI
-│   │   └── features/             # auth, catalogo, estoque, producao, pedidos, gestao
-│   └── ...
+├── client/src/app/
+│   ├── core/auth/                # sessão, cadastro, login e confirmação
+│   ├── core/security/            # obtenção do token antifalsificação
+│   ├── cadastro/
+│   ├── confirm-email/
+│   ├── login/
+│   └── app.routes.ts
 ├── server/
 │   ├── Xaquiamuni.slnx
 │   ├── src/
-│   │   ├── Xaquiamuni.Domain/
-│   │   ├── Xaquiamuni.Application/
-│   │   ├── Xaquiamuni.Infrastructure/
-│   │   └── Xaquiamuni.Api/
-│   └── tests/
-│       ├── Xaquiamuni.Domain.Tests/
-│       ├── Xaquiamuni.Application.Tests/
-│       └── Xaquiamuni.IntegrationTests/
+│   │   ├── Api/                  # endpoints HTTP e composição
+│   │   ├── Aplicacao/            # casos de uso e contratos
+│   │   ├── Dominio/              # regras e entidades
+│   │   ├── Infraestrutura/       # Identity, SQL Server, Outbox e Resend
+│   │   └── Admin/
+│   └── tests/Xaquiamuni.Tests/
+│       └── Integration/          # integração SQL opt-in com bancos temporários
 ├── docs/
 │   ├── prd.md
 │   └── tdd.md
@@ -104,13 +108,13 @@ Xaquiamuni/
 └── README.md
 ```
 
-A estrutura é um **alvo**, não pastas já criadas. Preservar `client/` e `server/` como no NoteKeeper. Migrations pertencem à Infrastructure; testes de integração devem usar banco isolado de produção.
+A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos de negócio restantes continuam como trabalho futuro. Migrations pertencem a Infrastructure; testes integrados usam bancos temporários isolados, nunca banco de desenvolvimento.
 
 ### 3.3 Módulos
 
 | Módulo | Responsabilidade | PRD |
 | --- | --- | --- |
-| Identidade | Cadastro, login, cliente, administração e autorização | RF-01–03, RN-13, RN-16 |
+| Identidade | ASP.NET Core Identity, sessão por cookie, antifalsificação, cadastro, login, confirmação de e-mail e reenvio; autorização administrativa mais ampla permanece futura | RF-01–03, RF-27–28, RN-13, RN-16, RN-21–29 |
 | Catálogo | Categorias, produtos, variantes/SKUs, fotos, publicação e preços | RF-04–05 |
 | Estoque | Insumos, lotes acabados, saldos, reservas, movimentos e mínimos | RF-06–08, RN-01–04, RN-17 |
 | Produção | Fichas versionadas, planejamento, reservas, execução e conclusão | RF-09–14, RN-03–06, RN-18 |
@@ -127,6 +131,8 @@ A estrutura é um **alvo**, não pastas já criadas. Preservar `client/` e `serv
 - Exibir quantidade **vendável**, não saldo bruto; informar indisponibilidade sem permitir compra de lote vencido.
 - UI não calcula valores finais autoritativos, não decide permissões e não confirma pagamento por conta própria.
 - Identidade visual baseada nos arquivos da proprietária: fundo claro, dourado discreto e contraste legível; evitar afirmações clínicas não validadas.
+- `/confirm-email` lê `email` e `token` do fragmento do link, remove o fragmento com `history.replaceState` antes da requisição e envia os dados no corpo HTTP; a página não mantém o token após a confirmação ou falha não recuperável.
+- A página oferece formulário reativo de reenvio sem fragmento ou quando o link falha; cadastro (no sucesso) e login possuem links para `/confirm-email`, sem transportar e-mail pela URL.
 
 ## 4. Dados e persistência
 
@@ -151,6 +157,7 @@ A estrutura é um **alvo**, não pastas já criadas. Preservar `client/` e `serv
 | FichaTecnica / FichaComponente | produto/variante, versão, material, quantidade por unidade, custo de referência |
 | OrdemProducao / OrdemMaterial | quantidade prevista, ficha snapshot, prazo, estado, reservas, consumo real |
 | LoteProduto | produto/variante, fabricação, validade, saldo físico, saldo reservado, origem da produção |
+| EmailOutbox | UserId, tipo, estado, tentativas, criação/próxima tentativa/conclusão, chave ativa de deduplicação, lease e `rowversion`; não persiste e-mail, token nem conteúdo da mensagem |
 | MovimentoEstoque | item/lote, tipo, quantidade, origem, autor, instante, motivo |
 | ReservaEstoque | origem (ordem/pedido), item/lote, quantidade, estado, expiração quando aplicável |
 | Carrinho / CarrinhoItem | cliente, produto/variante e quantidade; não garante reserva |
@@ -189,6 +196,7 @@ A estrutura é um **alvo**, não pastas já criadas. Preservar `client/` e `serv
 - A versão da ficha usada pela ordem fica congelada; atualização de preço/ficha não altera histórico.
 - Pedido guarda preço, desconto, frete e endereço de entrega do momento de confirmação; mudanças cadastrais posteriores não reescrevem o pedido.
 - Não permitir duas conclusões da mesma ordem, nem dois processamentos do mesmo evento externo.
+- Outbox de confirmação usa chave ativa única filtrada, `RowVersion` do SQL Server e updates condicionais por estado/lease/versão; preservar mensagens históricas ao liberar a chave.
 
 ### 4.5 Transações e concorrência
 
@@ -200,6 +208,9 @@ Toda mutação crítica de estoque deve ocorrer numa transação SQL curta. Uma 
 - **Pagamento:** atualizar estado e aplicar baixa definitiva **uma única vez** após confirmação válida; eventos repetidos não duplicam estoque ou receita.
 - **Venda externa:** criar venda, movimentar lotes e registrar origem financeira em uma operação consistente; repetição com mesma chave não duplica.
 - **Expiração:** processador idempotente de pedidos pendentes verifica estado antes de liberar reserva; disputa com pagamento exige reconciliação segura.
+- **Cadastro F2:** usuário, perfil/endereço e mensagem inicial da Outbox são salvos na mesma transação; rollback não deixa conta sem a solicitação inicial ou solicitação sem conta.
+- **Reenvio F2:** persistência usa transação SQL curta `READ COMMITTED` e `sp_getapplock` exclusivo por usuário, com proprietário transacional; bloqueia corrida de chamadas, valida limites e cooldown, libera chave de `DeadLetter` e insere nova linha na mesma transação.
+- **Outbox F2:** `RowVersion` e lease protegem claim, conclusão, retry, cancelamento e dead-letter contra gravações obsoletas; worker reprocessa leases expiradas.
 
 ## 5. Regras de cálculo e estados
 
@@ -250,21 +261,39 @@ flowchart TD
 
 Custo unitário estimado = materiais consumidos + embalagem + mão de obra alocada + taxas/custos atribuíveis + rateio de despesas **quando definido**. Margem bruta-alvo de 70% implica `preço = custo / 0,30`; 60% implica `preço = custo / 0,40`, se o custo usado na fórmula representar a base completa pretendida. Isso **não** equivale automaticamente a lucro líquido. Frete cobrado do cliente e frete absorvido pela loja devem ser distinguidos. Rateio e impostos são pendentes.
 
+### 5.6 Outbox de confirmação de e-mail — F2 implementada
+
+`EmailOutbox` guarda somente referência ao usuário e metadados de processamento; e-mail, token e conteúdo não são persistidos nessa tabela. Os estados são `Pending`, `Processing`, `Completed`, `DeadLetter` e `Cancelled`. A chave ativa única permite uma solicitação não concluída por conta; a conclusão/cancelamento libera a chave, enquanto `DeadLetter` mantém o histórico e sua chave até a recuperação.
+
+- O claim muda a mensagem para `Processing`, incrementa tentativas e cria lease de 2 minutos. Leases expiradas podem ser reivindicadas novamente.
+- Updates de conclusão, retry, cancelamento e dead-letter são condicionados ao estado, lease vigente e `RowVersion`; gravações obsoletas não devem sobrescrever estado novo.
+- Falhas transitórias usam atraso exponencial com jitter: base de 2 minutos, crescimento exponencial limitado a 15 minutos e fator aleatório entre 0,8 e 1,0. São permitidas no máximo 5 tentativas; falha permanente ou esgotamento leva a `DeadLetter`.
+- O worker percorre mensagens sequencialmente, reivindicando uma por vez; o intervalo padrão é 15 segundos e o lote configurável não implica processamento paralelo.
+- `EmailOutboxWorker.Enabled` e `ResendEmail.Enabled` têm padrão `false`. O sender HTTP é registrado somente quando Resend está habilitado; o worker exige sender válido. `EmailConfirmationOutboxProcessor` é registrado somente quando o worker está habilitado.
+- A entrega é **at-least-once**, não exactly-once: se o provedor aceitar o e-mail e o processo falhar antes de gravar `Completed`, uma nova tentativa após a expiração do lease pode causar entrega duplicada.
+
 ## 6. API e contratos preliminares
 
 ### 6.1 Convenções
 
-- Prefixo proposto `/api/v1`; JSON; paginação em listagens; DTOs separados das entidades.
+- As rotas HTTP implementadas na F2 usam `/api/auth` (sem segmento `/v1`); JSON e DTOs separados das entidades. Prefixos de recursos de negócio ainda não implementados serão definidos junto a seus contratos.
 - Erros padronizados (`ProblemDetails`), validação por campo, códigos HTTP coerentes: `400` entrada inválida, `401` não autenticado, `403` proibido, `404` ausente, `409` conflito de estado/saldo.
 - Identidade e autorização derivadas da sessão autenticada, nunca do `userId` arbitrário enviado pelo navegador.
 - `Idempotency-Key` para comandos críticos de criação/conclusão/pagamento/venda externa; mesmo comando retorna resultado anterior, chave reutilizada com payload distinto retorna conflito.
 - Valores monetários e datas em formatos canônicos; servidor recalcula totais, frete validado e disponibilidade.
+- Endpoints mutáveis de autenticação são anônimos ou autenticados conforme a operação e protegidos por antifalsificação; o token é obtido em `GET /api/auth/csrf` e enviado no cabeçalho `X-XSRF-TOKEN`.
 
-### 6.2 Catálogo inicial de endpoints (não implementado)
+### 6.2 Endpoints F2 implementados e catálogo de negócio proposto
 
 | Recurso | Exemplos de rotas | Acesso |
 | --- | --- | --- |
-| Conta | `POST /auth/register`, `POST /auth/login`, `POST /auth/logout`, `GET /me` | Público/autenticado conforme ação |
+| Antifalsificação | `GET /api/auth/csrf` | Público; `200`, token no corpo, cookie XSRF e `no-store` |
+| Cadastro | `POST /api/auth/register` | Anônimo + antifalsificação; `201`, `400`, `409` ou `500`; cria conta sem abrir sessão e enfileira confirmação |
+| Login | `POST /api/auth/login` | Anônimo + antifalsificação; `204`, `400` ou `401`; cookie de autenticação, confirmação ainda não exigida |
+| Sessão | `GET /api/auth/me` | Cliente autenticado; `200`, `401` ou `403`; retorna o identificador da sessão |
+| Logout | `POST /api/auth/logout` | Cliente autenticado + antifalsificação; `204`, `400`, `401` ou `403`; remove o cookie |
+| Confirmação | `POST /api/auth/confirm-email` | Anônimo + antifalsificação; recebe e-mail/token no corpo; `204`, `400` ou `500` |
+| Reenvio | `POST /api/auth/resend-confirmation-email` | Anônimo + antifalsificação + política exclusiva; `202` genérico, `400`, `429` com `Retry-After` quando disponível ou erro inesperado |
 | Produtos | `GET /produtos`, `GET /produtos/{id}`, `POST /admin/produtos`, `PATCH /admin/produtos/{id}` | Leitura pública, escrita autorizada |
 | Matérias-primas | `GET /admin/materiais`, `POST /admin/materiais`, `POST /admin/materiais/{id}/movimentos` | Administrativo |
 | Fichas | `GET /admin/variantes/{id}/fichas`, `POST /admin/variantes/{id}/fichas` | Administrativo |
@@ -276,9 +305,15 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 | Pagamento | `POST /pedidos/{id}/cobrancas`, `POST /webhooks/pagamentos/{provedor}` | Autenticado / webhook autenticado pelo provedor; condicionado |
 | Gestão | `GET /admin/dashboard`, demais consultas | Administrativo; condicionado |
 
-A estrutura das rotas é ilustrativa: nomes, payloads, autenticação e códigos de resposta serão consolidados na etapa de contratos/implementação. Não expor `POST /admin` a funcionário sem política específica.
+Apenas as rotas de autenticação listadas acima estão implementadas; os demais exemplos continuam propostos, sem prefixo ou contrato final definido. O reenvio retorna `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política exclusiva da rota, com `Retry-After` quando disponível. Não expor rotas administrativas a funcionário sem política específica.
 
 ### 6.3 Fluxos de integração
+
+#### Confirmação de e-mail (F2)
+
+Cadastro transacional → mensagem inicial `Pending` → claim do worker → geração do token Identity (24 horas) → composição do link `https://<frontend>/confirm-email#email=...&token=...` → envio pelo `IEmailSender` configurado com `HttpClient` para Resend. Os valores do link ficam no fragmento, não na query string; a página Angular remove o fragmento antes de chamar a API. Resend está desabilitado por padrão e nenhum envio real foi validado.
+
+O reenvio HTTP delega ao caso de uso, que consulta a conta não confirmada e a Outbox; cooldown de 2 minutos, máximo de 5 solicitações por conta em janela móvel de 1 hora (incluindo cadastro inicial), deduplicação de `Pending`/`Processing` e recuperação de `DeadLetter` são aplicados na transação SQL por usuário. A rota usa fixed window de 10 requisições por minuto por IP, sem confiar em `X-Forwarded-For`.
 
 **Pix:** pedido pendente → criar cobrança com referência única → exibir QR Code/copia-e-cola → receber evento assinado/autenticado ou consultar API → verificar identificador, valor, recebedor e estado → confirmar idempotentemente → liberar separação. Webhook não confiável ou falha de consulta não marca pagamento como confirmado. Credenciais somente no servidor. Testar em sandbox antes de produção.
 
@@ -288,10 +323,14 @@ A estrutura das rotas é ilustrativa: nomes, payloads, autenticação e códigos
 
 ## 7. Segurança, privacidade e operação
 
-- ASP.NET Core Identity com hashing de senhas, proteção contra brute force, recuperação de conta por mecanismo seguro a especificar; nunca armazenar senha reversível.
+- ASP.NET Core Identity com hashing de senhas e lockout configurado; recuperação de senha ainda não implementada e permanece como próxima funcionalidade. Nunca armazenar senha reversível.
+- Autenticação F2 usa um cookie `HttpOnly`, `Secure`, `SameSite=Lax`, path `/` e expiração de 8 horas, sem sliding expiration. Login/logout/cadastro/confirmação/reenvio usam antifalsificação; `/me` exige a política de cliente autenticado. `RequireConfirmedEmail` continua `false`.
+- Não há configuração explícita no repositório para persistir e compartilhar chaves de ASP.NET Data Protection; armazenamento persistente e compartilhado entre instâncias deve ser configurado e validado antes da produção.
+- O rate limiter nativo é em memória por processo, aplicado somente ao reenvio: fixed window de 1 minuto, 10 permissões, fila zero. Particiona por `RemoteIpAddress`, normaliza IPv4 mapeado em IPv6 e usa fallback compartilhado quando ausente; não lê headers de forwarding. No deploy atrás de proxy, configurar somente proxies confiáveis e validar o IP remoto efetivo.
+- Chave Resend e remetente são configurações exclusivas do servidor; o sender `HttpClient` tem timeout de 30 segundos, não segue redirects e só é registrado com `ResendEmail.Enabled=true`. Worker desabilitado não processa nem envia mensagens.
 - Validar CPF no servidor; proteger dados pessoais em logs, respostas e telas; definir finalidade, retenção e procedimentos de exclusão/correção com a proprietária antes do uso real.
 - Autorização por endpoint e caso de uso. Administrador recebe permissões plenas de negócio; funcionário inicia com acesso mínimo até a matriz ser aprovada; cliente acessa apenas seus próprios recursos.
-- Se JWT for adotado, definir refresh, revogação e armazenamento; se cookies, definir HttpOnly, Secure, SameSite e proteção CSRF. Não misturar modelos sem desenho explícito.
+- Para o cliente navegador da F2, cookie é o modelo selecionado; não há JWT implementado. Outro tipo de cliente exigiria decisão própria antes de adotar mecanismo diferente.
 - Configurações por ambiente e segredos fora do Git; logs estruturados sem tokens, CPF integral ou payload sensível de pagamento.
 - HTTPS em produção, CORS restrito às origens autorizadas, validação de uploads e limites de requisição.
 - Auditoria para estoque, preço, produção, pedidos, vendas externas, permissões e estornos; distinguir auditoria de logs de aplicação.
@@ -305,6 +344,7 @@ A estrutura das rotas é ilustrativa: nomes, payloads, autenticação e códigos
 | Application | Testes de casos de uso com portas falsas, incluindo rollback lógico e autorização | Regras sem dependência HTTP |
 | Infrastructure | Integração com SQL Server real, transações, índices e concorrência | Sem reservas/vendas duplicadas |
 | API | Testes de endpoints, identidade, validação, conflito e acesso indevido | Contratos verificáveis |
+| Confirmação/reenvio F2 | Testes unitários de caso de uso/Outbox, testes HTTP com doubles, specs Angular e integração de endpoint/Outbox com SQL Server real isolado | Elegibilidade, resposta genérica, antifalsificação, rate limit, cooldown, limites, deduplicação, concorrência e histórico |
 | Angular | Testes de formulários, guards, estados de tela e componentes | UI responsiva e erros claros |
 | E2E | Cliente compra; admin produz; registra venda externa; cancela/expira pedido | Jornada completa em ambiente de teste |
 | Integrações opcionais | Webhooks duplicados/fora de ordem, falha de Correios, timeout de provedor | Sem cobrança ou estoque indevido |
@@ -322,7 +362,11 @@ A estrutura das rotas é ilustrativa: nomes, payloads, autenticação e códigos
 9. Vendas externas movimentam estoque sem criar pedido online fictício.
 10. Simulação de frete para Vacaria oferece retirada gratuita e entrega própria R$ 10 somente em área elegível.
 
-**Rastreabilidade:** CA-01 a CA-17 do PRD v0.2 (observação: no arquivo-base, CA-15 a CA-17 estão em uma tabela Markdown separada; consolidar a formatação em revisão futura do PRD, sem mudar conteúdo).
+**Rastreabilidade:** CA-01 a CA-18 do PRD v0.3 (CA-15 a CA-18 permanecem em uma tabela Markdown separada; consolidar a formatação em revisão futura do PRD, sem mudar conteúdo).
+
+**Integração SQL F2:** testes opt-in via `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION=1`; a fixture valida `.\SQLEXPRESS`, cria bancos temporários `Xaquiamuni_IntegrationTest_*`, aplica migrations somente neles e remove apenas os bancos criados pela própria fixture. O fluxo de Resend integrado usa handler HTTP simulado; o teste do endpoint usa Identity e SQL reais no banco temporário, com worker e Resend desabilitados. A suíte não deve apontar para `XaquiamuniDev` nem para Azure SQL.
+
+**Validação manual F2:** ambiente local HTTPS da API e Angular pelo proxy; verificação do token antifalsificação e do cadastro/reenvio no navegador, seguida de consulta SQL somente leitura à Outbox. O resultado observado foi uma única mensagem `Pending`, sem tentativas/conclusão e com deduplicação ativa. Isso valida o enfileiramento, não a entrega real.
 
 ### 8.2 Metas não definidas
 
@@ -334,7 +378,7 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | --- | --- | --- |
 | F0 | Conferir referência NoteKeeper, versões, estrutura, PRD/TDD e repositório limpo | Stack compatível e decisões registradas |
 | F1 | Criar solução backend, Angular, infraestrutura local, CI inicial e health check | Build e testes básicos aprovados |
-| F2 | Identidade, cadastro de cliente, login, administrador inicial e proteção de API | Autorização e isolamento validados |
+| F2 | **Implementado parcialmente:** Identity, cadastro/login por cookie, `/me`, logout, confirmação e reenvio de e-mail, Outbox transacional e interface Angular; worker/Resend desligados por padrão | Testes unitários, HTTP e SQL isolado aprovados; entrega real de e-mail e confirmação obrigatória para login permanecem pendentes |
 | F3 | Catálogo, variantes, imagens e vitrine mobile | CRUD e estados públicos corretos |
 | F4 | Matérias-primas, estoque acabado, lotes, validade e movimentos | Integridade e auditoria testadas |
 | F5 | Fichas técnicas, capacidade e ordens com reserva | Concorrência e cálculo aprovados |
@@ -352,7 +396,7 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | ID | Tema | Risco/decisão necessária | Ação antes de implementar |
 | --- | --- | --- | --- |
 | PT-01 | Fonte de arquitetura | NoteKeeper foi citado, mas estrutura exata e dependências não foram auditadas nesta entrega | Conferir repositório e versões em F0 |
-| PT-02 | Autenticação | Cookie vs JWT e recuperação de acesso | Escolher após revisar implantação e padrões reais |
+| PT-02 | Autenticação e recuperação | F2 usa Identity com cookie e antifalsificação; recuperação de senha ainda não implementada | Manter o cookie no fluxo web; tratar recuperação como próxima funcionalidade |
 | PT-03 | Funcionários | Matriz de permissões ainda não definida | Implementar barreira mínima e revisar após admin |
 | PT-04 | Produção parcial | Quando consumir insumos, tratar perdas e cancelamento iniciado | Validar exemplos com proprietária antes de F6 |
 | PT-05 | Pedido | Prazo de reserva, cancelamento, pagamento tardio e reembolso | Aprovar política antes de F7/F9 |
@@ -365,6 +409,12 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | PT-12 | Infraestrutura | Imagens, banco, backup e custos de produção | Escolher serviço e verificar limites antes do deploy |
 | PT-13 | Escopo | Módulos condicionados não foram todos aprovados | Repriorizar com base em testes e decisões do solicitante |
 | PT-14 | Dados sensíveis | CPF, endereços, pagamento e retenção | Revisar privacidade antes de operação real |
+| PT-15 | Resend real | Configuração está desabilitada e nenhuma entrega real foi validada | Configurar remetente/chave em ambiente seguro, validar domínio, entrega, falhas e operação antes de ativar |
+| PT-16 | Garantia de entrega | Processamento é at-least-once; falha após aceitação pelo provedor e antes do `Completed` pode gerar entrega duplicada | Não prometer exactly-once; monitorar e definir tratamento operacional para duplicidades |
+| PT-17 | Rate limiting | Limites são locais a cada processo e não agregam instâncias; forwarded headers não são confiáveis/configurados | No deploy, documentar proxies confiáveis e avaliar limitador distribuído se houver múltiplas instâncias |
+| PT-18 | Data Protection | Não há chave persistente compartilhada configurada no repositório | Configurar armazenamento protegido e compartilhado, validar rotação, reinício e múltiplas instâncias |
+| PT-19 | Login confirmado | `RequireConfirmedEmail` permanece `false` porque envio real ainda não foi validado | Só avaliar exigência após validar entrega e experiência de recuperação/reenvio |
+| PT-20 | Recuperação de senha | Fluxo ainda não implementado | Tratar como próxima funcionalidade após validação do serviço real de e-mail |
 
 ### 10.1 Mapa de rastreabilidade resumido
 
@@ -380,11 +430,11 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 
 ## 11. Referências e validação documental
 
-- `docs/prd.md` — Xaquiamuni, versão 0.2, fornecida pelo solicitante; fonte das decisões de produto e da numeração RF/RN/RNF/CA.
+- `docs/prd.md` — Xaquiamuni, versão 0.3; fonte das decisões de produto e da numeração RF/RN/RNF/CA.
 - `tdd.md` do professor — exemplo de estrutura e profundidade de um Technical Design Document para locadora; **não** fonte de requisitos da Xaquiamuni.
 - Repositório NoteKeeper informado pelo solicitante — referência de organização e stack, **a conferir** em F0.
 - Entrevistas com a proprietária e esclarecimentos registrados na conversa — decisões de negócio e propostas aceitas como direção inicial.
 
 ### 11.1 Condições de handoff
 
-Antes de autorizar implementação dos fluxos críticos: (1) revisar o TDD com o solicitante; (2) confirmar a stack e a estrutura do NoteKeeper; (3) resolver as pendências que bloqueiam a etapa específica; (4) definir testes de aceite; (5) manter registro de decisões alteradas no PRD/TDD. **Este documento não comprova implementação, homologação de Pix, integração com Correios, testes executados ou prontidão de produção.**
+Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pendências aplicáveis do PRD/TDD; (2) validar as decisões específicas da etapa; (3) definir e executar testes de aceite; (4) validar persistência compartilhada de Data Protection e configuração de proxies; (5) configurar e validar envio real antes de exigir confirmação no login. **A implementação F2 comprova o enfileiramento e o fluxo HTTP/UI, não homologação de Resend, entrega real, Pix, Correios ou prontidão de produção.**

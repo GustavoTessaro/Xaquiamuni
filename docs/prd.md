@@ -5,14 +5,14 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão do documento | 0.2 — revisão do levantamento e decisões comerciais |
+| Versão do documento | 0.3 — atualização do fluxo F2 de confirmação de e-mail |
 | Data | 11/11/2026 |
-| Status | **Revisado; regras operacionais propostas aguardam validação e integrações aguardam viabilidade** |
+| Status | **Revisado; cadastro e confirmação/reenvio de e-mail da F2 implementados e testados; envio real ainda não validado** |
 | Contexto | Trabalho de Conclusão de Curso — Academia do Programador |
 | Fonte principal | Entrevista com a proprietária (53 respostas, cinco esclarecimentos complementares e rodada posterior de decisões sobre cadastro, entregas, estoque e banco), logomarca e capturas do Instagram fornecidas pelo solicitante |
 | Escopo | Primeira entrega demonstrável e planejamento de evolução, com limites e pendências explícitos |
 
-> **Regra de leitura:** “Confirmado” significa declarado pela proprietária ou pelo solicitante; “Proposto” significa sugestão de produto ainda sujeita a aprovação; “Pendente” exige decisão antes da implementação do fluxo afetado. Critérios de aceite descrevem testes futuros, não funcionalidades já implementadas.
+> **Regra de leitura:** “Confirmado” significa declarado pela proprietária ou pelo solicitante; “Implementado” significa comportamento verificado no código e coberto por testes; “Proposto” significa sugestão ainda sujeita a aprovação; “Pendente” exige decisão ou validação antes de ativar o fluxo afetado. Critérios de aceite descrevem verificações; resultados só são afirmados quando há evidência.
 
 ## 1. Resumo executivo
 
@@ -21,6 +21,8 @@ Desenvolver uma plataforma web responsiva para a **Xaquiamuni Produtos Naturais*
 O diferencial do produto será conectar a venda online à **organização da produção artesanal**, apontada pela proprietária como a principal necessidade. A solução deverá apoiar o planejamento de lotes, a reserva de matérias-primas, o cálculo da capacidade de produção e a atualização consistente de produtos acabados.
 
 Pagamentos integrados, entregas, financeiro, análises e agenda compõem a visão de produto, mas sua abrangência na entrega do TCC depende de decisões operacionais e da viabilidade das integrações. Não presumir automações ou serviços externos já contratados.
+
+O fluxo F2 de cadastro, confirmação e reenvio de e-mail está implementado no backend e no Angular, com testes automatizados, testes integrados opt-in com SQL Server isolado e validação manual local. O cadastro enfileira a solicitação inicial, mas o worker e o Resend permanecem desabilitados por padrão; nenhum envio real foi validado. A exigência de confirmação para login e a recuperação de senha continuam pendentes.
 
 ## 2. Contexto e problema
 
@@ -53,6 +55,7 @@ O planejamento de produção, os pedidos e os controles operacionais estão dist
 | Pagamento | Pix, dinheiro e cartão aceitos atualmente; desejo de Pix online com confirmação automática |
 | Frete | Correios para regiões atendidas; entrega própria em Vacaria por R$ 10 e retirada local sem frete, com abrangência exata a confirmar |
 | Cadastro do cliente | Conta obrigatória antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo com CEP |
+| Confirmação de e-mail | Cadastro cria conta não confirmada e enfileira solicitação inicial; link válido por 24 horas; reenvio genérico com cooldown e limite por conta |
 | Banco PJ | Sicredi; disponibilidade de API Pix e condições contratuais não verificadas |
 | Rastreabilidade | Variações dos produtos podem exigir fichas técnicas/estoques distintos; registrar fabricação e validade por lote |
 | Precificação | Considerar matérias-primas, embalagem, mão de obra, frete, taxas e despesas, distinguindo margem e lucro |
@@ -84,7 +87,7 @@ Não há baseline de tempo economizado, faturamento, volume de pedidos, disponib
 
 ### 5.1 Núcleo prioritário da primeira entrega — proposta para validação
 
-1. **Contas e acesso:** autenticação de cliente, administrador e funcionário; proteção das operações por perfil/permissão.
+1. **Contas e acesso:** autenticação de cliente, administrador e funcionário; proteção das operações por perfil/permissão; confirmação de e-mail no cadastro. Recuperação de senha permanece como próxima funcionalidade.
 2. **Catálogo e vitrine:** cadastro administrativo de produtos, categorias, preços, fotos, situação de publicação e consulta pública de itens disponíveis.
 3. **Carrinho e pedidos:** seleção de quantidades, validação de disponibilidade, conta de cliente obrigatória, endereço ou modalidade de entrega e criação de pedido.
 4. **Estoque de produtos acabados:** entradas, saídas, ajustes auditáveis, lotes com fabricação/validade e disponibilidade real para venda online.
@@ -158,7 +161,7 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 
 - **RF-01 — Autenticar usuários:** permitir acesso de administrador, funcionário e cliente; exigir autenticação para operações privadas e encerrar sessão com segurança.
 - **RF-02 — Proteger acesso:** cliente consulta apenas seus dados e pedidos; funcionário acessa somente operações autorizadas; administrador configura permissões. A matriz fina de permissões está pendente.
-- **RF-03 — Cadastrar cliente:** exigir conta antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo (CEP, UF, cidade, bairro, logradouro, número e complemento opcional); validar formato/dígitos do CPF, proteger os dados e prever recuperação segura de acesso. A necessidade de dados adicionais pelo provedor/logística deve ser reavaliada.
+- **RF-03 — Cadastrar cliente:** exigir conta antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo (CEP, UF, cidade, bairro, logradouro, número e complemento opcional); validar formato/dígitos do CPF e proteger os dados. A conta nasce não confirmada e a solicitação inicial de confirmação é enfileirada no cadastro. Recuperação de senha não está implementada e permanece como próxima funcionalidade. A necessidade de dados adicionais pelo provedor/logística deve ser reavaliada.
 
 ### 7.2 Catálogo e estoque
 
@@ -195,6 +198,11 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 - **RF-24 — Gerir agenda e notas (condicionado):** registrar compromissos, prazos e anotações, com alertas apenas quando canal e mecanismo forem definidos.
 - **RF-25 — Gerir fornecedores (condicionado):** cadastrar fornecedores e associá-los a aquisições de materiais, respeitando dados necessários à operação.
 
+### 7.6 Confirmação de e-mail — F2 implementada
+
+- **RF-27 — Confirmar e-mail:** permitir a confirmação anônima da conta por link contendo token de confirmação com validade de 24 horas. O cadastro cria a conta não confirmada e enfileira automaticamente a solicitação inicial, sem iniciar uma sessão.
+- **RF-28 — Reenviar confirmação:** permitir que o cliente solicite novo e-mail pela página de confirmação e pelos pontos de entrada do cadastro e login. Para e-mails válidos, a resposta pública não revela existência, elegibilidade ou estado interno da conta; cooldown, limite por conta e deduplicação seguem RN-23 a RN-27.
+
 ## 8. Regras de negócio
 
 - **RN-01 — Venda somente com disponibilidade:** quantidade comprável não excede saldo acabado disponível; produto esgotado não admite compra online nem encomenda pelo checkout.
@@ -217,6 +225,15 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 - **RN-18 — Cancelamentos e produção parcial (proposta):** cancelamentos de pedidos e ordens devem preservar histórico, liberar apenas reservas remanescentes e não desfazer consumos já efetivados; produção parcial registra rendimento real. Transições detalhadas e estornos dependem de validação.
 - **RN-19 — Trienta:** o novo sistema substituirá o Trienta na operação final; migração inicial poderá ser manual, mediante conferência dos dados e saldos, sem presumir API ou exportação.
 - **RN-20 — Banco e Pix:** Sicredi é o banco da conta PJ, mas não equivale à escolha ou aprovação de provedor de pagamentos. Confirmar disponibilidade de integração, homologação, custos e conciliação antes de ativar cobrança automática.
+- **RN-21 — Estado inicial da conta:** o cadastro cria a conta com e-mail não confirmado e enfileira a solicitação inicial na mesma operação transacional do usuário e do perfil; enfileirar não significa que o e-mail foi enviado.
+- **RN-22 — Validade da confirmação:** o token do link de confirmação é válido por 24 horas; token inválido ou expirado não confirma a conta.
+- **RN-23 — Privacidade do reenvio:** solicitações com e-mail válido recebem resposta pública genérica equivalente para contas elegíveis e não elegíveis; não revelar existência da conta, confirmação, cooldown, limites ou estado da Outbox.
+- **RN-24 — Cooldown:** respeitar intervalo mínimo de 2 minutos entre solicitações da mesma conta, considerando a solicitação mais recente e eventual conclusão posterior do processamento.
+- **RN-25 — Limite por conta:** permitir no máximo 5 solicitações em janela móvel de uma hora; a solicitação inicial do cadastro conta nesse limite.
+- **RN-26 — Deduplicação:** não criar solicitação adicional enquanto houver mensagem de confirmação `Pending` ou `Processing` para a conta.
+- **RN-27 — Recuperação de DeadLetter:** uma mensagem `DeadLetter` pode ser substituída por nova solicitação quando cooldown e limite permitirem; preservar a mensagem antiga como histórico e liberar sua chave ativa junto à criação da nova mensagem, atomicamente.
+- **RN-28 — Confirmação obrigatória para login:** `RequireConfirmedEmail` permanece `false`; não bloquear login por falta de confirmação até que o envio real de e-mail seja configurado e validado.
+- **RN-29 — Recuperação de senha:** não está implementada; permanece como próxima funcionalidade após validação do fluxo de e-mail real.
 
 ## 9. Requisitos não funcionais
 
@@ -253,6 +270,7 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 | **CA-15** | RF-03, RN-16 | Cadastro exige conta, CPF válido, nome, e-mail, telefone e endereço completo; cliente não acessa CPF/endereço de outro cliente. |
 | **CA-16** | RF-07, RN-17 | Lotes preservam fabricação e validade; lote vencido não compõe estoque vendável. |
 | **CA-17** | RF-17, RN-07 | **Se política proposta aprovada:** pedido pendente reserva uma vez, expiração libera uma vez e confirmação concorrente não produz venda duplicada. |
+| **CA-18** | RF-03, RF-27–28, RN-21–29 | Cadastro deixa a conta não confirmada e cria uma solicitação inicial; link expira em 24 horas; reenvio não enumera contas, respeita cooldown/limite, evita duplicação e preserva histórico ao recuperar `DeadLetter`; login não exige confirmação enquanto o envio real não for validado. |
 
 Os números dos cenários são **exemplos de teste a executar**, não resultados de execução.
 
@@ -340,15 +358,17 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 | **P-16** | Notificações além dos alertas internos | Definir necessidade de e-mail, WhatsApp ou push posteriormente. |
 | **P-17** | Permissões por operação para funcionários | Definir após o fluxo administrativo da proprietária. |
 | **P-18** | Regras de rateio de despesas e apresentação de margem/lucro | Validar com proprietária antes de automatizar sugestão de preços. |
+| **P-19** | Validar envio real de e-mail e política futura de confirmação obrigatória para login | Configurar e validar Resend, worker, entrega e operação antes de alterar `RequireConfirmedEmail`; nenhum envio real foi testado. |
+| **P-20** | Recuperação de senha | Implementar como próxima funcionalidade, com fluxo de identidade e entrega de e-mail validados. |
 
 **Regra de governança:** propostas acima são hipóteses de projeto aceitas como direção inicial pelo solicitante, mas ainda exigem detalhamento/validação antes de fluxos financeiros ou de estoque em produção.
 
 ## 14. Próximos passos e passagem para TDD
 
-1. Revisar esta versão 0.2, concentrando a validação nas políticas de pedido/pagamento (**P-04/P-05**) e execução de produção (**P-09/P-10**).
+1. Revisar esta versão 0.3, concentrando a validação nas políticas de pedido/pagamento (**P-04/P-05**) e execução de produção (**P-09/P-10**).
 2. Definir o recorte de entrega acadêmica e aprovar ou adiar explicitamente cada módulo condicionado; verificar dados de Correios e viabilidade de Pix no Sicredi.
 3. Atualizar regras, jornadas, requisitos e critérios de aceite de acordo com as decisões; registrar data e versão.
-4. Só então marcar o PRD como **Validado para TDD**.
-5. Elaborar `docs/tdd.md` com base na versão aprovada, detalhando arquitetura inspirada no NoteKeeper (Angular, ASP.NET Core, SQL Server), autenticação, persistência, transações, armazenamento de imagens, integração de pagamentos, testes e plano de implementação.
+4. Manter o status do PRD alinhado às decisões validadas; não tratar módulos propostos como aprovados.
+5. Revisar e manter `docs/tdd.md` alinhado a esta versão do PRD e ao código efetivamente implementado, mantendo explícitas as propostas, limitações e pendências.
 
-**Estado atual:** versão 0.2 revisada, com decisões confirmadas e propostas identificadas; nenhuma implementação, integração ou teste de aceite é afirmado neste arquivo.
+**Estado atual:** versão 0.3; o fluxo F2 de cadastro e confirmação/reenvio está implementado e testado, mas o envio real não foi validado e `RequireConfirmedEmail` permanece desabilitado. Os demais módulos e integrações mantêm os estados confirmados, propostos e pendentes descritos acima.
