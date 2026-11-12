@@ -38,6 +38,13 @@ public sealed class CadastroClienteInputValidator
         return Result(erros);
     }
 
+    public CadastroClienteInputValidationResult ValidateEmail(string? email)
+    {
+        var erros = new List<CadastroClienteInputValidationError>();
+        ValidateEmail(email, erros);
+        return Result(erros);
+    }
+
     private static void ValidateNome(string? nomeCompleto, List<CadastroClienteInputValidationError> erros)
     {
         if (string.IsNullOrWhiteSpace(nomeCompleto))

@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IdentityRoleInitializer>();
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
+        services.AddScoped<ISolicitarReenvioConfirmacaoEmail, SolicitarReenvioConfirmacaoEmail>();
         services.AddSingleton<IEmailConfirmationMessageComposer, EmailConfirmationMessageComposer>();
         services.AddScoped<ILoginCliente, LoginCliente>();
         services.AddScoped<CadastroClienteInputValidator>();
