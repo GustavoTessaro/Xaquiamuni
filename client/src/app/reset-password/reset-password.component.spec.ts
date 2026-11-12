@@ -26,6 +26,7 @@ describe('ResetPasswordComponent', () => {
     forgotPassword = vi.fn<AuthService['forgotPassword']>();
     login = vi.fn<AuthService['login']>();
     obterSessao = vi.fn<AuthService['obterSessao']>();
+    obterSessao.mockReturnValue(of(null));
     logout = vi.fn<AuthService['logout']>();
 
     await TestBed.configureTestingModule({
@@ -65,6 +66,72 @@ describe('ResetPasswordComponent', () => {
     expect(resetPassword).not.toHaveBeenCalled();
     expect(login).not.toHaveBeenCalled();
     expect(obterSessao).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it('navigates from an invalid link to recovery or login only on explicit action', async () => {
+    setLocation('', '');
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/reset-password', ResetPasswordComponent);
+
+    const forgotLink = harness.routeNativeElement?.querySelector(
+      'a[routerLink="/forgot-password"]',
+    ) as HTMLAnchorElement;
+    expect(forgotLink.href).toContain('/forgot-password');
+    expect(new URL(forgotLink.href).search).toBe('');
+    expect(new URL(forgotLink.href).hash).toBe('');
+    forgotLink.click();
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/forgot-password');
+    expect(harness.routeNativeElement?.textContent).toContain('Esqueci minha senha');
+    expect(forgotPassword).not.toHaveBeenCalled();
+    expect(resetPassword).not.toHaveBeenCalled();
+
+    await harness.navigateByUrl('/reset-password', ResetPasswordComponent);
+    const loginLink = harness.routeNativeElement?.querySelector(
+      'a[routerLink="/login"]',
+    ) as HTMLAnchorElement;
+    expect(new URL(loginLink.href).search).toBe('');
+    expect(new URL(loginLink.href).hash).toBe('');
+    loginLink.click();
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/login');
+    expect(harness.routeNativeElement?.textContent).toContain('Entrar na sua conta');
+    expect(resetPassword).not.toHaveBeenCalled();
+    expect(forgotPassword).not.toHaveBeenCalled();
+    expect(login).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
+  });
+
+  it('discards fragment credentials when leaving by Router and reopening without a fragment', async () => {
+    const email = 'cliente@example.test';
+    const token = 'synthetic-navigation-token';
+    setLocation('', `#${encodedCredentials(email, token)}`);
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/reset-password', ResetPasswordComponent);
+
+    expect(harness.routeNativeElement?.querySelector('form')).not.toBeNull();
+    expect(window.location.hash).toBe('');
+    const loginLink = harness.routeNativeElement?.querySelector(
+      'a[routerLink="/login"]',
+    ) as HTMLAnchorElement;
+    loginLink.click();
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/login');
+    expect(new URL(loginLink.href).search).toBe('');
+    expect(new URL(loginLink.href).hash).toBe('');
+    await harness.navigateByUrl('/reset-password', ResetPasswordComponent);
+
+    expect(harness.routeNativeElement?.textContent).toContain('Link de recuperação inválido');
+    expect(harness.routeNativeElement?.querySelector('form')).toBeNull();
+    expect(harness.routeNativeElement?.textContent).not.toContain(email);
+    expect(harness.routeNativeElement?.textContent).not.toContain(token);
+    expect(resetPassword).not.toHaveBeenCalled();
+    expect(login).not.toHaveBeenCalled();
+    expect(forgotPassword).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
   });
 

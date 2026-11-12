@@ -1,20 +1,24 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { Router, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
+import { routes } from '../app.routes';
 import { LoginComponent } from './login.component';
 
 describe('LoginComponent', () => {
   let fixture: ComponentFixture<LoginComponent>;
   let login: ReturnType<typeof vi.fn<AuthService['login']>>;
+  let forgotPassword: ReturnType<typeof vi.fn<AuthService['forgotPassword']>>;
   let obterSessao: ReturnType<typeof vi.fn<AuthService['obterSessao']>>;
   let logout: ReturnType<typeof vi.fn<AuthService['logout']>>;
 
   beforeEach(async () => {
     login = vi.fn<AuthService['login']>();
     login.mockReturnValue(new Observable<void>());
+    forgotPassword = vi.fn<AuthService['forgotPassword']>();
     obterSessao = vi.fn<AuthService['obterSessao']>();
     obterSessao.mockReturnValue(of(null));
     logout = vi.fn<AuthService['logout']>();
@@ -23,8 +27,8 @@ describe('LoginComponent', () => {
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
       providers: [
-        provideRouter([]),
-        { provide: AuthService, useValue: { login, obterSessao, logout } },
+        provideRouter(routes),
+        { provide: AuthService, useValue: { login, forgotPassword, obterSessao, logout } },
       ],
     }).compileComponents();
 
@@ -324,6 +328,42 @@ describe('LoginComponent', () => {
     const link = fixture.nativeElement.querySelector('a[routerLink="/cadastro"]') as HTMLAnchorElement;
     expect(link).not.toBeNull();
     expect(link.textContent).toContain('Cadastre-se');
+  });
+
+  it('navigates from an empty login form to password recovery without submitting or requesting', async () => {
+    obterSessao.mockClear();
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/login', LoginComponent);
+    harness.fixture.detectChanges();
+
+    const form = harness.routeNativeElement?.querySelector('form') as HTMLFormElement;
+    const link = harness.routeNativeElement?.querySelector(
+      'a[routerLink="/forgot-password"]',
+    ) as HTMLAnchorElement;
+    const submit = vi.fn();
+    form.addEventListener('submit', submit);
+
+    expect(form).not.toBeNull();
+    expect((harness.routeNativeElement?.querySelector('#email') as HTMLInputElement).value).toBe('');
+    expect((harness.routeNativeElement?.querySelector('#senha') as HTMLInputElement).value).toBe('');
+    expect(form.checkValidity()).toBe(false);
+    expect(link).not.toBeNull();
+    expect(link.href).toContain('/forgot-password');
+    expect(link.closest('form')).toBe(form);
+    expect(new URL(link.href).search).toBe('');
+    expect(new URL(link.href).hash).toBe('');
+
+    const sessionChecks = obterSessao.mock.calls.length;
+    link.click();
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/forgot-password');
+    expect(harness.routeNativeElement?.textContent).toContain('Esqueci minha senha');
+    expect(submit).not.toHaveBeenCalled();
+    expect(login).not.toHaveBeenCalled();
+    expect(forgotPassword).not.toHaveBeenCalled();
+    expect(obterSessao).toHaveBeenCalledTimes(sessionChecks);
+    expect(logout).not.toHaveBeenCalled();
   });
 
   it('offers resend independently of login state without adding personal data to the route', () => {

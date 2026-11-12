@@ -19,8 +19,11 @@ describe('ForgotPasswordComponent', () => {
     forgotPassword = vi.fn<AuthService['forgotPassword']>();
     forgotPassword.mockReturnValue(new Observable<ForgotPasswordResponse>());
     login = vi.fn<AuthService['login']>();
+    login.mockReturnValue(new Observable<void>());
     obterSessao = vi.fn<AuthService['obterSessao']>();
+    obterSessao.mockReturnValue(of(null));
     logout = vi.fn<AuthService['logout']>();
+    logout.mockReturnValue(new Observable<void>());
 
     await TestBed.configureTestingModule({
       imports: [ForgotPasswordComponent],
@@ -64,6 +67,26 @@ describe('ForgotPasswordComponent', () => {
     expect(logout).not.toHaveBeenCalled();
   });
 
+  it('navigates back to login only after the user selects the link', async () => {
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/forgot-password', ForgotPasswordComponent);
+    const loginLink = harness.routeNativeElement?.querySelector(
+      'a[routerLink="/login"]',
+    ) as HTMLAnchorElement;
+    expect(loginLink.href).toContain('/login');
+    expect(new URL(loginLink.href).search).toBe('');
+    expect(new URL(loginLink.href).hash).toBe('');
+
+    loginLink.click();
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/login');
+    expect(harness.routeNativeElement?.textContent).toContain('Entrar na sua conta');
+    expect(forgotPassword).not.toHaveBeenCalled();
+    expect(login).not.toHaveBeenCalled();
+    expect(logout).not.toHaveBeenCalled();
+  });
+
   it('validates required, malformed, and overlong email without calling the service', () => {
     const page = createComponent();
     submit(page);
@@ -88,7 +111,7 @@ describe('ForgotPasswordComponent', () => {
     expect(forgotPassword).not.toHaveBeenCalled();
   });
 
-  it('trims surrounding email whitespace and shows a generic success without navigating', () => {
+  it('trims surrounding email whitespace and navigates to login only by explicit action', async () => {
     const page = createComponent();
     const response = new Subject<ForgotPasswordResponse>();
     forgotPassword.mockReturnValue(response);
@@ -121,6 +144,16 @@ describe('ForgotPasswordComponent', () => {
     expect(login).not.toHaveBeenCalled();
     expect(obterSessao).not.toHaveBeenCalled();
     expect(logout).not.toHaveBeenCalled();
+
+    const loginLink = page.nativeElement.querySelector(
+      'a[routerLink="/login"]',
+    ) as HTMLAnchorElement;
+    expect(loginLink.href).toContain('/login');
+    loginLink.click();
+    await page.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/login');
+    expect(login).not.toHaveBeenCalled();
   });
 
   it('blocks duplicate submissions from button and Enter while a request is pending', () => {
