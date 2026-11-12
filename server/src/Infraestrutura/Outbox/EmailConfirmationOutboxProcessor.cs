@@ -4,7 +4,7 @@ using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 
 namespace Xaquiamuni.Infraestrutura.Outbox;
 
-public sealed class EmailConfirmationOutboxProcessor
+public sealed class EmailConfirmationOutboxProcessor : IEmailOutboxProcessor
 {
     private readonly IEmailOutboxStore _outboxStore;
     private readonly IEmailConfirmationService _emailConfirmationService;
@@ -26,6 +26,8 @@ public sealed class EmailConfirmationOutboxProcessor
         _emailSender = emailSender ?? throw new ArgumentNullException(nameof(emailSender));
         _timeProvider = timeProvider ?? throw new ArgumentNullException(nameof(timeProvider));
     }
+
+    public EmailOutboxMessageType MessageType => EmailOutboxMessageType.EmailConfirmation;
 
     public async Task ProcessAsync(
         EmailOutboxClaim claim,

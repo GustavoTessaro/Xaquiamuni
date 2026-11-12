@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Autenticacao;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Outbox;
@@ -29,6 +30,12 @@ public sealed class ResendEmailSenderDependencyInjectionTests
 
         using var app = builder.Build();
         Assert.Empty(app.Services.GetServices<IEmailSender>());
+        Assert.DoesNotContain(
+            builder.Services,
+            descriptor => descriptor.ServiceType == typeof(IEmailOutboxProcessor));
+        Assert.DoesNotContain(
+            builder.Services,
+            descriptor => descriptor.ServiceType == typeof(EmailOutboxDispatcher));
         Assert.DoesNotContain(
             app.Services.GetServices<IHostedService>(),
             service => service is EmailOutboxBackgroundService);
@@ -90,6 +97,12 @@ public sealed class ResendEmailSenderDependencyInjectionTests
         using var provider = services.BuildServiceProvider();
         Assert.IsType<ResendEmailSender>(provider.GetRequiredService<IEmailSender>());
         Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IEmailOutboxProcessor));
+        Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ServiceType == typeof(EmailOutboxDispatcher));
+        Assert.DoesNotContain(
             provider.GetServices<IHostedService>(),
             service => service is EmailOutboxBackgroundService);
         Assert.False(
@@ -123,6 +136,20 @@ public sealed class ResendEmailSenderDependencyInjectionTests
         using var scope = app.Services.CreateScope();
         Assert.IsType<EmailConfirmationOutboxProcessor>(
             scope.ServiceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
+        Assert.Same(
+            scope.ServiceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>(),
+            scope.ServiceProvider.GetRequiredService<IEmailOutboxProcessor>());
+        Assert.Equal(
+            [EmailOutboxMessageType.EmailConfirmation],
+            scope.ServiceProvider.GetRequiredService<EmailOutboxDispatcher>().SupportedMessageTypes);
+        Assert.Equal(
+            ServiceLifetime.Scoped,
+            Assert.Single(builder.Services, descriptor =>
+                descriptor.ServiceType == typeof(IEmailOutboxProcessor)).Lifetime);
+        Assert.Equal(
+            ServiceLifetime.Scoped,
+            Assert.Single(builder.Services, descriptor =>
+                descriptor.ServiceType == typeof(EmailOutboxDispatcher)).Lifetime);
     }
 
     private static IConfiguration CreateConfiguration(

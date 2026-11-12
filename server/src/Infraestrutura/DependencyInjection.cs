@@ -135,6 +135,9 @@ public static class DependencyInjection
             }
 
             services.AddScoped<EmailConfirmationOutboxProcessor>();
+            services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
+                serviceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
+            services.AddScoped<EmailOutboxDispatcher>();
             services.AddHostedService<EmailOutboxBackgroundService>();
         }
 

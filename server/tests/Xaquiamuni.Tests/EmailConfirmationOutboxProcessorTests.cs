@@ -23,6 +23,7 @@ public sealed class EmailConfirmationOutboxProcessorTests
         var sender = new FakeEmailSender();
         var processor = CreateProcessor(store, confirmation, composer, sender);
 
+        Assert.Equal(EmailOutboxMessageType.EmailConfirmation, processor.MessageType);
         await processor.ProcessAsync(claim);
 
         Assert.Equal(claim.UserId, confirmation.LastUserId);

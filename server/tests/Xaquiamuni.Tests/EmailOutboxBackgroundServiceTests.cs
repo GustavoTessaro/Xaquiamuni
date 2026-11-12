@@ -99,6 +99,48 @@ public sealed class EmailOutboxBackgroundServiceTests
     }
 
     [Fact]
+    public async Task Worker_DispatchesTypesRoundRobinWithinOneTotalBatchLimit()
+    {
+        var firstConfirmation = CreateClaim();
+        var firstPasswordReset = CreateClaim(EmailOutboxMessageType.PasswordReset);
+        var secondConfirmation = CreateClaim();
+        var state = new WorkerState(
+            [firstConfirmation, secondConfirmation, firstPasswordReset],
+            completionsBeforeSignal: 3);
+        using var provider = CreateMultiTypeWorkerProvider(state);
+        var worker = CreateWorker(provider, new EmailOutboxBackgroundServiceOptions
+        {
+            Enabled = true,
+            CycleInterval = TimeSpan.FromMinutes(1),
+            BatchSize = 3
+        });
+
+        await worker.StartAsync(CancellationToken.None);
+        await state.BatchProcessed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        using var stopTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await worker.StopAsync(stopTimeout.Token);
+
+        Assert.Equal(1, state.ScopeCreatedCount);
+        Assert.Equal(3, state.ClaimCalls);
+        Assert.Equal([1, 1, 1], state.ClaimBatchSizes);
+        Assert.Equal(
+            [
+                EmailOutboxMessageType.EmailConfirmation,
+                EmailOutboxMessageType.PasswordReset,
+                EmailOutboxMessageType.EmailConfirmation
+            ],
+            state.ClaimMessageTypes);
+        Assert.Equal(
+            [firstConfirmation.Id, firstPasswordReset.Id, secondConfirmation.Id],
+            state.ReturnedClaimIds);
+        Assert.Equal(state.ClaimMessageTypes, state.ProcessedMessageTypes);
+        Assert.Equal(1, state.MaximumConcurrentProcessors);
+        Assert.Empty(state.ClaimExclusions[0]);
+        Assert.Equal([firstConfirmation.Id], state.ClaimExclusions[1]);
+        Assert.Equal([firstConfirmation.Id, firstPasswordReset.Id], state.ClaimExclusions[2]);
+    }
+
+    [Fact]
     public async Task Worker_DoesNotReclaimMessageRetriedDuringSameCycle()
     {
         var retriedClaim = CreateClaim();
@@ -181,6 +223,28 @@ public sealed class EmailOutboxBackgroundServiceTests
         services.AddSingleton<IEmailSender, FakeEmailSender>();
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<EmailConfirmationOutboxProcessor>();
+        services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
+            serviceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
+        services.AddScoped<EmailOutboxDispatcher>();
+        return services.BuildServiceProvider(validateScopes: true);
+    }
+
+    private static ServiceProvider CreateMultiTypeWorkerProvider(WorkerState state)
+    {
+        var services = new ServiceCollection();
+        services.AddLogging();
+        services.AddSingleton(state);
+        services.AddScoped<IEmailOutboxStore>(serviceProvider =>
+            new FakeOutboxStore(serviceProvider.GetRequiredService<WorkerState>()));
+        services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
+            new RecordingOutboxProcessor(
+                EmailOutboxMessageType.EmailConfirmation,
+                serviceProvider.GetRequiredService<WorkerState>()));
+        services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
+            new RecordingOutboxProcessor(
+                EmailOutboxMessageType.PasswordReset,
+                serviceProvider.GetRequiredService<WorkerState>()));
+        services.AddScoped<EmailOutboxDispatcher>();
         return services.BuildServiceProvider(validateScopes: true);
     }
 
@@ -192,11 +256,12 @@ public sealed class EmailOutboxBackgroundServiceTests
             Options.Create(options),
             NullLogger<EmailOutboxBackgroundService>.Instance);
 
-    private static EmailOutboxClaim CreateClaim() =>
+    private static EmailOutboxClaim CreateClaim(
+        EmailOutboxMessageType messageType = EmailOutboxMessageType.EmailConfirmation) =>
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            EmailOutboxMessageType.EmailConfirmation,
+            messageType,
             attempts: 1,
             DateTimeOffset.UtcNow.AddMinutes(5),
             [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -206,11 +271,17 @@ public sealed class EmailOutboxBackgroundServiceTests
         int completionsBeforeSignal,
         bool failFirstTokenGeneration = false)
     {
+        private readonly object _processedMessageTypesLock = new();
+        private int _activeProcessors;
+        private int _maximumConcurrentProcessors;
+
         public IReadOnlyList<EmailOutboxClaim> Claims { get; } = claims;
         public int CompletionsBeforeSignal { get; } = completionsBeforeSignal;
         public bool FailFirstTokenGeneration { get; } = failFirstTokenGeneration;
         public List<int> ClaimBatchSizes { get; } = [];
         public List<EmailOutboxMessageType> ClaimMessageTypes { get; } = [];
+        public List<Guid[]> ClaimExclusions { get; } = [];
+        public List<EmailOutboxMessageType> ProcessedMessageTypes { get; } = [];
         public List<Guid> ReturnedClaimIds { get; } = [];
         public List<string> Operations { get; } = [];
         public TaskCompletionSource<bool> BatchProcessed { get; } =
@@ -220,12 +291,52 @@ public sealed class EmailOutboxBackgroundServiceTests
         public TaskCompletionSource<bool> NoMoreClaims { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
         public bool BlockClaimUntilCancelled { get; init; }
+        public int MaximumConcurrentProcessors => Volatile.Read(ref _maximumConcurrentProcessors);
         public int ScopeCreatedCount;
         public int ClaimCalls;
         public int TokenGenerationCalls;
         public int SendCalls;
         public int CompleteCalls;
         public int RetryCalls;
+
+        public async Task RecordProcessedAsync(
+            EmailOutboxMessageType messageType,
+            CancellationToken cancellationToken)
+        {
+            var activeProcessors = Interlocked.Increment(ref _activeProcessors);
+            while (true)
+            {
+                var previousMaximum = Volatile.Read(ref _maximumConcurrentProcessors);
+                if (activeProcessors <= previousMaximum
+                    || Interlocked.CompareExchange(
+                        ref _maximumConcurrentProcessors,
+                        activeProcessors,
+                        previousMaximum) == previousMaximum)
+                {
+                    break;
+                }
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(10), cancellationToken);
+                int processedCount;
+                lock (_processedMessageTypesLock)
+                {
+                    ProcessedMessageTypes.Add(messageType);
+                    processedCount = ProcessedMessageTypes.Count;
+                }
+
+                if (processedCount >= CompletionsBeforeSignal)
+                {
+                    BatchProcessed.TrySetResult(true);
+                }
+            }
+            finally
+            {
+                Interlocked.Decrement(ref _activeProcessors);
+            }
+        }
     }
 
     private sealed class FakeOutboxStore : IEmailOutboxStore
@@ -248,6 +359,7 @@ public sealed class EmailOutboxBackgroundServiceTests
             Interlocked.Increment(ref _state.ClaimCalls);
             _state.ClaimBatchSizes.Add(batchSize);
             _state.ClaimMessageTypes.Add(messageType);
+            _state.ClaimExclusions.Add(excludedMessageIds?.ToArray() ?? []);
             _state.Operations.Add("claim");
             _state.ClaimStarted.TrySetResult(true);
             if (_state.BlockClaimUntilCancelled)
@@ -256,7 +368,8 @@ public sealed class EmailOutboxBackgroundServiceTests
             }
 
             var excluded = excludedMessageIds?.ToHashSet() ?? [];
-            var claim = _state.Claims.FirstOrDefault(candidate => !excluded.Contains(candidate.Id));
+            var claim = _state.Claims.FirstOrDefault(candidate =>
+                candidate.MessageType == messageType && !excluded.Contains(candidate.Id));
             if (claim is null)
             {
                 _state.NoMoreClaims.TrySetResult(true);
@@ -371,6 +484,21 @@ public sealed class EmailOutboxBackgroundServiceTests
             }
 
             return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingOutboxProcessor(
+        EmailOutboxMessageType messageType,
+        WorkerState state) : IEmailOutboxProcessor
+    {
+        public EmailOutboxMessageType MessageType => messageType;
+
+        public Task ProcessAsync(
+            EmailOutboxClaim claim,
+            CancellationToken cancellationToken = default)
+        {
+            Assert.Equal(messageType, claim.MessageType);
+            return state.RecordProcessedAsync(messageType, cancellationToken);
         }
     }
 }

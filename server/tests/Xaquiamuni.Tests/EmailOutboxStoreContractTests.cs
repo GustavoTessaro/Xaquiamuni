@@ -78,6 +78,12 @@ public sealed class EmailOutboxStoreContractTests
         Assert.DoesNotContain(
             services,
             descriptor => descriptor.ServiceType == typeof(EmailConfirmationOutboxProcessor));
+        Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ServiceType == typeof(IEmailOutboxProcessor));
+        Assert.DoesNotContain(
+            services,
+            descriptor => descriptor.ServiceType == typeof(EmailOutboxDispatcher));
         Assert.DoesNotContain(services, descriptor => descriptor.ServiceType == typeof(IEmailSender));
     }
 
