@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -82,6 +83,9 @@ public sealed class AuthMeEndpointTests
                 }));
             builder.ConfigureTestServices(services =>
             {
+                services.PostConfigure<CookieAuthenticationOptions>(
+                    AuthenticationConfiguration.CookieScheme,
+                    options => options.Events.OnValidatePrincipal = _ => Task.CompletedTask);
                 services.RemoveAll<ILoginCliente>();
                 services.AddScoped<ILoginCliente>(provider =>
                 {

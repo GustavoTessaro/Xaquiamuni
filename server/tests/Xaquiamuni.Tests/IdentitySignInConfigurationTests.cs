@@ -30,11 +30,14 @@ public sealed class IdentitySignInConfigurationTests
     }
 
     [Fact]
-    public async Task Identity_UsesOneSecureCookieAndConfiguredLockoutPolicy()
+    public async Task Identity_UsesConfiguredCookiesAndLockoutPolicy()
     {
         using var factory = CreateFactory();
         var services = factory.Services;
         var identityOptions = services.GetRequiredService<IOptions<IdentityOptions>>().Value;
+        var stampValidatorOptions = services
+            .GetRequiredService<IOptions<SecurityStampValidatorOptions>>()
+            .Value;
         var cookieOptions = services
             .GetRequiredService<IOptionsMonitor<CookieAuthenticationOptions>>()
             .Get(AuthenticationConfiguration.CookieScheme);
@@ -52,7 +55,10 @@ public sealed class IdentitySignInConfigurationTests
         Assert.Equal(SameSiteMode.Lax, cookieOptions.Cookie.SameSite);
         Assert.Equal("/", cookieOptions.Cookie.Path);
         Assert.Equal(TimeSpan.FromHours(8), cookieOptions.ExpireTimeSpan);
-        Assert.Equal([AuthenticationConfiguration.CookieScheme], cookieSchemes);
+        Assert.Equal(2, cookieSchemes.Length);
+        Assert.Contains(AuthenticationConfiguration.CookieScheme, cookieSchemes);
+        Assert.Contains(IdentityConstants.TwoFactorRememberMeScheme, cookieSchemes);
+        Assert.Equal(TimeSpan.Zero, stampValidatorOptions.ValidationInterval);
         Assert.Equal(5, identityOptions.Lockout.MaxFailedAccessAttempts);
         Assert.Equal(TimeSpan.FromMinutes(15), identityOptions.Lockout.DefaultLockoutTimeSpan);
         Assert.True(identityOptions.Lockout.AllowedForNewUsers);
