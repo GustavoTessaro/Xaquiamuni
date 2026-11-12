@@ -11,6 +11,7 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddXaquiamuniAuthentication();
 builder.Services.AddXaquiamuniAntiforgery();
 builder.Services.AddXaquiamuniAuthorization();
+builder.Services.AddResendConfirmationEmailRateLimiting();
 
 var app = builder.Build();
 
@@ -60,6 +61,8 @@ app.Use(async (context, next) =>
 });
 
 app.UseHttpsRedirection();
+app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 

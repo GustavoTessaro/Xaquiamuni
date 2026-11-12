@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.RateLimiting;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Api.Autorizacao;
@@ -41,6 +42,7 @@ public static class AuthEndpoints
         endpoints.MapPost(ResendConfirmationEmailEndpoint, ResendConfirmationEmailAsync)
             .AllowAnonymous()
             .RequireXaquiamuniAntiforgery()
+            .RequireRateLimiting(ResendConfirmationEmailRateLimiting.PolicyName)
             .WithName("ResendClientEmailConfirmation")
             .WithSummary("Solicita o reenvio da confirmação de e-mail.")
             .WithDescription("Aceita a solicitação sem revelar se uma conta é elegível.")
