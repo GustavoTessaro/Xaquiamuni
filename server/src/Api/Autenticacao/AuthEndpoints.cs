@@ -10,6 +10,7 @@ public static class AuthEndpoints
 {
     public const string RegisterEndpoint = "/api/auth/register";
     public const string ConfirmEmailEndpoint = "/api/auth/confirm-email";
+    public const string ResendConfirmationEmailEndpoint = "/api/auth/resend-confirmation-email";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
     public const string LogoutEndpoint = "/api/auth/logout";
@@ -34,6 +35,16 @@ public static class AuthEndpoints
             .WithSummary("Confirma o e-mail de uma conta de cliente.")
             .WithDescription("Confirma o e-mail usando o token recebido pelo cliente.")
             .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        endpoints.MapPost(ResendConfirmationEmailEndpoint, ResendConfirmationEmailAsync)
+            .AllowAnonymous()
+            .RequireXaquiamuniAntiforgery()
+            .WithName("ResendClientEmailConfirmation")
+            .WithSummary("Solicita o reenvio da confirmação de e-mail.")
+            .WithDescription("Aceita a solicitação sem revelar se uma conta é elegível.")
+            .Produces<ResendConfirmationEmailResponse>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
 
@@ -111,6 +122,33 @@ public static class AuthEndpoints
                 statusCode: StatusCodes.Status401Unauthorized,
                 title: "Falha na autenticação",
                 detail: "Não foi possível autenticar com os dados informados.");
+    }
+
+    private static async Task<IResult> ResendConfirmationEmailAsync(
+        ResendConfirmationEmailRequest? request,
+        ISolicitarReenvioConfirmacaoEmail solicitarReenvio,
+        CancellationToken cancellationToken)
+    {
+        var result = await solicitarReenvio
+            .ExecuteAsync(request?.Email, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            SolicitarReenvioConfirmacaoEmailStatus.InvalidEmail => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["Email"] = ["O e-mail informado é inválido."]
+                },
+                title: "Requisição inválida",
+                statusCode: StatusCodes.Status400BadRequest),
+            SolicitarReenvioConfirmacaoEmailStatus.RequestProcessed =>
+                Results.Accepted(value: new ResendConfirmationEmailResponse(
+                    "Se houver uma conta elegível, enviaremos um e-mail de confirmação.")),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(result),
+                "The email confirmation resend use case returned an unsupported result.")
+        };
     }
 
     private static async Task<IResult> ConfirmEmailAsync(
@@ -347,6 +385,15 @@ public sealed record ConfirmClientEmailRequest
         return domain.Contains('.') && !domain.StartsWith('.') && !domain.EndsWith('.');
     }
 }
+
+/// <summary>Dados públicos para solicitar o reenvio da confirmação de e-mail.</summary>
+public sealed record ResendConfirmationEmailRequest
+{
+    public string? Email { get; init; }
+}
+
+/// <summary>Resposta genérica à solicitação de reenvio da confirmação de e-mail.</summary>
+public sealed record ResendConfirmationEmailResponse(string Message);
 
 /// <summary>Identificador público da conta de cliente criada.</summary>
 public sealed record RegisterClientResponse(Guid UserId);
