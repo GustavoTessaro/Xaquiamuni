@@ -28,7 +28,7 @@ public sealed class IdentityPasswordResetServiceTests
     }
 
     [Fact]
-    public async Task FindEligibleUserIdByEmailAsync_ReturnsOnlyConfirmedUsersWithoutMutatingThem()
+    public async Task FindConfirmedUserIdByEmailAsync_ReturnsOnlyConfirmedUsersWithoutMutatingThem()
     {
         await using var provider = CreateProvider();
         await using var scope = provider.CreateAsyncScope();
@@ -40,10 +40,10 @@ public sealed class IdentityPasswordResetServiceTests
         var confirmedPasswordHash = confirmedUser.PasswordHash;
         var unconfirmedStamp = unconfirmedUser.SecurityStamp;
 
-        var eligible = await service.FindEligibleUserIdByEmailAsync("  CONFIRMED@example.test ");
-        var unconfirmed = await service.FindEligibleUserIdByEmailAsync("Unconfirmed@example.test");
-        var missing = await service.FindEligibleUserIdByEmailAsync("missing@example.test");
-        var invalid = await service.FindEligibleUserIdByEmailAsync("not-an-email");
+        var eligible = await service.FindConfirmedUserIdByEmailAsync("  CONFIRMED@example.test ");
+        var unconfirmed = await service.FindConfirmedUserIdByEmailAsync("Unconfirmed@example.test");
+        var missing = await service.FindConfirmedUserIdByEmailAsync("missing@example.test");
+        var invalid = await service.FindConfirmedUserIdByEmailAsync("not-an-email");
 
         Assert.Equal(confirmedUser.Id, eligible);
         Assert.Null(unconfirmed);

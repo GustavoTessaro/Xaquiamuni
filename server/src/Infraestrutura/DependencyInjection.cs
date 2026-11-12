@@ -46,6 +46,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
         services.AddScoped<IPasswordResetService, IdentityPasswordResetService>();
         services.AddScoped<IPasswordResetOutbox, SqlServerPasswordResetOutbox>();
+        services.AddScoped<ISolicitarRecuperacaoSenha, SolicitarRecuperacaoSenha>();
         services.AddScoped<ISolicitarReenvioConfirmacaoEmail, SolicitarReenvioConfirmacaoEmail>();
         services.AddSingleton<IEmailConfirmationMessageComposer, EmailConfirmationMessageComposer>();
         services.AddScoped<ILoginCliente, LoginCliente>();

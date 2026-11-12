@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Identity;
@@ -42,6 +43,7 @@ public class DbContextRegistrationTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
         services.AddInfrastructureServices(configuration);
 
         using var serviceProvider = services.BuildServiceProvider();
@@ -69,6 +71,7 @@ public class DbContextRegistrationTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
         services.AddInfrastructureServices(configuration);
 
         var registration = Assert.Single(services, descriptor =>
@@ -141,6 +144,7 @@ public class DbContextRegistrationTests
             .Build();
         var services = new ServiceCollection();
         services.AddLogging();
+        services.AddDataProtection().UseEphemeralDataProtectionProvider();
         services.AddInfrastructureServices(configuration);
 
         Assert.Equal(ServiceLifetime.Scoped, Assert.Single(services, descriptor =>

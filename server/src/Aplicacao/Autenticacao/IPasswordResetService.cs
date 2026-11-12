@@ -2,7 +2,7 @@ namespace Xaquiamuni.Aplicacao.Autenticacao;
 
 public interface IPasswordResetService
 {
-    Task<Guid?> FindEligibleUserIdByEmailAsync(
+    Task<Guid?> FindConfirmedUserIdByEmailAsync(
         string? email,
         CancellationToken cancellationToken = default);
 

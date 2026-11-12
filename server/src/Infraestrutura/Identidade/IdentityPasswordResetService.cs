@@ -17,7 +17,7 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
         _userManager = userManager;
     }
 
-    public async Task<Guid?> FindEligibleUserIdByEmailAsync(
+    public async Task<Guid?> FindConfirmedUserIdByEmailAsync(
         string? email,
         CancellationToken cancellationToken = default)
     {
