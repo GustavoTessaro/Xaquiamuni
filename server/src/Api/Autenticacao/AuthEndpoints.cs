@@ -12,6 +12,7 @@ public static class AuthEndpoints
     public const string RegisterEndpoint = "/api/auth/register";
     public const string ConfirmEmailEndpoint = "/api/auth/confirm-email";
     public const string ResendConfirmationEmailEndpoint = "/api/auth/resend-confirmation-email";
+    public const string ForgotPasswordEndpoint = "/api/auth/forgot-password";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
     public const string LogoutEndpoint = "/api/auth/logout";
@@ -47,6 +48,16 @@ public static class AuthEndpoints
             .WithSummary("Solicita o reenvio da confirmação de e-mail.")
             .WithDescription("Aceita a solicitação sem revelar se uma conta é elegível.")
             .Produces<ResendConfirmationEmailResponse>(StatusCodes.Status202Accepted)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        endpoints.MapPost(ForgotPasswordEndpoint, ForgotPasswordAsync)
+            .AllowAnonymous()
+            .RequireXaquiamuniAntiforgery()
+            .WithName("RequestPasswordRecovery")
+            .WithSummary("Solicita a recuperação de senha.")
+            .WithDescription("Aceita a solicitação sem revelar se uma conta é elegível para recuperação.")
+            .Produces<ForgotPasswordResponse>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
 
@@ -150,6 +161,33 @@ public static class AuthEndpoints
             _ => throw new ArgumentOutOfRangeException(
                 nameof(result),
                 "The email confirmation resend use case returned an unsupported result.")
+        };
+    }
+
+    private static async Task<IResult> ForgotPasswordAsync(
+        ForgotPasswordRequest request,
+        ISolicitarRecuperacaoSenha solicitarRecuperacao,
+        CancellationToken cancellationToken)
+    {
+        var result = await solicitarRecuperacao
+            .ExecuteAsync(request.Email, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            SolicitarRecuperacaoSenhaStatus.InvalidEmail => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["Email"] = ["O e-mail informado é inválido."]
+                },
+                title: "Requisição inválida",
+                statusCode: StatusCodes.Status400BadRequest),
+            SolicitarRecuperacaoSenhaStatus.RequestProcessed =>
+                Results.Accepted(value: new ForgotPasswordResponse(
+                    "Se existir uma conta elegível para recuperação, você receberá instruções para redefinir sua senha.")),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(result),
+                "The password recovery use case returned an unsupported result.")
         };
     }
 
@@ -396,6 +434,16 @@ public sealed record ResendConfirmationEmailRequest
 
 /// <summary>Resposta genérica à solicitação de reenvio da confirmação de e-mail.</summary>
 public sealed record ResendConfirmationEmailResponse(string Message);
+
+/// <summary>Dados públicos para solicitar a recuperação de senha.</summary>
+public sealed record ForgotPasswordRequest
+{
+    /// <summary>E-mail associado à conta que deseja recuperar.</summary>
+    public string? Email { get; init; }
+}
+
+/// <summary>Resposta genérica à solicitação de recuperação de senha.</summary>
+public sealed record ForgotPasswordResponse(string Message);
 
 /// <summary>Identificador público da conta de cliente criada.</summary>
 public sealed record RegisterClientResponse(Guid UserId);

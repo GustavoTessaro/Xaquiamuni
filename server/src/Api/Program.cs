@@ -43,6 +43,10 @@ app.Use(async (context, next) =>
                 StringComparison.OrdinalIgnoreCase)
             || string.Equals(
                 context.Request.Path.Value,
+                AuthEndpoints.ForgotPasswordEndpoint,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.Request.Path.Value,
                 AuthEndpoints.LogoutEndpoint,
                 StringComparison.OrdinalIgnoreCase));
     var isCurrentClientRequest =
