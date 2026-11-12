@@ -70,15 +70,24 @@ public static class DependencyInjection
         identityBuilder
             .AddDefaultTokenProviders()
             .AddTokenProvider<XaquiamuniEmailConfirmationTokenProvider>(
-                XaquiamuniEmailConfirmationTokenProvider.ProviderName);
+                XaquiamuniEmailConfirmationTokenProvider.ProviderName)
+            .AddTokenProvider<XaquiamuniPasswordResetTokenProvider>(
+                XaquiamuniPasswordResetTokenProvider.ProviderName);
         services.Configure<IdentityOptions>(options =>
         {
             options.Tokens.EmailConfirmationTokenProvider =
                 XaquiamuniEmailConfirmationTokenProvider.ProviderName;
+            options.Tokens.PasswordResetTokenProvider =
+                XaquiamuniPasswordResetTokenProvider.ProviderName;
         });
         services.Configure<XaquiamuniEmailConfirmationTokenProviderOptions>(options =>
         {
             options.TokenLifespan = TimeSpan.FromHours(24);
+        });
+        services.Configure<XaquiamuniPasswordResetTokenProviderOptions>(options =>
+        {
+            options.Name = XaquiamuniPasswordResetTokenProvider.ProtectionPurpose;
+            options.TokenLifespan = TimeSpan.FromHours(1);
         });
 
         services.Replace(ServiceDescriptor.Scoped<SignInManager<XaquiamuniUser>>(serviceProvider =>

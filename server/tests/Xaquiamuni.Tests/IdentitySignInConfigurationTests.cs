@@ -60,7 +60,7 @@ public sealed class IdentitySignInConfigurationTests
     }
 
     [Fact]
-    public void Identity_RegistersDedicatedEmailConfirmationProviderWith24HourLifespan()
+    public void Identity_RegistersDedicatedEmailAndPasswordResetProvidersWithIndependentLifespans()
     {
         using var factory = CreateFactory();
         var services = factory.Services;
@@ -69,8 +69,13 @@ public sealed class IdentitySignInConfigurationTests
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<XaquiamuniUser>>();
         var emailConfirmationProvider = scope.ServiceProvider
             .GetRequiredService<XaquiamuniEmailConfirmationTokenProvider>();
+        var passwordResetProvider = scope.ServiceProvider
+            .GetRequiredService<XaquiamuniPasswordResetTokenProvider>();
         var confirmationOptions = services
             .GetRequiredService<IOptions<XaquiamuniEmailConfirmationTokenProviderOptions>>()
+            .Value;
+        var passwordResetOptions = services
+            .GetRequiredService<IOptions<XaquiamuniPasswordResetTokenProviderOptions>>()
             .Value;
         var defaultProviderOptions = services
             .GetRequiredService<IOptions<DataProtectionTokenProviderOptions>>()
@@ -83,10 +88,20 @@ public sealed class IdentitySignInConfigurationTests
         Assert.Equal(
             typeof(XaquiamuniEmailConfirmationTokenProvider),
             providerMap[XaquiamuniEmailConfirmationTokenProvider.ProviderName].ProviderType);
+        Assert.Equal(
+            XaquiamuniPasswordResetTokenProvider.ProviderName,
+            identityOptions.Tokens.PasswordResetTokenProvider);
+        Assert.Equal(
+            typeof(XaquiamuniPasswordResetTokenProvider),
+            providerMap[XaquiamuniPasswordResetTokenProvider.ProviderName].ProviderType);
         Assert.NotNull(emailConfirmationProvider);
+        Assert.NotNull(passwordResetProvider);
         Assert.Equal(TimeSpan.FromHours(24), confirmationOptions.TokenLifespan);
+        Assert.Equal(TimeSpan.FromHours(1), passwordResetOptions.TokenLifespan);
+        Assert.Equal(
+            XaquiamuniPasswordResetTokenProvider.ProtectionPurpose,
+            passwordResetOptions.Name);
         Assert.Equal(TimeSpan.FromDays(1), defaultProviderOptions.TokenLifespan);
-        Assert.Equal(TokenOptions.DefaultProvider, identityOptions.Tokens.PasswordResetTokenProvider);
         Assert.False(identityOptions.SignIn.RequireConfirmedEmail);
     }
 
