@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { TimeoutError } from 'rxjs';
 import { AuthService } from '../core/auth/auth.service';
@@ -16,9 +17,15 @@ import { AuthService } from '../core/auth/auth.service';
 type ConfirmationState =
   | 'loading'
   | 'success'
+  | 'missing'
   | 'invalid'
   | 'retryableFailure'
   | 'failure';
+
+type ResendFeedback = {
+  kind: 'success' | 'error';
+  message: string;
+};
 
 interface ConfirmationCredentials {
   email: string;
@@ -27,12 +34,21 @@ interface ConfirmationCredentials {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [ReactiveFormsModule, RouterLink],
   selector: 'app-confirm-email',
   templateUrl: './confirm-email.component.html',
 })
 export class ConfirmEmailComponent implements OnDestroy {
   protected readonly state = signal<ConfirmationState>('loading');
+  protected readonly resendSubmitted = signal(false);
+  protected readonly resending = signal(false);
+  protected readonly resendFeedback = signal<ResendFeedback | null>(null);
+  protected readonly resendForm = new FormGroup({
+    email: new FormControl('', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.email, Validators.maxLength(256)],
+    }),
+  });
 
   private readonly authService = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
@@ -43,6 +59,13 @@ export class ConfirmEmailComponent implements OnDestroy {
   private confirmed = false;
 
   constructor() {
+    this.resendForm.controls.email.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        if (!this.resending()) {
+          this.resendFeedback.set(null);
+        }
+      });
     this.confirmFromFragment();
   }
 
@@ -69,7 +92,7 @@ export class ConfirmEmailComponent implements OnDestroy {
 
     const credentials = this.parseFragment(fragment);
     if (!credentials) {
-      this.state.set('invalid');
+      this.state.set(fragment ? 'invalid' : 'missing');
       return;
     }
 
@@ -81,6 +104,44 @@ export class ConfirmEmailComponent implements OnDestroy {
     if (this.state() === 'retryableFailure') {
       this.submitConfirmation();
     }
+  }
+
+  protected submitResend(): void {
+    if (this.resending()) {
+      return;
+    }
+
+    this.resendSubmitted.set(true);
+    this.resendForm.markAllAsTouched();
+    if (this.resendForm.invalid) {
+      return;
+    }
+
+    this.resendFeedback.set(null);
+    this.resending.set(true);
+    this.authService.reenviarConfirmacaoEmail(this.resendForm.controls.email.value)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: () => {
+          this.resending.set(false);
+          this.resendFeedback.set({
+            kind: 'success',
+            message: 'Solicitação recebida. Verifique sua caixa de entrada e a pasta de spam.',
+          });
+        },
+        error: (error: unknown) => {
+          this.resending.set(false);
+          this.resendFeedback.set({
+            kind: 'error',
+            message: this.getResendErrorMessage(error),
+          });
+        },
+      });
+  }
+
+  protected resendEmailInvalid(): boolean {
+    const email = this.resendForm.controls.email;
+    return email.invalid && (email.touched || this.resendSubmitted());
   }
 
   ngOnDestroy(): void {
@@ -126,6 +187,52 @@ export class ConfirmEmailComponent implements OnDestroy {
     return error instanceof TimeoutError
       || (error instanceof HttpErrorResponse
         && (error.status === 0 || error.status === 408 || error.status >= 500));
+  }
+
+  private getResendErrorMessage(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 400) {
+        return 'Não foi possível processar a solicitação. Revise o e-mail e tente novamente.';
+      }
+
+      if (error.status === 429) {
+        const waitSeconds = this.getRetryAfterSeconds(error.headers.get('Retry-After'));
+        if (waitSeconds !== null) {
+          const unit = waitSeconds === 1 ? 'segundo' : 'segundos';
+          return `Muitas solicitações. Aguarde ${waitSeconds} ${unit} antes de tentar novamente.`;
+        }
+
+        return 'Muitas solicitações. Aguarde um pouco antes de tentar novamente.';
+      }
+
+      if (error.status === 0 || error.status === 408 || error.status >= 500) {
+        return 'Não foi possível concluir a solicitação agora. Tente novamente mais tarde.';
+      }
+    } else if (error instanceof TimeoutError) {
+      return 'Não foi possível concluir a solicitação agora. Tente novamente mais tarde.';
+    }
+
+    return 'Não foi possível processar a solicitação. Tente novamente mais tarde.';
+  }
+
+  private getRetryAfterSeconds(value: string | null): number | null {
+    const retryAfter = value?.trim();
+    if (!retryAfter) {
+      return null;
+    }
+
+    if (/^\d+$/.test(retryAfter)) {
+      const seconds = Number(retryAfter);
+      return Number.isSafeInteger(seconds) ? seconds : null;
+    }
+
+    const retryAt = Date.parse(retryAfter);
+    if (Number.isNaN(retryAt)) {
+      return null;
+    }
+
+    const seconds = Math.ceil((retryAt - Date.now()) / 1000);
+    return seconds > 0 ? seconds : null;
   }
 
   private parseFragment(fragment: string): ConfirmationCredentials | null {

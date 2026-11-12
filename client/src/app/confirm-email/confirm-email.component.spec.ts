@@ -67,6 +67,7 @@ describe('ConfirmEmailComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('E-mail confirmado');
+    expect(fixture.nativeElement.querySelector('#resend-email')).toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain(email);
     expect(fixture.nativeElement.textContent).not.toContain(token);
     fixture.detectChanges();
@@ -79,10 +80,33 @@ describe('ConfirmEmailComponent', () => {
 
     expect(window.location.hash).toBe('');
     expect(fixture.nativeElement.textContent).toContain('Link inválido');
+    expect(fixture.nativeElement.querySelector('#resend-email')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain('not-an-email');
     expect(fixture.nativeElement.textContent).not.toContain('private-token');
     http.expectNone('/api/auth/csrf');
     http.expectNone('/api/auth/confirm-email');
+  });
+
+  it('allows requesting a new confirmation email when opened without a fragment', () => {
+    createComponentWithoutFragment();
+
+    expect(fixture.nativeElement.textContent).toContain('Confirme seu e-mail');
+    expect(fixture.nativeElement.querySelector('#resend-email')).not.toBeNull();
+    http.expectNone('/api/auth/confirm-email');
+
+    const request = submitResend('cliente@example.test');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.url).toBe('/api/auth/resend-confirmation-email');
+    expect(request.request.body).toEqual({ email: 'cliente@example.test' });
+    request.flush({
+      message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.',
+    }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+    expect(fixture.nativeElement.textContent).toContain('caixa de entrada');
+    expect(fixture.nativeElement.textContent).toContain('pasta de spam');
+    expect(fixture.nativeElement.textContent).not.toContain('e-mail foi enviado');
   });
 
   it('rejects duplicate or missing fragment fields without making a request', () => {
@@ -114,11 +138,133 @@ describe('ConfirmEmailComponent', () => {
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Link inválido');
-    expect(fixture.nativeElement.querySelector('button')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#resend-email')).not.toBeNull();
     expect(fixture.nativeElement.textContent).not.toContain(email);
     expect(fixture.nativeElement.textContent).not.toContain(token);
     http.expectNone('/api/auth/csrf');
     http.expectNone('/api/auth/confirm-email');
+  });
+
+  it('does not request resend for an invalid email', () => {
+    createComponentWithoutFragment();
+    enterEmail('invalid-email');
+    clickResend();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Informe um endereço de e-mail válido.');
+    http.expectNone('/api/auth/csrf');
+    http.expectNone('/api/auth/resend-confirmation-email');
+  });
+
+  it('prevents duplicate resend requests while the request is in progress', () => {
+    createComponentWithoutFragment();
+    enterEmail('cliente@example.test');
+    clickResend();
+    clickResend();
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    csrf.flush({ requestToken: 'resend-request-token' });
+    const request = http.expectOne('/api/auth/resend-confirmation-email');
+    expect(request.request.body).toEqual({ email: 'cliente@example.test' });
+    expect(fixture.nativeElement.querySelector('button[type="submit"]').disabled).toBe(true);
+    request.flush({ message: 'Solicitação recebida.' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+    http.expectNone('/api/auth/resend-confirmation-email');
+  });
+
+  it('allows correcting the email and retrying after HTTP 400 without exposing backend details', () => {
+    createComponentWithoutFragment();
+    const firstRequest = submitResend('cliente@example.test');
+    firstRequest.flush(
+      { detail: 'The account does not exist.' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Revise o e-mail e tente novamente.');
+    expect(fixture.nativeElement.textContent).not.toContain('does not exist');
+
+    const secondRequest = submitResend('outro@example.test');
+    expect(secondRequest.request.body).toEqual({ email: 'outro@example.test' });
+    secondRequest.flush({ message: 'Solicitação recebida.' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+  });
+
+  it('uses a valid Retry-After value in the HTTP 429 guidance', () => {
+    createComponentWithoutFragment();
+    const request = submitResend('cliente@example.test');
+    request.flush(
+      { detail: 'private rate limit information' },
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '37' },
+      },
+    );
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Aguarde 37 segundos');
+    expect(fixture.nativeElement.textContent).not.toContain('private rate limit information');
+  });
+
+  it('uses safe wait guidance when Retry-After is absent or invalid', () => {
+    createComponentWithoutFragment();
+    submitResend('cliente@example.test').flush(
+      null,
+      { status: 429, statusText: 'Too Many Requests' },
+    );
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Aguarde um pouco');
+
+    const retry = submitResend('cliente@example.test');
+    retry.flush(
+      null,
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': 'not-valid' },
+      },
+    );
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Aguarde um pouco');
+    expect(fixture.nativeElement.textContent).not.toContain('not-valid');
+  });
+
+  it('allows retrying after a network failure', () => {
+    createComponentWithoutFragment();
+    submitResend('cliente@example.test').error(new ProgressEvent('error'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Tente novamente mais tarde.');
+
+    const retry = submitResend('cliente@example.test');
+    retry.flush({ message: 'Solicitação recebida.' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+  });
+
+  it('allows retrying after a server error', () => {
+    createComponentWithoutFragment();
+    submitResend('cliente@example.test').flush(
+      null,
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Tente novamente mais tarde.');
+
+    const retry = submitResend('cliente@example.test');
+    retry.flush({ message: 'Solicitação recebida.' }, { status: 202, statusText: 'Accepted' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+  });
+
+  it('cancels a pending resend request when the component is destroyed', () => {
+    createComponentWithoutFragment();
+    const request = submitResend('cliente@example.test');
+
+    fixture.destroy();
+
+    expect(request.cancelled).toBe(true);
   });
 
   it('allows an explicit retry after a network failure and completes without reloading', () => {
@@ -202,6 +348,33 @@ describe('ConfirmEmailComponent', () => {
     setFragment(`#email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`);
     fixture = TestBed.createComponent(ConfirmEmailComponent);
     fixture.detectChanges();
+  }
+
+  function createComponentWithoutFragment(): void {
+    setFragment('');
+    fixture = TestBed.createComponent(ConfirmEmailComponent);
+    fixture.detectChanges();
+  }
+
+  function enterEmail(email: string): void {
+    const input = fixture.nativeElement.querySelector('#resend-email') as HTMLInputElement;
+    input.value = email;
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  }
+
+  function clickResend(): void {
+    const button = fixture.nativeElement.querySelector('button[type="submit"]') as HTMLButtonElement;
+    button.click();
+    fixture.detectChanges();
+  }
+
+  function submitResend(email: string): ReturnType<HttpTestingController['expectOne']> {
+    enterEmail(email);
+    clickResend();
+    const csrf = http.expectOne('/api/auth/csrf');
+    csrf.flush({ requestToken: 'resend-request-token' });
+    return http.expectOne('/api/auth/resend-confirmation-email');
   }
 
   function setFragment(fragment: string): void {
