@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Tests;
@@ -27,6 +28,7 @@ public sealed class PasswordResetTokenProviderTests
             token);
 
         Assert.True(isValid);
+        Assert.InRange(token.Length, 1, ResetPasswordRequest.TokenMaxLength);
     }
 
     [Fact]

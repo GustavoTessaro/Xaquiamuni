@@ -395,6 +395,21 @@ public sealed class IdentityPasswordResetServiceTests
         Assert.True(await userManager.CheckPasswordAsync(user, OldPassword));
     }
 
+    [Fact]
+    public async Task ResetPasswordAsync_InvalidTokenWithInvalidPasswordReturnsInvalidRequest()
+    {
+        await using var provider = CreateProvider();
+        await using var scope = provider.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<XaquiamuniUser>>();
+        var service = scope.ServiceProvider.GetRequiredService<IPasswordResetService>();
+        var user = await CreateUserAsync(userManager, "invalid-token-weak-password@example.test", confirmed: true);
+
+        var result = await service.ResetPasswordAsync(user.Email, "not-a-token", "weak");
+
+        Assert.Equal(PasswordResetStatus.InvalidRequest, result.Status);
+        Assert.True(await userManager.CheckPasswordAsync(user, OldPassword));
+    }
+
     [Theory]
     [InlineData("weak")]
     [InlineData("A" + "a" + "1" + "!" + "b" + "c" + "d" + "e" + "f" + "g" + "h")]

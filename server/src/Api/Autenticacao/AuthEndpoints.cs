@@ -13,6 +13,7 @@ public static class AuthEndpoints
     public const string ConfirmEmailEndpoint = "/api/auth/confirm-email";
     public const string ResendConfirmationEmailEndpoint = "/api/auth/resend-confirmation-email";
     public const string ForgotPasswordEndpoint = "/api/auth/forgot-password";
+    public const string ResetPasswordEndpoint = "/api/auth/reset-password";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
     public const string LogoutEndpoint = "/api/auth/logout";
@@ -59,6 +60,17 @@ public static class AuthEndpoints
             .WithDescription("Aceita a solicitação sem revelar se uma conta é elegível para recuperação.")
             .Produces<ForgotPasswordResponse>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        endpoints.MapPost(ResetPasswordEndpoint, ResetPasswordAsync)
+            .AllowAnonymous()
+            .RequireXaquiamuniAntiforgery()
+            .WithName("ResetClientPassword")
+            .WithSummary("Redefine a senha de uma conta de cliente.")
+            .WithDescription("Redefine a senha usando o token de recuperação sem autenticar uma sessão.")
+            .Produces(StatusCodes.Status204NoContent)
+            .ProducesValidationProblem(StatusCodes.Status400BadRequest)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
 
         endpoints.MapPost(LoginEndpoint, LoginAsync)
@@ -188,6 +200,84 @@ public static class AuthEndpoints
             _ => throw new ArgumentOutOfRangeException(
                 nameof(result),
                 "The password recovery use case returned an unsupported result.")
+        };
+    }
+
+    private static async Task<IResult> ResetPasswordAsync(
+        ResetPasswordRequest? request,
+        IPasswordResetService passwordResetService,
+        CadastroClienteInputValidator validator,
+        CancellationToken cancellationToken)
+    {
+        if (request is null)
+        {
+            return Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    ["Request"] = ["Informe os dados para redefinir a senha."]
+                },
+                title: "Requisição inválida",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var emailValidation = validator.ValidateEmail(request.Email);
+        if (!emailValidation.Valido)
+        {
+            errors[nameof(request.Email)] = emailValidation.Erros
+                .Select(error => error.Mensagem)
+                .ToArray();
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            errors[nameof(request.Token)] = ["O token de recuperação é obrigatório."];
+        }
+        else if (request.Token.Length > ResetPasswordRequest.TokenMaxLength)
+        {
+            errors[nameof(request.Token)] = ["O token de recuperação é inválido."];
+        }
+
+        if (string.IsNullOrEmpty(request.NewPassword))
+        {
+            errors[nameof(request.NewPassword)] = ["A nova senha é obrigatória."];
+        }
+        else if (request.NewPassword.Length > ResetPasswordRequest.NewPasswordMaxLength)
+        {
+            errors[nameof(request.NewPassword)] = ["A nova senha excede o limite de 256 caracteres."];
+        }
+
+        if (errors.Count > 0)
+        {
+            return Results.ValidationProblem(
+                errors,
+                title: "Requisição inválida",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var result = await passwordResetService.ResetPasswordAsync(
+            request.Email,
+            request.Token,
+            request.NewPassword,
+            cancellationToken).ConfigureAwait(false);
+
+        return result.Status switch
+        {
+            PasswordResetStatus.Succeeded => Results.NoContent(),
+            PasswordResetStatus.InvalidRequest => Results.Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "Redefinição não concluída",
+                detail: "Não foi possível redefinir a senha. O link de recuperação pode ser inválido ou ter expirado. Solicite uma nova recuperação."),
+            PasswordResetStatus.InvalidPassword => Results.ValidationProblem(
+                new Dictionary<string, string[]>
+                {
+                    [nameof(request.NewPassword)] = ["A senha não atende aos requisitos de segurança."]
+                },
+                title: "Senha inválida",
+                statusCode: StatusCodes.Status400BadRequest),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(result),
+                "The password reset service returned an unsupported result.")
         };
     }
 
@@ -444,6 +534,22 @@ public sealed record ForgotPasswordRequest
 
 /// <summary>Resposta genérica à solicitação de recuperação de senha.</summary>
 public sealed record ForgotPasswordResponse(string Message);
+
+/// <summary>Dados públicos necessários para redefinir a senha de uma conta.</summary>
+public sealed record ResetPasswordRequest
+{
+    public const int TokenMaxLength = 4096;
+    public const int NewPasswordMaxLength = 256;
+
+    /// <summary>E-mail associado à conta que deseja recuperar.</summary>
+    public string? Email { get; init; }
+
+    /// <summary>Token recebido no link de recuperação.</summary>
+    public string? Token { get; init; }
+
+    /// <summary>Nova senha da conta.</summary>
+    public string? NewPassword { get; init; }
+}
 
 /// <summary>Identificador público da conta de cliente criada.</summary>
 public sealed record RegisterClientResponse(Guid UserId);
