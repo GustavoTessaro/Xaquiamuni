@@ -42,7 +42,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     public static async Task<SqlServerTestDatabase> CreateAsync(
         bool failProfilePersistence = false,
         bool failOutboxEnqueue = false,
-        string? targetMigration = null)
+        string? targetMigration = null,
+        IDataProtectionProvider? dataProtectionProvider = null)
     {
         var databaseName = $"Xaquiamuni_IntegrationTest_{Guid.NewGuid():N}";
         var masterConnectionString = new SqlConnectionStringBuilder
@@ -71,7 +72,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
             await database.InitializeAsync(
                 failProfilePersistence,
                 failOutboxEnqueue,
-                targetMigration).ConfigureAwait(false);
+                targetMigration,
+                dataProtectionProvider).ConfigureAwait(false);
             return database;
         }
         catch
@@ -143,7 +145,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
     private async Task InitializeAsync(
         bool failProfilePersistence,
         bool failOutboxEnqueue,
-        string? targetMigration)
+        string? targetMigration,
+        IDataProtectionProvider? dataProtectionProvider)
     {
         var encryptionKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var fingerprintKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
@@ -161,6 +164,12 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         var services = new ServiceCollection();
         services.AddLogging();
         services.AddDataProtection().UseEphemeralDataProtectionProvider();
+        if (dataProtectionProvider is not null)
+        {
+            services.RemoveAll<IDataProtectionProvider>();
+            services.AddSingleton(dataProtectionProvider);
+        }
+
         services.AddInfrastructureServices(configuration);
         services.RemoveAll<IEmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationOutbox>(serviceProvider =>
