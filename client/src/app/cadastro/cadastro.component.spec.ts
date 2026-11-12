@@ -9,6 +9,7 @@ import {
 import { HttpStatusCode } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { vi } from 'vitest';
 import { CadastroComponent } from './cadastro.component';
 import { CadastroService } from './cadastro.service';
 import { CsrfService } from '../core/security/csrf.service';
@@ -97,6 +98,70 @@ describe('CadastroComponent registration flow', () => {
     http.expectNone('/api/auth/register');
   });
 
+  it('toggles password fields independently without changing values, validation, or submitting', () => {
+    fillValidFields(fixture);
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    const password = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    const confirmation = fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement;
+    const submitEvent = vi.fn();
+    form.addEventListener('submit', submitEvent);
+    const initialValidity = form.checkValidity();
+    const passwordValue = password.value;
+    const confirmationValue = confirmation.value;
+    const passwordInvalid = password.getAttribute('aria-invalid');
+    const confirmationInvalid = confirmation.getAttribute('aria-invalid');
+
+    expect(password.type).toBe('password');
+    expect(confirmation.type).toBe('password');
+    expect(password.autocomplete).toBe('new-password');
+    expect(confirmation.autocomplete).toBe('new-password');
+
+    const showPassword = fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar senha"]',
+    ) as HTMLButtonElement;
+    expect(showPassword.type).toBe('button');
+    showPassword.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
+      .toBe('password');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Ocultar senha"]')).not.toBeNull();
+
+    const showConfirmation = fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar confirmação de senha"]',
+    ) as HTMLButtonElement;
+    expect(showConfirmation.type).toBe('button');
+    showConfirmation.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
+      .toBe('text');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Ocultar confirmação de senha"]'))
+      .not.toBeNull();
+
+    (fixture.nativeElement.querySelector(
+      'button[aria-label="Ocultar senha"]',
+    ) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('password');
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
+      .toBe('text');
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).value)
+      .toBe(passwordValue);
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).value)
+      .toBe(confirmationValue);
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement)
+      .getAttribute('aria-invalid')).toBe(passwordInvalid);
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement)
+      .getAttribute('aria-invalid')).toBe(confirmationInvalid);
+    expect(form.checkValidity()).toBe(initialValidity);
+    expect(submitEvent).not.toHaveBeenCalled();
+    expect(http.match('/api/auth/csrf')).toHaveLength(0);
+    expect(http.match('/api/auth/register')).toHaveLength(0);
+  });
+
   it('sends the CSRF request token before POST, independent of the cookie token', () => {
     fillValidFields(fixture);
     submit(fixture);
@@ -136,6 +201,16 @@ describe('CadastroComponent registration flow', () => {
 
   it('reports creation without claiming email verification or authentication, then clears personal fields', () => {
     fillValidFields(fixture);
+    (fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar senha"]',
+    ) as HTMLButtonElement).click();
+    (fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar confirmação de senha"]',
+    ) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
+      .toBe('text');
     submit(fixture);
     completeCsrfAndGetRegisterRequest(http).flush({
       userId: '5b0d0e35-0ba1-4d54-bcf8-85452a8f6588',
@@ -156,6 +231,12 @@ describe('CadastroComponent registration flow', () => {
     expect((fixture.nativeElement.querySelector('#cpf') as HTMLInputElement).value).toBe('');
     expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).value).toBe('');
     expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).value).toBe('');
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('password');
+    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
+      .toBe('password');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar senha"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar confirmação de senha"]'))
+      .not.toBeNull();
   });
 
   it('displays available field errors from HTTP 400', () => {

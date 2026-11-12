@@ -55,6 +55,8 @@ type RegistrationControls = {
 export class CadastroComponent {
   protected readonly passwordRequirements = registrationPasswordRequirements;
   protected readonly submitted = signal(false);
+  protected readonly passwordVisible = signal(false);
+  protected readonly confirmationVisible = signal(false);
   protected readonly registering = signal(false);
   protected readonly successMessage = signal('');
   protected readonly errorMessage = signal('');
@@ -131,6 +133,14 @@ export class CadastroComponent {
     return control.invalid && (control.touched || this.submitted());
   }
 
+  protected togglePasswordVisibility(): void {
+    this.passwordVisible.update((visible) => !visible);
+  }
+
+  protected toggleConfirmationVisibility(): void {
+    this.confirmationVisible.update((visible) => !visible);
+  }
+
   protected submit(): void {
     if (this.registering()) {
       return;
@@ -170,6 +180,8 @@ export class CadastroComponent {
       .subscribe({
         next: () => {
           this.form.reset();
+          this.passwordVisible.set(false);
+          this.confirmationVisible.set(false);
           this.submitted.set(false);
           this.successMessage.set(
             'Cadastro criado. Você poderá continuar usando a conta após as próximas etapas de acesso.',

@@ -421,23 +421,37 @@ describe('ResetPasswordComponent', () => {
     setPassword(page, 'confirmacaoSenha', password);
 
     const newPasswordInput = page.nativeElement.querySelector('#new-password') as HTMLInputElement;
+    const confirmationInput = page.nativeElement.querySelector('#confirm-password') as HTMLInputElement;
+    const form = page.nativeElement.querySelector('form') as HTMLFormElement;
+    const submitEvent = vi.fn();
+    form.addEventListener('submit', submitEvent);
     const showPassword = page.nativeElement.querySelector(
       'button[aria-label="Mostrar nova senha"]',
     ) as HTMLButtonElement;
+    expect(newPasswordInput.type).toBe('password');
+    expect(confirmationInput.type).toBe('password');
     expect(newPasswordInput.autocomplete).toBe('new-password');
+    expect(showPassword.type).toBe('button');
     showPassword.click();
     page.detectChanges();
     expect((page.nativeElement.querySelector('#new-password') as HTMLInputElement).type).toBe('text');
+    expect((page.nativeElement.querySelector('#confirm-password') as HTMLInputElement).type)
+      .toBe('password');
     expect(page.nativeElement.querySelector('button[aria-label="Ocultar nova senha"]')).not.toBeNull();
 
     const showConfirmation = page.nativeElement.querySelector(
       'button[aria-label="Mostrar confirmação da senha"]',
     ) as HTMLButtonElement;
-    expect((page.nativeElement.querySelector('#confirm-password') as HTMLInputElement).autocomplete)
-      .toBe('new-password');
+    expect(confirmationInput.autocomplete).toBe('new-password');
+    expect(showConfirmation.type).toBe('button');
     showConfirmation.click();
     page.detectChanges();
     expect((page.nativeElement.querySelector('#confirm-password') as HTMLInputElement).type).toBe('text');
+    expect(newPasswordInput.value).toBe(password);
+    expect(confirmationInput.value).toBe(password);
+    expect(form.checkValidity()).toBe(true);
+    expect(submitEvent).not.toHaveBeenCalled();
+    expect(resetPassword).not.toHaveBeenCalled();
 
     resetPassword.mockReturnValue(of(undefined));
     submit(page);
@@ -446,6 +460,8 @@ describe('ResetPasswordComponent', () => {
       token: 'synthetic-token',
       newPassword: password,
     });
+    expect(page.componentInstance['passwordVisible']()).toBe(false);
+    expect(page.componentInstance['confirmationVisible']()).toBe(false);
   });
 
   it('shows a terminal generic state for token/account HTTP 400 and discards credentials', () => {

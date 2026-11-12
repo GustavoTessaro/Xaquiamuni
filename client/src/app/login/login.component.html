@@ -91,10 +91,28 @@
 
                 <div>
                   <label for="senha" class="field-label">Senha</label>
-                  <input id="senha" class="field-control" type="password" formControlName="senha"
-                    autocomplete="current-password" required
-                    [attr.aria-invalid]="fieldInvalid(form.controls.senha)"
-                    aria-describedby="senha-error">
+                  <div class="password-field">
+                    <input id="senha" class="field-control password-field__input"
+                      [type]="passwordVisible() ? 'text' : 'password'" formControlName="senha"
+                      autocomplete="current-password" required
+                      [attr.aria-invalid]="fieldInvalid(form.controls.senha)"
+                      aria-describedby="senha-error">
+                    <button type="button" class="password-toggle"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="togglePasswordVisibility()"
+                      [attr.aria-label]="passwordVisible() ? 'Ocultar senha' : 'Mostrar senha'"
+                      [attr.aria-pressed]="passwordVisible()" aria-controls="senha">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"
+                          stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        @if (passwordVisible()) {
+                          <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+                        } @else {
+                          <path d="M3 3l18 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        }
+                      </svg>
+                    </button>
+                  </div>
                   @if (fieldInvalid(form.controls.senha)) {
                     <p id="senha-error" class="field-error" role="alert">Informe sua senha.</p>
                   }

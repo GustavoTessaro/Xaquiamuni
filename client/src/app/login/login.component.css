@@ -37,6 +37,47 @@
   border-color: #dc2626;
 }
 
+.password-field {
+  position: relative;
+}
+
+.password-field__input {
+  padding-right: 3.25rem;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  display: flex;
+  width: 2.25rem;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 0.625rem;
+  background: transparent;
+  color: #166534;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.password-toggle:hover {
+  background-color: #ecfdf5;
+  color: #065f46;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid #166534;
+  outline-offset: 2px;
+}
+
+.password-toggle svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 .field-error {
   margin-top: 0.35rem;
   color: #b91c1c;

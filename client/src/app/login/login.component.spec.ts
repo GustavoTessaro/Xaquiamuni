@@ -129,6 +129,44 @@ describe('LoginComponent', () => {
     expect(login).not.toHaveBeenCalled();
   });
 
+  it('toggles the login password independently without changing the form or submitting', () => {
+    setValidFields(fixture);
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    const password = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    const submitEvent = vi.fn();
+    form.addEventListener('submit', submitEvent);
+    const initialValue = password.value;
+    const initialValidity = form.checkValidity();
+    const sessionChecks = obterSessao.mock.calls.length;
+
+    expect(password.type).toBe('password');
+    expect(password.autocomplete).toBe('current-password');
+    const show = fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar senha"]',
+    ) as HTMLButtonElement;
+    expect(show.type).toBe('button');
+    expect(show.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+
+    show.click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Ocultar senha"]')).not.toBeNull();
+    expect(password.value).toBe(initialValue);
+    expect(form.checkValidity()).toBe(initialValidity);
+
+    const hide = fixture.nativeElement.querySelector(
+      'button[aria-label="Ocultar senha"]',
+    ) as HTMLButtonElement;
+    hide.click();
+    fixture.detectChanges();
+
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('password');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar senha"]')).not.toBeNull();
+    expect(submitEvent).not.toHaveBeenCalled();
+    expect(login).not.toHaveBeenCalled();
+    expect(obterSessao).toHaveBeenCalledTimes(sessionChecks);
+  });
+
   it('does not send an invalid form', () => {
     submit(fixture);
     expect(login).not.toHaveBeenCalled();
@@ -198,11 +236,19 @@ describe('LoginComponent', () => {
     fixture = TestBed.createComponent(LoginComponent);
     fixture.detectChanges();
     setValidFields(fixture);
+    (fixture.nativeElement.querySelector(
+      'button[aria-label="Mostrar senha"]',
+    ) as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
 
     submit(fixture);
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('form')).not.toBeNull();
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('password');
+    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).value).toBe('');
+    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar senha"]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Não foi possível confirmar a sessão.');
     expect(fixture.nativeElement.textContent).not.toContain('Login realizado com sucesso.');
   });

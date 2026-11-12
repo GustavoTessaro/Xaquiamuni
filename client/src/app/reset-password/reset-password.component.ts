@@ -363,5 +363,7 @@ export class ResetPasswordComponent implements OnDestroy {
 
   private clearPasswords(): void {
     this.form.reset({ senha: '', confirmacaoSenha: '' }, { emitEvent: false });
+    this.passwordVisible.set(false);
+    this.confirmationVisible.set(false);
   }
 }

@@ -25,6 +25,7 @@ type LoginControls = {
 })
 export class LoginComponent {
   protected readonly submitted = signal(false);
+  protected readonly passwordVisible = signal(false);
   protected readonly signingIn = signal(false);
   protected readonly signingOut = signal(false);
   protected readonly checkingSession = signal(true);
@@ -58,6 +59,10 @@ export class LoginComponent {
     return control.invalid && (control.touched || this.submitted());
   }
 
+  protected togglePasswordVisibility(): void {
+    this.passwordVisible.update((visible) => !visible);
+  }
+
   protected submit(): void {
     if (this.signingIn() || this.checkingSession()) {
       return;
@@ -79,6 +84,7 @@ export class LoginComponent {
       .subscribe({
         next: () => {
           this.form.controls.senha.reset();
+          this.passwordVisible.set(false);
           this.submitted.set(false);
           this.checkSession('login');
         },

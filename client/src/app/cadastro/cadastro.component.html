@@ -108,10 +108,28 @@
 
                 <div>
                   <label for="senha" class="field-label">Senha</label>
-                  <input id="senha" class="field-control" type="password" formControlName="senha"
-                    autocomplete="new-password" maxlength="256" required
-                    [attr.aria-invalid]="fieldInvalid(form.controls.senha) || !!serverFieldError('senha')"
-                    aria-describedby="senha-hint senha-requisitos senha-error senha-server-error">
+                  <div class="password-field">
+                    <input id="senha" class="field-control password-field__input"
+                      [type]="passwordVisible() ? 'text' : 'password'" formControlName="senha"
+                      autocomplete="new-password" maxlength="256" required
+                      [attr.aria-invalid]="fieldInvalid(form.controls.senha) || !!serverFieldError('senha')"
+                      aria-describedby="senha-hint senha-requisitos senha-error senha-server-error">
+                    <button type="button" class="password-toggle"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="togglePasswordVisibility()"
+                      [attr.aria-label]="passwordVisible() ? 'Ocultar senha' : 'Mostrar senha'"
+                      [attr.aria-pressed]="passwordVisible()" aria-controls="senha">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"
+                          stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        @if (passwordVisible()) {
+                          <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+                        } @else {
+                          <path d="M3 3l18 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        }
+                      </svg>
+                    </button>
+                  </div>
                   <p id="senha-hint" class="field-hint">
                     Confira os requisitos enquanto digita. A senha não é exibida nem registrada.
                   </p>
@@ -143,10 +161,28 @@
 
                 <div>
                   <label for="confirmacaoSenha" class="field-label">Confirme sua senha</label>
-                  <input id="confirmacaoSenha" class="field-control" type="password"
-                    formControlName="confirmacaoSenha" autocomplete="new-password" maxlength="256" required
-                    [attr.aria-invalid]="fieldInvalid(form.controls.confirmacaoSenha) || (fieldInvalid(form) && !passwordsMatch)"
-                    aria-describedby="confirmacaoSenha-hint confirmacaoSenha-error">
+                  <div class="password-field">
+                    <input id="confirmacaoSenha" class="field-control password-field__input"
+                      [type]="confirmationVisible() ? 'text' : 'password'"
+                      formControlName="confirmacaoSenha" autocomplete="new-password" maxlength="256" required
+                      [attr.aria-invalid]="fieldInvalid(form.controls.confirmacaoSenha) || (fieldInvalid(form) && !passwordsMatch)"
+                      aria-describedby="confirmacaoSenha-hint confirmacaoSenha-error">
+                    <button type="button" class="password-toggle"
+                      (mousedown)="$event.preventDefault()"
+                      (click)="toggleConfirmationVisibility()"
+                      [attr.aria-label]="confirmationVisible() ? 'Ocultar confirmação de senha' : 'Mostrar confirmação de senha'"
+                      [attr.aria-pressed]="confirmationVisible()" aria-controls="confirmacaoSenha">
+                      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"
+                          stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                        @if (confirmationVisible()) {
+                          <circle cx="12" cy="12" r="2.5" stroke="currentColor" stroke-width="1.7"/>
+                        } @else {
+                          <path d="M3 3l18 18" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+                        }
+                      </svg>
+                    </button>
+                  </div>
                   <p id="confirmacaoSenha-hint" class="field-hint">
                     Digite novamente a mesma senha.
                   </p>
