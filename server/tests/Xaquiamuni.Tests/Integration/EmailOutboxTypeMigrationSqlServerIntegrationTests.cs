@@ -28,9 +28,9 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
             userId,
             EmailOutboxMessageType.EmailConfirmation,
             $"email-confirmation:{userId:N}");
-        await SeedMessageAsync(database, confirmation);
+        await SeedLegacyConfirmationMessageAsync(database, confirmation);
 
-        var before = await ReadMessageAsync(database, confirmation.Id);
+        var before = await ReadPersistedMessageAsync(database, confirmation.Id);
         var indexesBefore = await ReadCatalogValuesAsync(
             database,
             """
@@ -61,7 +61,7 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
             AddPasswordResetEmailOutboxTypeMigration,
             await GetAppliedMigrationsAsync(database));
 
-        var after = await ReadMessageAsync(database, confirmation.Id);
+        var after = await ReadPersistedMessageAsync(database, confirmation.Id);
         AssertMessageUnchanged(before, after);
         Assert.Equal(
             indexesBefore,
@@ -102,7 +102,7 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
         Assert.Equal(2, messagesAfterRejectedDown.Count);
         AssertMessageUnchanged(
             before,
-            Assert.Single(messagesAfterRejectedDown, message => message.Id == confirmation.Id));
+            await ReadPersistedMessageAsync(database, confirmation.Id));
         Assert.Equal(
             EmailOutboxMessageType.PasswordReset,
             Assert.Single(messagesAfterRejectedDown, message => message.Id == passwordReset.Id).MessageType);
@@ -123,8 +123,8 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
             userId,
             EmailOutboxMessageType.EmailConfirmation,
             $"email-confirmation:{userId:N}");
-        await SeedMessageAsync(database, confirmation);
-        var before = await ReadMessageAsync(database, confirmation.Id);
+        await SeedLegacyConfirmationMessageAsync(database, confirmation);
+        var before = await ReadPersistedMessageAsync(database, confirmation.Id);
         var indexesBefore = await ReadCatalogValuesAsync(
             database,
             """
@@ -147,7 +147,7 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
         await MigrateToLatestAsync(database);
         await MigrateToAsync(database, AddEmailOutboxMigration);
 
-        var after = await ReadMessageAsync(database, confirmation.Id);
+        var after = await ReadPersistedMessageAsync(database, confirmation.Id);
         AssertMessageUnchanged(before, after);
         Assert.DoesNotContain(
             AddPasswordResetEmailOutboxTypeMigration,
@@ -208,7 +208,10 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
             attempts: 0,
             createdAtUtc: now,
             nextAttemptAtUtc: now,
-            activeDeduplicationKey: activeDeduplicationKey);
+            activeDeduplicationKey: activeDeduplicationKey,
+            credentialGenerationFingerprint: messageType == EmailOutboxMessageType.PasswordReset
+                ? new byte[32]
+                : null);
     }
 
     private static async Task SeedMessageAsync(
@@ -220,14 +223,72 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
         await context.SaveChangesAsync();
     }
 
-    private static async Task<EmailOutboxMessage> ReadMessageAsync(
+    private static async Task SeedLegacyConfirmationMessageAsync(
+        SqlServerTestDatabase database,
+        EmailOutboxMessage message)
+    {
+        await using var context = database.CreateVerificationContext();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [dbo].[EmailOutbox]
+                ([Id], [UserId], [MessageType], [Status], [Attempts],
+                 [CreatedAtUtc], [NextAttemptAtUtc], [CompletedAtUtc],
+                 [ActiveDeduplicationKey], [LeaseExpiresAtUtc])
+            VALUES
+                ({message.Id}, {message.UserId}, {(short)message.MessageType},
+                 {(short)message.Status}, {message.Attempts},
+                 {message.CreatedAtUtc}, {message.NextAttemptAtUtc}, {message.CompletedAtUtc},
+                 {message.ActiveDeduplicationKey}, {message.LeaseExpiresAtUtc});
+            """);
+    }
+
+    private static async Task<PersistedMessage> ReadPersistedMessageAsync(
         SqlServerTestDatabase database,
         Guid id)
     {
         await using var context = database.CreateVerificationContext();
-        return await context.EmailOutboxMessages
-            .AsNoTracking()
-            .SingleAsync(message => message.Id == id);
+        var connection = (SqlConnection)context.Database.GetDbConnection();
+        var shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync();
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT [Id], [UserId], [MessageType], [Status], [Attempts],
+                       [CreatedAtUtc], [NextAttemptAtUtc], [CompletedAtUtc],
+                       [ActiveDeduplicationKey], [LeaseExpiresAtUtc], [RowVersion]
+                FROM [dbo].[EmailOutbox]
+                WHERE [Id] = @Id;
+                """;
+            command.Parameters.Add(new SqlParameter("@Id", System.Data.SqlDbType.UniqueIdentifier)
+            {
+                Value = id
+            });
+            await using var reader = await command.ExecuteReaderAsync();
+            Assert.True(await reader.ReadAsync());
+            return new PersistedMessage(
+                reader.GetGuid(0),
+                reader.GetGuid(1),
+                (EmailOutboxMessageType)reader.GetInt16(2),
+                (EmailOutboxMessageStatus)reader.GetInt16(3),
+                reader.GetInt32(4),
+                reader.GetDateTimeOffset(5),
+                reader.GetDateTimeOffset(6),
+                reader.IsDBNull(7) ? null : reader.GetDateTimeOffset(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetDateTimeOffset(9),
+                (byte[])reader.GetValue(10));
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 
     private static async Task<List<EmailOutboxMessage>> ReadMessagesAsync(
@@ -312,8 +373,8 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
     }
 
     private static void AssertMessageUnchanged(
-        EmailOutboxMessage expected,
-        EmailOutboxMessage actual)
+        PersistedMessage expected,
+        PersistedMessage actual)
     {
         Assert.Equal(expected.Id, actual.Id);
         Assert.Equal(expected.UserId, actual.UserId);
@@ -327,4 +388,17 @@ public sealed class EmailOutboxTypeMigrationSqlServerIntegrationTests
         Assert.Equal(expected.LeaseExpiresAtUtc, actual.LeaseExpiresAtUtc);
         Assert.Equal(expected.RowVersion, actual.RowVersion);
     }
+
+    private sealed record PersistedMessage(
+        Guid Id,
+        Guid UserId,
+        EmailOutboxMessageType MessageType,
+        EmailOutboxMessageStatus Status,
+        int Attempts,
+        DateTimeOffset CreatedAtUtc,
+        DateTimeOffset NextAttemptAtUtc,
+        DateTimeOffset? CompletedAtUtc,
+        string? ActiveDeduplicationKey,
+        DateTimeOffset? LeaseExpiresAtUtc,
+        byte[] RowVersion);
 }

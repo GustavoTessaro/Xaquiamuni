@@ -757,7 +757,8 @@ public sealed class EmailConfirmationResendOutboxSqlServerIntegrationTests
             createdAtUtc,
             completedAtUtc,
             requiresActiveKey ? $"{deduplicationKeyPrefix}{userId:N}" : null,
-            leaseExpiresAtUtc);
+            leaseExpiresAtUtc,
+            messageType == EmailOutboxMessageType.PasswordReset ? new byte[32] : null);
     }
 
     private static async Task SetTerminalMessageAsync(

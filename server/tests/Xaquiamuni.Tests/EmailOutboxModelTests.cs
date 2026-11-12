@@ -34,6 +34,7 @@ public sealed class EmailOutboxModelTests
                 nameof(EmailOutboxMessage.CompletedAtUtc),
                 nameof(EmailOutboxMessage.ActiveDeduplicationKey),
                 nameof(EmailOutboxMessage.LeaseExpiresAtUtc),
+                nameof(EmailOutboxMessage.CredentialGenerationFingerprint),
                 nameof(EmailOutboxMessage.RowVersion)
             }.OrderBy(name => name),
             properties.Keys.OrderBy(name => name));
@@ -43,10 +44,12 @@ public sealed class EmailOutboxModelTests
         Assert.Equal("datetimeoffset(7)", properties[nameof(EmailOutboxMessage.NextAttemptAtUtc)].GetColumnType());
         Assert.Equal("datetimeoffset(7)", properties[nameof(EmailOutboxMessage.CompletedAtUtc)].GetColumnType());
         Assert.Equal("datetimeoffset(7)", properties[nameof(EmailOutboxMessage.LeaseExpiresAtUtc)].GetColumnType());
+        Assert.Equal("binary(32)", properties[nameof(EmailOutboxMessage.CredentialGenerationFingerprint)].GetColumnType());
         Assert.Equal("rowversion", properties[nameof(EmailOutboxMessage.RowVersion)].GetColumnType());
         Assert.True(properties[nameof(EmailOutboxMessage.CompletedAtUtc)].IsNullable);
         Assert.True(properties[nameof(EmailOutboxMessage.ActiveDeduplicationKey)].IsNullable);
         Assert.True(properties[nameof(EmailOutboxMessage.LeaseExpiresAtUtc)].IsNullable);
+        Assert.True(properties[nameof(EmailOutboxMessage.CredentialGenerationFingerprint)].IsNullable);
     }
 
     [Fact]
@@ -112,6 +115,10 @@ public sealed class EmailOutboxModelTests
 
         Assert.Equal("[Attempts] >= 0", constraints["CK_EmailOutbox_Attempts_NonNegative"]);
         Assert.Equal("[MessageType] IN (1, 2)", constraints["CK_EmailOutbox_MessageType_Valid"]);
+        Assert.Equal(
+            "([MessageType] = 1 AND [CredentialGenerationFingerprint] IS NULL) OR "
+            + "([MessageType] = 2 AND [CredentialGenerationFingerprint] IS NOT NULL)",
+            constraints["CK_EmailOutbox_CredentialGenerationFingerprint_Valid"]);
         Assert.Equal("[Status] IN (1, 2, 3, 4, 5)", constraints["CK_EmailOutbox_Status_Valid"]);
         Assert.Equal(
             "DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND DATEPART(TZOFFSET, [NextAttemptAtUtc]) = 0 AND "
@@ -142,6 +149,42 @@ public sealed class EmailOutboxModelTests
             () => CreateMessage(messageType: (EmailOutboxMessageType)3));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => CreateMessage(status: (EmailOutboxMessageStatus)99));
+    }
+
+    [Fact]
+    public void PasswordResetMessage_RequiresAndDefensivelyCopiesCredentialFingerprint()
+    {
+        var fingerprint = Enumerable.Range(0, 32).Select(value => (byte)value).ToArray();
+        var message = new EmailOutboxMessage(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.PasswordReset,
+            EmailOutboxMessageStatus.Pending,
+            attempts: 0,
+            createdAtUtc: UtcNow,
+            nextAttemptAtUtc: UtcNow,
+            credentialGenerationFingerprint: fingerprint);
+        fingerprint[0] = 255;
+
+        Assert.Equal(0, message.CredentialGenerationFingerprint![0]);
+        Assert.Equal("[EmailOutboxMessage]", message.ToString());
+        Assert.Throws<ArgumentNullException>(() => new EmailOutboxMessage(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.PasswordReset,
+            EmailOutboxMessageStatus.Pending,
+            0,
+            UtcNow,
+            UtcNow));
+        Assert.Throws<ArgumentException>(() => new EmailOutboxMessage(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.EmailConfirmation,
+            EmailOutboxMessageStatus.Pending,
+            0,
+            UtcNow,
+            UtcNow,
+            credentialGenerationFingerprint: new byte[32]));
     }
 
     private static XaquiamuniDbContext CreateContext()

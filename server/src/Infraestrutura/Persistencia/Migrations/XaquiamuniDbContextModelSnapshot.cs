@@ -326,6 +326,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("datetimeoffset(7)");
 
+                    b.Property<byte[]>("CredentialGenerationFingerprint")
+                        .HasColumnType("binary(32)");
+
                     b.Property<DateTimeOffset?>("LeaseExpiresAtUtc")
                         .HasColumnType("datetimeoffset(7)");
 
@@ -363,6 +366,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("EmailOutbox", null, t =>
                         {
                             t.HasCheckConstraint("CK_EmailOutbox_Attempts_NonNegative", "[Attempts] >= 0");
+
+                            t.HasCheckConstraint("CK_EmailOutbox_CredentialGenerationFingerprint_Valid", "([MessageType] = 1 AND [CredentialGenerationFingerprint] IS NULL) OR ([MessageType] = 2 AND [CredentialGenerationFingerprint] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_EmailOutbox_MessageType_Valid", "[MessageType] IN (1, 2)");
 

@@ -205,6 +205,7 @@ public sealed class EmailConfirmationResendSqlServerIntegrationTests
             "CompletedAtUtc",
             "ActiveDeduplicationKey",
             "LeaseExpiresAtUtc",
+            "CredentialGenerationFingerprint",
             "RowVersion"
         };
         var properties = entityType.GetProperties().ToArray();

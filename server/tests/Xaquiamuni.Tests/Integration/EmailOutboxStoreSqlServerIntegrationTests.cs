@@ -56,6 +56,9 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         Assert.Equal(EmailOutboxMessageType.PasswordReset, passwordResetClaim.MessageType);
         Assert.Equal(1, passwordResetClaim.Attempts);
         Assert.Equal(8, passwordResetClaim.RowVersion.Length);
+        Assert.Equal(
+            new byte[32],
+            passwordResetClaim.CredentialGenerationFingerprint!.Value.ToArray());
         Assert.True(passwordResetClaim.LeaseExpiresAtUtc > DateTimeOffset.UtcNow);
 
         await using (var verification = database.CreateVerificationContext())
@@ -64,6 +67,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
                 .AsNoTracking()
                 .SingleAsync(message => message.Id == confirmationMessage.Id);
             Assert.Equal(EmailOutboxMessageStatus.Pending, stillPending.Status);
+            Assert.Null(stillPending.CredentialGenerationFingerprint);
         }
 
         Assert.True(await store.CompleteAsync(passwordResetClaim));
@@ -74,6 +78,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
             TimeSpan.FromMinutes(2)));
         Assert.Equal(confirmationMessage.Id, confirmationClaim.Id);
         Assert.Equal(EmailOutboxMessageType.EmailConfirmation, confirmationClaim.MessageType);
+        Assert.Null(confirmationClaim.CredentialGenerationFingerprint);
 
         await using var completedVerification = database.CreateVerificationContext();
         var completedPasswordReset = await completedVerification.EmailOutboxMessages
@@ -491,7 +496,8 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
             attempts,
             now,
             now,
-            activeDeduplicationKey: $"{GetDeduplicationKeyPrefix(messageType)}{userId:N}");
+            activeDeduplicationKey: $"{GetDeduplicationKeyPrefix(messageType)}{userId:N}",
+            credentialGenerationFingerprint: GetCredentialFingerprint(messageType));
     }
 
     private static EmailOutboxMessage CreateExpiredProcessingMessage(
@@ -508,8 +514,12 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
             createdAtUtc: now.AddMinutes(-5),
             nextAttemptAtUtc: now.AddMinutes(-5),
             activeDeduplicationKey: $"{GetDeduplicationKeyPrefix(messageType)}{userId:N}",
-            leaseExpiresAtUtc: now.AddMinutes(-1));
+            leaseExpiresAtUtc: now.AddMinutes(-1),
+            credentialGenerationFingerprint: GetCredentialFingerprint(messageType));
     }
+
+    private static byte[]? GetCredentialFingerprint(EmailOutboxMessageType messageType) =>
+        messageType == EmailOutboxMessageType.PasswordReset ? new byte[32] : null;
 
     private static string GetDeduplicationKeyPrefix(EmailOutboxMessageType messageType) =>
         messageType switch

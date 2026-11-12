@@ -7,6 +7,7 @@ using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
+using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Tests;
 
@@ -41,6 +42,70 @@ public sealed class EmailOutboxStoreContractTests
     }
 
     [Fact]
+    public void PasswordResetClaimsRequireAndDefensivelyCopyTheCredentialFingerprint()
+    {
+        var fingerprint = Enumerable.Range(0, 32).Select(value => (byte)value).ToArray();
+        var claim = new EmailOutboxClaim(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.PasswordReset,
+            attempts: 1,
+            DateTimeOffset.UtcNow.AddMinutes(2),
+            new byte[8],
+            fingerprint);
+        fingerprint[0] = 255;
+
+        Assert.Equal(0, claim.CredentialGenerationFingerprint!.Value.Span[0]);
+        Assert.Equal("[EmailOutboxClaim]", claim.ToString());
+        Assert.Throws<ArgumentNullException>(() => new EmailOutboxClaim(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.PasswordReset,
+            1,
+            DateTimeOffset.UtcNow,
+            new byte[8]));
+        Assert.Throws<ArgumentException>(() => new EmailOutboxClaim(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            DateTimeOffset.UtcNow,
+            new byte[8],
+            new byte[32]));
+    }
+
+    [Fact]
+    public void EmailConfirmationClaimHasNoCredentialGenerationFingerprint()
+    {
+        var claim = new EmailOutboxClaim(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            EmailOutboxMessageType.EmailConfirmation,
+            attempts: 1,
+            DateTimeOffset.UtcNow,
+            new byte[8]);
+
+        Assert.False(claim.CredentialGenerationFingerprint.HasValue);
+    }
+
+    [Fact]
+    public async Task PasswordResetOutbox_RejectsEmptyUserIdWithoutOpeningTheDatabase()
+    {
+        var options = new DbContextOptionsBuilder<XaquiamuniDbContext>()
+            .UseSqlServer("Server=localhost;Database=XaquiamuniOutboxRequestValidationTest")
+            .Options;
+        using var context = new XaquiamuniDbContext(options);
+        var outbox = new SqlServerPasswordResetOutbox(
+            context,
+            new Sha256CredentialGenerationFingerprint());
+
+        Assert.Equal(
+            PasswordResetOutboxResult.NotEligible,
+            await outbox.RequestAsync(Guid.Empty));
+        Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
+    }
+
+    [Fact]
     public void DependencyInjection_RegistersScopedSqlServerOutboxStore()
     {
         var configuration = new ConfigurationBuilder()
@@ -66,6 +131,29 @@ public sealed class EmailOutboxStoreContractTests
 
         Assert.Same(context, storeContext);
         Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
+    }
+
+    [Fact]
+    public void DependencyInjection_RegistersScopedPasswordResetOutboxAndFingerprintService()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+        var services = new ServiceCollection();
+        services.AddInfrastructureServices(configuration);
+
+        var outboxRegistration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IPasswordResetOutbox));
+        Assert.Equal(ServiceLifetime.Scoped, outboxRegistration.Lifetime);
+        var fingerprintRegistration = Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(ICredentialGenerationFingerprint));
+        Assert.Equal(ServiceLifetime.Singleton, fingerprintRegistration.Lifetime);
+
+        using var provider = services.BuildServiceProvider();
+        using var scope = provider.CreateScope();
+        Assert.IsType<SqlServerPasswordResetOutbox>(
+            scope.ServiceProvider.GetRequiredService<IPasswordResetOutbox>());
+        var fingerprint = scope.ServiceProvider.GetRequiredService<ICredentialGenerationFingerprint>();
+        Assert.True(fingerprint.Matches("stamp", fingerprint.Compute("stamp")));
+        Assert.False(fingerprint.Matches("other-stamp", fingerprint.Compute("stamp")));
     }
 
     [Fact]

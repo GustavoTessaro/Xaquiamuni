@@ -14,6 +14,7 @@ public enum EmailOutboxMessageStatus : short
 public sealed class EmailOutboxMessage
 {
     public const int ActiveDeduplicationKeyMaxLength = 128;
+    private byte[]? _credentialGenerationFingerprint;
 
     private EmailOutboxMessage()
     {
@@ -29,7 +30,8 @@ public sealed class EmailOutboxMessage
         DateTimeOffset nextAttemptAtUtc,
         DateTimeOffset? completedAtUtc = null,
         string? activeDeduplicationKey = null,
-        DateTimeOffset? leaseExpiresAtUtc = null)
+        DateTimeOffset? leaseExpiresAtUtc = null,
+        byte[]? credentialGenerationFingerprint = null)
     {
         if (id == Guid.Empty)
         {
@@ -44,6 +46,23 @@ public sealed class EmailOutboxMessage
         if (!Enum.IsDefined(messageType))
         {
             throw new ArgumentOutOfRangeException(nameof(messageType));
+        }
+
+        if (messageType == EmailOutboxMessageType.PasswordReset)
+        {
+            ArgumentNullException.ThrowIfNull(credentialGenerationFingerprint);
+            if (credentialGenerationFingerprint.Length != 32)
+            {
+                throw new ArgumentException(
+                    "The credential generation fingerprint must be 32 bytes.",
+                    nameof(credentialGenerationFingerprint));
+            }
+        }
+        else if (credentialGenerationFingerprint is not null)
+        {
+            throw new ArgumentException(
+                "Email confirmation messages cannot contain a credential generation fingerprint.",
+                nameof(credentialGenerationFingerprint));
         }
 
         if (!Enum.IsDefined(status))
@@ -77,6 +96,9 @@ public sealed class EmailOutboxMessage
         LeaseExpiresAtUtc = leaseExpiresAtUtc is null
             ? null
             : RequireUtc(leaseExpiresAtUtc.Value, nameof(leaseExpiresAtUtc));
+        _credentialGenerationFingerprint = credentialGenerationFingerprint is null
+            ? null
+            : (byte[])credentialGenerationFingerprint.Clone();
 
         ValidateInitialState();
     }
@@ -91,6 +113,10 @@ public sealed class EmailOutboxMessage
     public DateTimeOffset? CompletedAtUtc { get; private set; }
     public string? ActiveDeduplicationKey { get; private set; }
     public DateTimeOffset? LeaseExpiresAtUtc { get; private set; }
+    public byte[]? CredentialGenerationFingerprint =>
+        _credentialGenerationFingerprint is null
+            ? null
+            : (byte[])_credentialGenerationFingerprint.Clone();
     public byte[] RowVersion { get; private set; } = [];
 
     public override string ToString() => "[EmailOutboxMessage]";

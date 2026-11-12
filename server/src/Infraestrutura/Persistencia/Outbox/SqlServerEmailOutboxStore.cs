@@ -59,7 +59,8 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             inserted.[Attempts],
             inserted.[Status],
             inserted.[LeaseExpiresAtUtc],
-            inserted.[RowVersion];
+            inserted.[RowVersion],
+            inserted.[CredentialGenerationFingerprint];
         """;
 
     private const string CompleteSql = """
@@ -208,7 +209,8 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
                         (EmailOutboxMessageType)reader.GetInt16(2),
                         reader.GetInt32(3),
                         reader.GetDateTimeOffset(5),
-                        (byte[])reader.GetValue(6)));
+                        (byte[])reader.GetValue(6),
+                        reader.IsDBNull(7) ? null : (byte[])reader.GetValue(7)));
                 }
             }
 

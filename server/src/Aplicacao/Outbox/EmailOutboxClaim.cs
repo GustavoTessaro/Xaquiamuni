@@ -3,6 +3,7 @@ namespace Xaquiamuni.Aplicacao.Outbox;
 public sealed class EmailOutboxClaim
 {
     private readonly byte[] _rowVersion;
+    private readonly byte[]? _credentialGenerationFingerprint;
 
     public EmailOutboxClaim(
         Guid id,
@@ -10,7 +11,8 @@ public sealed class EmailOutboxClaim
         EmailOutboxMessageType messageType,
         int attempts,
         DateTimeOffset leaseExpiresAtUtc,
-        byte[] rowVersion)
+        byte[] rowVersion,
+        byte[]? credentialGenerationFingerprint = null)
     {
         if (id == Guid.Empty)
         {
@@ -25,6 +27,23 @@ public sealed class EmailOutboxClaim
         if (!Enum.IsDefined(messageType))
         {
             throw new ArgumentOutOfRangeException(nameof(messageType));
+        }
+
+        if (messageType == EmailOutboxMessageType.PasswordReset)
+        {
+            ArgumentNullException.ThrowIfNull(credentialGenerationFingerprint);
+            if (credentialGenerationFingerprint.Length != 32)
+            {
+                throw new ArgumentException(
+                    "The credential generation fingerprint must be 32 bytes.",
+                    nameof(credentialGenerationFingerprint));
+            }
+        }
+        else if (credentialGenerationFingerprint is not null)
+        {
+            throw new ArgumentException(
+                "Email confirmation claims cannot contain a credential generation fingerprint.",
+                nameof(credentialGenerationFingerprint));
         }
 
         if (attempts <= 0)
@@ -49,6 +68,9 @@ public sealed class EmailOutboxClaim
         Attempts = attempts;
         LeaseExpiresAtUtc = leaseExpiresAtUtc;
         _rowVersion = (byte[])rowVersion.Clone();
+        _credentialGenerationFingerprint = credentialGenerationFingerprint is null
+            ? null
+            : (byte[])credentialGenerationFingerprint.Clone();
     }
 
     public Guid Id { get; }
@@ -57,6 +79,18 @@ public sealed class EmailOutboxClaim
     public int Attempts { get; }
     public DateTimeOffset LeaseExpiresAtUtc { get; }
     public ReadOnlyMemory<byte> RowVersion => _rowVersion;
+    public ReadOnlyMemory<byte>? CredentialGenerationFingerprint
+    {
+        get
+        {
+            if (_credentialGenerationFingerprint is null)
+            {
+                return null;
+            }
+
+            return new ReadOnlyMemory<byte>(_credentialGenerationFingerprint);
+        }
+    }
 
     public override string ToString() => "[EmailOutboxClaim]";
 }

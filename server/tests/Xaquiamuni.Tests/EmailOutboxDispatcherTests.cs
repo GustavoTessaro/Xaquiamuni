@@ -65,7 +65,8 @@ public sealed class EmailOutboxDispatcherTests
             messageType,
             attempts: 1,
             DateTimeOffset.UtcNow.AddMinutes(2),
-            [1, 2, 3, 4, 5, 6, 7, 8]);
+            [1, 2, 3, 4, 5, 6, 7, 8],
+            messageType == EmailOutboxMessageType.PasswordReset ? new byte[32] : null);
 
     private sealed class RecordingProcessor(EmailOutboxMessageType messageType)
         : IEmailOutboxProcessor

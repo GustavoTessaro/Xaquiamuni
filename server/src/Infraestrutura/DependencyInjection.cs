@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
         services.AddScoped<IPasswordResetService, IdentityPasswordResetService>();
+        services.AddScoped<IPasswordResetOutbox, SqlServerPasswordResetOutbox>();
         services.AddScoped<ISolicitarReenvioConfirmacaoEmail, SolicitarReenvioConfirmacaoEmail>();
         services.AddSingleton<IEmailConfirmationMessageComposer, EmailConfirmationMessageComposer>();
         services.AddScoped<ILoginCliente, LoginCliente>();
@@ -100,6 +101,7 @@ public static class DependencyInjection
 
         services.Configure<CpfProtectionOptions>(configuration.GetSection("CpfProtection"));
         services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();
+        services.AddSingleton<ICredentialGenerationFingerprint, Sha256CredentialGenerationFingerprint>();
         services.Configure<EmailConfirmationEmailOptions>(
             configuration.GetSection(EmailConfirmationEmailOptions.SectionName));
 

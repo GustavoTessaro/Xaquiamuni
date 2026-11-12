@@ -41,6 +41,10 @@ public sealed class XaquiamuniDbContext
                     "CK_EmailOutbox_MessageType_Valid",
                     "[MessageType] IN (1, 2)");
                 table.HasCheckConstraint(
+                    "CK_EmailOutbox_CredentialGenerationFingerprint_Valid",
+                    "([MessageType] = 1 AND [CredentialGenerationFingerprint] IS NULL) OR "
+                    + "([MessageType] = 2 AND [CredentialGenerationFingerprint] IS NOT NULL)");
+                table.HasCheckConstraint(
                     "CK_EmailOutbox_Status_Valid",
                     "[Status] IN (1, 2, 3, 4, 5)");
                 table.HasCheckConstraint(
@@ -76,6 +80,10 @@ public sealed class XaquiamuniDbContext
                 .HasColumnType("datetimeoffset(7)");
             outbox.Property(message => message.ActiveDeduplicationKey)
                 .HasMaxLength(EmailOutboxMessage.ActiveDeduplicationKeyMaxLength);
+            outbox.Property(message => message.CredentialGenerationFingerprint)
+                .HasField("_credentialGenerationFingerprint")
+                .UsePropertyAccessMode(PropertyAccessMode.Field)
+                .HasColumnType("binary(32)");
             outbox.Property(message => message.LeaseExpiresAtUtc)
                 .HasColumnType("datetimeoffset(7)");
             outbox.Property(message => message.RowVersion)

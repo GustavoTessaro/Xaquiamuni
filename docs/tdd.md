@@ -5,9 +5,9 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão | 0.2 — arquitetura implementada da confirmação/reenvio de e-mail F2 |
-| Data | 11/11/2026 |
-| Status | **Revisão técnica do fluxo F2 implementado; envio real e recursos restantes ainda pendentes** |
+| Versão | 0.3 — Outbox multi-tipo e preparação da recuperação de senha R6.1 |
+| Data | 12/11/2026 |
+| Status | **F2 e dispatcher R5 implementados; persistência R6.1 preparada, validação SQL pendente; envio real e etapas seguintes pendentes** |
 | Documento-base | `docs/prd.md`, versão 0.3 |
 | Referência estrutural | Projeto NoteKeeper; reaproveitar princípios e organização, **não copiar código ou assumir detalhes não verificados** |
 | Decisão recente | Solicitante concordou em seguir com as propostas iniciais de produção e pagamento, sujeitas a detalhamento |
@@ -27,7 +27,7 @@ Construir uma aplicação web responsiva com vitrine e compra para clientes e pa
 - **Confirmado:** Vacaria tem opção de retirada sem frete e entrega própria por R$ 10, sujeito a delimitação de área, horários e endereço; Correios para localidades atendidas em RS/SC.
 - **Confirmado:** Sicredi é o banco PJ, **não** um provedor de API Pix já homologado.
 - **Implementado na F2:** cadastro cria conta ainda não confirmada e enfileira a solicitação inicial; confirmação usa token Identity com validade de 24 horas; reenvio aplica resposta genérica, cooldown, limite por conta e deduplicação.
-- **Limite atual:** worker e Resend são desabilitados por padrão; não houve envio real de e-mail; `RequireConfirmedEmail` permanece `false`; recuperação de senha ainda não foi implementada.
+- **Limite atual:** worker e Resend são desabilitados por padrão; não houve envio real de e-mail; `RequireConfirmedEmail` permanece `false`; recuperação de senha ainda não tem endpoint nem envio, embora o contrato e a persistência de Outbox estejam em preparação.
 - **Proposto:** separar MVP operacional e módulos condicionados; nenhuma integração bancária ou logística deve ser simulada como confirmação real.
 - **Prazo informado:** 30/11/2026; o solicitante conduzirá eventual replanejamento. Não usar a data para suprimir requisitos silenciosamente.
 
@@ -78,6 +78,8 @@ flowchart LR
 Dependências de compilação propostas: `Application → Domain`; `Infrastructure → Application/Domain`; `Api → Application + Infrastructure` somente na composição. Domain não conhece HTTP, EF Core, Identity, provedores ou Angular. Evitar regras de negócio nos controllers e componentes visuais.
 
 No fluxo F2, o cadastro chama o caso de uso de aplicação e, na mesma transação SQL, persiste usuário Identity ainda não confirmado, perfil/endereço e uma mensagem inicial `Pending` na Outbox. O worker, quando habilitado, gera o token Identity de 24 horas, compõe o link e solicita o envio ao adaptador `IEmailSender`. O reenvio passa pelo endpoint anônimo protegido por antifalsificação e pelo caso de uso; a persistência SQL decide elegibilidade, cooldown, limite e deduplicação sem revelar o resultado interno.
+
+Na R6.1, a solicitação de recuperação é persistida como `PasswordReset` somente após revalidar a conta confirmada sob transação e lock por usuário. A Outbox guarda um fingerprint SHA-256 com separação de propósito do `SecurityStamp` vigente, nunca o stamp bruto, token, senha, e-mail ou link. O fingerprint permite que o processor futuro detecte mudança da geração de credenciais; a redefinição e a invalidação concorrente das mensagens serão coordenadas pela R8. A migration que adiciona esse campo é gerada nesta etapa e não deve ser aplicada automaticamente a bancos existentes.
 
 ### 3.2 Estrutura atual do repositório e módulos futuros
 
@@ -157,7 +159,7 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 | FichaTecnica / FichaComponente | produto/variante, versão, material, quantidade por unidade, custo de referência |
 | OrdemProducao / OrdemMaterial | quantidade prevista, ficha snapshot, prazo, estado, reservas, consumo real |
 | LoteProduto | produto/variante, fabricação, validade, saldo físico, saldo reservado, origem da produção |
-| EmailOutbox | UserId, tipo, estado, tentativas, criação/próxima tentativa/conclusão, chave ativa de deduplicação, lease e `rowversion`; não persiste e-mail, token nem conteúdo da mensagem |
+| EmailOutbox | UserId, tipo, estado, tentativas, criação/próxima tentativa/conclusão, chave ativa de deduplicação, lease, `rowversion` e fingerprint opcional de geração de credenciais (obrigatório apenas para `PasswordReset`); não persiste e-mail, token, senha, `SecurityStamp` bruto nem conteúdo da mensagem |
 | MovimentoEstoque | item/lote, tipo, quantidade, origem, autor, instante, motivo |
 | ReservaEstoque | origem (ordem/pedido), item/lote, quantidade, estado, expiração quando aplicável |
 | Carrinho / CarrinhoItem | cliente, produto/variante e quantidade; não garante reserva |
