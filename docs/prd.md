@@ -5,9 +5,9 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão do documento | 0.3 — atualização do fluxo F2 de confirmação de e-mail |
-| Data | 11/11/2026 |
-| Status | **Revisado; cadastro e confirmação/reenvio de e-mail da F2 implementados e testados; envio real ainda não validado** |
+| Versão do documento | 0.4 — recuperação de senha e atualização do estado de implementação |
+| Data | 12/11/2026 |
+| Status | **Revisado; cadastro, confirmação/reenvio e recuperação/redefinição de senha implementados e testados; envio real de e-mail ainda não validado** |
 | Contexto | Trabalho de Conclusão de Curso — Academia do Programador |
 | Fonte principal | Entrevista com a proprietária (53 respostas, cinco esclarecimentos complementares e rodada posterior de decisões sobre cadastro, entregas, estoque e banco), logomarca e capturas do Instagram fornecidas pelo solicitante |
 | Escopo | Primeira entrega demonstrável e planejamento de evolução, com limites e pendências explícitos |
@@ -22,7 +22,7 @@ O diferencial do produto será conectar a venda online à **organização da pro
 
 Pagamentos integrados, entregas, financeiro, análises e agenda compõem a visão de produto, mas sua abrangência na entrega do TCC depende de decisões operacionais e da viabilidade das integrações. Não presumir automações ou serviços externos já contratados.
 
-O fluxo F2 de cadastro, confirmação e reenvio de e-mail está implementado no backend e no Angular, com testes automatizados, testes integrados opt-in com SQL Server isolado e validação manual local. O cadastro enfileira a solicitação inicial, mas o worker e o Resend permanecem desabilitados por padrão; nenhum envio real foi validado. A exigência de confirmação para login e a recuperação de senha continuam pendentes.
+Os fluxos de cadastro, confirmação/reenvio de e-mail e recuperação/redefinição de senha estão implementados no backend e no Angular, cobertos por testes automatizados e integração opt-in com SQL Server isolado. A recuperação foi validada manualmente no Chrome isolado, com token Identity verdadeiro e remetente simulado em memória. O worker e o Resend permanecem desabilitados por padrão; nenhum envio real foi validado. `RequireConfirmedEmail` continua desabilitado para login, e os requisitos de produção de e-mail e Data Protection permanecem pendentes.
 
 ## 2. Contexto e problema
 
@@ -87,7 +87,7 @@ Não há baseline de tempo economizado, faturamento, volume de pedidos, disponib
 
 ### 5.1 Núcleo prioritário da primeira entrega — proposta para validação
 
-1. **Contas e acesso:** autenticação de cliente, administrador e funcionário; proteção das operações por perfil/permissão; confirmação de e-mail no cadastro. Recuperação de senha permanece como próxima funcionalidade.
+1. **Contas e acesso:** autenticação de cliente, administrador e funcionário; proteção das operações por perfil/permissão; confirmação de e-mail no cadastro e recuperação de senha para contas com e-mail confirmado.
 2. **Catálogo e vitrine:** cadastro administrativo de produtos, categorias, preços, fotos, situação de publicação e consulta pública de itens disponíveis.
 3. **Carrinho e pedidos:** seleção de quantidades, validação de disponibilidade, conta de cliente obrigatória, endereço ou modalidade de entrega e criação de pedido.
 4. **Estoque de produtos acabados:** entradas, saídas, ajustes auditáveis, lotes com fabricação/validade e disponibilidade real para venda online.
@@ -153,6 +153,10 @@ Administrador ou funcionário autorizado registra manualmente produto, quantidad
 
 Administrador consulta saldos físicos e disponíveis, materiais reservados, ordens em andamento e pedidos online. Indicadores avançados e financeiro dependem do escopo aprovado.
 
+### J-08 — Recuperar e redefinir senha
+
+Uma pessoa não autenticada solicita recuperação informando o e-mail. A interface sempre apresenta uma confirmação genérica para um e-mail válido, sem revelar se a conta existe ou é elegível. Somente uma conta com e-mail confirmado pode gerar uma mensagem de recuperação. A pessoa abre o link temporário, informa e confirma uma nova senha e, após a redefinição bem-sucedida, entra novamente usando a nova senha; sessões anteriores deixam de ser válidas.
+
 ## 7. Requisitos funcionais
 
 **Convenção:** os RF abaixo descrevem o escopo-alvo da seção 5.1; os RF condicionados estão identificados separadamente. Detalhes não confirmados são explicitados como pendências e não devem ser decididos silenciosamente na implementação.
@@ -161,7 +165,7 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 
 - **RF-01 — Autenticar usuários:** permitir acesso de administrador, funcionário e cliente; exigir autenticação para operações privadas e encerrar sessão com segurança.
 - **RF-02 — Proteger acesso:** cliente consulta apenas seus dados e pedidos; funcionário acessa somente operações autorizadas; administrador configura permissões. A matriz fina de permissões está pendente.
-- **RF-03 — Cadastrar cliente:** exigir conta antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo (CEP, UF, cidade, bairro, logradouro, número e complemento opcional); validar formato/dígitos do CPF e proteger os dados. A conta nasce não confirmada e a solicitação inicial de confirmação é enfileirada no cadastro. Recuperação de senha não está implementada e permanece como próxima funcionalidade. A necessidade de dados adicionais pelo provedor/logística deve ser reavaliada.
+- **RF-03 — Cadastrar cliente:** exigir conta antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo (CEP, UF, cidade, bairro, logradouro, número e complemento opcional); validar formato/dígitos do CPF e proteger os dados. A conta nasce não confirmada e a solicitação inicial de confirmação é enfileirada no cadastro. A necessidade de dados adicionais pelo provedor/logística deve ser reavaliada.
 
 ### 7.2 Catálogo e estoque
 
@@ -203,6 +207,12 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 - **RF-27 — Confirmar e-mail:** permitir a confirmação anônima da conta por link contendo token de confirmação com validade de 24 horas. O cadastro cria a conta não confirmada e enfileira automaticamente a solicitação inicial, sem iniciar uma sessão.
 - **RF-28 — Reenviar confirmação:** permitir que o cliente solicite novo e-mail pela página de confirmação e pelos pontos de entrada do cadastro e login. Para e-mails válidos, a resposta pública não revela existência, elegibilidade ou estado interno da conta; cooldown, limite por conta e deduplicação seguem RN-23 a RN-27.
 
+### 7.7 Recuperação de senha — implementada
+
+- **RF-29 — Solicitar recuperação:** permitir que uma pessoa não autenticada solicite recuperação informando o e-mail. Para e-mail válido, a resposta genérica não revela existência, confirmação, elegibilidade, cooldown, limite ou estado interno da solicitação. Somente contas com e-mail confirmado podem criar mensagem de recuperação.
+- **RF-30 — Redefinir senha:** oferecer página de redefinição por link temporário; aceitar a nova senha somente após validar o token de Identity e as regras de senha. Após sucesso, invalidar sessões anteriores e exigir novo login explícito.
+- **RF-31 — Mostrar ou ocultar senha:** disponibilizar controle de olho independente para senha e confirmação nas telas de login, cadastro e redefinição. Os cinco campos começam ocultos, preservam valor e validação ao alternar, e voltam a ocultos quando o formulário é limpo ou o respectivo fluxo é concluído.
+
 ## 8. Regras de negócio
 
 - **RN-01 — Venda somente com disponibilidade:** quantidade comprável não excede saldo acabado disponível; produto esgotado não admite compra online nem encomenda pelo checkout.
@@ -233,7 +243,11 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 - **RN-26 — Deduplicação:** não criar solicitação adicional enquanto houver mensagem de confirmação `Pending` ou `Processing` para a conta.
 - **RN-27 — Recuperação de DeadLetter:** uma mensagem `DeadLetter` pode ser substituída por nova solicitação quando cooldown e limite permitirem; preservar a mensagem antiga como histórico e liberar sua chave ativa junto à criação da nova mensagem, atomicamente.
 - **RN-28 — Confirmação obrigatória para login:** `RequireConfirmedEmail` permanece `false`; não bloquear login por falta de confirmação até que o envio real de e-mail seja configurado e validado.
-- **RN-29 — Recuperação de senha:** não está implementada; permanece como próxima funcionalidade após validação do fluxo de e-mail real.
+- **RN-29 — Elegibilidade de recuperação:** somente contas com e-mail confirmado podem gerar solicitação de recuperação; contas não elegíveis recebem a mesma resposta pública genérica.
+- **RN-30 — Token de recuperação:** o link de redefinição tem validade de 1 hora; tokens inválidos, expirados ou já utilizados não redefinem a senha.
+- **RN-31 — Solicitações de recuperação:** respeitar cooldown mínimo de 2 minutos, no máximo 5 solicitações aceitas por conta em janela móvel de 1 hora e deduplicação enquanto houver mensagem `Pending` ou `Processing`. Esses limites são independentes dos limites de reenvio de confirmação.
+- **RN-32 — Redefinição segura:** alteração da senha e cancelamento transacional de mensagens de recuperação obsoletas devem ser atômicos; redefinição bem-sucedida invalida sessões anteriores pelo `SecurityStamp`, exigindo novo login.
+- **RN-33 — Envio e produção:** enfileirar ou validar manualmente uma mensagem não comprova entrega de e-mail. Worker, Resend, domínio, remetente, credenciais e URL pública precisam ser configurados e validados antes do uso real.
 
 ## 9. Requisitos não funcionais
 
@@ -270,7 +284,9 @@ Administrador consulta saldos físicos e disponíveis, materiais reservados, ord
 | **CA-15** | RF-03, RN-16 | Cadastro exige conta, CPF válido, nome, e-mail, telefone e endereço completo; cliente não acessa CPF/endereço de outro cliente. |
 | **CA-16** | RF-07, RN-17 | Lotes preservam fabricação e validade; lote vencido não compõe estoque vendável. |
 | **CA-17** | RF-17, RN-07 | **Se política proposta aprovada:** pedido pendente reserva uma vez, expiração libera uma vez e confirmação concorrente não produz venda duplicada. |
-| **CA-18** | RF-03, RF-27–28, RN-21–29 | Cadastro deixa a conta não confirmada e cria uma solicitação inicial; link expira em 24 horas; reenvio não enumera contas, respeita cooldown/limite, evita duplicação e preserva histórico ao recuperar `DeadLetter`; login não exige confirmação enquanto o envio real não for validado. |
+| **CA-18** | RF-03, RF-27–28, RN-21–28 | Cadastro deixa a conta não confirmada e cria uma solicitação inicial; link expira em 24 horas; reenvio não enumera contas, respeita cooldown/limite, evita duplicação e preserva histórico ao recuperar `DeadLetter`; login não exige confirmação enquanto o envio real não for validado. |
+| **CA-19** | RF-29–30, RN-29–32 | Solicitação válida sempre apresenta resposta genérica; apenas conta confirmada pode receber recuperação; link de 1 hora redefine a senha uma única vez, invalida sessões anteriores e exige novo login. |
+| **CA-20** | RF-31, RNF-04–05 | Os cinco campos de senha começam ocultos; controles independentes mostram/ocultam sem alterar valor, validação ou submeter formulário; acessibilidade por teclado e foco visível; limpeza/sucesso restaura ocultação. |
 
 Os números dos cenários são **exemplos de teste a executar**, não resultados de execução.
 
@@ -359,16 +375,23 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 | **P-17** | Permissões por operação para funcionários | Definir após o fluxo administrativo da proprietária. |
 | **P-18** | Regras de rateio de despesas e apresentação de margem/lucro | Validar com proprietária antes de automatizar sugestão de preços. |
 | **P-19** | Validar envio real de e-mail e política futura de confirmação obrigatória para login | Configurar e validar Resend, worker, entrega e operação antes de alterar `RequireConfirmedEmail`; nenhum envio real foi testado. |
-| **P-20** | Recuperação de senha | Implementar como próxima funcionalidade, com fluxo de identidade e entrega de e-mail validados. |
+| **P-20** | Ativação de produção dos fluxos de e-mail | Recuperação e confirmação estão implementadas, mas domínio, remetente, credenciais, URL pública, persistência/compartilhamento de Data Protection e entrega real ainda precisam ser configurados e validados antes da ativação em produção. |
 
 **Regra de governança:** propostas acima são hipóteses de projeto aceitas como direção inicial pelo solicitante, mas ainda exigem detalhamento/validação antes de fluxos financeiros ou de estoque em produção.
 
 ## 14. Próximos passos e passagem para TDD
 
-1. Revisar esta versão 0.3, concentrando a validação nas políticas de pedido/pagamento (**P-04/P-05**) e execução de produção (**P-09/P-10**).
+1. Revisar esta versão 0.4, concentrando a validação nas políticas de pedido/pagamento (**P-04/P-05**) e execução de produção (**P-09/P-10**).
 2. Definir o recorte de entrega acadêmica e aprovar ou adiar explicitamente cada módulo condicionado; verificar dados de Correios e viabilidade de Pix no Sicredi.
 3. Atualizar regras, jornadas, requisitos e critérios de aceite de acordo com as decisões; registrar data e versão.
 4. Manter o status do PRD alinhado às decisões validadas; não tratar módulos propostos como aprovados.
 5. Revisar e manter `docs/tdd.md` alinhado a esta versão do PRD e ao código efetivamente implementado, mantendo explícitas as propostas, limitações e pendências.
 
-**Estado atual:** versão 0.3; o fluxo F2 de cadastro e confirmação/reenvio está implementado e testado, mas o envio real não foi validado e `RequireConfirmedEmail` permanece desabilitado. Os demais módulos e integrações mantêm os estados confirmados, propostos e pendentes descritos acima.
+**Estado atual:** versão 0.4; cadastro, confirmação/reenvio, recuperação/redefinição de senha e controles de visibilidade de senha estão implementados e testados. A recuperação foi validada manualmente com banco SQL isolado e remetente simulado. Nenhum envio real, ambiente de produção, Azure, Resend ou entrega de e-mail foi validado. `RequireConfirmedEmail` permanece desabilitado; os demais módulos e integrações mantêm os estados confirmados, propostos e pendentes descritos acima.
+
+## 15. Histórico de versões
+
+| Versão | Data | Alterações |
+| --- | --- | --- |
+| 0.3 | 11/11/2026 | Cadastro, confirmação e reenvio de e-mail da F2; envio real pendente. |
+| 0.4 | 12/11/2026 | Recuperação e redefinição de senha implementadas e validadas manualmente com SQL isolado/remetente simulado; documentados controles de visibilidade dos cinco campos e pendências de produção. |
