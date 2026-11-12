@@ -17,17 +17,50 @@ interface EmailConfirmationRequest {
   token: string;
 }
 
+export interface ResendConfirmationEmailRequest {
+  email: string;
+}
+
+export interface ResendConfirmationEmailResponse {
+  message: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly http = inject(HttpClient);
   private readonly csrf = inject(CsrfService);
 
   login(email: string, senha: string): Observable<void> {
-    return this.postWithCsrf('/api/auth/login', { email, senha });
+    return this.postWithCsrf<LoginRequest, void>(
+      '/api/auth/login',
+      { email, senha },
+      204,
+      () => undefined,
+    );
   }
 
   confirmarEmail(email: string, token: string): Observable<void> {
-    return this.postWithCsrf('/api/auth/confirm-email', { email, token });
+    return this.postWithCsrf<EmailConfirmationRequest, void>(
+      '/api/auth/confirm-email',
+      { email, token },
+      204,
+      () => undefined,
+    );
+  }
+
+  reenviarConfirmacaoEmail(email: string): Observable<ResendConfirmationEmailResponse> {
+    return this.postWithCsrf<ResendConfirmationEmailRequest, ResendConfirmationEmailResponse>(
+      '/api/auth/resend-confirmation-email',
+      { email },
+      202,
+      (response) => {
+        if (!response.body || typeof response.body.message !== 'string') {
+          throw new Error('Unexpected authentication response');
+        }
+
+        return response.body;
+      },
+    );
   }
 
   obterSessao(): Observable<AuthSession | null> {
@@ -41,24 +74,32 @@ export class AuthService {
   }
 
   logout(): Observable<void> {
-    return this.postWithCsrf('/api/auth/logout', null);
+    return this.postWithCsrf<null, void>(
+      '/api/auth/logout',
+      null,
+      204,
+      () => undefined,
+    );
   }
 
-  private postWithCsrf(
+  private postWithCsrf<TRequest, TResponse>(
     url: string,
-    body: LoginRequest | EmailConfirmationRequest | null,
-  ): Observable<void> {
+    body: TRequest | null,
+    expectedStatus: number,
+    getResponseValue: (response: HttpResponse<TResponse>) => TResponse,
+  ): Observable<TResponse> {
     return this.csrf.getRequestToken().pipe(
       switchMap(({ requestToken }) =>
-        this.http.post<void>(url, body, {
+        this.http.post<TResponse>(url, body, {
           headers: new HttpHeaders({ 'X-XSRF-TOKEN': requestToken }),
           observe: 'response',
         }),
       ),
-      map((response: HttpResponse<void>) => {
-        if (response.status !== 204) {
+      map((response: HttpResponse<TResponse>) => {
+        if (response.status !== expectedStatus) {
           throw new Error('Unexpected authentication response');
         }
+        return getResponseValue(response);
       }),
     );
   }

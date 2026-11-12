@@ -9,7 +9,7 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { AuthService } from './auth.service';
+import { AuthService, AuthSession, ResendConfirmationEmailResponse } from './auth.service';
 import { CsrfService } from '../security/csrf.service';
 
 describe('AuthService', () => {
@@ -107,6 +107,129 @@ describe('AuthService', () => {
     confirmation.flush(null, { status: 204, statusText: 'No Content' });
 
     expect(completed).toBe(true);
+  });
+
+  it('gets the existing CSRF request token before posting a resend request and preserves the 202 response', () => {
+    let response: ResendConfirmationEmailResponse | undefined;
+    const email = 'cliente+tag@example.test';
+    service.reenviarConfirmacaoEmail(email).subscribe((value) => {
+      response = value;
+    });
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    expect(csrf.request.method).toBe('GET');
+    http.expectNone('/api/auth/resend-confirmation-email');
+    csrf.flush({ requestToken: 'resend-request-token' });
+
+    const resend = http.expectOne('/api/auth/resend-confirmation-email');
+    expect(resend.request.method).toBe('POST');
+    expect(resend.request.urlWithParams).toBe('/api/auth/resend-confirmation-email');
+    expect(resend.request.body).toEqual({ email });
+    expect(Object.keys(resend.request.body as object)).toEqual(['email']);
+    expect(resend.request.headers.get('X-XSRF-TOKEN')).toBe('resend-request-token');
+    expect(resend.request.headers.get('X-XSRF-TOKEN')).not.toBe('cookie-token-not-request-token');
+    expect(resend.request.withCredentials).toBe(false);
+    resend.flush({
+      message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.',
+    }, { status: 202, statusText: 'Accepted' });
+
+    expect(response).toEqual({
+      message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.',
+    });
+  });
+
+  it('propagates resend HTTP 400', () => {
+    let error: HttpErrorResponse | undefined;
+    service.reenviarConfirmacaoEmail('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        error = value;
+      },
+    });
+
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'resend-request-token' });
+    http.expectOne('/api/auth/resend-confirmation-email').flush(
+      { title: 'Requisição inválida' },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(error?.status).toBe(400);
+  });
+
+  it('propagates resend HTTP 429 and preserves Retry-After', () => {
+    let error: HttpErrorResponse | undefined;
+    service.reenviarConfirmacaoEmail('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        error = value;
+      },
+    });
+
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'resend-request-token' });
+    http.expectOne('/api/auth/resend-confirmation-email').flush(
+      { message: 'Muitas solicitações. Tente novamente mais tarde.' },
+      {
+        status: 429,
+        statusText: 'Too Many Requests',
+        headers: { 'Retry-After': '37' },
+      },
+    );
+
+    expect(error?.status).toBe(429);
+    expect(error?.headers.get('Retry-After')).toBe('37');
+  });
+
+  it('propagates resend network failures and HTTP 5xx without success conversion', () => {
+    let networkError: HttpErrorResponse | undefined;
+    service.reenviarConfirmacaoEmail('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        networkError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'network-request-token' });
+    http.expectOne('/api/auth/resend-confirmation-email')
+      .error(new ProgressEvent('error'));
+
+    expect(networkError?.status).toBe(0);
+
+    let serverError: HttpErrorResponse | undefined;
+    service.reenviarConfirmacaoEmail('cliente@example.test').subscribe({
+      error: (value: HttpErrorResponse) => {
+        serverError = value;
+      },
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'server-request-token' });
+    http.expectOne('/api/auth/resend-confirmation-email').flush(
+      { title: 'Falha interna' },
+      { status: 503, statusText: 'Service Unavailable' },
+    );
+
+    expect(serverError?.status).toBe(503);
+  });
+
+  it('does not change authentication session state when requesting a resend', () => {
+    let session: AuthSession | null = null;
+    service.obterSessao().subscribe((value) => {
+      session = value;
+    });
+    const sessionResponse = { userId: '4c4a31ce-0a27-4c0e-b903-a96f62fb81df' };
+    http.expectOne('/api/auth/me').flush(sessionResponse);
+    const sessionBeforeResend = session;
+    let completed = false;
+
+    service.reenviarConfirmacaoEmail('cliente@example.test').subscribe(() => {
+      completed = true;
+    });
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'state-request-token' });
+    http.expectOne('/api/auth/resend-confirmation-email').flush(
+      { message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.' },
+      { status: 202, statusText: 'Accepted' },
+    );
+
+    expect(completed).toBe(true);
+    expect(session).toBe(sessionBeforeResend);
+    expect(session).toEqual(sessionResponse);
+    http.expectNone('/api/auth/login');
+    http.expectNone('/api/auth/logout');
+    http.expectNone('/api/auth/me');
   });
 
   it('gets the current session from /me without accepting a user ID', () => {
