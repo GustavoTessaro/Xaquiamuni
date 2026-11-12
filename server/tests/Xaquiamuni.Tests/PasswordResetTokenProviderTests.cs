@@ -29,6 +29,7 @@ public sealed class PasswordResetTokenProviderTests
 
         Assert.True(isValid);
         Assert.InRange(token.Length, 1, ResetPasswordRequest.TokenMaxLength);
+        Assert.Matches("^[A-Za-z0-9+/]+={0,2}$", token);
     }
 
     [Fact]
