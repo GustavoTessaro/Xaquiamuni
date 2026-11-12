@@ -136,16 +136,41 @@ public sealed class ResendEmailSenderDependencyInjectionTests
         using var scope = app.Services.CreateScope();
         Assert.IsType<EmailConfirmationOutboxProcessor>(
             scope.ServiceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
+        Assert.IsType<PasswordResetOutboxProcessor>(
+            scope.ServiceProvider.GetRequiredService<PasswordResetOutboxProcessor>());
+        var processors = scope.ServiceProvider.GetServices<IEmailOutboxProcessor>().ToArray();
+        Assert.Equal(
+            [
+                EmailOutboxMessageType.EmailConfirmation,
+                EmailOutboxMessageType.PasswordReset
+            ],
+            processors.Select(processor => processor.MessageType));
         Assert.Same(
             scope.ServiceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>(),
-            scope.ServiceProvider.GetRequiredService<IEmailOutboxProcessor>());
+            processors.Single(processor =>
+                processor.MessageType == EmailOutboxMessageType.EmailConfirmation));
+        Assert.Same(
+            scope.ServiceProvider.GetRequiredService<PasswordResetOutboxProcessor>(),
+            processors.Single(
+                processor => processor.MessageType == EmailOutboxMessageType.PasswordReset));
         Assert.Equal(
-            [EmailOutboxMessageType.EmailConfirmation],
+            [
+                EmailOutboxMessageType.EmailConfirmation,
+                EmailOutboxMessageType.PasswordReset
+            ],
             scope.ServiceProvider.GetRequiredService<EmailOutboxDispatcher>().SupportedMessageTypes);
+        Assert.All(
+            builder.Services.Where(descriptor =>
+                descriptor.ServiceType == typeof(IEmailOutboxProcessor)),
+            descriptor => Assert.Equal(ServiceLifetime.Scoped, descriptor.Lifetime));
         Assert.Equal(
             ServiceLifetime.Scoped,
             Assert.Single(builder.Services, descriptor =>
-                descriptor.ServiceType == typeof(IEmailOutboxProcessor)).Lifetime);
+                descriptor.ServiceType == typeof(PasswordResetOutboxProcessor)).Lifetime);
+        Assert.Equal(
+            ServiceLifetime.Scoped,
+            Assert.Single(builder.Services, descriptor =>
+                descriptor.ServiceType == typeof(EmailConfirmationOutboxProcessor)).Lifetime);
         Assert.Equal(
             ServiceLifetime.Scoped,
             Assert.Single(builder.Services, descriptor =>

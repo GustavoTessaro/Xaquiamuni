@@ -141,6 +141,9 @@ public static class DependencyInjection
             services.AddScoped<EmailConfirmationOutboxProcessor>();
             services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
                 serviceProvider.GetRequiredService<EmailConfirmationOutboxProcessor>());
+            services.AddScoped<PasswordResetOutboxProcessor>();
+            services.AddScoped<IEmailOutboxProcessor>(serviceProvider =>
+                serviceProvider.GetRequiredService<PasswordResetOutboxProcessor>());
             services.AddScoped<EmailOutboxDispatcher>();
             services.AddHostedService<EmailOutboxBackgroundService>();
         }
