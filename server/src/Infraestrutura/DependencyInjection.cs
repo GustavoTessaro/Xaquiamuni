@@ -37,6 +37,7 @@ public static class DependencyInjection
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
+        services.AddScoped<IEmailConfirmationResendOutbox, SqlServerEmailConfirmationResendOutbox>();
         services.AddScoped<IEmailOutboxStore, SqlServerEmailOutboxStore>();
         services.AddScoped<EmailConfirmationOutboxProcessor>();
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
