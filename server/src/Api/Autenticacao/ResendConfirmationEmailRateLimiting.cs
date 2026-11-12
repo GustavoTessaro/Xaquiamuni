@@ -10,6 +10,8 @@ namespace Xaquiamuni.Api.Autenticacao;
 public static class ResendConfirmationEmailRateLimiting
 {
     public const string PolicyName = "resend-confirmation-email";
+    public const string ForgotPasswordPolicyName = "forgot-password";
+    public const string ResetPasswordPolicyName = "reset-password";
 
     private const string UnavailableIpPartition = "ip-unavailable";
 
@@ -34,21 +36,30 @@ public static class ResendConfirmationEmailRateLimiting
             };
 
             options.AddPolicy(PolicyName, httpContext =>
-                RateLimitPartition.GetFixedWindowLimiter(
-                    GetPartitionKey(httpContext),
-                    _ => new FixedWindowRateLimiterOptions
-                    {
-                        PermitLimit = 10,
-                        Window = TimeSpan.FromMinutes(1),
-                        QueueLimit = 0,
-                        AutoReplenishment = true
-                    }));
+                CreatePartition(httpContext, PolicyName));
+            options.AddPolicy(ForgotPasswordPolicyName, httpContext =>
+                CreatePartition(httpContext, ForgotPasswordPolicyName));
+            options.AddPolicy(ResetPasswordPolicyName, httpContext =>
+                CreatePartition(httpContext, ResetPasswordPolicyName));
         });
 
         return services;
     }
 
-    private static string GetPartitionKey(HttpContext context)
+    private static RateLimitPartition<string> CreatePartition(
+        HttpContext context,
+        string policyName) =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"{policyName}:{GetIpPartitionKey(context)}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+
+    private static string GetIpPartitionKey(HttpContext context)
     {
         IPAddress? remoteIpAddress = context.Connection.RemoteIpAddress;
         if (remoteIpAddress is null)
