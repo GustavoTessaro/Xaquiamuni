@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Valores;

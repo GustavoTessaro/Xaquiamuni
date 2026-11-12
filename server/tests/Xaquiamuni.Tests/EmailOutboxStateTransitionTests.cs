@@ -1,4 +1,5 @@
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
+using Xaquiamuni.Aplicacao.Outbox;
 
 namespace Xaquiamuni.Tests;
 

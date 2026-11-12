@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;

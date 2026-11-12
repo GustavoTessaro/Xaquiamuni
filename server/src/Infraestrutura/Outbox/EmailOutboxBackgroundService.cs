@@ -68,7 +68,12 @@ public sealed class EmailOutboxBackgroundService : BackgroundService
         for (var processedCount = 0; processedCount < options.BatchSize; processedCount++)
         {
             var claims = await outboxStore
-                .ClaimDueAsync(1, LeaseDuration, stoppingToken, claimedMessageIds)
+                .ClaimDueAsync(
+                    EmailOutboxMessageType.EmailConfirmation,
+                    1,
+                    LeaseDuration,
+                    stoppingToken,
+                    claimedMessageIds)
                 .ConfigureAwait(false);
             if (claims.Count == 0)
             {

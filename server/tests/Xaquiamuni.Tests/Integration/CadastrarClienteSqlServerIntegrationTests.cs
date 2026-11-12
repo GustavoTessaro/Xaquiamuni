@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Dominio.Entidades;

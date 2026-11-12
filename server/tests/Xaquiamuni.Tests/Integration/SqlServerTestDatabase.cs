@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -39,7 +41,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
     public static async Task<SqlServerTestDatabase> CreateAsync(
         bool failProfilePersistence = false,
-        bool failOutboxEnqueue = false)
+        bool failOutboxEnqueue = false,
+        string? targetMigration = null)
     {
         var databaseName = $"Xaquiamuni_IntegrationTest_{Guid.NewGuid():N}";
         var masterConnectionString = new SqlConnectionStringBuilder
@@ -65,7 +68,10 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
         try
         {
-            await database.InitializeAsync(failProfilePersistence, failOutboxEnqueue).ConfigureAwait(false);
+            await database.InitializeAsync(
+                failProfilePersistence,
+                failOutboxEnqueue,
+                targetMigration).ConfigureAwait(false);
             return database;
         }
         catch
@@ -134,7 +140,10 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         }
     }
 
-    private async Task InitializeAsync(bool failProfilePersistence, bool failOutboxEnqueue)
+    private async Task InitializeAsync(
+        bool failProfilePersistence,
+        bool failOutboxEnqueue,
+        string? targetMigration)
     {
         var encryptionKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var fingerprintKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
@@ -182,7 +191,16 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
         _scope = _serviceProvider.CreateAsyncScope();
         var dbContext = Services.GetRequiredService<XaquiamuniDbContext>();
-        await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        if (targetMigration is null)
+        {
+            await dbContext.Database.MigrateAsync().ConfigureAwait(false);
+        }
+        else
+        {
+            await dbContext.GetService<IMigrator>()
+                .MigrateAsync(targetMigration)
+                .ConfigureAwait(false);
+        }
 
         var roleManager = Services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
         var roleResult = await roleManager.CreateAsync(new IdentityRole<Guid>(XaquiamuniRoles.Cliente))

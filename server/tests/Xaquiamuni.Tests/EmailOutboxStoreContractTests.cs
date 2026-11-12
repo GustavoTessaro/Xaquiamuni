@@ -19,6 +19,7 @@ public sealed class EmailOutboxStoreContractTests
         var claim = CreateClaim(rowVersion);
         rowVersion[0] = 9;
 
+        Assert.Equal(EmailOutboxMessageType.EmailConfirmation, claim.MessageType);
         Assert.Equal(1, claim.RowVersion.Span[0]);
         Assert.Equal("[EmailOutboxClaim]", claim.ToString());
         Assert.Throws<ArgumentException>(() => CreateClaim([1, 2, 3]));
@@ -26,9 +27,17 @@ public sealed class EmailOutboxStoreContractTests
             () => new EmailOutboxClaim(
                 Guid.NewGuid(),
                 Guid.NewGuid(),
+                EmailOutboxMessageType.EmailConfirmation,
                 attempts: 1,
                 DateTimeOffset.UtcNow.ToOffset(TimeSpan.FromHours(-3)),
                 new byte[8]));
+    }
+
+    [Fact]
+    public void MessageTypes_PreserveTheirPersistedNumericValues()
+    {
+        Assert.Equal((short)1, (short)EmailOutboxMessageType.EmailConfirmation);
+        Assert.Equal((short)2, (short)EmailOutboxMessageType.PasswordReset);
     }
 
     [Fact]
@@ -82,9 +91,15 @@ public sealed class EmailOutboxStoreContractTests
         var store = new SqlServerEmailOutboxStore(context);
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => store.ClaimDueAsync(batchSize: 0, TimeSpan.FromMinutes(1)));
+            () => store.ClaimDueAsync(
+                EmailOutboxMessageType.EmailConfirmation,
+                batchSize: 0,
+                TimeSpan.FromMinutes(1)));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
-            () => store.ClaimDueAsync(batchSize: 1, TimeSpan.Zero));
+            () => store.ClaimDueAsync(
+                EmailOutboxMessageType.EmailConfirmation,
+                batchSize: 1,
+                TimeSpan.Zero));
 
         Assert.Equal(System.Data.ConnectionState.Closed, context.Database.GetDbConnection().State);
     }
@@ -93,7 +108,8 @@ public sealed class EmailOutboxStoreContractTests
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            attempts: 1,
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
             DateTimeOffset.UtcNow,
             rowVersion);
 }

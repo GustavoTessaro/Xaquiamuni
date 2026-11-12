@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
@@ -110,13 +111,21 @@ public sealed class EmailOutboxModelTests
             .ToDictionary(constraint => constraint.Name!, constraint => constraint.Sql!);
 
         Assert.Equal("[Attempts] >= 0", constraints["CK_EmailOutbox_Attempts_NonNegative"]);
-        Assert.Equal("[MessageType] IN (1)", constraints["CK_EmailOutbox_MessageType_Valid"]);
+        Assert.Equal("[MessageType] IN (1, 2)", constraints["CK_EmailOutbox_MessageType_Valid"]);
         Assert.Equal("[Status] IN (1, 2, 3, 4, 5)", constraints["CK_EmailOutbox_Status_Valid"]);
         Assert.Equal(
             "DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND DATEPART(TZOFFSET, [NextAttemptAtUtc]) = 0 AND "
             + "([CompletedAtUtc] IS NULL OR DATEPART(TZOFFSET, [CompletedAtUtc]) = 0) AND "
             + "([LeaseExpiresAtUtc] IS NULL OR DATEPART(TZOFFSET, [LeaseExpiresAtUtc]) = 0)",
             constraints["CK_EmailOutbox_Timestamps_Utc"]);
+    }
+
+    [Fact]
+    public void ModelSnapshot_HasNoPendingChanges()
+    {
+        using var context = CreateContext();
+
+        Assert.False(context.Database.HasPendingModelChanges());
     }
 
     [Fact]
@@ -130,7 +139,7 @@ public sealed class EmailOutboxModelTests
     public void Constructor_RejectsEnumValuesNotRepresentedByTheModel()
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => CreateMessage(messageType: (EmailOutboxMessageType)2));
+            () => CreateMessage(messageType: (EmailOutboxMessageType)3));
         Assert.Throws<ArgumentOutOfRangeException>(
             () => CreateMessage(status: (EmailOutboxMessageStatus)99));
     }

@@ -85,6 +85,9 @@ public sealed class EmailOutboxBackgroundServiceTests
         Assert.Equal(1, state.ScopeCreatedCount);
         Assert.Equal(2, state.ClaimCalls);
         Assert.Equal(new[] { 1, 1 }, state.ClaimBatchSizes);
+        Assert.All(
+            state.ClaimMessageTypes,
+            messageType => Assert.Equal(EmailOutboxMessageType.EmailConfirmation, messageType));
         Assert.Equal(new[] { claims[0].Id, claims[1].Id }, state.ReturnedClaimIds);
         Assert.Equal(
             ["claim", "token", "compose", "claim", "token", "compose", "send", "complete"],
@@ -120,6 +123,9 @@ public sealed class EmailOutboxBackgroundServiceTests
 
         Assert.Equal(3, state.ClaimCalls);
         Assert.All(state.ClaimBatchSizes, batchSize => Assert.Equal(1, batchSize));
+        Assert.All(
+            state.ClaimMessageTypes,
+            messageType => Assert.Equal(EmailOutboxMessageType.EmailConfirmation, messageType));
         Assert.Equal(new[] { retriedClaim.Id, nextClaim.Id }, state.ReturnedClaimIds);
         Assert.Equal(1, state.RetryCalls);
         Assert.Equal(2, state.TokenGenerationCalls);
@@ -190,6 +196,7 @@ public sealed class EmailOutboxBackgroundServiceTests
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            EmailOutboxMessageType.EmailConfirmation,
             attempts: 1,
             DateTimeOffset.UtcNow.AddMinutes(5),
             [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -203,6 +210,7 @@ public sealed class EmailOutboxBackgroundServiceTests
         public int CompletionsBeforeSignal { get; } = completionsBeforeSignal;
         public bool FailFirstTokenGeneration { get; } = failFirstTokenGeneration;
         public List<int> ClaimBatchSizes { get; } = [];
+        public List<EmailOutboxMessageType> ClaimMessageTypes { get; } = [];
         public List<Guid> ReturnedClaimIds { get; } = [];
         public List<string> Operations { get; } = [];
         public TaskCompletionSource<bool> BatchProcessed { get; } =
@@ -231,6 +239,7 @@ public sealed class EmailOutboxBackgroundServiceTests
         }
 
         public async Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
+            EmailOutboxMessageType messageType,
             int batchSize,
             TimeSpan leaseDuration,
             CancellationToken cancellationToken = default,
@@ -238,6 +247,7 @@ public sealed class EmailOutboxBackgroundServiceTests
         {
             Interlocked.Increment(ref _state.ClaimCalls);
             _state.ClaimBatchSizes.Add(batchSize);
+            _state.ClaimMessageTypes.Add(messageType);
             _state.Operations.Add("claim");
             _state.ClaimStarted.TrySetResult(true);
             if (_state.BlockClaimUntilCancelled)

@@ -3,6 +3,7 @@ namespace Xaquiamuni.Aplicacao.Outbox;
 public interface IEmailOutboxStore
 {
     Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
+        EmailOutboxMessageType messageType,
         int batchSize,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default,

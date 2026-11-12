@@ -3,6 +3,7 @@ using System.Net.Mail;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Autenticacao;
+using Xaquiamuni.Aplicacao.Outbox;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 

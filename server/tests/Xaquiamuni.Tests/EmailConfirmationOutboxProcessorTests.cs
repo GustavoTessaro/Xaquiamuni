@@ -142,6 +142,24 @@ public sealed class EmailConfirmationOutboxProcessorTests
         Assert.Equal(0, sender.SendCalls);
     }
 
+    [Fact]
+    public async Task ProcessAsync_RejectsPasswordResetClaimWithoutProcessingIt()
+    {
+        var claim = CreateClaim(messageType: EmailOutboxMessageType.PasswordReset);
+        var store = new FakeOutboxStore();
+        var confirmation = GeneratedConfirmation();
+        var composer = new FakeMessageComposer();
+        var sender = new FakeEmailSender();
+        var processor = CreateProcessor(store, confirmation, composer, sender);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => processor.ProcessAsync(claim));
+
+        Assert.Empty(store.Operations);
+        Assert.Equal(0, confirmation.GenerateCalls);
+        Assert.Equal(0, composer.ComposeCalls);
+        Assert.Equal(0, sender.SendCalls);
+    }
+
     private static EmailConfirmationOutboxProcessor CreateProcessor(
         FakeOutboxStore store,
         FakeEmailConfirmationService confirmation,
@@ -165,10 +183,12 @@ public sealed class EmailConfirmationOutboxProcessorTests
 
     private static EmailOutboxClaim CreateClaim(
         int attempts = 1,
-        DateTimeOffset? leaseExpiresAtUtc = null) =>
+        DateTimeOffset? leaseExpiresAtUtc = null,
+        EmailOutboxMessageType messageType = EmailOutboxMessageType.EmailConfirmation) =>
         new(
             Guid.NewGuid(),
             Guid.NewGuid(),
+            messageType,
             attempts,
             leaseExpiresAtUtc ?? UtcNow.AddMinutes(2),
             [1, 2, 3, 4, 5, 6, 7, 8]);
@@ -182,6 +202,7 @@ public sealed class EmailConfirmationOutboxProcessorTests
         public double LastJitterSample { get; private set; }
 
         public Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
+            EmailOutboxMessageType messageType,
             int batchSize,
             TimeSpan leaseDuration,
             CancellationToken cancellationToken = default,

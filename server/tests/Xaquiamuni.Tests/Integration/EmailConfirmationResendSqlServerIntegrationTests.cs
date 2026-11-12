@@ -61,6 +61,7 @@ public sealed class EmailConfirmationResendSqlServerIntegrationTests
         await AssertRegistrationAndPendingOutboxAsync(database, userId, email);
 
         var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
             batchSize: 1,
             TimeSpan.FromMinutes(2)));
         if (claim.UserId != userId || claim.Attempts != 1)

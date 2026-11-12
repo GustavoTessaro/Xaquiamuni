@@ -23,12 +23,98 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var store = new SqlServerEmailOutboxStore(context);
 
         var claim = Assert.Single(await store.ClaimDueAsync(
+            messageType: EmailOutboxMessageType.EmailConfirmation,
             batchSize: 1,
             TimeSpan.FromMinutes(2),
             excludedMessageIds: Array.Empty<Guid>()));
 
         Assert.Equal(message.Id, claim.Id);
         Assert.Equal(1, claim.Attempts);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_FiltersByRequestedMessageTypeAndReturnsPersistedType()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var confirmationUserId = await CreateUserAsync(database);
+        var passwordResetUserId = await CreateUserAsync(database);
+        var confirmationMessage = CreatePendingMessage(confirmationUserId);
+        var passwordResetMessage = CreatePendingMessage(
+            passwordResetUserId,
+            messageType: EmailOutboxMessageType.PasswordReset);
+        await SeedMessageAsync(database, confirmationMessage);
+        await SeedMessageAsync(database, passwordResetMessage);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        var passwordResetClaim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.PasswordReset,
+            batchSize: 1,
+            TimeSpan.FromMinutes(2)));
+        Assert.Equal(passwordResetMessage.Id, passwordResetClaim.Id);
+        Assert.Equal(EmailOutboxMessageType.PasswordReset, passwordResetClaim.MessageType);
+        Assert.Equal(1, passwordResetClaim.Attempts);
+        Assert.Equal(8, passwordResetClaim.RowVersion.Length);
+        Assert.True(passwordResetClaim.LeaseExpiresAtUtc > DateTimeOffset.UtcNow);
+
+        await using (var verification = database.CreateVerificationContext())
+        {
+            var stillPending = await verification.EmailOutboxMessages
+                .AsNoTracking()
+                .SingleAsync(message => message.Id == confirmationMessage.Id);
+            Assert.Equal(EmailOutboxMessageStatus.Pending, stillPending.Status);
+        }
+
+        Assert.True(await store.CompleteAsync(passwordResetClaim));
+
+        var confirmationClaim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            batchSize: 1,
+            TimeSpan.FromMinutes(2)));
+        Assert.Equal(confirmationMessage.Id, confirmationClaim.Id);
+        Assert.Equal(EmailOutboxMessageType.EmailConfirmation, confirmationClaim.MessageType);
+
+        await using var completedVerification = database.CreateVerificationContext();
+        var completedPasswordReset = await completedVerification.EmailOutboxMessages
+            .AsNoTracking()
+            .SingleAsync(message => message.Id == passwordResetMessage.Id);
+        Assert.Equal(EmailOutboxMessageStatus.Completed, completedPasswordReset.Status);
+        Assert.Null(completedPasswordReset.LeaseExpiresAtUtc);
+        Assert.Null(completedPasswordReset.ActiveDeduplicationKey);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ClaimDueAsync_ExpiredLeasesRespectRequestedMessageType()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var confirmationUserId = await CreateUserAsync(database);
+        var passwordResetUserId = await CreateUserAsync(database);
+        var confirmationMessage = CreateExpiredProcessingMessage(
+            confirmationUserId,
+            EmailOutboxMessageType.EmailConfirmation);
+        var passwordResetMessage = CreateExpiredProcessingMessage(
+            passwordResetUserId,
+            EmailOutboxMessageType.PasswordReset);
+        await SeedMessageAsync(database, confirmationMessage);
+        await SeedMessageAsync(database, passwordResetMessage);
+
+        await using var context = database.CreateVerificationContext();
+        var store = new SqlServerEmailOutboxStore(context);
+
+        var confirmationClaim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            2,
+            TimeSpan.FromMinutes(2)));
+        Assert.Equal(confirmationMessage.Id, confirmationClaim.Id);
+        Assert.Equal(EmailOutboxMessageType.EmailConfirmation, confirmationClaim.MessageType);
+
+        var passwordResetClaim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.PasswordReset,
+            2,
+            TimeSpan.FromMinutes(2)));
+        Assert.Equal(passwordResetMessage.Id, passwordResetClaim.Id);
+        Assert.Equal(EmailOutboxMessageType.PasswordReset, passwordResetClaim.MessageType);
     }
 
     [SqlServerIntegrationFact]
@@ -46,6 +132,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var store = new SqlServerEmailOutboxStore(context);
 
         var claim = Assert.Single(await store.ClaimDueAsync(
+            messageType: EmailOutboxMessageType.EmailConfirmation,
             batchSize: 2,
             TimeSpan.FromMinutes(2),
             excludedMessageIds: [excludedMessage.Id]));
@@ -76,6 +163,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var store = new SqlServerEmailOutboxStore(context);
 
         var claim = Assert.Single(await store.ClaimDueAsync(
+            messageType: EmailOutboxMessageType.EmailConfirmation,
             batchSize: 3,
             TimeSpan.FromMinutes(2),
             excludedMessageIds: [firstExcluded.Id, secondExcluded.Id]));
@@ -100,7 +188,10 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
         Assert.True(await store.RetryAsync(claim, jitterSample: 1));
 
         await using (var makeRetryEligible = database.CreateVerificationContext())
@@ -110,6 +201,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         }
 
         var claims = await store.ClaimDueAsync(
+            messageType: EmailOutboxMessageType.EmailConfirmation,
             batchSize: 1,
             TimeSpan.FromMinutes(2),
             excludedMessageIds: [message.Id]);
@@ -141,10 +233,12 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         var results = await Task.WhenAll(
             firstStore.ClaimDueAsync(
+                messageType: EmailOutboxMessageType.EmailConfirmation,
                 batchSize: 1,
                 TimeSpan.FromMinutes(2),
                 excludedMessageIds: Array.Empty<Guid>()),
             secondStore.ClaimDueAsync(
+                messageType: EmailOutboxMessageType.EmailConfirmation,
                 batchSize: 1,
                 TimeSpan.FromMinutes(2),
                 excludedMessageIds: Array.Empty<Guid>()));
@@ -184,14 +278,19 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var staleClaim = new EmailOutboxClaim(
             message.Id,
             message.UserId,
+            message.MessageType,
             message.Attempts,
             message.LeaseExpiresAtUtc!.Value,
             message.RowVersion);
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var currentClaim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var currentClaim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
 
+        Assert.Equal(message.MessageType, currentClaim.MessageType);
         Assert.Equal(2, currentClaim.Attempts);
         Assert.NotEqual(staleClaim.RowVersion.ToArray(), currentClaim.RowVersion.ToArray());
         Assert.False(await store.CompleteAsync(staleClaim));
@@ -214,7 +313,10 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
 
         Assert.True(await store.RetryAsync(claim, jitterSample: 1));
 
@@ -225,7 +327,10 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         Assert.True(persisted.NextAttemptAtUtc > DateTimeOffset.UtcNow);
         Assert.Null(persisted.LeaseExpiresAtUtc);
         Assert.Equal($"email-confirmation:{userId:N}", persisted.ActiveDeduplicationKey);
-        Assert.Empty(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        Assert.Empty(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
     }
 
     [SqlServerIntegrationFact]
@@ -237,7 +342,10 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
 
         Assert.Equal(EmailOutboxRetryPolicy.MaximumAttempts, claim.Attempts);
         Assert.True(await store.RetryAsync(claim, jitterSample: 0.5));
@@ -259,7 +367,10 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
 
         Assert.True(await store.DeadLetterAsync(claim));
 
@@ -279,12 +390,16 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
 
         await using var context = database.CreateVerificationContext();
         var store = new SqlServerEmailOutboxStore(context);
-        var claim = Assert.Single(await store.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await store.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
         var staleRowVersion = claim.RowVersion.ToArray();
         staleRowVersion[0] ^= 0xff;
         var staleClaim = new EmailOutboxClaim(
             claim.Id,
             claim.UserId,
+            claim.MessageType,
             claim.Attempts,
             claim.LeaseExpiresAtUtc,
             staleRowVersion);
@@ -321,6 +436,7 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         var expiredClaim = new EmailOutboxClaim(
             message.Id,
             message.UserId,
+            message.MessageType,
             message.Attempts,
             message.LeaseExpiresAtUtc!.Value,
             message.RowVersion);
@@ -361,17 +477,45 @@ public sealed class EmailOutboxStoreSqlServerIntegrationTests
         await context.SaveChangesAsync();
     }
 
-    private static EmailOutboxMessage CreatePendingMessage(Guid userId, int attempts = 0)
+    private static EmailOutboxMessage CreatePendingMessage(
+        Guid userId,
+        int attempts = 0,
+        EmailOutboxMessageType messageType = EmailOutboxMessageType.EmailConfirmation)
     {
         var now = DateTimeOffset.UtcNow;
         return new EmailOutboxMessage(
             Guid.NewGuid(),
             userId,
-            EmailOutboxMessageType.EmailConfirmation,
+            messageType,
             EmailOutboxMessageStatus.Pending,
             attempts,
             now,
             now,
-            activeDeduplicationKey: $"email-confirmation:{userId:N}");
+            activeDeduplicationKey: $"{GetDeduplicationKeyPrefix(messageType)}{userId:N}");
     }
+
+    private static EmailOutboxMessage CreateExpiredProcessingMessage(
+        Guid userId,
+        EmailOutboxMessageType messageType)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new EmailOutboxMessage(
+            Guid.NewGuid(),
+            userId,
+            messageType,
+            EmailOutboxMessageStatus.Processing,
+            attempts: 1,
+            createdAtUtc: now.AddMinutes(-5),
+            nextAttemptAtUtc: now.AddMinutes(-5),
+            activeDeduplicationKey: $"{GetDeduplicationKeyPrefix(messageType)}{userId:N}",
+            leaseExpiresAtUtc: now.AddMinutes(-1));
+    }
+
+    private static string GetDeduplicationKeyPrefix(EmailOutboxMessageType messageType) =>
+        messageType switch
+        {
+            EmailOutboxMessageType.EmailConfirmation => "email-confirmation:",
+            EmailOutboxMessageType.PasswordReset => "password-reset:",
+            _ => throw new ArgumentOutOfRangeException(nameof(messageType))
+        };
 }

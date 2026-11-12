@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
+using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
@@ -303,6 +304,97 @@ public sealed class EmailConfirmationResendOutboxSqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task RequestAsync_PasswordResetHistoryDoesNotAffectConfirmationLimitsOrCooldown()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var hourlyLimitUserId = await CreateUserAsync(database);
+        var cooldownUserId = await CreateUserAsync(database);
+        var now = await GetSqlUtcNowAsync(database);
+
+        for (var index = 0; index < 5; index++)
+        {
+            var status = index == 0
+                ? EmailOutboxMessageStatus.Pending
+                : EmailOutboxMessageStatus.Completed;
+            await SeedMessageAsync(
+                database,
+                CreateMessage(
+                    hourlyLimitUserId,
+                    status,
+                    now.AddMinutes(-3 - index),
+                    completedAtUtc: status == EmailOutboxMessageStatus.Completed
+                        ? now.AddMinutes(-3 - index)
+                        : null,
+                    messageType: EmailOutboxMessageType.PasswordReset,
+                    activeDeduplicationKey: status == EmailOutboxMessageStatus.Pending));
+        }
+
+        await SeedMessageAsync(
+            database,
+            CreateMessage(
+                cooldownUserId,
+                EmailOutboxMessageStatus.Completed,
+                now.AddMinutes(-10),
+                completedAtUtc: now.AddSeconds(-30),
+                messageType: EmailOutboxMessageType.PasswordReset));
+
+        var outbox = database.Services.GetRequiredService<IEmailConfirmationResendOutbox>();
+
+        Assert.Equal(
+            EmailConfirmationResendOutboxResult.Enqueued,
+            await outbox.RequestAsync(hourlyLimitUserId));
+        Assert.Equal(
+            EmailConfirmationResendOutboxResult.Enqueued,
+            await outbox.RequestAsync(cooldownUserId));
+
+        var messages = await ReadMessagesAsync(database);
+        Assert.Equal(8, messages.Count);
+        Assert.Single(
+            messages,
+            message => message.UserId == hourlyLimitUserId
+                && message.MessageType == EmailOutboxMessageType.EmailConfirmation
+                && message.Status == EmailOutboxMessageStatus.Pending);
+        Assert.Single(
+            messages,
+            message => message.UserId == cooldownUserId
+                && message.MessageType == EmailOutboxMessageType.EmailConfirmation
+                && message.Status == EmailOutboxMessageStatus.Pending);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task RequestAsync_PasswordResetDeduplicationKeyCoexistsWithConfirmationKey()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        var userId = await CreateUserAsync(database);
+        var now = await GetSqlUtcNowAsync(database);
+        await SeedMessageAsync(
+            database,
+            CreateMessage(
+                userId,
+                EmailOutboxMessageStatus.Pending,
+                now.AddMinutes(-3),
+                messageType: EmailOutboxMessageType.PasswordReset,
+                activeDeduplicationKey: true));
+
+        var outbox = database.Services.GetRequiredService<IEmailConfirmationResendOutbox>();
+
+        Assert.Equal(
+            EmailConfirmationResendOutboxResult.Enqueued,
+            await outbox.RequestAsync(userId));
+
+        var messages = await ReadMessagesAsync(database);
+        Assert.Equal(2, messages.Count);
+        Assert.Equal(
+            $"password-reset:{userId:N}",
+            Assert.Single(messages, message =>
+                message.MessageType == EmailOutboxMessageType.PasswordReset).ActiveDeduplicationKey);
+        Assert.Equal(
+            $"email-confirmation:{userId:N}",
+            Assert.Single(messages, message =>
+                message.MessageType == EmailOutboxMessageType.EmailConfirmation).ActiveDeduplicationKey);
+    }
+
+    [SqlServerIntegrationFact]
     public async Task RequestAsync_DeadLetterPreservesHistoryAndReleasesKeyOnlyAfterCooldown()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
@@ -439,7 +531,10 @@ public sealed class EmailConfirmationResendOutboxSqlServerIntegrationTests
 
         await using var workerContext = database.CreateVerificationContext();
         var workerStore = new SqlServerEmailOutboxStore(workerContext);
-        var claim = Assert.Single(await workerStore.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await workerStore.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
         await using var resendContext = database.CreateVerificationContext();
         var resendOutbox = new SqlServerEmailConfirmationResendOutbox(resendContext);
 
@@ -469,7 +564,10 @@ public sealed class EmailConfirmationResendOutboxSqlServerIntegrationTests
 
         await using var workerContext = database.CreateVerificationContext();
         var workerStore = new SqlServerEmailOutboxStore(workerContext);
-        var claim = Assert.Single(await workerStore.ClaimDueAsync(1, TimeSpan.FromMinutes(2)));
+        var claim = Assert.Single(await workerStore.ClaimDueAsync(
+            EmailOutboxMessageType.EmailConfirmation,
+            1,
+            TimeSpan.FromMinutes(2)));
         await using var resendContext = database.CreateVerificationContext();
         var resendOutbox = new SqlServerEmailConfirmationResendOutbox(resendContext);
 
@@ -636,22 +734,29 @@ public sealed class EmailConfirmationResendOutboxSqlServerIntegrationTests
         DateTimeOffset? completedAtUtc = null,
         DateTimeOffset? leaseExpiresAtUtc = null,
         int attempts = 1,
-        bool activeDeduplicationKey = false)
+        bool activeDeduplicationKey = false,
+        EmailOutboxMessageType messageType = EmailOutboxMessageType.EmailConfirmation)
     {
         var requiresActiveKey = activeDeduplicationKey
             || status is EmailOutboxMessageStatus.Pending
                 or EmailOutboxMessageStatus.Processing
                 or EmailOutboxMessageStatus.DeadLetter;
+        var deduplicationKeyPrefix = messageType switch
+        {
+            EmailOutboxMessageType.EmailConfirmation => "email-confirmation:",
+            EmailOutboxMessageType.PasswordReset => "password-reset:",
+            _ => throw new ArgumentOutOfRangeException(nameof(messageType))
+        };
         return new EmailOutboxMessage(
             Guid.NewGuid(),
             userId,
-            EmailOutboxMessageType.EmailConfirmation,
+            messageType,
             status,
             status == EmailOutboxMessageStatus.Pending ? 0 : attempts,
             createdAtUtc,
             createdAtUtc,
             completedAtUtc,
-            requiresActiveKey ? $"email-confirmation:{userId:N}" : null,
+            requiresActiveKey ? $"{deduplicationKeyPrefix}{userId:N}" : null,
             leaseExpiresAtUtc);
     }
 

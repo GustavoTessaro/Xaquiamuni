@@ -7,6 +7,7 @@ public sealed class EmailOutboxClaim
     public EmailOutboxClaim(
         Guid id,
         Guid userId,
+        EmailOutboxMessageType messageType,
         int attempts,
         DateTimeOffset leaseExpiresAtUtc,
         byte[] rowVersion)
@@ -19,6 +20,11 @@ public sealed class EmailOutboxClaim
         if (userId == Guid.Empty)
         {
             throw new ArgumentException("The user identifier is required.", nameof(userId));
+        }
+
+        if (!Enum.IsDefined(messageType))
+        {
+            throw new ArgumentOutOfRangeException(nameof(messageType));
         }
 
         if (attempts <= 0)
@@ -39,6 +45,7 @@ public sealed class EmailOutboxClaim
 
         Id = id;
         UserId = userId;
+        MessageType = messageType;
         Attempts = attempts;
         LeaseExpiresAtUtc = leaseExpiresAtUtc;
         _rowVersion = (byte[])rowVersion.Clone();
@@ -46,6 +53,7 @@ public sealed class EmailOutboxClaim
 
     public Guid Id { get; }
     public Guid UserId { get; }
+    public EmailOutboxMessageType MessageType { get; }
     public int Attempts { get; }
     public DateTimeOffset LeaseExpiresAtUtc { get; }
     public ReadOnlyMemory<byte> RowVersion => _rowVersion;

@@ -32,6 +32,13 @@ public sealed class EmailConfirmationOutboxProcessor
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(claim);
+        if (claim.MessageType != EmailOutboxMessageType.EmailConfirmation)
+        {
+            throw new ArgumentException(
+                "The email confirmation processor only accepts EmailConfirmation claims.",
+                nameof(claim));
+        }
+
         if (!HasActiveLease(claim))
         {
             return;

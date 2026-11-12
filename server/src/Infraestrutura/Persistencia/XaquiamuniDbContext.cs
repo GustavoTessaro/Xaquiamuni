@@ -39,7 +39,7 @@ public sealed class XaquiamuniDbContext
                     "[Attempts] >= 0");
                 table.HasCheckConstraint(
                     "CK_EmailOutbox_MessageType_Valid",
-                    "[MessageType] IN (1)");
+                    "[MessageType] IN (1, 2)");
                 table.HasCheckConstraint(
                     "CK_EmailOutbox_Status_Valid",
                     "[Status] IN (1, 2, 3, 4, 5)");

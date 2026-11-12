@@ -1,4 +1,5 @@
 using Xaquiamuni.Aplicacao.Autenticacao;
+using Xaquiamuni.Aplicacao.Outbox;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 

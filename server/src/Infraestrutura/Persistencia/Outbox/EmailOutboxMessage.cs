@@ -1,9 +1,6 @@
-namespace Xaquiamuni.Infraestrutura.Persistencia.Outbox;
+using Xaquiamuni.Aplicacao.Outbox;
 
-public enum EmailOutboxMessageType : short
-{
-    EmailConfirmation = 1
-}
+namespace Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 
 public enum EmailOutboxMessageStatus : short
 {

@@ -22,11 +22,13 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             SELECT TOP (@BatchSize) *
             FROM [dbo].[EmailOutbox] WITH (UPDLOCK, READPAST, ROWLOCK, READCOMMITTEDLOCK)
             WHERE
-            (
-                ([Status] = @PendingStatus AND [NextAttemptAtUtc] <= @NowUtc)
-                OR
-                ([Status] = @ProcessingStatus AND [LeaseExpiresAtUtc] <= @NowUtc)
-            )
+                [MessageType] = @MessageType
+                AND
+                (
+                    ([Status] = @PendingStatus AND [NextAttemptAtUtc] <= @NowUtc)
+                    OR
+                    ([Status] = @ProcessingStatus AND [LeaseExpiresAtUtc] <= @NowUtc)
+                )
             /* EXCLUDED_MESSAGE_IDS */
             ORDER BY
                 CASE
@@ -53,6 +55,7 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
         OUTPUT
             inserted.[Id],
             inserted.[UserId],
+            inserted.[MessageType],
             inserted.[Attempts],
             inserted.[Status],
             inserted.[LeaseExpiresAtUtc],
@@ -134,11 +137,17 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
     }
 
     public async Task<IReadOnlyList<EmailOutboxClaim>> ClaimDueAsync(
+        EmailOutboxMessageType messageType,
         int batchSize,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken = default,
         IReadOnlyCollection<Guid>? excludedMessageIds = null)
     {
+        if (!Enum.IsDefined(messageType))
+        {
+            throw new ArgumentOutOfRangeException(nameof(messageType));
+        }
+
         ValidateClaimOptions(batchSize, leaseDuration);
         var excludedIds = excludedMessageIds?.Distinct().ToArray() ?? [];
         if (excludedIds.Length > MaximumBatchSize)
@@ -168,6 +177,7 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
                 exclusionPredicate,
                 StringComparison.Ordinal);
             AddParameter(command, "@BatchSize", SqlDbType.Int, batchSize);
+            AddParameter(command, "@MessageType", SqlDbType.SmallInt, (short)messageType);
             AddParameter(
                 command,
                 "@LeaseMilliseconds",
@@ -187,7 +197,7 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
             {
                 while (await reader.ReadAsync(cancellationToken).ConfigureAwait(false))
                 {
-                    if (reader.GetInt16(3) != (short)EmailOutboxMessageStatus.Processing)
+                    if (reader.GetInt16(4) != (short)EmailOutboxMessageStatus.Processing)
                     {
                         continue;
                     }
@@ -195,9 +205,10 @@ public sealed class SqlServerEmailOutboxStore : IEmailOutboxStore
                     claims.Add(new EmailOutboxClaim(
                         reader.GetGuid(0),
                         reader.GetGuid(1),
-                        reader.GetInt32(2),
-                        reader.GetDateTimeOffset(4),
-                        (byte[])reader.GetValue(5)));
+                        (EmailOutboxMessageType)reader.GetInt16(2),
+                        reader.GetInt32(3),
+                        reader.GetDateTimeOffset(5),
+                        (byte[])reader.GetValue(6)));
                 }
             }
 

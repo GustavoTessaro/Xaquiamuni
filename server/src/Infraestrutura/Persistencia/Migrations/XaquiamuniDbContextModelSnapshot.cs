@@ -364,7 +364,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         {
                             t.HasCheckConstraint("CK_EmailOutbox_Attempts_NonNegative", "[Attempts] >= 0");
 
-                            t.HasCheckConstraint("CK_EmailOutbox_MessageType_Valid", "[MessageType] IN (1)");
+                            t.HasCheckConstraint("CK_EmailOutbox_MessageType_Valid", "[MessageType] IN (1, 2)");
 
                             t.HasCheckConstraint("CK_EmailOutbox_Status_Valid", "[Status] IN (1, 2, 3, 4, 5)");
 
