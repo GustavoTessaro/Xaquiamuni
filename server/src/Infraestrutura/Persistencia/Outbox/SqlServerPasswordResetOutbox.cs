@@ -10,7 +10,6 @@ public sealed class SqlServerPasswordResetOutbox : IPasswordResetOutbox
 {
     private const int MaximumRequestsPerHour = 5;
     private const int CooldownMinutes = 2;
-    private const int ApplicationLockTimeoutMilliseconds = 5000;
     private const int MaximumSecurityStampLength = 256;
     private const string DeduplicationKeyPrefix = "password-reset:";
 
@@ -89,17 +88,6 @@ public sealed class SqlServerPasswordResetOutbox : IPasswordResetOutbox
              @CredentialGenerationFingerprint);
         """;
 
-    private const string AcquireUserLockSql = """
-        DECLARE @LockResult int;
-        EXEC @LockResult = sys.sp_getapplock
-            @Resource = @Resource,
-            @LockMode = 'Exclusive',
-            @LockOwner = 'Transaction',
-            @LockTimeout = @LockTimeoutMilliseconds,
-            @DbPrincipal = 'public';
-        SELECT @LockResult;
-        """;
-
     private readonly XaquiamuniDbContext _dbContext;
     private readonly ICredentialGenerationFingerprint _fingerprint;
 
@@ -133,7 +121,8 @@ public sealed class SqlServerPasswordResetOutbox : IPasswordResetOutbox
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
                 .ConfigureAwait(false);
 
-            await AcquireUserLockAsync(connection, transaction, userId, cancellationToken)
+            await PasswordResetGenerationLock
+                .AcquireAsync(connection, transaction, userId, cancellationToken)
                 .ConfigureAwait(false);
 
             var user = await FindUserAsync(connection, transaction, userId, cancellationToken)
@@ -235,45 +224,6 @@ public sealed class SqlServerPasswordResetOutbox : IPasswordResetOutbox
             {
                 await connection.CloseAsync().ConfigureAwait(false);
             }
-        }
-    }
-
-    private static async Task AcquireUserLockAsync(
-        SqlConnection connection,
-        SqlTransaction transaction,
-        Guid userId,
-        CancellationToken cancellationToken)
-    {
-        await using var command = connection.CreateCommand();
-        command.Transaction = transaction;
-        command.CommandText = AcquireUserLockSql;
-        AddParameter(
-            command,
-            "@Resource",
-            SqlDbType.NVarChar,
-            PasswordResetGenerationLock.GetResourceName(userId),
-            size: 255);
-        AddParameter(
-            command,
-            "@LockTimeoutMilliseconds",
-            SqlDbType.Int,
-            ApplicationLockTimeoutMilliseconds);
-
-        var lockResult = (int?)await command.ExecuteScalarAsync(cancellationToken).ConfigureAwait(false);
-        if (lockResult is null)
-        {
-            throw new InvalidOperationException("The password reset Outbox lock returned no result.");
-        }
-
-        if (lockResult.Value < 0)
-        {
-            if (lockResult.Value == -2 && cancellationToken.IsCancellationRequested)
-            {
-                throw new OperationCanceledException(cancellationToken);
-            }
-
-            throw new InvalidOperationException(
-                $"The password reset Outbox lock could not be acquired (SQL result {lockResult.Value}).");
         }
     }
 

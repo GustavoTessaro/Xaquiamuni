@@ -469,6 +469,9 @@ public sealed class IdentityPasswordResetServiceTests
         services.AddSingleton(userStore ?? new InMemoryUserStore());
         services.AddSingleton<IUserStore<XaquiamuniUser>>(
             serviceProvider => serviceProvider.GetRequiredService<InMemoryUserStore>());
+        services.Replace(ServiceDescriptor.Scoped<IPasswordResetTransactionCoordinator>(
+            serviceProvider => new InMemoryPasswordResetTransactionCoordinator(
+                serviceProvider.GetRequiredService<InMemoryUserStore>())));
         if (credentialGenerationFingerprint is not null)
         {
             services.Replace(ServiceDescriptor.Singleton(credentialGenerationFingerprint));
@@ -485,6 +488,47 @@ public sealed class IdentityPasswordResetServiceTests
 
     private static byte[] ComputeFingerprint(XaquiamuniUser user) =>
         new Sha256CredentialGenerationFingerprint().Compute(user.SecurityStamp!);
+
+    private sealed class InMemoryPasswordResetTransactionCoordinator(InMemoryUserStore userStore)
+        : IPasswordResetTransactionCoordinator
+    {
+        public Task<Guid?> FindUserIdByNormalizedEmailAsync(
+            string normalizedEmail,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(userStore.FindUserIdByNormalizedEmail(normalizedEmail));
+        }
+
+        public Task<IPasswordResetTransaction> BeginAsync(
+            Guid userId,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult<IPasswordResetTransaction>(new InMemoryPasswordResetTransaction());
+        }
+    }
+
+    private sealed class InMemoryPasswordResetTransaction : IPasswordResetTransaction
+    {
+        public Task<bool> ReloadUserAsync(
+            XaquiamuniUser user,
+            CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(true);
+        }
+
+        public Task CommitAsync(CancellationToken cancellationToken)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.CompletedTask;
+        }
+
+        public Task RollbackAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
 
     private sealed class ThrowingCredentialGenerationFingerprint(Exception exception)
         : ICredentialGenerationFingerprint
@@ -534,6 +578,15 @@ public sealed class IdentityPasswordResetServiceTests
         {
             _users[userId].SecurityStamp = securityStamp;
         }
+
+        public Guid? FindUserIdByNormalizedEmail(string normalizedEmail) =>
+            _users.Values
+                .Where(user => string.Equals(
+                    user.NormalizedEmail,
+                    normalizedEmail,
+                    StringComparison.Ordinal))
+                .Select(user => (Guid?)user.Id)
+                .SingleOrDefault();
 
         public Task<IdentityResult> CreateAsync(
             XaquiamuniUser user,

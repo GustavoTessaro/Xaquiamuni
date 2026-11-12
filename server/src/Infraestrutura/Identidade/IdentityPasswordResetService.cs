@@ -14,14 +14,18 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
 
     private readonly UserManager<XaquiamuniUser> _userManager;
     private readonly ICredentialGenerationFingerprint _credentialGenerationFingerprint;
+    private readonly IPasswordResetTransactionCoordinator _transactionCoordinator;
 
-    public IdentityPasswordResetService(
+    internal IdentityPasswordResetService(
         UserManager<XaquiamuniUser> userManager,
-        ICredentialGenerationFingerprint credentialGenerationFingerprint)
+        ICredentialGenerationFingerprint credentialGenerationFingerprint,
+        IPasswordResetTransactionCoordinator transactionCoordinator)
     {
         _userManager = userManager ?? throw new ArgumentNullException(nameof(userManager));
         _credentialGenerationFingerprint = credentialGenerationFingerprint
             ?? throw new ArgumentNullException(nameof(credentialGenerationFingerprint));
+        _transactionCoordinator = transactionCoordinator
+            ?? throw new ArgumentNullException(nameof(transactionCoordinator));
     }
 
     public async Task<Guid?> FindConfirmedUserIdByEmailAsync(
@@ -126,25 +130,76 @@ public sealed class IdentityPasswordResetService : IPasswordResetService
         }
 
         var validatedEmail = email!.Trim();
-        var user = await _userManager.FindByEmailAsync(validatedEmail).ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        if (user is null
-            || user.Id == Guid.Empty
-            || !IsValidEmailAddress(user.Email)
-            || !await _userManager.IsEmailConfirmedAsync(user).ConfigureAwait(false))
+        var normalizedEmail = _userManager.NormalizeEmail(validatedEmail);
+        if (string.IsNullOrWhiteSpace(normalizedEmail))
         {
             return PasswordResetResult.InvalidRequest();
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var result = await _userManager.ResetPasswordAsync(user, token, newPassword)
+        var userId = await _transactionCoordinator
+            .FindUserIdByNormalizedEmailAsync(normalizedEmail, cancellationToken)
             .ConfigureAwait(false);
-        return result.Succeeded
-            ? PasswordResetResult.Success()
-            : result.Errors.Any(error =>
-                error.Code.StartsWith("Password", StringComparison.Ordinal))
-                ? PasswordResetResult.InvalidPassword()
-                : PasswordResetResult.InvalidRequest();
+        cancellationToken.ThrowIfCancellationRequested();
+        if (userId is not Guid validUserId || validUserId == Guid.Empty)
+        {
+            return PasswordResetResult.InvalidRequest();
+        }
+
+        await using var transaction = await _transactionCoordinator
+            .BeginAsync(validUserId, cancellationToken)
+            .ConfigureAwait(false);
+
+        XaquiamuniUser? user = null;
+        try
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            user = await _userManager.FindByIdAsync(validUserId.ToString())
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (user is null
+                || user.Id != validUserId
+                || !await transaction.ReloadUserAsync(user, cancellationToken).ConfigureAwait(false)
+                || !IsValidEmailAddress(user.Email)
+                || !string.Equals(user.NormalizedEmail, normalizedEmail, StringComparison.Ordinal)
+                || !await _userManager.IsEmailConfirmedAsync(user).ConfigureAwait(false))
+            {
+                await RollbackAndRefreshAsync(transaction, user).ConfigureAwait(false);
+                return PasswordResetResult.InvalidRequest();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            var result = await _userManager.ResetPasswordAsync(user, token, newPassword)
+                .ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!result.Succeeded)
+            {
+                await RollbackAndRefreshAsync(transaction, user).ConfigureAwait(false);
+                return result.Errors.Any(error =>
+                    error.Code.StartsWith("Password", StringComparison.Ordinal))
+                    ? PasswordResetResult.InvalidPassword()
+                    : PasswordResetResult.InvalidRequest();
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            return PasswordResetResult.Success();
+        }
+        catch
+        {
+            await RollbackAndRefreshAsync(transaction, user).ConfigureAwait(false);
+            throw;
+        }
+    }
+
+    private static async Task RollbackAndRefreshAsync(
+        IPasswordResetTransaction transaction,
+        XaquiamuniUser? user)
+    {
+        await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        if (user is not null)
+        {
+            await transaction.ReloadUserAsync(user, CancellationToken.None).ConfigureAwait(false);
+        }
     }
 
     private static bool IsValidEmailAddress(string? email)

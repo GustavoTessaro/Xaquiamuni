@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Configuration;
@@ -43,7 +44,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         bool failProfilePersistence = false,
         bool failOutboxEnqueue = false,
         string? targetMigration = null,
-        IDataProtectionProvider? dataProtectionProvider = null)
+        IDataProtectionProvider? dataProtectionProvider = null,
+        IInterceptor? dbContextInterceptor = null)
     {
         var databaseName = $"Xaquiamuni_IntegrationTest_{Guid.NewGuid():N}";
         var masterConnectionString = new SqlConnectionStringBuilder
@@ -73,7 +75,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
                 failProfilePersistence,
                 failOutboxEnqueue,
                 targetMigration,
-                dataProtectionProvider).ConfigureAwait(false);
+                dataProtectionProvider,
+                dbContextInterceptor).ConfigureAwait(false);
             return database;
         }
         catch
@@ -146,7 +149,8 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         bool failProfilePersistence,
         bool failOutboxEnqueue,
         string? targetMigration,
-        IDataProtectionProvider? dataProtectionProvider)
+        IDataProtectionProvider? dataProtectionProvider,
+        IInterceptor? dbContextInterceptor)
     {
         var encryptionKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
         var fingerprintKey = System.Security.Cryptography.RandomNumberGenerator.GetBytes(32);
@@ -171,6 +175,12 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         }
 
         services.AddInfrastructureServices(configuration);
+        if (dbContextInterceptor is not null)
+        {
+            services.ConfigureDbContext<XaquiamuniDbContext>(
+                (_, options) => options.AddInterceptors(dbContextInterceptor));
+        }
+
         services.RemoveAll<IEmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationOutbox>(serviceProvider =>
         {
