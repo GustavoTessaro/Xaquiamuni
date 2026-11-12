@@ -1,3 +1,4 @@
+using System.Net.Mail;
 using Microsoft.AspNetCore.Identity;
 using Xaquiamuni.Aplicacao.Autenticacao;
 
@@ -10,6 +11,28 @@ public sealed class IdentityEmailConfirmationService : IEmailConfirmationService
     public IdentityEmailConfirmationService(UserManager<XaquiamuniUser> userManager)
     {
         _userManager = userManager;
+    }
+
+    public async Task<Guid?> FindUnconfirmedUserIdByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!IsValidEmailAddress(email))
+        {
+            return null;
+        }
+
+        var user = await _userManager.FindByEmailAsync(email.Trim()).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (user is null || user.Id == Guid.Empty || !IsValidEmailAddress(user.Email))
+        {
+            return null;
+        }
+
+        var isEmailConfirmed = await _userManager.IsEmailConfirmedAsync(user).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        return isEmailConfirmed ? null : user.Id;
     }
 
     public async Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenAsync(
@@ -84,5 +107,33 @@ public sealed class IdentityEmailConfirmationService : IEmailConfirmationService
         return result.Succeeded
             ? EmailConfirmationResult.Confirmed()
             : EmailConfirmationResult.InvalidOrExpiredToken();
+    }
+
+    private static bool IsValidEmailAddress(string? email)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+        {
+            return false;
+        }
+
+        var value = email.Trim();
+        if (value.Length > 256
+            || !MailAddress.TryCreate(value, out var address)
+            || !string.Equals(address.Address, value, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var separator = value.LastIndexOf('@');
+        if (separator <= 0 || separator == value.Length - 1)
+        {
+            return false;
+        }
+
+        var domain = value.AsSpan(separator + 1);
+        return domain.Contains('.')
+            && domain[0] != '.'
+            && domain[^1] != '.'
+            && !domain.Contains("..", StringComparison.Ordinal);
     }
 }

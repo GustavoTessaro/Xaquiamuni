@@ -224,6 +224,11 @@ public sealed class AuthEmailConfirmationEndpointTests
         public string? LastEmail { get; private set; }
         public string? LastToken { get; private set; }
 
+        public Task<Guid?> FindUnconfirmedUserIdByEmailAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenAsync(
             string email,
             CancellationToken cancellationToken = default) =>

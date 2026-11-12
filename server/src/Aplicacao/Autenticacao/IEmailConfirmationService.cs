@@ -2,6 +2,10 @@ namespace Xaquiamuni.Aplicacao.Autenticacao;
 
 public interface IEmailConfirmationService
 {
+    Task<Guid?> FindUnconfirmedUserIdByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default);
+
     Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenAsync(
         string email,
         CancellationToken cancellationToken = default);

@@ -294,6 +294,11 @@ public sealed class EmailOutboxBackgroundServiceTests
 
     private sealed class FakeEmailConfirmationService(WorkerState state) : IEmailConfirmationService
     {
+        public Task<Guid?> FindUnconfirmedUserIdByEmailAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenForUserAsync(
             Guid userId,
             CancellationToken cancellationToken = default)

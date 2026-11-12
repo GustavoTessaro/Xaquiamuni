@@ -9,6 +9,109 @@ namespace Xaquiamuni.Tests;
 public sealed class IdentityEmailConfirmationServiceTests
 {
     [Fact]
+    public async Task FindUnconfirmedUserIdByEmailAsync_ForEligibleUserUsesIdentityEmailNormalization()
+    {
+        var userId = Guid.NewGuid();
+        var user = new XaquiamuniUser
+        {
+            Id = userId,
+            Email = "Client@Example.invalid",
+            EmailConfirmed = false,
+            SecurityStamp = "unchanged-security-stamp"
+        };
+        var userManager = new FakeUserManager(user);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.FindUnconfirmedUserIdByEmailAsync("  client@example.invalid  ");
+
+        Assert.Equal(userId, result);
+        Assert.Equal("client@example.invalid", userManager.LastEmail);
+        Assert.Equal("CLIENT@EXAMPLE.INVALID", userManager.LastNormalizedEmail);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+        Assert.Equal(0, userManager.ConfirmTokenCalls);
+        Assert.Equal(0, userManager.PersistedMutationCalls);
+        Assert.Equal("Client@Example.invalid", user.Email);
+        Assert.False(user.EmailConfirmed);
+        Assert.Equal("unchanged-security-stamp", user.SecurityStamp);
+    }
+
+    [Fact]
+    public async Task FindUnconfirmedUserIdByEmailAsync_ForMissingUserReturnsNull()
+    {
+        var userManager = new FakeUserManager(user: null);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.FindUnconfirmedUserIdByEmailAsync("client@example.invalid");
+
+        Assert.Null(result);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+        Assert.Equal(0, userManager.PersistedMutationCalls);
+    }
+
+    [Fact]
+    public async Task FindUnconfirmedUserIdByEmailAsync_ForConfirmedUserReturnsNull()
+    {
+        var user = new XaquiamuniUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "client@example.invalid",
+            EmailConfirmed = true
+        };
+        var userManager = new FakeUserManager(user);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.FindUnconfirmedUserIdByEmailAsync("client@example.invalid");
+
+        Assert.Null(result);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+        Assert.Equal(0, userManager.PersistedMutationCalls);
+        Assert.True(user.EmailConfirmed);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-an-email")]
+    [InlineData("client@example..invalid")]
+    public async Task FindUnconfirmedUserIdByEmailAsync_ForInvalidEmailReturnsNull(string? email)
+    {
+        var user = new XaquiamuniUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "client@example.invalid",
+            EmailConfirmed = false
+        };
+        var userManager = new FakeUserManager(user);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.FindUnconfirmedUserIdByEmailAsync(email!);
+
+        Assert.Null(result);
+        Assert.Null(userManager.LastEmail);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+        Assert.Equal(0, userManager.PersistedMutationCalls);
+    }
+
+    [Fact]
+    public async Task FindUnconfirmedUserIdByEmailAsync_ForUserWithoutValidEmailReturnsNull()
+    {
+        var user = new XaquiamuniUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "not-an-email",
+            EmailConfirmed = false
+        };
+        var userManager = new FakeUserManager(user, returnUserForAnyEmail: true);
+        var service = new IdentityEmailConfirmationService(userManager);
+
+        var result = await service.FindUnconfirmedUserIdByEmailAsync("client@example.invalid");
+
+        Assert.Null(result);
+        Assert.Equal(0, userManager.GenerateTokenCalls);
+        Assert.Equal(0, userManager.PersistedMutationCalls);
+    }
+
+    [Fact]
     public async Task GenerateEmailConfirmationTokenAsync_ForUnconfirmedUserReturnsToken()
     {
         var user = new XaquiamuniUser { Email = "client@example.invalid", EmailConfirmed = false };
@@ -191,20 +294,43 @@ public sealed class IdentityEmailConfirmationServiceTests
         Assert.Equal(0, userManager.GenerateTokenCalls);
     }
 
-    private sealed class FakeUserManager(
-        XaquiamuniUser? user,
-        IdentityResult? confirmationResult = null)
-        : UserManager<XaquiamuniUser>(
-            new FakeUserStore(),
-            Microsoft.Extensions.Options.Options.Create(new IdentityOptions()),
-            new PasswordHasher<XaquiamuniUser>(),
-            [],
-            [],
-            new UpperInvariantLookupNormalizer(),
-            new IdentityErrorDescriber(),
-            new ServiceCollection().BuildServiceProvider(),
-            NullLogger<UserManager<XaquiamuniUser>>.Instance)
+    private sealed class FakeUserManager : UserManager<XaquiamuniUser>
     {
+        private readonly XaquiamuniUser? _user;
+        private readonly FakeUserStore _userStore;
+        private readonly IdentityResult? _confirmationResult;
+
+        public FakeUserManager(
+            XaquiamuniUser? user,
+            IdentityResult? confirmationResult = null,
+            bool returnUserForAnyEmail = false)
+            : this(
+                user,
+                confirmationResult,
+                new FakeUserStore(user, returnUserForAnyEmail))
+        {
+        }
+
+        private FakeUserManager(
+            XaquiamuniUser? user,
+            IdentityResult? confirmationResult,
+            FakeUserStore userStore)
+            : base(
+                userStore,
+                Microsoft.Extensions.Options.Options.Create(new IdentityOptions()),
+                new PasswordHasher<XaquiamuniUser>(),
+                [],
+                [],
+                new UpperInvariantLookupNormalizer(),
+                new IdentityErrorDescriber(),
+                new ServiceCollection().BuildServiceProvider(),
+                NullLogger<UserManager<XaquiamuniUser>>.Instance)
+        {
+            _user = user;
+            _confirmationResult = confirmationResult;
+            _userStore = userStore;
+        }
+
         public const string TestToken = "test-only-confirmation-token";
 
         public Exception? FindUserException { get; init; }
@@ -212,6 +338,8 @@ public sealed class IdentityEmailConfirmationServiceTests
         public int ConfirmTokenCalls { get; private set; }
         public string? LastEmail { get; private set; }
         public string? LastUserId { get; private set; }
+        public string? LastNormalizedEmail => _userStore.LastNormalizedEmail;
+        public int PersistedMutationCalls => _userStore.PersistedMutationCalls;
 
         public override Task<XaquiamuniUser?> FindByEmailAsync(string email)
         {
@@ -221,7 +349,7 @@ public sealed class IdentityEmailConfirmationServiceTests
             }
 
             LastEmail = email;
-            return Task.FromResult(user);
+            return base.FindByEmailAsync(email);
         }
 
         public override Task<XaquiamuniUser?> FindByIdAsync(string userId)
@@ -233,8 +361,8 @@ public sealed class IdentityEmailConfirmationServiceTests
 
             LastUserId = userId;
             return Task.FromResult(
-                user is not null && string.Equals(user.Id.ToString(), userId, StringComparison.Ordinal)
-                    ? user
+                _user is not null && string.Equals(_user.Id.ToString(), userId, StringComparison.Ordinal)
+                    ? _user
                     : null);
         }
 
@@ -250,9 +378,9 @@ public sealed class IdentityEmailConfirmationServiceTests
         public override Task<IdentityResult> ConfirmEmailAsync(XaquiamuniUser user, string token)
         {
             ConfirmTokenCalls++;
-            if (token != TestToken || confirmationResult is { Succeeded: false })
+            if (token != TestToken || _confirmationResult is { Succeeded: false })
             {
-                return Task.FromResult(confirmationResult ?? IdentityResult.Failed(
+                return Task.FromResult(_confirmationResult ?? IdentityResult.Failed(
                     new IdentityError { Code = "InvalidToken", Description = "Not exposed" }));
             }
 
@@ -261,8 +389,13 @@ public sealed class IdentityEmailConfirmationServiceTests
         }
     }
 
-    private sealed class FakeUserStore : IUserStore<XaquiamuniUser>
+    private sealed class FakeUserStore(
+        XaquiamuniUser? user,
+        bool returnUserForAnyEmail = false) : IUserEmailStore<XaquiamuniUser>
     {
+        public string? LastNormalizedEmail { get; private set; }
+        public int PersistedMutationCalls { get; private set; }
+
         public void Dispose() { }
         public Task<string> GetUserIdAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
             Task.FromResult(user.Id.ToString());
@@ -270,6 +403,7 @@ public sealed class IdentityEmailConfirmationServiceTests
             Task.FromResult(user.UserName);
         public Task SetUserNameAsync(XaquiamuniUser user, string? userName, CancellationToken cancellationToken)
         {
+            PersistedMutationCalls++;
             user.UserName = userName;
             return Task.CompletedTask;
         }
@@ -277,15 +411,62 @@ public sealed class IdentityEmailConfirmationServiceTests
             Task.FromResult(user.NormalizedUserName);
         public Task SetNormalizedUserNameAsync(XaquiamuniUser user, string? normalizedName, CancellationToken cancellationToken)
         {
+            PersistedMutationCalls++;
             user.NormalizedUserName = normalizedName;
             return Task.CompletedTask;
         }
-        public Task<IdentityResult> CreateAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
-            Task.FromResult(IdentityResult.Success);
-        public Task<IdentityResult> UpdateAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
-            Task.FromResult(IdentityResult.Success);
-        public Task<IdentityResult> DeleteAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
-            Task.FromResult(IdentityResult.Success);
+        public Task<IdentityResult> CreateAsync(XaquiamuniUser user, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            return Task.FromResult(IdentityResult.Success);
+        }
+        public Task<IdentityResult> UpdateAsync(XaquiamuniUser user, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            return Task.FromResult(IdentityResult.Success);
+        }
+        public Task<IdentityResult> DeleteAsync(XaquiamuniUser user, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            return Task.FromResult(IdentityResult.Success);
+        }
+        public Task<string?> GetEmailAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
+            Task.FromResult(user.Email);
+        public Task SetEmailAsync(XaquiamuniUser user, string? email, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            user.Email = email;
+            return Task.CompletedTask;
+        }
+        public Task<bool> GetEmailConfirmedAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
+            Task.FromResult(user.EmailConfirmed);
+        public Task SetEmailConfirmedAsync(XaquiamuniUser user, bool confirmed, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            user.EmailConfirmed = confirmed;
+            return Task.CompletedTask;
+        }
+        public Task<string?> GetNormalizedEmailAsync(XaquiamuniUser user, CancellationToken cancellationToken) =>
+            Task.FromResult(user.NormalizedEmail);
+        public Task SetNormalizedEmailAsync(XaquiamuniUser user, string? normalizedEmail, CancellationToken cancellationToken)
+        {
+            PersistedMutationCalls++;
+            user.NormalizedEmail = normalizedEmail;
+            return Task.CompletedTask;
+        }
+        public Task<XaquiamuniUser?> FindByEmailAsync(string normalizedEmail, CancellationToken cancellationToken)
+        {
+            LastNormalizedEmail = normalizedEmail;
+            return Task.FromResult(
+                user is not null
+                && (returnUserForAnyEmail
+                    || string.Equals(
+                        user.Email?.ToUpperInvariant(),
+                        normalizedEmail,
+                        StringComparison.Ordinal))
+                    ? user
+                    : null);
+        }
         public Task<XaquiamuniUser?> FindByIdAsync(string userId, CancellationToken cancellationToken) =>
             Task.FromResult<XaquiamuniUser?>(null);
         public Task<XaquiamuniUser?> FindByNameAsync(string normalizedUserName, CancellationToken cancellationToken) =>

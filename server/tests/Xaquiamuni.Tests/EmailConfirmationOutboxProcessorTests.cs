@@ -234,6 +234,11 @@ public sealed class EmailConfirmationOutboxProcessorTests
         public int GenerateCalls { get; private set; }
         public Guid LastUserId { get; private set; }
 
+        public Task<Guid?> FindUnconfirmedUserIdByEmailAsync(
+            string email,
+            CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<EmailConfirmationTokenResult> GenerateEmailConfirmationTokenAsync(
             string email,
             CancellationToken cancellationToken = default) =>
