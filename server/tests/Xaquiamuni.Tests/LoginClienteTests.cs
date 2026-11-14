@@ -15,7 +15,12 @@ public sealed class LoginClienteTests
     [Fact]
     public async Task ValidCustomerCredentials_SucceedAndUseLockoutAwareIdentitySignIn()
     {
-        var user = new XaquiamuniUser { Id = Guid.NewGuid(), Email = "client@example.test" };
+        var user = new XaquiamuniUser
+        {
+            Id = Guid.NewGuid(),
+            Email = "client@example.test",
+            EmailConfirmed = true
+        };
         var userManager = new FakeUserManager(user, isCustomer: true);
         var signInManager = new FakeSignInManager(userManager, SignInResult.Success);
         var useCase = CreateUseCase(userManager, signInManager);
@@ -27,12 +32,16 @@ public sealed class LoginClienteTests
         });
 
         Assert.True(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.Succeeded, result.Status);
         Assert.Equal("CLIENT@example.test", userManager.LastEmail);
         Assert.Same(user, signInManager.LastUser);
         Assert.Equal("Valid!Password123", signInManager.LastPassword);
         Assert.False(signInManager.LastIsPersistent);
         Assert.True(signInManager.LastLockoutOnFailure);
         Assert.Equal(1, signInManager.Calls);
+        Assert.Equal(1, signInManager.SignInCalls);
+        Assert.Null(signInManager.LastLoginProvider);
+        Assert.False(signInManager.LastBypassTwoFactor);
         Assert.True(signInManager.CookieIssued);
     }
 
@@ -45,7 +54,45 @@ public sealed class LoginClienteTests
             .ExecuteAsync(ValidInput());
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.True(signInManager.LastLockoutOnFailure);
+        Assert.Equal(1, signInManager.Calls);
+        Assert.Equal(0, signInManager.SignInCalls);
+        Assert.False(signInManager.CookieIssued);
+    }
+
+    [Fact]
+    public async Task UnconfirmedCustomerWithValidPassword_ReturnsSpecificStatusWithoutSigningIn()
+    {
+        var userManager = new FakeUserManager(
+            new XaquiamuniUser { EmailConfirmed = false },
+            isCustomer: true);
+        var signInManager = new FakeSignInManager(userManager, SignInResult.Success);
+
+        var result = await CreateUseCase(userManager, signInManager)
+            .ExecuteAsync(ValidInput());
+
+        Assert.Equal(LoginClienteStatus.EmailNotConfirmed, result.Status);
+        Assert.False(result.Succeeded);
+        Assert.Equal(1, signInManager.Calls);
+        Assert.Equal(0, signInManager.SignInCalls);
+        Assert.False(signInManager.CookieIssued);
+    }
+
+    [Fact]
+    public async Task UnconfirmedCustomerWithInvalidPassword_RemainsGenericFailure()
+    {
+        var userManager = new FakeUserManager(
+            new XaquiamuniUser { EmailConfirmed = false },
+            isCustomer: true);
+        var signInManager = new FakeSignInManager(userManager, SignInResult.Failed);
+
+        var result = await CreateUseCase(userManager, signInManager)
+            .ExecuteAsync(ValidInput());
+
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
+        Assert.Equal(1, signInManager.Calls);
+        Assert.Equal(0, signInManager.SignInCalls);
         Assert.False(signInManager.CookieIssued);
     }
 
@@ -58,6 +105,7 @@ public sealed class LoginClienteTests
             .ExecuteAsync(ValidInput());
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.Equal(0, signInManager.Calls);
         Assert.False(signInManager.CookieIssued);
     }
@@ -71,6 +119,7 @@ public sealed class LoginClienteTests
             .ExecuteAsync(ValidInput());
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.False(signInManager.CookieIssued);
     }
 
@@ -83,6 +132,7 @@ public sealed class LoginClienteTests
             .ExecuteAsync(ValidInput());
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.Equal(XaquiamuniRoles.Cliente, userManager.LastRole);
         Assert.Equal(0, signInManager.Calls);
         Assert.False(signInManager.CookieIssued);
@@ -101,6 +151,7 @@ public sealed class LoginClienteTests
             .ExecuteAsync(new LoginClienteInput { Email = email, Senha = password });
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.Null(userManager.LastEmail);
         Assert.Equal(0, signInManager.Calls);
         Assert.False(signInManager.CookieIssued);
@@ -115,6 +166,7 @@ public sealed class LoginClienteTests
             .ExecuteAsync(ValidInput());
 
         Assert.False(result.Succeeded);
+        Assert.Equal(LoginClienteStatus.InvalidCredentials, result.Status);
         Assert.False(signInManager.CookieIssued);
     }
 
@@ -164,13 +216,20 @@ public sealed class LoginClienteTests
             LastRole = role;
             return Task.FromResult(_isCustomer);
         }
+
+        public override Task<bool> IsEmailConfirmedAsync(XaquiamuniUser user) =>
+            Task.FromResult(user.EmailConfirmed);
     }
 
-    private sealed class FakeSignInManager : SignInManager<XaquiamuniUser>
+    private sealed class FakeSignInManager : XaquiamuniSignInManager
     {
-        private readonly SignInResult _result;
+        private readonly SignInResult _passwordCheckResult;
+        private readonly SignInResult _signInResult;
 
-        public FakeSignInManager(UserManager<XaquiamuniUser> userManager, SignInResult result)
+        public FakeSignInManager(
+            UserManager<XaquiamuniUser> userManager,
+            SignInResult passwordCheckResult,
+            SignInResult? signInResult = null)
             : base(
                 userManager,
                 new HttpContextAccessor(),
@@ -181,29 +240,45 @@ public sealed class LoginClienteTests
                     Microsoft.Extensions.Options.Options.Create(new AuthenticationOptions())),
                 new TestUserConfirmation())
         {
-            _result = result;
+            _passwordCheckResult = passwordCheckResult;
+            _signInResult = signInResult ?? passwordCheckResult;
         }
 
         public int Calls { get; private set; }
+        public int SignInCalls { get; private set; }
         public XaquiamuniUser? LastUser { get; private set; }
         public string? LastPassword { get; private set; }
+        public string? LastLoginProvider { get; private set; }
         public bool LastIsPersistent { get; private set; }
+        public bool LastBypassTwoFactor { get; private set; }
         public bool LastLockoutOnFailure { get; private set; }
         public bool CookieIssued { get; private set; }
 
-        public override Task<SignInResult> PasswordSignInAsync(
+        public override Task<SignInResult> CheckPasswordSignInAsync(
             XaquiamuniUser user,
             string password,
-            bool isPersistent,
             bool lockoutOnFailure)
         {
             Calls++;
             LastUser = user;
             LastPassword = password;
-            LastIsPersistent = isPersistent;
             LastLockoutOnFailure = lockoutOnFailure;
-            CookieIssued = _result.Succeeded;
-            return Task.FromResult(_result);
+            return Task.FromResult(_passwordCheckResult);
+        }
+
+        protected override Task<SignInResult> SignInOrTwoFactorAsync(
+            XaquiamuniUser user,
+            bool isPersistent,
+            string? loginProvider = null,
+            bool bypassTwoFactor = false)
+        {
+            SignInCalls++;
+            LastUser = user;
+            LastLoginProvider = loginProvider;
+            LastIsPersistent = isPersistent;
+            LastBypassTwoFactor = bypassTwoFactor;
+            CookieIssued = _signInResult.Succeeded;
+            return Task.FromResult(_signInResult);
         }
     }
 

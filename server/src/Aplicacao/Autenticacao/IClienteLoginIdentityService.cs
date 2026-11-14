@@ -2,7 +2,7 @@ namespace Xaquiamuni.Aplicacao.Autenticacao;
 
 public interface IClienteLoginIdentityService
 {
-    Task<bool> SignInClienteAsync(
+    Task<LoginClienteStatus> SignInClienteAsync(
         string email,
         string senha,
         CancellationToken cancellationToken = default);

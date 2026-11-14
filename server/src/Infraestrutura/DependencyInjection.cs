@@ -103,12 +103,14 @@ public static class DependencyInjection
             options.TokenLifespan = TimeSpan.FromHours(1);
         });
 
-        services.Replace(ServiceDescriptor.Scoped<SignInManager<XaquiamuniUser>>(serviceProvider =>
+        services.AddScoped<XaquiamuniSignInManager>(serviceProvider =>
         {
-            var signInManager = ActivatorUtilities.CreateInstance<SignInManager<XaquiamuniUser>>(serviceProvider);
+            var signInManager = ActivatorUtilities.CreateInstance<XaquiamuniSignInManager>(serviceProvider);
             signInManager.AuthenticationScheme = XaquiamuniIdentityDefaults.AuthenticationScheme;
             return signInManager;
-        }));
+        });
+        services.Replace(ServiceDescriptor.Scoped<SignInManager<XaquiamuniUser>>(
+            serviceProvider => serviceProvider.GetRequiredService<XaquiamuniSignInManager>()));
 
         services.Configure<CpfProtectionOptions>(configuration.GetSection("CpfProtection"));
         services.AddSingleton<ICpfProtectionService, AesGcmCpfProtectionService>();

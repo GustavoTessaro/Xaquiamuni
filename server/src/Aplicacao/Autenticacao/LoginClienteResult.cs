@@ -2,14 +2,20 @@ namespace Xaquiamuni.Aplicacao.Autenticacao;
 
 public sealed class LoginClienteResult
 {
-    private LoginClienteResult(bool succeeded)
+    private LoginClienteResult(LoginClienteStatus status)
     {
-        Succeeded = succeeded;
+        Status = status;
     }
 
-    public bool Succeeded { get; }
+    public LoginClienteStatus Status { get; }
+    public bool Succeeded => Status == LoginClienteStatus.Succeeded;
 
-    public static LoginClienteResult Success() => new(true);
+    public static LoginClienteResult Success() =>
+        new(LoginClienteStatus.Succeeded);
 
-    public static LoginClienteResult Failure() => new(false);
+    public static LoginClienteResult Failure() =>
+        new(LoginClienteStatus.InvalidCredentials);
+
+    public static LoginClienteResult EmailNotConfirmed() =>
+        new(LoginClienteStatus.EmailNotConfirmed);
 }

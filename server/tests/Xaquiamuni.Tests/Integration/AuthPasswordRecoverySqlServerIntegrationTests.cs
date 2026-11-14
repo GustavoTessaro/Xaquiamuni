@@ -218,6 +218,114 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task LoginRequiresConfirmedEmailAfterValidCredentialsAndWorksAfterRealConfirmation()
+    {
+        await using var environment = await CreateEnvironmentAsync();
+        var account = await CreateRegisteredClientAsync(environment.Database);
+        using var client = environment.CreateClient();
+        var csrf = await GetAntiforgeryAsync(client);
+        const string incorrectPassword = "Incorrect Password 987!";
+
+        var wrongPendingPassword = await LoginAsync(
+            client,
+            csrf,
+            account.Email,
+            incorrectPassword);
+        var missingAccount = await LoginAsync(
+            client,
+            csrf,
+            CreateEmail(),
+            OriginalPassword);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongPendingPassword.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, missingAccount.StatusCode);
+        Assert.Null(wrongPendingPassword.AuthCookie);
+        Assert.Null(missingAccount.AuthCookie);
+        AssertSafeEqual(wrongPendingPassword.Body, missingAccount.Body);
+        AssertTextNotPresent(wrongPendingPassword.Body, account.Email, StringComparison.Ordinal);
+        AssertTextNotPresent(wrongPendingPassword.Body, incorrectPassword, StringComparison.Ordinal);
+
+        var validPendingPassword = await LoginAsync(
+            client,
+            csrf,
+            account.Email,
+            OriginalPassword);
+
+        Assert.Equal(HttpStatusCode.Forbidden, validPendingPassword.StatusCode);
+        Assert.Null(validPendingPassword.AuthCookie);
+        using (var document = JsonDocument.Parse(validPendingPassword.Body))
+        {
+            AssertSafeEqual(
+                "EMAIL_NOT_CONFIRMED",
+                document.RootElement.GetProperty("code").GetString());
+            AssertSafeEqual(
+                "Confirme seu e-mail antes de entrar na sua conta.",
+                document.RootElement.GetProperty("detail").GetString());
+        }
+
+        using (var anonymousMe = await GetMeAsync(client, authCookie: null))
+        {
+            Assert.Equal(HttpStatusCode.Unauthorized, anonymousMe.StatusCode);
+        }
+
+        var confirmationToken = await GenerateEmailConfirmationTokenAsync(
+            environment.Factory,
+            account.Id);
+        using (var confirmation = await SendJsonAsync(
+            client,
+            AuthEndpoints.ConfirmEmailEndpoint,
+            new { email = account.Email, token = confirmationToken },
+            csrf))
+        {
+            Assert.Equal(HttpStatusCode.NoContent, confirmation.StatusCode);
+            Assert.False(HasAuthCookie(confirmation));
+        }
+
+        var validConfirmedPassword = await LoginAsync(
+            client,
+            csrf,
+            account.Email,
+            OriginalPassword);
+
+        Assert.Equal(HttpStatusCode.NoContent, validConfirmedPassword.StatusCode);
+        Assert.NotNull(validConfirmedPassword.AuthCookie);
+        using (var authenticatedMe = await GetMeAsync(client, validConfirmedPassword.AuthCookie!))
+        {
+            Assert.Equal(HttpStatusCode.OK, authenticatedMe.StatusCode);
+        }
+
+        var wrongConfirmedPassword = await LoginAsync(
+            client,
+            csrf,
+            account.Email,
+            incorrectPassword);
+        Assert.Equal(HttpStatusCode.Unauthorized, wrongConfirmedPassword.StatusCode);
+        Assert.Null(wrongConfirmedPassword.AuthCookie);
+        AssertSafeEqual(wrongPendingPassword.Body, wrongConfirmedPassword.Body);
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            var failedAttempt = await LoginAsync(
+                client,
+                csrf,
+                account.Email,
+                incorrectPassword);
+            Assert.Equal(HttpStatusCode.Unauthorized, failedAttempt.StatusCode);
+            Assert.Null(failedAttempt.AuthCookie);
+            AssertSafeEqual(wrongPendingPassword.Body, failedAttempt.Body);
+        }
+
+        var lockedAccount = await LoginAsync(
+            client,
+            csrf,
+            account.Email,
+            OriginalPassword);
+        Assert.Equal(HttpStatusCode.Unauthorized, lockedAccount.StatusCode);
+        Assert.Null(lockedAccount.AuthCookie);
+        AssertSafeEqual(wrongPendingPassword.Body, lockedAccount.Body);
+    }
+
+    [SqlServerIntegrationFact]
     public async Task ForgotPassword_ReturnsTheSameAcceptedResponseForEligibleMissingAndUnconfirmedAccounts()
     {
         await using var environment = await CreateEnvironmentAsync();
@@ -1312,9 +1420,11 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
         };
         AddAntiforgery(request, csrf);
         using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
         return new LoginResult(
             response.StatusCode,
-            TryFindCookiePair(response, AuthenticationConfiguration.CookieName));
+            TryFindCookiePair(response, AuthenticationConfiguration.CookieName),
+            body);
     }
 
     private static Task<HttpResponseMessage> SendForgotPasswordAsync(
@@ -1780,7 +1890,7 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
 
     private sealed record AntiforgeryState(string RequestToken, string CookiePair);
     private sealed record IntegrationAccount(Guid Id, string Email);
-    private sealed record LoginResult(HttpStatusCode StatusCode, string? AuthCookie);
+    private sealed record LoginResult(HttpStatusCode StatusCode, string? AuthCookie, string Body);
     private sealed record ResetLink(string Email, string Token);
     private sealed record UserCredentialState(
         string PasswordHash,

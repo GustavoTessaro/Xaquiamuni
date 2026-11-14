@@ -46,6 +46,32 @@ public sealed class AuthLoginEndpointTests
     }
 
     [Fact]
+    public async Task PostLogin_WhenEmailIsNotConfirmed_ReturnsStructured403WithoutAuthCookie()
+    {
+        using var factory = CreateFactory(LoginClienteStatus.EmailNotConfirmed);
+        using var client = CreateClient(factory);
+        var csrf = await GetCsrfAsync(client);
+        using var request = CreateLoginRequest(new LoginClientRequest
+        {
+            Email = "cliente@exemplo.test",
+            Senha = "SenhaSegura!123"
+        }, csrf);
+
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        AssertNoStore(response);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        using var document = JsonDocument.Parse(body);
+        Assert.Equal("EMAIL_NOT_CONFIRMED", document.RootElement.GetProperty("code").GetString());
+        Assert.Equal(
+            "Confirme seu e-mail antes de entrar na sua conta.",
+            document.RootElement.GetProperty("detail").GetString());
+        Assert.False(HasAuthCookie(response));
+    }
+
+    [Fact]
     public async Task PostLogin_WhenCredentialsAreRejected_ReturnsGeneric401WithoutAuthCookie()
     {
         using var factory = CreateFactory(succeeded: false);
@@ -143,7 +169,7 @@ public sealed class AuthLoginEndpointTests
     [Fact]
     public async Task PostLogin_WhenCsrfIsMissing_DoesNotCallLoginUseCase()
     {
-        var fake = new FakeLoginCliente(succeeded: true);
+        var fake = new FakeLoginCliente(LoginClienteStatus.Succeeded);
         using var factory = CreateFactory(fake);
         using var client = CreateClient(factory);
         using var request = new HttpRequestMessage(HttpMethod.Post, AuthEndpoints.LoginEndpoint)
@@ -164,7 +190,11 @@ public sealed class AuthLoginEndpointTests
     }
 
     private static WebApplicationFactory<Program> CreateFactory(bool succeeded) =>
-        CreateFactory(new FakeLoginCliente(succeeded));
+        CreateFactory(new FakeLoginCliente(
+            succeeded ? LoginClienteStatus.Succeeded : LoginClienteStatus.InvalidCredentials));
+
+    private static WebApplicationFactory<Program> CreateFactory(LoginClienteStatus status) =>
+        CreateFactory(new FakeLoginCliente(status));
 
     private static WebApplicationFactory<Program> CreateFactory(FakeLoginCliente fake) =>
         new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -236,7 +266,7 @@ public sealed class AuthLoginEndpointTests
 
     private sealed record CsrfState(string RequestToken, string CookieValue);
 
-    private sealed class FakeLoginCliente(bool succeeded) : ILoginCliente
+    private sealed class FakeLoginCliente(LoginClienteStatus status) : ILoginCliente
     {
         public IHttpContextAccessor? HttpContextAccessor { get; set; }
         public int Calls { get; private set; }
@@ -246,9 +276,14 @@ public sealed class AuthLoginEndpointTests
             CancellationToken cancellationToken = default)
         {
             Calls++;
-            if (!succeeded)
+            if (status != LoginClienteStatus.Succeeded)
             {
-                return LoginClienteResult.Failure();
+                return status switch
+                {
+                    LoginClienteStatus.InvalidCredentials => LoginClienteResult.Failure(),
+                    LoginClienteStatus.EmailNotConfirmed => LoginClienteResult.EmailNotConfirmed(),
+                    _ => throw new ArgumentOutOfRangeException(nameof(status))
+                };
             }
 
             var context = HttpContextAccessor?.HttpContext

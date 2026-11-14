@@ -6,17 +6,17 @@ namespace Xaquiamuni.Infraestrutura.Identidade;
 public sealed class IdentityClienteLoginService : IClienteLoginIdentityService
 {
     private readonly UserManager<XaquiamuniUser> _userManager;
-    private readonly SignInManager<XaquiamuniUser> _signInManager;
+    private readonly XaquiamuniSignInManager _signInManager;
 
     public IdentityClienteLoginService(
         UserManager<XaquiamuniUser> userManager,
-        SignInManager<XaquiamuniUser> signInManager)
+        XaquiamuniSignInManager signInManager)
     {
         _userManager = userManager;
         _signInManager = signInManager;
     }
 
-    public async Task<bool> SignInClienteAsync(
+    public async Task<LoginClienteStatus> SignInClienteAsync(
         string email,
         string senha,
         CancellationToken cancellationToken = default)
@@ -27,15 +27,29 @@ public sealed class IdentityClienteLoginService : IClienteLoginIdentityService
         if (user is null
             || !await _userManager.IsInRoleAsync(user, XaquiamuniRoles.Cliente).ConfigureAwait(false))
         {
-            return false;
+            return LoginClienteStatus.InvalidCredentials;
         }
 
-        var result = await _signInManager.PasswordSignInAsync(
+        var passwordResult = await _signInManager.CheckPasswordSignInAsync(
             user,
             senha,
-            isPersistent: false,
             lockoutOnFailure: true).ConfigureAwait(false);
+        if (!passwordResult.Succeeded)
+        {
+            return LoginClienteStatus.InvalidCredentials;
+        }
 
-        return result.Succeeded;
+        if (!await _userManager.IsEmailConfirmedAsync(user).ConfigureAwait(false))
+        {
+            return LoginClienteStatus.EmailNotConfirmed;
+        }
+
+        var signInResult = await _signInManager.SignInAfterPasswordCheckAsync(
+            user,
+            isPersistent: false).ConfigureAwait(false);
+
+        return signInResult.Succeeded
+            ? LoginClienteStatus.Succeeded
+            : LoginClienteStatus.InvalidCredentials;
     }
 }

@@ -19,11 +19,19 @@ public sealed class LoginCliente : ILoginCliente
             return LoginClienteResult.Failure();
         }
 
-        var succeeded = await _identityService.SignInClienteAsync(
+        var status = await _identityService.SignInClienteAsync(
             input.Email.Trim(),
             input.Senha,
             cancellationToken).ConfigureAwait(false);
 
-        return succeeded ? LoginClienteResult.Success() : LoginClienteResult.Failure();
+        return status switch
+        {
+            LoginClienteStatus.Succeeded => LoginClienteResult.Success(),
+            LoginClienteStatus.InvalidCredentials => LoginClienteResult.Failure(),
+            LoginClienteStatus.EmailNotConfirmed => LoginClienteResult.EmailNotConfirmed(),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(status),
+                "The client login identity service returned an unsupported status.")
+        };
     }
 }

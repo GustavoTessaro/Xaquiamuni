@@ -80,10 +80,11 @@ public static class AuthEndpoints
             .RequireXaquiamuniAntiforgery()
             .WithName("LoginClient")
             .WithSummary("Autentica uma conta de cliente.")
-            .WithDescription("Autentica clientes sem revelar se uma conta existe.")
+            .WithDescription("Valida as credenciais do cliente e exige confirmação do e-mail antes de autenticar.")
             .Produces(StatusCodes.Status204NoContent)
             .ProducesProblem(StatusCodes.Status400BadRequest)
-            .ProducesProblem(StatusCodes.Status401Unauthorized);
+            .ProducesProblem(StatusCodes.Status401Unauthorized)
+            .ProducesProblem(StatusCodes.Status403Forbidden);
 
         endpoints.MapGet(MeEndpoint, GetCurrentClient)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
@@ -143,12 +144,25 @@ public static class AuthEndpoints
             },
             cancellationToken).ConfigureAwait(false);
 
-        return result.Succeeded
-            ? Results.NoContent()
-            : Results.Problem(
+        return result.Status switch
+        {
+            LoginClienteStatus.Succeeded => Results.NoContent(),
+            LoginClienteStatus.EmailNotConfirmed => Results.Problem(
+                statusCode: StatusCodes.Status403Forbidden,
+                title: "E-mail não confirmado",
+                detail: "Confirme seu e-mail antes de entrar na sua conta.",
+                extensions: new Dictionary<string, object?>
+                {
+                    ["code"] = "EMAIL_NOT_CONFIRMED"
+                }),
+            LoginClienteStatus.InvalidCredentials => Results.Problem(
                 statusCode: StatusCodes.Status401Unauthorized,
                 title: "Falha na autenticação",
-                detail: "Não foi possível autenticar com os dados informados.");
+                detail: "Não foi possível autenticar com os dados informados."),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(result),
+                "The client login use case returned an unsupported status.")
+        };
     }
 
     private static async Task<IResult> ResendConfirmationEmailAsync(
