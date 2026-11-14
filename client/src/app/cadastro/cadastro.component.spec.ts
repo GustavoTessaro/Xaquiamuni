@@ -7,6 +7,7 @@ import {
   withXsrfConfiguration,
 } from '@angular/common/http';
 import { HttpStatusCode } from '@angular/common/http';
+import { Router } from '@angular/router';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { vi } from 'vitest';
@@ -51,7 +52,7 @@ describe('CadastroComponent registration flow', () => {
     expect(fixture.nativeElement.querySelector('#nomeCompleto[aria-invalid="true"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#nomeCompleto-error[role="alert"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#cep-error[role="alert"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('[aria-live="polite"]').textContent.trim()).toBe('');
+    expectNoSuccessState(fixture);
     http.expectNone('/api/auth/csrf');
   });
 
@@ -60,6 +61,7 @@ describe('CadastroComponent registration flow', () => {
     submit(fixture);
 
     expect(fixture.nativeElement.textContent).toContain('As senhas não coincidem.');
+    expectNoSuccessState(fixture);
     http.expectNone('/api/auth/csrf');
   });
 
@@ -94,6 +96,7 @@ describe('CadastroComponent registration flow', () => {
     expect(fixture.nativeElement.textContent).toContain('Atenda aos requisitos de senha indicados');
     expect(fixture.nativeElement.querySelector('#senha[aria-invalid="true"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#confirmacaoSenha[aria-invalid="true"]')).toBeNull();
+    expectNoSuccessState(fixture);
     http.expectNone('/api/auth/csrf');
     http.expectNone('/api/auth/register');
   });
@@ -172,6 +175,7 @@ describe('CadastroComponent registration flow', () => {
     csrfRequest.flush({ requestToken: 'request-token-from-response' });
 
     const registerRequest = http.expectOne('/api/auth/register');
+    expectNoSuccessState(fixture);
     expect(registerRequest.request.method).toBe('POST');
     expect(registerRequest.request.headers.get('X-XSRF-TOKEN')).toBe('request-token-from-response');
     expect(registerRequest.request.body).toEqual({
@@ -199,44 +203,84 @@ describe('CadastroComponent registration flow', () => {
     });
   });
 
-  it('reports creation without claiming email verification or authentication, then clears personal fields', () => {
+  it('shows the success state after registration, clears fields, and offers safe navigation actions', () => {
     fillValidFields(fixture);
-    (fixture.nativeElement.querySelector(
-      'button[aria-label="Mostrar senha"]',
-    ) as HTMLButtonElement).click();
-    (fixture.nativeElement.querySelector(
-      'button[aria-label="Mostrar confirmação de senha"]',
-    ) as HTMLButtonElement).click();
-    fixture.detectChanges();
-    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('text');
-    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
-      .toBe('text');
+    const form = fixture.nativeElement.querySelector('form') as HTMLFormElement;
+    const cpf = fixture.nativeElement.querySelector('#cpf') as HTMLInputElement;
+    const email = fixture.nativeElement.querySelector('#email') as HTMLInputElement;
+    const password = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    const passwordConfirmation = fixture.nativeElement.querySelector(
+      '#confirmacaoSenha',
+    ) as HTMLInputElement;
+    const sensitiveValues = [
+      cpf.value,
+      email.value,
+      password.value,
+      passwordConfirmation.value,
+    ];
     submit(fixture);
     completeCsrfAndGetRegisterRequest(http).flush({
       userId: '5b0d0e35-0ba1-4d54-bcf8-85452a8f6588',
     }, { status: HttpStatusCode.Created, statusText: 'Created' });
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    http.expectNone('/api/auth/csrf');
+    http.expectNone('/api/auth/login');
     fixture.detectChanges();
 
-    const feedback = fixture.nativeElement.querySelector('[aria-live="polite"]').textContent;
-    expect(feedback).toContain('Cadastro criado.');
-    expect(feedback).not.toContain('e-mail enviado');
-    expect(feedback).not.toContain('autenticado');
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+    expect(fixture.nativeElement.querySelector('button[type="submit"]')).toBeNull();
+    const successTitle = fixture.nativeElement.querySelector(
+      '#registration-success-title',
+    ) as HTMLHeadingElement | null;
+    expect(successTitle).not.toBeNull();
+    expect(successTitle?.textContent?.trim())
+      .toBe('Cadastro realizado com sucesso!');
+    expect(fixture.nativeElement.textContent).toContain(
+      'Sua conta foi criada! Você receberá um e-mail de confirmação no endereço cadastrado. '
+        + 'Confirme seu e-mail para acessar sua conta.',
+    );
+    expect(fixture.nativeElement.textContent)
+      .toContain('Verifique também a pasta de spam caso não encontre a mensagem.');
+    expect(fixture.nativeElement.textContent).not.toContain('e-mail foi entregue');
+    expect(fixture.nativeElement.textContent).not.toContain('e-mail enviado');
+
+    const loginLink = fixture.nativeElement.querySelector(
+      'a[routerLink="/login"]',
+    ) as HTMLAnchorElement;
+    expect(loginLink).not.toBeNull();
+    expect(loginLink.textContent).toContain('Ir para o login');
+    expect(new URL(loginLink.href).pathname).toBe('/login');
+    expect(new URL(loginLink.href).search).toBe('');
+    expect(new URL(loginLink.href).hash).toBe('');
+
     const resendLink = fixture.nativeElement.querySelector(
       'a[routerLink="/confirm-email"]',
     ) as HTMLAnchorElement;
+    expect(resendLink.textContent).toContain('Não recebeu o e-mail?');
     expect(resendLink.textContent).toContain('Solicitar nova confirmação');
-    expect(resendLink.href).toContain('/confirm-email');
+    expect(new URL(resendLink.href).pathname).toBe('/confirm-email');
     expect(new URL(resendLink.href).search).toBe('');
     expect(new URL(resendLink.href).hash).toBe('');
-    expect((fixture.nativeElement.querySelector('#cpf') as HTMLInputElement).value).toBe('');
-    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).value).toBe('');
-    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).value).toBe('');
-    expect((fixture.nativeElement.querySelector('#senha') as HTMLInputElement).type).toBe('password');
-    expect((fixture.nativeElement.querySelector('#confirmacaoSenha') as HTMLInputElement).type)
-      .toBe('password');
-    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar senha"]')).not.toBeNull();
-    expect(fixture.nativeElement.querySelector('button[aria-label="Mostrar confirmação de senha"]'))
-      .not.toBeNull();
+    for (const value of sensitiveValues) {
+      expect(resendLink.href).not.toContain(value);
+      expect(loginLink.href).not.toContain(value);
+    }
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl')
+      .mockResolvedValue(true);
+    loginLink.click();
+    expect(navigateByUrl).toHaveBeenCalledOnce();
+    expect(navigateByUrl.mock.calls[0][0].toString()).toBe('/login');
+    navigateByUrl.mockClear();
+    resendLink.click();
+    expect(navigateByUrl).toHaveBeenCalledOnce();
+    expect(navigateByUrl.mock.calls[0][0].toString()).toBe('/confirm-email');
+
+    expect(cpf.value).toBe('');
+    expect(email.value).toBe('');
+    expect(password.value).toBe('');
+    expect(passwordConfirmation.value).toBe('');
+    expect(fixture.nativeElement.querySelector('#senha')).toBeNull();
+    expect(fixture.nativeElement.querySelector('#confirmacaoSenha')).toBeNull();
   });
 
   it('displays available field errors from HTTP 400', () => {
@@ -250,6 +294,7 @@ describe('CadastroComponent registration flow', () => {
     }, { status: HttpStatusCode.BadRequest, statusText: 'Bad Request' });
     fixture.detectChanges();
 
+    expectNoSuccessState(fixture);
     expect(fixture.nativeElement.querySelector('[aria-live="assertive"]').textContent)
       .toContain('Revise os campos indicados');
     expect(fixture.nativeElement.textContent).toContain('O CPF informado é inválido.');
@@ -265,6 +310,7 @@ describe('CadastroComponent registration flow', () => {
     }, { status: HttpStatusCode.Conflict, statusText: 'Conflict' });
     fixture.detectChanges();
 
+    expectNoSuccessState(fixture);
     expect(fixture.nativeElement.querySelector('[aria-live="assertive"]').textContent)
       .toContain('Verifique os dados');
     expect(fixture.nativeElement.textContent).not.toContain('52998224725');
@@ -280,6 +326,7 @@ describe('CadastroComponent registration flow', () => {
     );
     fixture.detectChanges();
 
+    expectNoSuccessState(fixture);
     expect(fixture.nativeElement.querySelector('[aria-live="assertive"]').textContent)
       .toContain('Tente novamente');
     expect(fixture.nativeElement.textContent).not.toContain('internal SQL details');
@@ -294,6 +341,7 @@ describe('CadastroComponent registration flow', () => {
     );
     fixture.detectChanges();
 
+    expectNoSuccessState(fixture);
     expect(http.match('/api/auth/register')).toHaveLength(0);
     expect(fixture.nativeElement.querySelector('[aria-live="assertive"]').textContent)
       .toContain('Tente novamente');
@@ -307,6 +355,7 @@ describe('CadastroComponent registration flow', () => {
     completeCsrfAndGetRegisterRequest(http).error(new ProgressEvent('error'));
     fixture.detectChanges();
 
+    expectNoSuccessState(fixture);
     expect(fixture.nativeElement.querySelector('[aria-live="assertive"]').textContent)
       .toContain('Tente novamente');
     expect(fixture.nativeElement.textContent).not.toContain('52998224725');
@@ -337,6 +386,10 @@ describe('CadastroComponent registration flow', () => {
 function completeCsrfAndGetRegisterRequest(http: HttpTestingController) {
   http.expectOne('/api/auth/csrf').flush({ requestToken: 'request-token-from-response' });
   return http.expectOne('/api/auth/register');
+}
+
+function expectNoSuccessState(fixture: ComponentFixture<CadastroComponent>): void {
+  expect(fixture.nativeElement.querySelector('#registration-success-title')).toBeNull();
 }
 
 function fillValidFields(

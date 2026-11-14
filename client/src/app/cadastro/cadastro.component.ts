@@ -58,7 +58,7 @@ export class CadastroComponent {
   protected readonly passwordVisible = signal(false);
   protected readonly confirmationVisible = signal(false);
   protected readonly registering = signal(false);
-  protected readonly successMessage = signal('');
+  protected readonly registrationSucceeded = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly serverErrors = signal<Record<string, string>>({});
 
@@ -142,12 +142,11 @@ export class CadastroComponent {
   }
 
   protected submit(): void {
-    if (this.registering()) {
+    if (this.registering() || this.registrationSucceeded()) {
       return;
     }
 
     this.submitted.set(true);
-    this.successMessage.set('');
     this.errorMessage.set('');
     this.serverErrors.set({});
     this.form.markAllAsTouched();
@@ -183,9 +182,7 @@ export class CadastroComponent {
           this.passwordVisible.set(false);
           this.confirmationVisible.set(false);
           this.submitted.set(false);
-          this.successMessage.set(
-            'Cadastro criado. Você poderá continuar usando a conta após as próximas etapas de acesso.',
-          );
+          this.registrationSucceeded.set(true);
         },
         error: (error: unknown) => this.handleRegistrationError(error),
       });

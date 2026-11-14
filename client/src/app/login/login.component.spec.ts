@@ -88,7 +88,7 @@ describe('LoginComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('Sessão ativa');
     expect(fixture.nativeElement.querySelector('form')).toBeNull();
     expect(fixture.nativeElement.querySelector('button').textContent).toContain('Sair');
-    expectResendLink(fixture);
+    expectNoResendLink(fixture);
   });
 
   it('shows the login form when /me indicates no session', () => {
@@ -98,6 +98,7 @@ describe('LoginComponent', () => {
 
     expect(fixture.nativeElement.querySelector('form')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('#email')).not.toBeNull();
+    expectResendLink(fixture);
   });
 
   it('does not treat HTTP 403 as no session and allows retry', () => {
@@ -350,6 +351,7 @@ describe('LoginComponent', () => {
     expect(obterSessao).toHaveBeenCalledOnce();
     expect(reenviarConfirmacaoEmail).not.toHaveBeenCalled();
     expect(login).toHaveBeenCalledOnce();
+    expectNoResendLink(fixture);
   });
 
   it('keeps HTTP 401 and other HTTP 403 login failures generic', () => {
@@ -480,6 +482,7 @@ describe('LoginComponent', () => {
     expect(emailInput.value).toBe('ana@example.test');
     expect(passwordInput.value).toBe('');
     expect(passwordInput.type).toBe('password');
+    expectResendLink(fixture);
     expect(fixture.nativeElement.querySelector('#email-confirmation-title')).toBeNull();
     expect(window.location.href).toBe(urlBefore);
     expect(window.location.search).toBe('');
@@ -616,7 +619,7 @@ describe('LoginComponent', () => {
     expect(logout).not.toHaveBeenCalled();
   });
 
-  it('offers resend independently of login state without adding personal data to the route', () => {
+  it('keeps the confirmation link in the normal login form without sensitive route data', () => {
     expectResendLink(fixture);
   });
 });
@@ -631,6 +634,10 @@ function expectResendLink(fixture: ComponentFixture<LoginComponent>): void {
   expect(link.href).toContain('/confirm-email');
   expect(new URL(link.href).search).toBe('');
   expect(new URL(link.href).hash).toBe('');
+}
+
+function expectNoResendLink(fixture: ComponentFixture<LoginComponent>): void {
+  expect(fixture.nativeElement.querySelector('a[routerLink="/confirm-email"]')).toBeNull();
 }
 
 function setValidFields(fixture: ComponentFixture<LoginComponent>): void {

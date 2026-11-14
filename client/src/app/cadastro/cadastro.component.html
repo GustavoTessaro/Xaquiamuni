@@ -31,6 +31,31 @@
         </aside>
 
         <div class="px-5 py-8 sm:px-9 sm:py-10 lg:px-12">
+          @if (registrationSucceeded()) {
+            <section class="py-5" aria-labelledby="registration-success-title">
+              <p class="text-sm font-medium text-emerald-800">Cadastro de cliente</p>
+              <h2 id="registration-success-title" class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">
+                Cadastro realizado com sucesso!
+              </h2>
+              <p class="mt-3 text-sm leading-6 text-slate-600" role="status" aria-live="polite">
+                Sua conta foi criada! Você receberá um e-mail de confirmação no endereço cadastrado.
+                Confirme seu e-mail para acessar sua conta.
+              </p>
+              <p class="mt-3 text-sm leading-6 text-slate-500">
+                Verifique também a pasta de spam caso não encontre a mensagem.
+              </p>
+              <div class="mt-7 space-y-3">
+                <a routerLink="/login"
+                  class="flex min-h-12 w-full items-center justify-center rounded-xl bg-emerald-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800">
+                  Ir para o login
+                </a>
+                <a routerLink="/confirm-email"
+                  class="flex min-h-11 w-full items-center justify-center rounded-xl border border-emerald-800 px-5 py-2.5 text-center text-sm font-semibold text-emerald-800 transition hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800">
+                  Não recebeu o e-mail? Solicitar nova confirmação
+                </a>
+              </div>
+            </section>
+          } @else {
           <div class="mb-8">
             <p class="text-sm font-medium text-emerald-800">Cadastro de cliente</p>
             <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Vamos começar</h2>
@@ -313,18 +338,6 @@
               <p class="text-center text-xs leading-5 text-slate-500">
                 Seu cadastro ainda não confirma o e-mail nem inicia uma sessão.
               </p>
-              <p aria-live="polite" aria-atomic="true" class="min-h-6 text-center text-sm font-medium text-emerald-800">
-                {{ successMessage() }}
-              </p>
-              @if (successMessage()) {
-                <p class="text-center text-sm text-slate-600">
-                  Não recebeu o e-mail?
-                  <a routerLink="/confirm-email"
-                    class="font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800">
-                    Solicitar nova confirmação
-                  </a>
-                </p>
-              }
               @if (registering()) {
                 <p class="sr-only" role="status" aria-live="polite">Enviando seu cadastro.</p>
               }
@@ -335,6 +348,7 @@
               }
             </div>
           </form>
+          }
         </div>
       </div>
     </section>
