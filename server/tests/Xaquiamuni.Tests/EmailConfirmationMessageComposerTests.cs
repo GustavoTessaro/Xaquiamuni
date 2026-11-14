@@ -71,10 +71,31 @@ public sealed class EmailConfirmationMessageComposerTests
         Assert.Equal(
             $"#email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}",
             uri.Fragment);
+        Assert.Contains(">Confirmar meu e-mail</a>", message.Content, StringComparison.Ordinal);
+        Assert.Contains("background:#28734b", message.Content, StringComparison.Ordinal);
         Assert.DoesNotContain(token, message.Content, StringComparison.Ordinal);
         Assert.Contains("&amp;", message.Content, StringComparison.Ordinal);
         Assert.DoesNotContain(email, message.ToString(), StringComparison.Ordinal);
         Assert.DoesNotContain(token, message.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Compose_IncludesBrandedResponsiveConfirmationContentAndExpiration()
+    {
+        var message = CreateComposer("https://frontend.example.invalid", "Production")
+            .Compose(EmailConfirmationTokenResult.GeneratedForUser(
+                "client@example.invalid",
+                "synthetic-token"));
+
+        Assert.Contains("Xaquiamuni Produtos Naturais", message.Content, StringComparison.Ordinal);
+        Assert.Contains("Bem-vindo!", message.Content, StringComparison.Ordinal);
+        Assert.Contains("Confirme seu e-mail", message.Content, StringComparison.Ordinal);
+        Assert.Contains("validar o endereço de e-mail cadastrado", message.Content, StringComparison.Ordinal);
+        Assert.Contains("válido por 24 horas", message.Content, StringComparison.Ordinal);
+        Assert.Contains("Se você não realizou este cadastro, ignore este e-mail.", message.Content, StringComparison.Ordinal);
+        Assert.Contains("role=\"presentation\"", message.Content, StringComparison.Ordinal);
+        Assert.Contains("width=\"100%\"", message.Content, StringComparison.Ordinal);
+        Assert.Contains("style=\"", message.Content, StringComparison.Ordinal);
     }
 
     [Fact]

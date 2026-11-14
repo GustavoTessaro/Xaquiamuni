@@ -39,8 +39,18 @@ public sealed class EmailConfirmationMessageComposer : IEmailConfirmationMessage
             + $"&token={Uri.EscapeDataString(tokenResult.Token)}";
         var link = $"{_confirmationPageUri.GetLeftPart(UriPartial.Path)}#{fragment}";
         var encodedLink = HtmlEncoder.Default.Encode(link);
-        var content = $"<p>Para confirmar seu e-mail, acesse o link abaixo:</p>"
-            + $"<p><a href=\"{encodedLink}\">Confirmar e-mail</a></p>";
+        var content = "<div style=\"margin:0 auto;max-width:600px;font-family:Arial,sans-serif;color:#24312b;line-height:1.6\">"
+            + "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"width:100%;max-width:600px;margin:0 auto;border-collapse:collapse;background-color:#ffffff\">"
+            + "<tr><td style=\"padding:32px 24px\">"
+            + "<h1 style=\"margin:0 0 16px;color:#28734b;font-size:24px\">Xaquiamuni Produtos Naturais</h1>"
+            + "<h2 style=\"margin:0 0 16px;color:#24312b;font-size:20px\">Bem-vindo! Confirme seu e-mail</h2>"
+            + "<p style=\"margin:0 0 20px\">A confirmação permite validar o endereço de e-mail cadastrado na sua conta.</p>"
+            + "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse:collapse\">"
+            + $"<tr><td align=\"center\" bgcolor=\"#28734b\" style=\"border-radius:4px\"><a href=\"{encodedLink}\" style=\"display:inline-block;background:#28734b;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px;font-weight:bold\">Confirmar meu e-mail</a></td></tr>"
+            + "</table>"
+            + "<p style=\"margin:20px 0 12px\">Este link é válido por 24 horas.</p>"
+            + "<p style=\"margin:0\">Se você não realizou este cadastro, ignore este e-mail.</p>"
+            + "</td></tr></table></div>";
 
         return new EmailMessage(tokenResult.Email, Subject, content);
     }
