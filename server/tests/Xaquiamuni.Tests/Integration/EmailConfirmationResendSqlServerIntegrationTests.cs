@@ -46,7 +46,7 @@ public sealed class EmailConfirmationResendSqlServerIntegrationTests
         EmailOutboxMessageStatus expectedOutboxStatus)
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
-        var email = $"resend-integration-{Guid.NewGuid():N}@example.test";
+        var email = $"resend-integration+{Guid.NewGuid():N}@example.test";
         var registration = await database.Services
             .GetRequiredService<ICadastrarCliente>()
             .ExecuteAsync(CreateRegistrationInput(email));
@@ -261,21 +261,30 @@ public sealed class EmailConfirmationResendSqlServerIntegrationTests
             .Where(parts => parts.Length == 2)
             .ToDictionary(
                 parts => Uri.UnescapeDataString(parts[0]),
-                parts => Uri.UnescapeDataString(parts[1]),
+                parts => parts[1],
                 StringComparer.Ordinal);
-        if (!fragmentValues.TryGetValue("email", out var linkedEmail)
-            || !fragmentValues.TryGetValue("token", out var token)
-            || string.IsNullOrWhiteSpace(token))
+        if (!fragmentValues.TryGetValue("email", out var encodedEmail)
+            || !fragmentValues.TryGetValue("token", out var encodedToken))
+        {
+            throw new Xunit.Sdk.XunitException("The confirmation link does not contain its required fragment values.");
+        }
+
+        var linkedEmail = Uri.UnescapeDataString(encodedEmail);
+        var token = Uri.UnescapeDataString(encodedToken);
+        if (string.IsNullOrWhiteSpace(token))
         {
             throw new Xunit.Sdk.XunitException("The confirmation link does not contain its required fragment values.");
         }
 
         AssertSafeEqual(email, linkedEmail, "confirmation link email");
-        if (!decodedHtml.StartsWith("<p>", StringComparison.Ordinal)
-            || !decodedHtml.EndsWith("</p>", StringComparison.Ordinal)
-            || decodedHtml.Count(character => character == '<') != decodedHtml.Count(character => character == '>'))
+        AssertSafeEqual(Uri.EscapeDataString(email), encodedEmail, "encoded confirmation link email");
+        AssertSafeEqual(Uri.EscapeDataString(token), encodedToken, "encoded confirmation link token");
+
+        if (!decodedHtml.Contains("Xaquiamuni Produtos Naturais", StringComparison.Ordinal)
+            || !decodedHtml.Contains("Confirmar meu e-mail", StringComparison.Ordinal)
+            || !decodedHtml.Contains("válido por 24 horas", StringComparison.Ordinal))
         {
-            throw new Xunit.Sdk.XunitException("The confirmation body is not a valid HTML fragment.");
+            throw new Xunit.Sdk.XunitException("The confirmation body is missing required template content.");
         }
 
         return (decodedHtml[hrefStart..hrefEnd], token);
