@@ -42,6 +42,7 @@ public static class DependencyInjection
         services.AddScoped<IClienteIdentityService, IdentityClienteIdentityService>();
         services.AddScoped<IRoleManagerOperations, IdentityRoleManagerOperations>();
         services.AddScoped<IdentityRoleInitializer>();
+        services.AddScoped<IAdministradorLoginIdentityService, IdentityAdministradorLoginService>();
         services.AddScoped<IClienteLoginIdentityService, IdentityClienteLoginService>();
         services.AddScoped<IEmailConfirmationService, IdentityEmailConfirmationService>();
         services.AddScoped<IPasswordResetTransactionCoordinator, SqlServerPasswordResetTransactionCoordinator>();
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddSingleton<IEmailConfirmationMessageComposer, EmailConfirmationMessageComposer>();
         services.AddSingleton<IPasswordResetMessageComposer, PasswordResetMessageComposer>();
         services.AddScoped<ILoginCliente, LoginCliente>();
+        services.AddScoped<ILoginAdministrador, LoginAdministrador>();
         services.AddScoped<CadastroClienteInputValidator>();
         services.AddScoped<ICadastrarCliente, CadastrarCliente>();
 

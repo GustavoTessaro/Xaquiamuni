@@ -52,13 +52,26 @@ app.Use(async (context, next) =>
             || string.Equals(
                 context.Request.Path.Value,
                 AuthEndpoints.LogoutEndpoint,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.Request.Path.Value,
+                AdminAuthEndpoints.LoginEndpoint,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                context.Request.Path.Value,
+                AdminAuthEndpoints.LogoutEndpoint,
                 StringComparison.OrdinalIgnoreCase));
     var isCurrentClientRequest =
         HttpMethods.IsGet(context.Request.Method)
         && string.Equals(
             context.Request.Path.Value,
             AuthEndpoints.MeEndpoint,
-            StringComparison.OrdinalIgnoreCase);
+            StringComparison.OrdinalIgnoreCase)
+        || HttpMethods.IsGet(context.Request.Method)
+            && string.Equals(
+                context.Request.Path.Value,
+                AdminAuthEndpoints.MeEndpoint,
+                StringComparison.OrdinalIgnoreCase);
 
     if (isAuthenticationWrite || isCurrentClientRequest)
     {
@@ -77,6 +90,7 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapXaquiamuniCsrfEndpoint();
 app.MapXaquiamuniAuthEndpoints();
+app.MapXaquiamuniAdminAuthEndpoints();
 
 app.Run();
 

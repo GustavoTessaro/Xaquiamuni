@@ -109,7 +109,7 @@ public static class AuthEndpoints
         return endpoints;
     }
 
-    private static async Task<IResult> LogoutAsync(HttpContext context)
+    internal static async Task<IResult> LogoutAsync(HttpContext context)
     {
         await context.SignOutAsync(AuthenticationConfiguration.CookieScheme).ConfigureAwait(false);
         return Results.NoContent();

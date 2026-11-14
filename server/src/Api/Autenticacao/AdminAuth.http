@@ -1,0 +1,37 @@
+@baseUrl = https://localhost:7231
+
+### Get a request token for administrator login
+# @name adminLoginCsrf
+GET {{baseUrl}}/api/auth/csrf
+
+### Missing credentials are rejected without creating a session
+POST {{baseUrl}}/api/admin/auth/login
+Content-Type: application/json
+X-XSRF-TOKEN: {{adminLoginCsrf.response.body.requestToken}}
+
+{}
+
+### Login with an ADMIN account from the local REST Client environment
+# @name adminLoginCsrfForSession
+GET {{baseUrl}}/api/auth/csrf
+
+###
+POST {{baseUrl}}/api/admin/auth/login
+Content-Type: application/json
+X-XSRF-TOKEN: {{adminLoginCsrfForSession.response.body.requestToken}}
+
+{
+  "email": "{{adminEmail}}",
+  "senha": "{{adminPassword}}"
+}
+
+### Get the current administrator session
+GET {{baseUrl}}/api/admin/auth/me
+
+### Get a fresh request token before administrator logout
+# @name adminLogoutCsrf
+GET {{baseUrl}}/api/auth/csrf
+
+###
+POST {{baseUrl}}/api/admin/auth/logout
+X-XSRF-TOKEN: {{adminLogoutCsrf.response.body.requestToken}}

@@ -5,14 +5,14 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão | 0.4 — encerramento da F2 e handoff para F3 |
+| Versão | 0.5 — acesso administrativo inicial da F3.1 |
 | Data | 14/11/2026 |
-| Status | **F2 concluída; gate final com 777 testes e builds aprovados; fluxos anteriores validados manualmente com Resend real em ambientes isolados; produção pendente** |
+| Status | **F2 concluída; acesso administrativo inicial da F3.1 implementado; F3.2 — Catálogo de Produtos é a próxima etapa e não foi iniciada; produção pendente** |
 | Documento-base | `docs/prd.md`, versão 0.5 |
 | Referência estrutural | Projeto NoteKeeper; reaproveitar princípios e organização, **não copiar código ou assumir detalhes não verificados** |
 | Decisão recente | Solicitante concordou em seguir com as propostas iniciais de produção e pagamento, sujeitas a detalhamento |
 
-> **Convenções:** **Implementado** = comportamento verificado no código e coberto por testes; **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia ainda sujeita a validação; **Pendente** = requer informação, validação ou integração. A F2 está concluída. O gate de confirmação para login de `CLIENTE` é explícito e está ativo, embora `RequireConfirmedEmail` global permaneça `false`. Testes manuais anteriores validaram envio real com Resend em ambientes isolados; implantação e operação de produção não estão homologadas.
+> **Convenções:** **Implementado** = comportamento verificado no código e coberto por testes; **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia ainda sujeita a validação; **Pendente** = requer informação, validação ou integração. A F2 está concluída e a F3.1 implementa o acesso administrativo inicial. O gate de confirmação para login de `CLIENTE` é explícito e está ativo, embora `RequireConfirmedEmail` global permaneça `false`. Testes manuais anteriores validaram envio real com Resend em ambientes isolados; implantação e operação de produção não estão homologadas.
 
 ## 1. Resumo e objetivos técnicos
 
@@ -83,13 +83,17 @@ No fluxo F2, o cadastro chama o caso de uso de aplicação e, na mesma transaç�
 
 Na recuperação implementada, o endpoint valida o e-mail e retorna resposta genérica. O caso de uso encontra somente contas com e-mail confirmado; a Outbox `PasswordReset` aplica deduplicação, cooldown e limite sob transação SQL e lock exclusivo por usuário. A mensagem contém fingerprint SHA-256 com separação de propósito do `SecurityStamp` vigente, nunca o stamp bruto, token, senha, e-mail ou link. O processor valida a geração de credenciais antes de gerar o token Identity de 1 hora e encaminhar o e-mail pelo sender configurado. A redefinição usa Identity e coordenação transacional para alterar credenciais e cancelar mensagens obsoletas atomicamente. A entrega real foi validada manualmente com Resend em ambiente isolado; habilitação operacional e requisitos de produção permanecem pendentes.
 
+O acesso administrativo inicial também reutiliza o Identity e o cookie existentes, sem criar um banco de usuários ou mecanismo de autenticação paralelo. O login administrativo tem endpoint próprio e só emite sessão após validar o papel `ADMIN`; as rotas administrativas aplicam a política `Administracao`. O painel Angular usa uma guarda para navegação, sem substituir a autorização efetiva da API. O provisionador interativo existente ganhou o modo `--provision-admin`, restrito ao destino local `.\SQLEXPRESS` / `XaquiamuniDev`; esse fluxo não é mecanismo de provisionamento de produção.
+
 ### 3.2 Estrutura atual do repositório e módulos futuros
 
 ```text
 Xaquiamuni/
 ├── client/src/app/
 │   ├── core/auth/                # sessão, cadastro, login e confirmação
+│   ├── core/admin-auth/          # sessão, login e logout administrativos
 │   ├── core/security/            # obtenção do token antifalsificação
+│   ├── admin/                    # login, guarda e painel inicial
 │   ├── cadastro/
 │   ├── confirm-email/
 │   ├── forgot-password/
@@ -120,7 +124,7 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 
 | Módulo | Responsabilidade | PRD |
 | --- | --- | --- |
-| Identidade | ASP.NET Core Identity, sessão por cookie, antifalsificação, cadastro, login, confirmação/reenvio e recuperação/redefinição de senha; autorização administrativa mais ampla permanece futura | RF-01–03, RF-27–31, RN-13, RN-16, RN-21–33 |
+| Identidade | ASP.NET Core Identity, cookie compartilhado, antifalsificação, cadastro/login de clientes, confirmação/reenvio, recuperação/redefinição e login inicial exclusivo para `ADMIN`; permissões finas para funcionários permanecem futuras | RF-01–03, RF-27–31, RN-13, RN-16, RN-21–33 |
 | Catálogo | Categorias, produtos, variantes/SKUs, fotos, publicação e preços | RF-04–05 |
 | Estoque | Insumos, lotes acabados, saldos, reservas, movimentos e mínimos | RF-06–08, RN-01–04, RN-17 |
 | Produção | Fichas versionadas, planejamento, reservas, execução e conclusão | RF-09–14, RN-03–06, RN-18 |
@@ -131,7 +135,8 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 
 ### 3.4 Frontend e experiência
 
-- Rotas públicas para vitrine, produto e autenticação; rotas de cliente para carrinho, checkout, perfil e pedidos; rotas administrativas para painel, produtos, estoque, fichas, produção, vendas e configurações.
+- Implementadas: rotas de cliente para cadastro, login, confirmação e recuperação; `/admin/login` para autenticação administrativa e `/admin` para o painel inicial protegido por guarda. A guarda melhora a navegação; a autorização permanece no backend.
+- Futuras: vitrine, produto, carrinho, checkout, perfil, pedidos e os módulos administrativos de produtos, estoque, fichas, produção, vendas e configurações.
 - Carregar módulos por rota quando apropriado; serviços de API tipados e estados explícitos de `carregando`, `vazio`, `erro` e `sucesso`.
 - Layout mobile-first: navegação simplificada, formulários com rótulos, toque confortável, tabelas adaptadas a cartões no celular e confirmação para ações irreversíveis.
 - Exibir quantidade **vendável**, não saldo bruto; informar indisponibilidade sem permitir compra de lote vencido.
@@ -305,7 +310,7 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 
 ### 6.1 Convenções
 
-- As rotas HTTP implementadas na F2 usam `/api/auth` (sem segmento `/v1`); JSON e DTOs separados das entidades. Prefixos de recursos de negócio ainda não implementados serão definidos junto a seus contratos.
+- As rotas HTTP de autenticação de clientes implementadas na F2 usam `/api/auth`; as rotas de autenticação administrativa adicionadas na F3.1 usam `/api/admin/auth` (sem segmento `/v1`). JSON e DTOs são separados das entidades. Prefixos de recursos de negócio ainda não implementados serão definidos junto a seus contratos.
 - Erros padronizados (`ProblemDetails`), validação por campo, códigos HTTP coerentes: `400` entrada inválida, `401` não autenticado, `403` proibido, `404` ausente, `409` conflito de estado/saldo.
 - Identidade e autorização derivadas da sessão autenticada, nunca do `userId` arbitrário enviado pelo navegador.
 - `Idempotency-Key` para comandos críticos de criação/conclusão/pagamento/venda externa; mesmo comando retorna resultado anterior, chave reutilizada com payload distinto retorna conflito.
@@ -322,6 +327,9 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 | Login | `POST /api/auth/login` | Anônimo + antifalsificação; `204`, `400`, `401` ou `403`; credenciais corretas de `CLIENTE` não confirmado retornam `403` com código `EMAIL_NOT_CONFIRMED` e não criam sessão; `RequireConfirmedEmail` global permanece `false` |
 | Sessão | `GET /api/auth/me` | Cliente autenticado; `200`, `401` ou `403`; retorna o identificador da sessão |
 | Logout | `POST /api/auth/logout` | Cliente autenticado + antifalsificação; `204`, `400`, `401` ou `403`; remove o cookie |
+| Login administrativo | `POST /api/admin/auth/login` | Anônimo + antifalsificação; `204`, `400` ou `401`; somente conta com papel `ADMIN` pode autenticar; credenciais inválidas e papéis não autorizados recebem resposta genérica sem sessão |
+| Sessão administrativa | `GET /api/admin/auth/me` | Política `Administracao` (usuário autenticado com papel `ADMIN`); `200`, `401` ou `403`; retorna somente o identificador |
+| Logout administrativo | `POST /api/admin/auth/logout` | Política `Administracao` + antifalsificação; `204`, `400`, `401` ou `403`; encerra o mesmo cookie seguro compartilhado |
 | Confirmação | `POST /api/auth/confirm-email` | Anônimo + antifalsificação; recebe e-mail/token no corpo; `204`, `400` ou `500` |
 | Reenvio | `POST /api/auth/resend-confirmation-email` | Anônimo + antifalsificação + política exclusiva; `202` genérico, `400`, `429` com `Retry-After` quando disponível ou erro inesperado |
 | Solicitar recuperação | `POST /api/auth/forgot-password` | Anônimo + antifalsificação + política exclusiva; JSON `{ "email": ... }`; `202` com `{ "message": ... }` genérico para e-mail válido, mesmo sem conta elegível; `400` para entrada inválida e `429` ao exceder limite |
@@ -337,9 +345,15 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 | Pagamento | `POST /pedidos/{id}/cobrancas`, `POST /webhooks/pagamentos/{provedor}` | Autenticado / webhook autenticado pelo provedor; condicionado |
 | Gestão | `GET /admin/dashboard`, demais consultas | Administrativo; condicionado |
 
-Apenas as rotas de autenticação listadas acima estão implementadas; os demais exemplos continuam propostos, sem prefixo ou contrato final definido. Reenvio e recuperação retornam `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política independente da rota, com `Retry-After` quando disponível. As três políticas de reenvio, recuperação e redefinição são fixed-window, cada uma com 10 requisições por minuto por IP e fila zero; a identificação usa `RemoteIpAddress`, sem confiar diretamente em headers de forwarding. Regras adicionais de cooldown/deduplicação/limite de recuperação são aplicadas por conta na Outbox. Não expor rotas administrativas a funcionário sem política específica.
+Apenas os endpoints do bloco de autenticação estão implementados; os exemplos de catálogo de negócio continuam propostos, sem prefixo ou contrato final definido. Reenvio e recuperação retornam `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política independente da rota, com `Retry-After` quando disponível. As três políticas de reenvio, recuperação e redefinição são fixed-window, cada uma com 10 requisições por minuto por IP e fila zero; a identificação usa `RemoteIpAddress`, sem confiar diretamente em headers de forwarding. Regras adicionais de cooldown/deduplicação/limite de recuperação são aplicadas por conta na Outbox. As rotas administrativas atuais aceitam exclusivamente `ADMIN`; funcionários permanecem sem acesso até haver matriz e política específicas.
 
 ### 6.3 Fluxos de integração
+
+#### Acesso administrativo inicial (F3.1)
+
+`POST /api/admin/auth/login` usa Identity e antifalsificação, verifica a senha com lockout e emite o cookie somente se a conta pertencer a `ADMIN`. `401` não distingue senha inválida de papel ausente; a resposta não expõe a conta nem emite cookie. O gate específico de e-mail confirmado continua aplicável ao login de `CLIENTE`; a autenticação administrativa não altera esse fluxo. `/api/admin/auth/me` e `/api/admin/auth/logout` aplicam a política `Administracao`. O painel Angular consulta a sessão pela API; `401`/`403` redirecionam para `/admin/login`, enquanto erros de rede continuam explícitos. A guarda não é controle de segurança do servidor.
+
+O provisionamento não é público: o utilitário `Xaquiamuni.Admin --provision-admin` solicita confirmação explícita, e-mail e senha digitada sem eco, valida a senha via Identity e atribui `ADMIN` sem exibir credenciais. O comando continua restrito ao alvo local `.\SQLEXPRESS` / `XaquiamuniDev`; não há procedimento de provisionamento de produção implementado ou validado.
 
 #### Confirmação de e-mail (F2)
 
@@ -364,13 +378,13 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 ## 7. Segurança, privacidade e operação
 
 - ASP.NET Core Identity com hashing de senhas e lockout configurado; provider dedicado gera token de recuperação de 1 hora; endpoint e redefinição coordenada já estão implementados. Nunca armazenar senha reversível.
-- Autenticação F2 usa um cookie `HttpOnly`, `Secure`, `SameSite=Lax`, path `/` e expiração de 8 horas, sem sliding expiration. Login/logout/cadastro/confirmação/reenvio/recuperação/redefinição usam antifalsificação; `/me` exige a política de cliente autenticado. `RequireConfirmedEmail` global permanece `false`; o serviço de login valida credenciais e aplica depois o gate específico para `CLIENTE`, retornando `403/EMAIL_NOT_CONFIRMED` sem emitir cookie de sessão.
+- Autenticação de cliente e ADMIN reutiliza o cookie `HttpOnly`, `Secure`, `SameSite=Lax`, path `/` e expiração de 8 horas, sem sliding expiration. Operações mutáveis de login/logout/cadastro/confirmação/reenvio/recuperação/redefinição administrativas e de cliente usam antifalsificação; `/api/auth/me` exige papel `CLIENTE`, e `/api/admin/auth/me` exige a política `Administracao` (papel `ADMIN`). `RequireConfirmedEmail` global permanece `false`; o serviço de login valida credenciais e aplica depois o gate específico para `CLIENTE`, retornando `403/EMAIL_NOT_CONFIRMED` sem emitir cookie de sessão.
 - Não há configuração explícita no repositório para persistir e compartilhar chaves de ASP.NET Data Protection; armazenamento persistente e compartilhado entre instâncias deve ser configurado e validado antes da produção.
 - O rate limiter nativo é em memória por processo. Reenvio, solicitação de recuperação e redefinição usam políticas independentes: fixed window de 1 minuto, 10 permissões e fila zero cada. Particiona por `RemoteIpAddress`, normaliza IPv4 mapeado em IPv6 e usa fallback compartilhado quando ausente; não lê headers de forwarding. No deploy atrás de proxy, configurar somente proxies confiáveis e validar o IP remoto efetivo.
 - Chave Resend e remetente são configurações exclusivas do servidor; o sender `HttpClient` tem timeout de 30 segundos, não segue redirects e só é registrado com `ResendEmail.Enabled=true`. Worker e Resend têm padrão desabilitado. Envio real foi validado manualmente somente em ambientes isolados.
 - Link de recuperação contém e-mail e token somente no fragmento `/reset-password#...`; o Angular remove esses valores da URL antes de prosseguir e não os grava em armazenamento local. Respostas de autenticação usam `no-store`.
 - Validar CPF no servidor; proteger dados pessoais em logs, respostas e telas; definir finalidade, retenção e procedimentos de exclusão/correção com a proprietária antes do uso real.
-- Autorização por endpoint e caso de uso. Administrador recebe permissões plenas de negócio; funcionário inicia com acesso mínimo até a matriz ser aprovada; cliente acessa apenas seus próprios recursos.
+- Autorização por endpoint e caso de uso. A política `Administracao` exige autenticação e papel `ADMIN`; funcionário não acessa os endpoints administrativos iniciais. Permissões administrativas de funcionário e a matriz fina permanecem pendentes; cliente acessa apenas seus próprios recursos.
 - Para o cliente navegador da F2, cookie é o modelo selecionado; não há JWT implementado. Outro tipo de cliente exigiria decisão própria antes de adotar mecanismo diferente.
 - Configurações por ambiente e segredos fora do Git; logs estruturados sem tokens, CPF integral ou payload sensível de pagamento.
 - HTTPS em produção, CORS restrito às origens autorizadas, validação de uploads e limites de requisição.
@@ -385,6 +399,7 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 | Application | Testes de casos de uso com portas falsas, incluindo rollback lógico e autorização | Regras sem dependência HTTP |
 | Infrastructure | Integração com SQL Server real, transações, índices e concorrência | Sem reservas/vendas duplicadas |
 | API | Testes de endpoints, identidade, validação, conflito e acesso indevido | Contratos verificáveis |
+| Acesso administrativo F3.1 | Testes de caso de uso, integração HTTP/SQL descartável e specs Angular para login, papéis, antifalsificação, cookie, SecurityStamp, guarda, sessão, erros e logout; regressão do gate de cliente | Apenas `ADMIN` cria sessão administrativa; fluxos de cliente permanecem inalterados |
 | Confirmação/reenvio F2 | Testes unitários de caso de uso/Outbox, testes HTTP com doubles, specs Angular e integração de endpoint/Outbox com SQL Server real isolado | Elegibilidade, resposta genérica, antifalsificação, rate limit, cooldown, limites, deduplicação, concorrência e histórico |
 | Recuperação/redefinição | Testes unitários, HTTP/API e SQL Server isolado para elegibilidade, resposta genérica, limites, fingerprint, processor, tokens, transação, concorrência, rollback, cancelamento e sessão; specs Angular para fragmento e formulários | Token temporário e de uso único, Outbox consistente, sessão anterior invalidada, nenhum segredo persistido ou exposto |
 | Visibilidade de senha | Specs focadas para os cinco campos de login/cadastro/redefinição | Campos ocultos inicialmente, alternância independente, valor/validação preservados, sem submit e ocultação após limpeza/sucesso |
@@ -409,6 +424,8 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 
 **Integração SQL F2:** testes opt-in via `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION=1`; a fixture valida `.\SQLEXPRESS`, cria bancos temporários `Xaquiamuni_IntegrationTest_*`, aplica migrations somente neles e remove apenas os bancos criados pela própria fixture. O fluxo de Resend integrado usa handler HTTP simulado; o teste do endpoint usa Identity e SQL reais no banco temporário, com worker e Resend desabilitados. A suíte não deve apontar para `XaquiamuniDev` nem para Azure SQL.
 
+**Validação focada F3.1:** 12 testes backend aprovados (incluindo integração SQL pela fixture descartável local) e 60 testes frontend aprovados; build da solução backend sem avisos/erros e build Angular aprovados. Nenhum serviço de API/Angular foi iniciado e nenhum e-mail foi enviado nesta etapa.
+
 **Validação manual F2:** em ambientes locais isolados, foram validados cadastro de cliente, recebimento do primeiro e-mail via Resend real, bloqueio do login antes da confirmação, reenvio pela interface, recebimento do segundo e-mail, confirmação pelo novo link e login após confirmação. A recuperação e redefinição também foram validadas com Resend real, senha antiga rejeitada e novo login aprovado. Consultas somente leitura a bancos descartáveis confirmaram os estados esperados da conta e Outbox. Essas validações não comprovam entrega, disponibilidade ou implantação em produção.
 
 **Validação manual de recuperação (R10.5.3, registro histórico):** a solicitação pelo navegador foi atendida com HTTP `202` e persistida para a conta sintética em banco SQL Server isolado; aquela etapa inicial usou remetente simulado em memória e não enviou e-mail real. O processamento concluiu uma única mensagem `PasswordReset` (`Completed`, `Attempts=1`, fingerprint preservado e lease/deduplicação liberados), preservando a mensagem `EmailConfirmation/Pending`. O link apontava para `/reset-password` e carregava `email`/`token` no fragmento, sem registrar conteúdo sensível. No Chrome isolado, reset válido retornou HTTP `204`, reutilização do token `400`, login com senha antiga `401`, novo login `204` e `/api/auth/me` autenticado `200`. A validação posterior com Resend real está registrada no resultado final da F2 acima.
@@ -432,7 +449,8 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | R11.1–R11.2 | Gates globais anteriores (registro histórico) | 633 testes backend e 121 frontend; sucedidos pelo gate final F2.1/F2.1.1 |
 | F2.1/F2.1.1 | Gate global final e correção das assertions de integração SQL do template de confirmação | 777 testes aprovados, sem falhas ou ignorados; builds aprovados; integração SQL somente pela fixture isolada |
 | F2.2 | Encerramento documental e transição de fase | PRD/TDD atualizados; F2 concluída; F3 é a próxima fase |
-| F3 | Catálogo de Produtos, variantes, imagens e vitrine mobile | Próxima fase; não iniciada nesta etapa |
+| F3.1 | **Concluída:** login ADMIN reutilizando Identity/cookie, endpoints de sessão e logout protegidos, rotas `/admin/login` e `/admin`, painel inicial e provisionamento local interativo | Testes focados: 12 backend e 60 frontend aprovados; builds backend e frontend aprovados; sem CRUD ou catálogo |
+| F3.2 | Catálogo de Produtos, categorias, variantes, imagens e vitrine mobile | Próxima etapa; ainda não iniciada |
 | F4 | Matérias-primas, estoque acabado, lotes, validade e movimentos | Integridade e auditoria testadas |
 | F5 | Fichas técnicas, capacidade e ordens com reserva | Concorrência e cálculo aprovados |
 | F6 | Execução, conclusão parcial/cancelamento e entrada de lotes | Consumo e rendimento consistentes |
@@ -470,6 +488,7 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | PT-18 | Data Protection | Não há chave persistente compartilhada configurada no repositório | Configurar armazenamento protegido e compartilhado, validar rotação, reinício e múltiplas instâncias |
 | PT-19 | Gate de confirmação no login | Gate específico para `CLIENTE` implementado e validado; `RequireConfirmedEmail` global permanece `false` | Preservar o gate específico; não habilitar a exigência global sem decisão explícita e validação de impacto |
 | PT-20 | Prontidão da recuperação | Endpoint, processor, Outbox, redefinição transacional, invalidação de sessões e UI implementados e validados, inclusive manualmente com Resend real em ambiente isolado; produção pendente | Configurar URL pública HTTPS, Data Protection persistente/compartilhada, proxies confiáveis e segredos; validar operação no ambiente de produção antes de ativar |
+| PT-21 | Provisionamento ADMIN | Provisionador interativo atual está restrito a `.\SQLEXPRESS` / `XaquiamuniDev` | Definir e validar mecanismo controlado e apropriado ao ambiente antes de provisionar administradores fora do desenvolvimento local |
 
 ### 10.1 Mapa de rastreabilidade resumido
 
@@ -493,7 +512,7 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 
 ### 11.1 Condições de handoff
 
-Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pendências aplicáveis do PRD/TDD; (2) validar as decisões específicas da etapa; (3) definir e executar testes de aceite; (4) configurar Data Protection persistente e compartilhada quando houver múltiplas instâncias; (5) configurar proxies e forwarded headers somente para proxies confiáveis; (6) provisionar e proteger segredos, verificar o domínio e remetente no Resend, configurar URL pública HTTPS e habilitar explicitamente sender e worker no ambiente adequado; (7) avaliar limitador distribuído se houver múltiplas instâncias, pois os rate limiters atuais são por processo. O gate específico de login de `CLIENTE` já está ativo; `RequireConfirmedEmail` global permanece `false`. **Os testes manuais com Resend real ocorreram em ambientes isolados e não homologam produção, Azure, Pix ou Correios.**
+Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pendências aplicáveis do PRD/TDD; (2) validar as decisões específicas da etapa; (3) definir e executar testes de aceite; (4) configurar Data Protection persistente e compartilhada quando houver múltiplas instâncias; (5) configurar proxies e forwarded headers somente para proxies confiáveis; (6) definir provisionamento de administradores adequado ao ambiente — o comando atual é somente local — e proteger segredos, verificar o domínio e remetente no Resend, configurar URL pública HTTPS e habilitar explicitamente sender e worker no ambiente adequado; (7) avaliar limitador distribuído se houver múltiplas instâncias, pois os rate limiters atuais são por processo. O gate específico de login de `CLIENTE` já está ativo; `RequireConfirmedEmail` global permanece `false`. **Os testes manuais com Resend real ocorreram em ambientes isolados e não homologam produção, Azure, Pix ou Correios.**
 
 ## 12. Histórico de versões
 
@@ -502,3 +521,4 @@ Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pend�
 | 0.2 | 12/11/2026 | Outbox multi-tipo e preparação técnica da geração de credenciais para recuperação. |
 | 0.3 | 12/11/2026 | Fluxo de recuperação/redefinição concluído; migrations e schema registrados; validação manual isolada e gates globais documentados; limitações de produção explicitadas. |
 | 0.4 | 14/11/2026 | F2 encerrada; contratos atualizados para gate específico de confirmação de `CLIENTE`; validações manuais com Resend real em ambientes isolados e gate final de 777 testes/builds registrados; F3 definida como próxima fase; requisitos de produção e decisão sobre branch reutilizável documentados. |
+| 0.5 | 14/11/2026 | F3.1 concluída com autenticação administrativa exclusiva para `ADMIN`, painel inicial, endpoints protegidos e provisionador local interativo; testes focados e limitações de provisionamento de produção registrados; F3.2 — Catálogo de Produtos definida como próxima etapa, sem implementação iniciada. |
