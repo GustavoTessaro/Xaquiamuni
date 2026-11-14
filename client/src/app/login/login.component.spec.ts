@@ -1,10 +1,14 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
 import { Observable, Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
-import { AuthService, AuthSession } from '../core/auth/auth.service';
+import {
+  AuthService,
+  AuthSession,
+  ResendConfirmationEmailResponse,
+} from '../core/auth/auth.service';
 import { routes } from '../app.routes';
 import { LoginComponent } from './login.component';
 
@@ -14,6 +18,9 @@ describe('LoginComponent', () => {
   let forgotPassword: ReturnType<typeof vi.fn<AuthService['forgotPassword']>>;
   let obterSessao: ReturnType<typeof vi.fn<AuthService['obterSessao']>>;
   let logout: ReturnType<typeof vi.fn<AuthService['logout']>>;
+  let reenviarConfirmacaoEmail: ReturnType<
+    typeof vi.fn<AuthService['reenviarConfirmacaoEmail']>
+  >;
 
   beforeEach(async () => {
     login = vi.fn<AuthService['login']>();
@@ -23,17 +30,35 @@ describe('LoginComponent', () => {
     obterSessao.mockReturnValue(of(null));
     logout = vi.fn<AuthService['logout']>();
     logout.mockReturnValue(new Observable<void>());
+    reenviarConfirmacaoEmail = vi.fn<AuthService['reenviarConfirmacaoEmail']>();
+    reenviarConfirmacaoEmail.mockReturnValue(
+      new Observable<ResendConfirmationEmailResponse>(),
+    );
 
     await TestBed.configureTestingModule({
       imports: [LoginComponent],
       providers: [
         provideRouter(routes),
-        { provide: AuthService, useValue: { login, forgotPassword, obterSessao, logout } },
+        {
+          provide: AuthService,
+          useValue: {
+            login,
+            forgotPassword,
+            obterSessao,
+            logout,
+            reenviarConfirmacaoEmail,
+          },
+        },
       ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(LoginComponent);
     fixture.detectChanges();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
   });
 
   it('checks /me on initialization and shows a discreet loading state', () => {
@@ -302,6 +327,185 @@ describe('LoginComponent', () => {
     }
   });
 
+  it('shows pending confirmation only for the exact HTTP 403 code and does not check the session', () => {
+    login.mockReturnValue(throwError(() => new HttpErrorResponse({
+      status: 403,
+      error: {
+        code: 'EMAIL_NOT_CONFIRMED',
+        detail: 'Confirme seu e-mail antes de entrar na sua conta.',
+      },
+    })));
+    setValidFields(fixture);
+
+    submit(fixture);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('#email-confirmation-title').textContent.trim())
+      .toBe('Confirme seu e-mail');
+    expect(fixture.nativeElement.textContent)
+      .toContain('Sua conta está quase pronta! Confirme seu endereço de e-mail para acessar sua conta.');
+    expect(fixture.nativeElement.textContent).toContain('caixa de entrada e a pasta de spam');
+    expect(fixture.nativeElement.querySelector('form')).toBeNull();
+    expect(fixture.nativeElement.textContent).not.toContain('Confirme seu e-mail antes de entrar na sua conta.');
+    expect(obterSessao).toHaveBeenCalledOnce();
+    expect(reenviarConfirmacaoEmail).not.toHaveBeenCalled();
+    expect(login).toHaveBeenCalledOnce();
+  });
+
+  it('keeps HTTP 401 and other HTTP 403 login failures generic', () => {
+    const failures = [
+      new HttpErrorResponse({ status: 401, error: { code: 'EMAIL_NOT_CONFIRMED' } }),
+      new HttpErrorResponse({ status: 403, error: { code: 'OTHER_FORBIDDEN' } }),
+      new HttpErrorResponse({ status: 403, error: { detail: 'private backend detail' } }),
+    ];
+
+    for (const failure of failures) {
+      login.mockReturnValue(throwError(() => failure));
+      setValidFields(fixture);
+      submit(fixture);
+      fixture.detectChanges();
+
+      expect(fixture.nativeElement.querySelector('#email-confirmation-title')).toBeNull();
+      expect(fixture.nativeElement.querySelector('form')).not.toBeNull();
+      expect(fixture.nativeElement.textContent).not.toContain('private backend detail');
+      expect(reenviarConfirmacaoEmail).not.toHaveBeenCalled();
+    }
+
+    expect(obterSessao).toHaveBeenCalledOnce();
+  });
+
+  it('resends manually to the login email through AuthService and prevents simultaneous requests', () => {
+    const result = new Subject<ResendConfirmationEmailResponse>();
+    reenviarConfirmacaoEmail.mockReturnValue(result);
+    enterEmailConfirmationPending(fixture, login);
+
+    clickButton(fixture, 'Reenviar e-mail de confirmação');
+    fixture.detectChanges();
+
+    const resendButton = fixture.nativeElement.querySelector(
+      'button[aria-busy="true"]',
+    ) as HTMLButtonElement;
+    expect(reenviarConfirmacaoEmail).toHaveBeenCalledOnce();
+    expect(reenviarConfirmacaoEmail).toHaveBeenCalledWith('ana@example.test');
+    expect(resendButton.disabled).toBe(true);
+    resendButton.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(reenviarConfirmacaoEmail).toHaveBeenCalledOnce();
+    expect(obterSessao).toHaveBeenCalledOnce();
+
+    result.next({ message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.' });
+    result.complete();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+    expect(fixture.nativeElement.textContent).not.toContain('e-mail foi enviado');
+  });
+
+  it('respects Retry-After on HTTP 429 and waits for a manual retry', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+
+    try {
+      const page = fixture;
+      enterEmailConfirmationPending(page, login);
+      reenviarConfirmacaoEmail
+        .mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+          status: 429,
+          headers: new HttpHeaders({ 'Retry-After': '3' }),
+          error: { detail: 'private rate limit detail' },
+        })))
+        .mockReturnValueOnce(of({
+          message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.',
+        }));
+
+      clickButton(page, 'Reenviar e-mail de confirmação');
+      page.detectChanges();
+
+      const resendButton = Array.from<HTMLButtonElement>(page.nativeElement.querySelectorAll('button'))
+        .find((button) => button.textContent?.includes('Reenviar e-mail de confirmação')
+          || button.textContent?.includes('Solicitando'));
+      expect(page.nativeElement.textContent).toContain('Aguarde 3 segundos');
+      expect(page.nativeElement.textContent).not.toContain('private rate limit detail');
+      expect(resendButton?.disabled).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(2000);
+      page.detectChanges();
+      expect(page.nativeElement.textContent).toContain('Aguarde 1 segundo');
+      expect(reenviarConfirmacaoEmail).toHaveBeenCalledOnce();
+
+      await vi.advanceTimersByTimeAsync(1000);
+      page.detectChanges();
+      expect(page.nativeElement.textContent)
+        .toContain('O período de espera terminou. Você pode tentar novamente.');
+
+      clickButton(page, 'Reenviar e-mail de confirmação');
+      page.detectChanges();
+      expect(reenviarConfirmacaoEmail).toHaveBeenCalledTimes(2);
+      expect(page.nativeElement.textContent).toContain('Solicitação recebida.');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('allows manual retry after a temporary resend failure', () => {
+    enterEmailConfirmationPending(fixture, login);
+    reenviarConfirmacaoEmail
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+        status: 503,
+        error: 'private server detail',
+      })))
+      .mockReturnValueOnce(of({
+        message: 'Se houver uma conta elegível, enviaremos um e-mail de confirmação.',
+      }));
+
+    clickButton(fixture, 'Reenviar e-mail de confirmação');
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('Tente novamente mais tarde.');
+    expect(fixture.nativeElement.textContent).not.toContain('private server detail');
+
+    clickButton(fixture, 'Reenviar e-mail de confirmação');
+    fixture.detectChanges();
+    expect(reenviarConfirmacaoEmail).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('Solicitação recebida.');
+  });
+
+  it('returns to login with the email retained in memory and the password cleared', () => {
+    const urlBefore = window.location.href;
+    const localStorageWrite = vi.spyOn(window.localStorage, 'setItem');
+    const sessionStorageWrite = vi.spyOn(window.sessionStorage, 'setItem');
+    enterEmailConfirmationPending(fixture, login);
+    clickButton(fixture, 'Voltar para o login');
+
+    const emailInput = fixture.nativeElement.querySelector('#email') as HTMLInputElement;
+    const passwordInput = fixture.nativeElement.querySelector('#senha') as HTMLInputElement;
+    expect(emailInput.value).toBe('ana@example.test');
+    expect(passwordInput.value).toBe('');
+    expect(passwordInput.type).toBe('password');
+    expect(fixture.nativeElement.querySelector('#email-confirmation-title')).toBeNull();
+    expect(window.location.href).toBe(urlBefore);
+    expect(window.location.search).toBe('');
+    expect(window.location.hash).toBe('');
+    expect(urlBefore).not.toContain('ana@example.test');
+    expect(urlBefore).not.toContain('senha-de-teste');
+    expect(localStorageWrite).not.toHaveBeenCalled();
+    expect(sessionStorageWrite).not.toHaveBeenCalled();
+    expect(obterSessao).toHaveBeenCalledOnce();
+  });
+
+  it('allows the same client to log in after returning from email confirmation', () => {
+    enterEmailConfirmationPending(fixture, login);
+    clickButton(fixture, 'Voltar para o login');
+
+    login.mockReturnValue(of(undefined));
+    obterSessao.mockReturnValue(of({ userId: '4c4a31ce-0a27-4c0e-b903-a96f62fb81df' }));
+    setField(fixture, 'senha', 'senha-de-teste');
+    submit(fixture);
+    fixture.detectChanges();
+
+    expect(login).toHaveBeenCalledTimes(2);
+    expect(fixture.nativeElement.textContent).toContain('Sessão ativa');
+    expect(fixture.nativeElement.textContent).toContain('Login realizado com sucesso.');
+  });
+
   it('calls logout and returns to the form only after /me confirms no session', () => {
     obterSessao.mockClear();
     obterSessao
@@ -432,6 +636,19 @@ function expectResendLink(fixture: ComponentFixture<LoginComponent>): void {
 function setValidFields(fixture: ComponentFixture<LoginComponent>): void {
   setField(fixture, 'email', 'ana@example.test');
   setField(fixture, 'senha', 'senha-de-teste');
+}
+
+function enterEmailConfirmationPending(
+  fixture: ComponentFixture<LoginComponent>,
+  login: ReturnType<typeof vi.fn<AuthService['login']>>,
+): void {
+  login.mockReturnValue(throwError(() => new HttpErrorResponse({
+    status: 403,
+    error: { code: 'EMAIL_NOT_CONFIRMED' },
+  })));
+  setValidFields(fixture);
+  submit(fixture);
+  fixture.detectChanges();
 }
 
 function setField(fixture: ComponentFixture<LoginComponent>, id: string, value: string): void {
