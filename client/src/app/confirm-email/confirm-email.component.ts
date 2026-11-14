@@ -240,19 +240,35 @@ export class ConfirmEmailComponent implements OnDestroy {
       return null;
     }
 
-    const parameters = new URLSearchParams(fragment.slice(1));
-    const entries: Array<[string, string]> = [];
-    parameters.forEach((value, key) => entries.push([key, value]));
-
-    const emailValues = entries.filter(([key]) => key === 'email');
-    const tokenValues = entries.filter(([key]) => key === 'token');
-    if (entries.length !== 2 || emailValues.length !== 1 || tokenValues.length !== 1) {
+    const rawFragment = fragment.slice(1);
+    const tokenSeparator = rawFragment.indexOf('&token=');
+    if (
+      !rawFragment.startsWith('email=')
+      || tokenSeparator <= 'email='.length
+      || rawFragment.indexOf('&') !== tokenSeparator
+      || rawFragment.indexOf('&', tokenSeparator + 1) !== -1
+    ) {
       return null;
     }
 
-    const email = emailValues[0][1].trim();
-    const token = tokenValues[0][1];
-    if (!this.isValidEmail(email)
+    const rawEmail = rawFragment.slice('email='.length, tokenSeparator);
+    const rawToken = rawFragment.slice(tokenSeparator + '&token='.length);
+
+    let email: string;
+    let token: string;
+    try {
+      email = decodeURIComponent(rawEmail).trim();
+      token = decodeURIComponent(rawToken);
+    } catch (error) {
+      if (error instanceof URIError) {
+        return null;
+      }
+
+      throw error;
+    }
+
+    if (
+      !this.isValidEmail(email)
       || email.length > 256
       || token.trim().length === 0
       || token.length > 4096) {

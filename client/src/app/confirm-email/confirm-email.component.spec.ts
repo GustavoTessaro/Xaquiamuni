@@ -4,9 +4,11 @@ import {
   provideHttpClientTesting,
 } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { DefaultUrlSerializer, provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { AuthService } from '../core/auth/auth.service';
 import { CsrfService } from '../core/security/csrf.service';
+import { routes } from '../app.routes';
 import { ConfirmEmailComponent } from './confirm-email.component';
 
 describe('ConfirmEmailComponent', () => {
@@ -18,7 +20,7 @@ describe('ConfirmEmailComponent', () => {
     await TestBed.configureTestingModule({
       imports: [ConfirmEmailComponent],
       providers: [
-        provideRouter([]),
+        provideRouter(routes),
         AuthService,
         CsrfService,
         provideHttpClient(
@@ -71,6 +73,107 @@ describe('ConfirmEmailComponent', () => {
     expect(fixture.nativeElement.textContent).not.toContain(email);
     expect(fixture.nativeElement.textContent).not.toContain(token);
     fixture.detectChanges();
+    http.expectNone('/api/auth/csrf');
+    http.expectNone('/api/auth/confirm-email');
+  });
+
+  for (const [label, token] of [
+    ['plus', '+'],
+    ['slash', '/'],
+    ['equals', '='],
+    ['combined reserved characters', '+/='],
+    ['escaped percent sequences', 'abc%26token%3Dxyz'],
+    ['Identity-shaped Base64Url token', 'CfDJ8SyntheticToken_-0123456789'],
+  ] as const) {
+    it(`preserves a ${label} token after Angular Router URL canonicalization`, async () => {
+      const email = 'cliente@example.test';
+      const encodedEmail = encodeURIComponent(email);
+      const encodedToken = encodeURIComponent(token);
+      const url = `/confirm-email#email=${encodedEmail}&token=${encodedToken}`;
+      const serializer = new DefaultUrlSerializer();
+      const canonicalUrl = serializer.serialize(serializer.parse(url));
+      setFragment(canonicalUrl.slice(canonicalUrl.indexOf('#')));
+
+      const harness = await RouterTestingHarness.create();
+      const component = await harness.navigateByUrl(url, ConfirmEmailComponent);
+      harness.fixture.detectChanges();
+
+      expect(component).toBeInstanceOf(ConfirmEmailComponent);
+      expect(window.location.hash).toBe('');
+      const csrf = http.expectOne('/api/auth/csrf');
+      csrf.flush({ requestToken: 'confirmation-request-token' });
+      const confirmation = http.expectOne('/api/auth/confirm-email');
+      expect(confirmation.request.body).toEqual({ email, token });
+      confirmation.flush(null, { status: 204, statusText: 'No Content' });
+      harness.fixture.detectChanges();
+
+      expect(harness.routeNativeElement?.textContent).toContain('E-mail confirmado');
+      expect(window.location.hash).toBe('');
+    });
+  }
+
+  it('preserves a plus-addressed email after Angular Router URL canonicalization', async () => {
+    const email = 'cliente+tag@example.test';
+    const token = 'CfDJ8SyntheticToken_-0123456789';
+    const url = `/confirm-email#email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+    const serializer = new DefaultUrlSerializer();
+    const canonicalUrl = serializer.serialize(serializer.parse(url));
+    setFragment(canonicalUrl.slice(canonicalUrl.indexOf('#')));
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url, ConfirmEmailComponent);
+    harness.fixture.detectChanges();
+
+    const csrf = http.expectOne('/api/auth/csrf');
+    csrf.flush({ requestToken: 'confirmation-request-token' });
+    const confirmation = http.expectOne('/api/auth/confirm-email');
+    expect(confirmation.request.body).toEqual({ email, token });
+    confirmation.flush(null, { status: 204, statusText: 'No Content' });
+    harness.fixture.detectChanges();
+
+    expect(harness.routeNativeElement?.textContent).toContain('E-mail confirmado');
+    expect(window.location.hash).toBe('');
+  });
+
+  for (const [label, fields] of [
+    ['duplicate token fields', 'token=one&token=two'],
+    [
+      'duplicate email fields',
+      'email=first%40example.test&email=second%40example.test&token=value',
+    ],
+    ['unexpected fields', 'token=one&extra=two'],
+  ] as const) {
+    it(`rejects ${label} after Angular Router URL canonicalization`, async () => {
+      const email = 'cliente@example.test';
+      const url = `/confirm-email#email=${encodeURIComponent(email)}&${fields}`;
+      const serializer = new DefaultUrlSerializer();
+      const canonicalUrl = serializer.serialize(serializer.parse(url));
+      setFragment(canonicalUrl.slice(canonicalUrl.indexOf('#')));
+
+      const harness = await RouterTestingHarness.create();
+      await harness.navigateByUrl(url, ConfirmEmailComponent);
+      harness.fixture.detectChanges();
+
+      expect(window.location.hash).toBe('');
+      expect(harness.routeNativeElement?.textContent).toContain('Link inválido');
+      http.expectNone('/api/auth/csrf');
+      http.expectNone('/api/auth/confirm-email');
+    });
+  }
+
+  it('rejects a token containing a canonicalized raw parameter delimiter', async () => {
+    const email = 'cliente@example.test';
+    const url = `/confirm-email#email=${encodeURIComponent(email)}&token=${encodeURIComponent('abc&token=xyz')}`;
+    const serializer = new DefaultUrlSerializer();
+    const canonicalUrl = serializer.serialize(serializer.parse(url));
+    setFragment(canonicalUrl.slice(canonicalUrl.indexOf('#')));
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url, ConfirmEmailComponent);
+    harness.fixture.detectChanges();
+
+    expect(window.location.hash).toBe('');
+    expect(harness.routeNativeElement?.textContent).toContain('Link inválido');
     http.expectNone('/api/auth/csrf');
     http.expectNone('/api/auth/confirm-email');
   });
