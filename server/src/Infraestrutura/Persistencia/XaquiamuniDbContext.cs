@@ -20,6 +20,8 @@ public sealed class XaquiamuniDbContext
     public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
+    public DbSet<Produto> Produtos => Set<Produto>();
+    public DbSet<ProdutoVariante> ProdutoVariantes => Set<ProdutoVariante>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -139,6 +141,92 @@ public sealed class XaquiamuniDbContext
             categoria.HasIndex(entity => entity.NomeNormalizado)
                 .IsUnique()
                 .HasDatabaseName("UX_Categorias_NomeNormalizado");
+        });
+
+        builder.Entity<Produto>(produto =>
+        {
+            produto.ToTable("Produtos", table =>
+                table.HasCheckConstraint(
+                    "CK_Produtos_Nome_NotBlank",
+                    "LEN(LTRIM(RTRIM([Nome]))) > 0"));
+            produto.HasKey(entity => entity.Id);
+            produto.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            produto.Property(entity => entity.Nome)
+                .HasMaxLength(Produto.NomeMaxLength)
+                .IsRequired();
+            produto.Property(entity => entity.Descricao)
+                .HasMaxLength(Produto.DescricaoMaxLength);
+            produto.Property(entity => entity.CategoriaId)
+                .IsRequired();
+            produto.Property(entity => entity.Publicado)
+                .IsRequired();
+
+            produto.HasOne(entity => entity.Categoria)
+                .WithMany()
+                .HasForeignKey(entity => entity.CategoriaId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            produto.HasMany(entity => entity.Variantes)
+                .WithOne(variant => variant.Produto)
+                .HasForeignKey(variant => variant.ProdutoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            produto.Navigation(entity => entity.Variantes)
+                .HasField("_variantes")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+            produto.HasIndex(entity => entity.CategoriaId)
+                .HasDatabaseName("IX_Produtos_CategoriaId");
+        });
+
+        builder.Entity<ProdutoVariante>(variante =>
+        {
+            variante.ToTable("ProdutoVariantes", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_Identificacao_NotBlank",
+                    "LEN(LTRIM(RTRIM([Identificacao]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_UnidadeVenda_NotBlank",
+                    "LEN(LTRIM(RTRIM([UnidadeVenda]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_PrecoVenda_Positive",
+                    "[PrecoVenda] > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_Default_Active",
+                    "[Padrao] = 0 OR [Ativa] = 1");
+            });
+            variante.HasKey(entity => entity.Id);
+            variante.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            variante.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            variante.Property(entity => entity.Identificacao)
+                .HasMaxLength(ProdutoVariante.IdentificacaoMaxLength)
+                .IsRequired();
+            variante.Property(entity => entity.IdentificacaoNormalizada)
+                .HasMaxLength(ProdutoVariante.IdentificacaoMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            variante.Property(entity => entity.UnidadeVenda)
+                .HasMaxLength(ProdutoVariante.UnidadeVendaMaxLength)
+                .IsRequired();
+            variante.Property(entity => entity.PrecoVenda)
+                .HasPrecision(18, 2)
+                .IsRequired();
+            variante.Property(entity => entity.Ativa)
+                .IsRequired();
+            variante.Property(entity => entity.Padrao)
+                .IsRequired();
+
+            variante.HasIndex(entity => new { entity.ProdutoId, entity.IdentificacaoNormalizada })
+                .IsUnique()
+                .HasDatabaseName("UX_ProdutoVariantes_ProdutoId_IdentificacaoNormalizada");
+            variante.HasIndex(entity => entity.ProdutoId)
+                .IsUnique()
+                .HasFilter("[Padrao] = 1")
+                .HasDatabaseName("UX_ProdutoVariantes_DefaultPerProduto");
         });
 
         builder.Entity<ClientePerfil>(profile =>

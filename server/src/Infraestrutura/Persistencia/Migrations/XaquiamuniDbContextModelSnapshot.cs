@@ -276,6 +276,94 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ClientePerfis", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CategoriaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Descricao")
+                        .HasMaxLength(4000)
+                        .HasColumnType("nvarchar(4000)");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<bool>("Publicado")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CategoriaId")
+                        .HasDatabaseName("IX_Produtos_CategoriaId");
+
+                    b.ToTable("Produtos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Produtos_Nome_NotBlank", "LEN(LTRIM(RTRIM([Nome]))) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ProdutoVariante", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Identificacao")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("IdentificacaoNormalizada")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<bool>("Padrao")
+                        .HasColumnType("bit");
+
+                    b.Property<decimal>("PrecoVenda")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("ProdutoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("UnidadeVenda")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProdutoVariantes_DefaultPerProduto")
+                        .HasFilter("[Padrao] = 1");
+
+                    b.HasIndex("ProdutoId", "IdentificacaoNormalizada")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ProdutoVariantes_ProdutoId_IdentificacaoNormalizada");
+
+                    b.ToTable("ProdutoVariantes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProdutoVariantes_Default_Active", "[Padrao] = 0 OR [Ativa] = 1");
+
+                            t.HasCheckConstraint("CK_ProdutoVariantes_Identificacao_NotBlank", "LEN(LTRIM(RTRIM([Identificacao]))) > 0");
+
+                            t.HasCheckConstraint("CK_ProdutoVariantes_PrecoVenda_Positive", "[PrecoVenda] > 0");
+
+                            t.HasCheckConstraint("CK_ProdutoVariantes_UnidadeVenda_NotBlank", "LEN(LTRIM(RTRIM([UnidadeVenda]))) > 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -540,6 +628,28 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Categoria", "Categoria")
+                        .WithMany()
+                        .HasForeignKey("CategoriaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Categoria");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ProdutoVariante", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Produto", "Produto")
+                        .WithMany("Variantes")
+                        .HasForeignKey("ProdutoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Produto");
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
                 {
                     b.HasOne("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", null)
@@ -547,6 +657,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>
+                {
+                    b.Navigation("Variantes");
                 });
 #pragma warning restore 612, 618
         }
