@@ -8,10 +8,12 @@ using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Catalogo;
+using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
+using Xaquiamuni.Infraestrutura.Imagens;
 using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
@@ -40,6 +42,15 @@ public static class DependencyInjection
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
         services.AddScoped<IProdutoRepository, EfProdutoRepository>();
         services.AddScoped<IGerenciarProdutos, GerenciarProdutos>();
+        services.AddOptions<ArmazenamentoLocalImagemProdutoOptions>()
+            .Bind(configuration.GetSection(ArmazenamentoLocalImagemProdutoOptions.SectionName))
+            .Validate(
+                options => !string.IsNullOrWhiteSpace(options.RootPath)
+                    && Path.IsPathFullyQualified(options.RootPath),
+                "Product image storage RootPath must be an absolute path.")
+            .ValidateOnStart();
+        services.AddSingleton<IArmazenamentoImagemProduto, ArmazenamentoLocalImagemProduto>();
+        services.AddSingleton<IProcessadorImagemProduto, ProcessadorImagemProduto>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationResendOutbox, SqlServerEmailConfirmationResendOutbox>();
