@@ -77,9 +77,8 @@ public sealed class Produto
             .Distinct(StringComparer.Ordinal)
             .Count() != variants.Length)
         {
-            throw new ArgumentException(
-                "As identificações das variantes devem ser únicas dentro do produto.",
-                nameof(variantes));
+            throw new InvalidOperationException(
+                "Já existe uma variante deste produto com essa identificação.");
         }
 
         var produto = new Produto(Guid.NewGuid(), normalizedName, normalizedDescription, categoria!);
@@ -146,12 +145,34 @@ public sealed class Produto
                     variante.IdentificacaoNormalizada,
                     StringComparison.Ordinal)))
         {
-            throw new ArgumentException(
-                "As identificações das variantes devem ser únicas dentro do produto.",
-                nameof(variante));
+            throw new InvalidOperationException(
+                "Já existe uma variante deste produto com essa identificação.");
         }
 
         AssociarVariante(variante);
+    }
+
+    public void AtualizarVariante(
+        Guid varianteId,
+        string? identificacao,
+        string? unidadeVenda,
+        decimal precoVenda)
+    {
+        var variante = ObterVariante(varianteId);
+        var identification = ProdutoVariante.NormalizarIdentificacao(identificacao);
+        var normalizedIdentification = identification.ToUpperInvariant();
+        if (_variantes.Any(existing =>
+                existing.Id != varianteId
+                && string.Equals(
+                    existing.IdentificacaoNormalizada,
+                    normalizedIdentification,
+                    StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "Já existe uma variante deste produto com essa identificação.");
+        }
+
+        variante.AtualizarDados(identificacao, unidadeVenda, precoVenda);
     }
 
     public void DefinirVariantePadrao(Guid varianteId)
@@ -208,10 +229,9 @@ public sealed class Produto
                 nameof(novoPadraoId));
         }
 
-        if (Publicado && _variantes.Count(item => item.Ativa) <= 1)
+        if (_variantes.Count(item => item.Ativa) <= 1)
         {
-            throw new InvalidOperationException(
-                "Um produto publicado deve possuir ao menos uma variante ativa.");
+            throw new InvalidOperationException("A última variante ativa não pode ser desativada.");
         }
 
         variante.DefinirAtiva(false);
@@ -219,6 +239,12 @@ public sealed class Produto
 
     public void Publicar()
     {
+        if (!Categoria.Ativa)
+        {
+            throw new InvalidOperationException(
+                "Um produto associado a uma categoria inativa não pode ser publicado.");
+        }
+
         if (_variantes.Count == 0
             || !_variantes.Any(variant => variant.Padrao && variant.Ativa)
             || !_variantes.Any(variant => variant.Ativa))

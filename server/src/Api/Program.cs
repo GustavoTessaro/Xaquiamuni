@@ -1,5 +1,6 @@
 using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Catalogo;
+using Xaquiamuni.Api.Middleware;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Infraestrutura;
 
@@ -8,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
+builder.Services.AddExceptionHandler<ApiExceptionHandler>();
+builder.Services.AddProblemDetails();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddXaquiamuniAuthentication();
 builder.Services.AddXaquiamuniAntiforgery();
@@ -22,6 +25,7 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseExceptionHandler();
 app.Use(async (context, next) =>
 {
     var isAuthenticationWrite =
@@ -93,6 +97,7 @@ app.MapXaquiamuniCsrfEndpoint();
 app.MapXaquiamuniAuthEndpoints();
 app.MapXaquiamuniAdminAuthEndpoints();
 app.MapAdminCategoriaEndpoints();
+app.MapAdminProdutoEndpoints();
 
 app.Run();
 

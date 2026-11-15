@@ -1,0 +1,110 @@
+@baseUrl = https://localhost:7231
+@adminCookie = <valor-do-cookie-ADMIN>
+@xsrfCookieValue = <valor-do-cookie-XSRF-TOKEN>
+@xsrfRequestToken = <requestToken-retornado-pelo-endpoint-csrf>
+@produtoId = <guid-do-produto>
+@varianteId = <guid-da-variante>
+@novaVarianteId = <guid-da-variante-ativa-para-promover>
+@categoriaId = <guid-da-categoria-ativa>
+
+### Obter token antifalsificação; repetir com o cookie administrativo e copiar requestToken + cookie XSRF-TOKEN
+GET {{baseUrl}}/api/auth/csrf
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Listar produtos administrativos com filtros opcionais
+GET {{baseUrl}}/api/admin/produtos?busca=lavanda&categoriaId={{categoriaId}}&publicado=false
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Consultar produto e variantes
+GET {{baseUrl}}/api/admin/produtos/{{produtoId}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Consultar produto inexistente (esperado: 404)
+GET {{baseUrl}}/api/admin/produtos/00000000-0000-0000-0000-000000000000
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Cadastrar produto não publicado com variante padrão
+POST {{baseUrl}}/api/admin/produtos
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Sabonete de Lavanda",
+  "descricao": "Produzido artesanalmente",
+  "categoriaId": "{{categoriaId}}",
+  "variantePadrao": {
+    "identificacao": "100 g",
+    "unidadeVenda": "G",
+    "precoVenda": 20.00
+  },
+  "variantes": [
+    {
+      "identificacao": "200 g",
+      "unidadeVenda": "G",
+      "precoVenda": 35.00
+    }
+  ]
+}
+
+### Editar dados principais e categoria
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Sabonete Natural de Lavanda",
+  "descricao": "Produzido artesanalmente",
+  "categoriaId": "{{categoriaId}}"
+}
+
+### Adicionar variante
+POST {{baseUrl}}/api/admin/produtos/{{produtoId}}/variantes
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "identificacao": "250 g",
+  "unidadeVenda": "G",
+  "precoVenda": 42.50
+}
+
+### Editar variante
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}/variantes/{{varianteId}}
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "identificacao": "300 g",
+  "unidadeVenda": "G",
+  "precoVenda": 49.90
+}
+
+### Definir variante padrão
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}/variantes/{{novaVarianteId}}/padrao
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+### Desativar variante; para a padrão, informe uma variante ativa em novoPadraoId
+PATCH {{baseUrl}}/api/admin/produtos/{{produtoId}}/variantes/{{varianteId}}/status
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "ativa": false,
+  "novoPadraoId": "{{novaVarianteId}}"
+}
+
+### Publicar produto (ou enviar publicado=false para despublicar)
+PATCH {{baseUrl}}/api/admin/produtos/{{produtoId}}/publicacao
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "publicado": true
+}

@@ -65,6 +65,18 @@ public sealed class ProdutoVariante
             padrao);
     }
 
+    public void AtualizarDados(string? identificacao, string? unidadeVenda, decimal precoVenda)
+    {
+        var normalizedIdentification = NormalizarIdentificacao(identificacao);
+        var normalizedUnit = NormalizarUnidadeVenda(unidadeVenda);
+        ValidarPreco(precoVenda);
+
+        Identificacao = normalizedIdentification;
+        IdentificacaoNormalizada = normalizedIdentification.ToUpperInvariant();
+        UnidadeVenda = normalizedUnit;
+        PrecoVenda = precoVenda;
+    }
+
     internal void AssociarA(Produto produto)
     {
         ArgumentNullException.ThrowIfNull(produto);
@@ -97,7 +109,7 @@ public sealed class ProdutoVariante
         Ativa = ativa;
     }
 
-    private static string NormalizarIdentificacao(string? identificacao)
+    internal static string NormalizarIdentificacao(string? identificacao)
     {
         if (string.IsNullOrWhiteSpace(identificacao))
         {

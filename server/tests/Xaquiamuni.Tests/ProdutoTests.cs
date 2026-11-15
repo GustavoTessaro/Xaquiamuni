@@ -121,10 +121,29 @@ public sealed class ProdutoTests
         var padrao = ProdutoVariante.Criar("200 g", "G", 20m, padrao: true);
         var duplicate = ProdutoVariante.Criar(" 200   G ", "G", 22m);
 
-        var exception = Assert.Throws<ArgumentException>(
+        var exception = Assert.Throws<InvalidOperationException>(
             () => Produto.Criar("Vela", null, CategoriaAtiva(), [padrao, duplicate]));
 
-        Assert.Equal("variantes", exception.ParamName);
+        Assert.Contains("identificação", exception.Message);
+    }
+
+    [Fact]
+    public void AtualizarVariante_UpdatesCommercialFieldsAndRejectsDuplicateIdentification()
+    {
+        var padrao = ProdutoVariante.Criar("100 g", "G", 15m, padrao: true);
+        var outra = ProdutoVariante.Criar("200 g", "G", 25m);
+        var produto = Produto.Criar("Sabonete", null, CategoriaAtiva(), [padrao, outra]);
+
+        produto.AtualizarVariante(outra.Id, "250 g", "g", 29.90m);
+        Assert.Equal("250 g", outra.Identificacao);
+        Assert.Equal("G", outra.UnidadeVenda);
+        Assert.Equal(29.90m, outra.PrecoVenda);
+        Assert.False(outra.Padrao);
+        Assert.True(outra.Ativa);
+
+        Assert.Throws<InvalidOperationException>(
+            () => produto.AtualizarVariante(outra.Id, "100 G", "G", 29.90m));
+        Assert.Equal("250 g", outra.Identificacao);
     }
 
     [Fact]
@@ -195,6 +214,21 @@ public sealed class ProdutoTests
         Assert.True(produto.Publicado);
         Assert.Single(produto.Variantes, variante => variante.Ativa && variante.Padrao);
         Assert.False(padrao.Ativa);
+    }
+
+    [Fact]
+    public void Publicar_RejectsInactiveCategoryAndDeactivationNeverRemovesLastActiveVariant()
+    {
+        var categoria = CategoriaAtiva();
+        var padrao = ProdutoVariante.Criar("Padrão", "UN", 10m, padrao: true);
+        var produto = Produto.Criar("Sabonete", null, categoria, [padrao]);
+        categoria.DefinirAtiva(false);
+
+        Assert.Throws<InvalidOperationException>(() => produto.Publicar());
+        Assert.Throws<InvalidOperationException>(() => produto.DesativarVariante(padrao.Id));
+        Assert.False(produto.Publicado);
+        Assert.True(padrao.Ativa);
+        Assert.True(padrao.Padrao);
     }
 
     private static Categoria CategoriaAtiva() => Categoria.Criar("Categoria", null, 0);

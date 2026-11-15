@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Catalogo;
@@ -70,14 +71,29 @@ public sealed class EfCategoriaRepository : ICategoriaRepository
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(categoria);
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            .ConfigureAwait(false);
 
         try
         {
+            if (!categoria.Ativa)
+            {
+                await _dbContext.Produtos
+                    .Where(produto => produto.CategoriaId == categoria.Id && produto.Publicado)
+                    .ExecuteUpdateAsync(
+                        updates => updates.SetProperty(produto => produto.Publicado, false),
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
         catch (DbUpdateException exception) when (IsCategoryNameConflict(exception))
         {
+            await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
             _dbContext.Entry(categoria).State = EntityState.Detached;
             return false;
         }

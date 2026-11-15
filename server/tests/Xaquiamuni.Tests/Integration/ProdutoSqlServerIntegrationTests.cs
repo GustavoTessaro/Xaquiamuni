@@ -1,7 +1,10 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.DependencyInjection;
+using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -133,6 +136,117 @@ public sealed class ProdutoSqlServerIntegrationTests
         await Assert.ThrowsAsync<SqlException>(() => deleteCategory);
     }
 
+    [SqlServerIntegrationFact]
+    public async Task AdminProductCases_PersistVariantsFiltersPublicationAndCategoryDeactivation()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var appliedMigrations = await context.Database.GetAppliedMigrationsAsync();
+        Assert.Contains(AddProdutosEVariantesMigration, appliedMigrations);
+
+        var category = Categoria.Criar("Sabonetes", null, 0);
+        var otherCategory = Categoria.Criar("Velas", null, 1);
+        context.Categorias.AddRange(category, otherCategory);
+        await context.SaveChangesAsync();
+
+        var manager = database.Services.GetRequiredService<IGerenciarProdutos>();
+        var created = await manager.CadastrarAsync(
+            new ProdutoCadastroInput(
+                "Sabonete de Lavanda",
+                "Produção artesanal",
+                category.Id,
+                new ProdutoVarianteInput("100 g", "G", 20m),
+                [new ProdutoVarianteInput("200 g", "G", 35m)]));
+        Assert.Equal(ProdutoStatus.Success, created.Status);
+        var product = Assert.IsType<Produto>(created.Produto);
+        var originalDefault = Assert.Single(product.Variantes, variant => variant.Padrao);
+        var otherVariant = Assert.Single(product.Variantes, variant => !variant.Padrao);
+
+        var edited = await manager.EditarAsync(
+            product.Id,
+            new ProdutoEdicaoInput("Sabonete Natural", "Lavanda", otherCategory.Id));
+        var variantEdited = await manager.EditarVarianteAsync(
+            product.Id,
+            otherVariant.Id,
+            new ProdutoVarianteInput("250 g", "G", 39.90m));
+        var switched = await manager.DefinirVariantePadraoAsync(product.Id, otherVariant.Id);
+        var deactivated = await manager.AlterarStatusVarianteAsync(
+            product.Id,
+            originalDefault.Id,
+            false,
+            null);
+        var published = await manager.AlterarPublicacaoAsync(product.Id, true);
+        var publishedList = await manager.ListarAsync(
+            new ProdutoFiltro("NATURAL", otherCategory.Id, Publicado: true));
+
+        Assert.Equal(ProdutoStatus.Success, edited.Status);
+        Assert.Equal(ProdutoStatus.Success, variantEdited.Status);
+        Assert.Equal(ProdutoStatus.Success, switched.Status);
+        Assert.Equal(ProdutoStatus.Success, deactivated.Status);
+        Assert.Equal(ProdutoStatus.Success, published.Status);
+        Assert.Single(publishedList);
+        Assert.Equal(product.Id, publishedList[0].Id);
+
+        var categoryResult = await database.Services.GetRequiredService<IGerenciarCategorias>()
+            .AlterarStatusAsync(otherCategory.Id, false);
+        Assert.Equal(CategoriaStatus.Success, categoryResult.Status);
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Categoria)
+            .Include(item => item.Variantes)
+            .SingleAsync(item => item.Id == product.Id);
+        Assert.Equal("Sabonete Natural", persisted.Nome);
+        Assert.Equal("Lavanda", persisted.Descricao);
+        Assert.False(persisted.Categoria.Ativa);
+        Assert.False(persisted.Publicado);
+        Assert.False(persisted.Variantes.Single(variant => variant.Id == originalDefault.Id).Ativa);
+        Assert.True(persisted.Variantes.Single(variant => variant.Id == otherVariant.Id).Padrao);
+        Assert.Equal(39.90m, persisted.Variantes.Single(variant => variant.Id == otherVariant.Id).PrecoVenda);
+
+        var cannotPublishInactiveCategory = await manager.AlterarPublicacaoAsync(product.Id, true);
+        Assert.Equal(ProdutoStatus.CategoryInactive, cannotPublishInactiveCategory.Status);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task DefaultVariantSwitch_SaveFailureRollsBackTheDemotionAndPromotion()
+    {
+        var saveInterceptor = new FailNextSaveInterceptor();
+        await using var database = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: saveInterceptor);
+        var context = database.Services.GetRequiredService<XaquiamuniDbContext>();
+        var category = Categoria.Criar("Velas", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var manager = database.Services.GetRequiredService<IGerenciarProdutos>();
+        var created = await manager.CadastrarAsync(
+            new ProdutoCadastroInput(
+                "Vela artesanal",
+                null,
+                category.Id,
+                new ProdutoVarianteInput("Padrão", "UN", 25m),
+                [new ProdutoVarianteInput("200 g", "G", 38m)]));
+        var product = Assert.IsType<Produto>(created.Produto);
+        var originalDefault = Assert.Single(product.Variantes, variant => variant.Padrao);
+        var replacement = Assert.Single(product.Variantes, variant => !variant.Padrao);
+
+        saveInterceptor.FailNextSave = true;
+        await Assert.ThrowsAsync<DbUpdateException>(
+            () => manager.AlterarStatusVarianteAsync(
+                product.Id,
+                originalDefault.Id,
+                false,
+                replacement.Id));
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Variantes)
+            .SingleAsync(item => item.Id == product.Id);
+        Assert.True(persisted.Variantes.Single(variant => variant.Id == originalDefault.Id).Ativa);
+        Assert.True(persisted.Variantes.Single(variant => variant.Id == originalDefault.Id).Padrao);
+        Assert.False(persisted.Variantes.Single(variant => variant.Id == replacement.Id).Padrao);
+    }
+
     private static Task<int> InsertVariantAsync(
         XaquiamuniDbContext context,
         Guid productId,
@@ -151,4 +265,23 @@ public sealed class ProdutoSqlServerIntegrationTests
                 ({id}, {productId}, {identification}, {normalizedIdentification}, {unit},
                  {price}, {active}, {isDefault});
             """);
+
+    private sealed class FailNextSaveInterceptor : SaveChangesInterceptor
+    {
+        public bool FailNextSave { get; set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData,
+            InterceptionResult<int> result,
+            CancellationToken cancellationToken = default)
+        {
+            if (FailNextSave)
+            {
+                FailNextSave = false;
+                throw new DbUpdateException("Injected product persistence failure.");
+            }
+
+            return ValueTask.FromResult(result);
+        }
+    }
 }
