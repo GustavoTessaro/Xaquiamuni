@@ -11,6 +11,7 @@ public sealed class Produto
 
     private readonly List<ProdutoVariante> _variantes = [];
     private readonly List<ProdutoCaracteristica> _caracteristicas = [];
+    private readonly List<ProdutoImagem> _imagens = [];
 
     private Produto()
     {
@@ -33,6 +34,7 @@ public sealed class Produto
     public bool Publicado { get; private set; }
     public IReadOnlyCollection<ProdutoVariante> Variantes => _variantes.AsReadOnly();
     public IReadOnlyCollection<ProdutoCaracteristica> Caracteristicas => _caracteristicas.AsReadOnly();
+    public IReadOnlyCollection<ProdutoImagem> Imagens => _imagens.AsReadOnly();
 
     public static Produto Criar(
         string? nome,
@@ -379,6 +381,119 @@ public sealed class Produto
         variante.DefinirAtiva(false);
     }
 
+    public ProdutoImagem AdicionarImagem(
+        string? chaveArmazenamento,
+        string? nomeOriginal,
+        string? tipoConteudo,
+        long tamanhoBytes,
+        int larguraPixels,
+        int alturaPixels,
+        DateTimeOffset? criadoEmUtc = null)
+    {
+        if (_imagens.Count >= ProdutoImagem.QuantidadeMaximaPorProduto)
+        {
+            throw new InvalidOperationException(
+                $"Um produto pode possuir no máximo {ProdutoImagem.QuantidadeMaximaPorProduto} imagens.");
+        }
+
+        var storageKey = chaveArmazenamento?.Trim();
+        if (_imagens.Any(imagem => string.Equals(
+                imagem.ChaveArmazenamento,
+                storageKey,
+                StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "A chave de armazenamento já está associada a uma imagem deste produto.");
+        }
+
+        var slot = Enumerable.Range(1, ProdutoImagem.QuantidadeMaximaPorProduto)
+            .First(candidate => _imagens.All(imagem => imagem.SlotGaleria != candidate));
+        var imagem = ProdutoImagem.Criar(
+            this,
+            storageKey,
+            nomeOriginal,
+            tipoConteudo,
+            tamanhoBytes,
+            larguraPixels,
+            alturaPixels,
+            _imagens.Count + 1,
+            slot,
+            principal: _imagens.Count == 0,
+            criadoEmUtc);
+        _imagens.Add(imagem);
+        return imagem;
+    }
+
+    public void DefinirImagemPrincipal(Guid imagemId)
+    {
+        var imagem = ObterImagem(imagemId);
+        foreach (var existente in _imagens)
+        {
+            existente.DefinirPrincipal(existente.Id == imagem.Id);
+        }
+    }
+
+    public void ReordenarImagens(IEnumerable<Guid> imagemIds)
+    {
+        ArgumentNullException.ThrowIfNull(imagemIds);
+        var ids = imagemIds.ToArray();
+        if (ids.Length != _imagens.Count || ids.Distinct().Count() != ids.Length)
+        {
+            throw new ArgumentException(
+                "A nova ordem deve conter cada imagem do produto exatamente uma vez.",
+                nameof(imagemIds));
+        }
+
+        var orderedImages = ids.Select(ObterImagem).ToArray();
+        for (var index = 0; index < orderedImages.Length; index++)
+        {
+            orderedImages[index].DefinirOrdemExibicao(index + 1);
+        }
+
+        _imagens.Clear();
+        _imagens.AddRange(orderedImages);
+    }
+
+    public void AssociarImagemAVariante(Guid imagemId, Guid varianteId) =>
+        ObterImagem(imagemId).AssociarVariante(ObterVariante(varianteId));
+
+    public void DesassociarImagemDaVariante(Guid imagemId, Guid varianteId)
+    {
+        var imagem = ObterImagem(imagemId);
+        _ = ObterVariante(varianteId);
+        if (!imagem.DesassociarVariante(varianteId))
+        {
+            throw new ArgumentException(
+                "A imagem não está vinculada a esta opção do produto.",
+                nameof(varianteId));
+        }
+    }
+
+    public void RemoverImagem(Guid imagemId)
+    {
+        var imagem = ObterImagem(imagemId);
+        if (Publicado && _imagens.Count == 1)
+        {
+            throw new InvalidOperationException(
+                "Despublique o produto antes de remover sua última imagem.");
+        }
+
+        if (imagem.Principal && _imagens.Count > 1)
+        {
+            _imagens
+                .Where(item => item.Id != imagemId)
+                .MinBy(item => item.OrdemExibicao)!
+                .DefinirPrincipal(true);
+            imagem.DefinirPrincipal(false);
+        }
+
+        _imagens.Remove(imagem);
+        for (var index = 0; index < _imagens.Count; index++)
+        {
+            _imagens[index].DefinirOrdemExibicao(index + 1);
+        }
+    }
+
     public void Publicar()
     {
         if (!Categoria.Ativa)
@@ -395,6 +510,12 @@ public sealed class Produto
                 "Um produto publicado deve possuir uma variante padrão ativa.");
         }
 
+        if (_imagens.Count == 0 || _imagens.Count(imagem => imagem.Principal) != 1)
+        {
+            throw new InvalidOperationException(
+                "Um produto só pode ser publicado com ao menos uma imagem e exatamente uma imagem principal.");
+        }
+
         Publicado = true;
     }
 
@@ -406,6 +527,10 @@ public sealed class Produto
     private ProdutoVariante ObterVariante(Guid id) =>
         _variantes.SingleOrDefault(variant => variant.Id == id)
         ?? throw new ArgumentException("A variante não pertence a este produto.", nameof(id));
+
+    private ProdutoImagem ObterImagem(Guid id) =>
+        _imagens.SingleOrDefault(image => image.Id == id)
+        ?? throw new ArgumentException("A imagem não pertence a este produto.", nameof(id));
 
     private ProdutoCaracteristica ObterCaracteristica(Guid id) =>
         _caracteristicas.SingleOrDefault(item => item.Id == id)

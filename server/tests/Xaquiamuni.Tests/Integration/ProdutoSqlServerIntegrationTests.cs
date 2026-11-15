@@ -16,6 +16,7 @@ public sealed class ProdutoSqlServerIntegrationTests
     private const string AddProdutosEVariantesMigration = "20261115021210_AddProdutosEVariantes";
     private const string AddProductCharacteristicsMigrationSuffix =
         "_AddProdutoCaracteristicasEMedidasFisicas";
+    private const string AddProductImagesMigrationSuffix = "_AddProdutoImagens";
 
     [SqlServerIntegrationFact]
     public async Task Migration_PersistsProductsVariantsAndCategoryRelationship()
@@ -59,6 +60,176 @@ public sealed class ProdutoSqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task ProductImages_PersistReloadReorderAndEnforceScopedLinksAndUniqueIndexes()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Velas", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var mainVariant = ProdutoVariante.Criar("100 g", "UN", 35m, padrao: true);
+        var otherVariant = ProdutoVariante.Criar("200 g", "KIT", 55m);
+        var product = Produto.Criar("Vela aromática", null, category, [mainVariant, otherVariant]);
+        var mainImage = AdicionarImagem(product, "products/vela/main.jpg", "foto principal.jpg");
+        var secondaryImage = AdicionarImagem(product, "products/vela/secondary.jpg", "detalhe.webp");
+        product.AssociarImagemAVariante(mainImage.Id, mainVariant.Id);
+        product.AssociarImagemAVariante(mainImage.Id, otherVariant.Id);
+        product.AssociarImagemAVariante(secondaryImage.Id, otherVariant.Id);
+        context.Produtos.Add(product);
+        await context.SaveChangesAsync();
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Variantes)
+            .Include(item => item.Imagens)
+                .ThenInclude(image => image.Variantes)
+                    .ThenInclude(association => association.Variante)
+            .SingleAsync(item => item.Id == product.Id);
+        Assert.Equal(2, persisted.Imagens.Count);
+        Assert.Single(persisted.Imagens, image => image.Principal);
+        Assert.Equal(
+            new[] { mainImage.Id, secondaryImage.Id },
+            persisted.Imagens.OrderBy(image => image.OrdemExibicao).Select(image => image.Id));
+        var persistedMainImage = persisted.Imagens.Single(image => image.Id == mainImage.Id);
+        Assert.Equal("products/vela/main.jpg", persistedMainImage.ChaveArmazenamento);
+        Assert.Equal("foto principal.jpg", persistedMainImage.NomeOriginal);
+        Assert.Equal(2, persistedMainImage.Variantes.Count);
+        Assert.Contains(
+            persistedMainImage.Variantes,
+            association => association.Variante.Id == mainVariant.Id);
+
+        var repository = new EfProdutoRepository(verificationContext);
+        var reordered = await repository.ExecutarMutacaoAsync(async (session, token) =>
+        {
+            var loaded = await session.BuscarProdutoAsync(product.Id, token);
+            Assert.NotNull(loaded);
+            loaded.DefinirImagemPrincipal(secondaryImage.Id);
+            loaded.ReordenarImagens([secondaryImage.Id, mainImage.Id]);
+            return ProdutoResult.Success(loaded);
+        });
+        Assert.Equal(ProdutoStatus.Success, reordered.Status);
+
+        await using var constraintContext = database.CreateVerificationContext();
+        var changed = await constraintContext.Produtos
+            .Include(item => item.Imagens)
+            .SingleAsync(item => item.Id == product.Id);
+        Assert.Equal(
+            new[] { secondaryImage.Id, mainImage.Id },
+            changed.Imagens.OrderBy(image => image.OrdemExibicao).Select(image => image.Id));
+        Assert.True(changed.Imagens.Single(image => image.Id == secondaryImage.Id).Principal);
+
+        var removedMain = await repository.ExecutarMutacaoAsync(async (session, token) =>
+        {
+            var loaded = await session.BuscarProdutoAsync(product.Id, token);
+            Assert.NotNull(loaded);
+            loaded.RemoverImagem(secondaryImage.Id);
+            return ProdutoResult.Success(loaded);
+        });
+        Assert.Equal(ProdutoStatus.Success, removedMain.Status);
+
+        await using var removalVerificationContext = database.CreateVerificationContext();
+        var afterRemoval = await removalVerificationContext.Produtos
+            .Include(item => item.Imagens)
+                .ThenInclude(image => image.Variantes)
+                    .ThenInclude(association => association.Variante)
+            .SingleAsync(item => item.Id == product.Id);
+        var promotedImage = Assert.Single(afterRemoval.Imagens);
+        Assert.Equal(mainImage.Id, promotedImage.Id);
+        Assert.True(promotedImage.Principal);
+        Assert.Single(promotedImage.Variantes, association =>
+            association.ProdutoVarianteId == mainVariant.Id);
+
+        var otherProduct = Produto.CriarSimples("Outro produto", null, category, "UN", 10m);
+        context.Produtos.Add(otherProduct);
+        await context.SaveChangesAsync();
+        var otherProductVariantId = Assert.Single(otherProduct.Variantes).Id;
+        var crossProductLink = removalVerificationContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoImagemVariantes] ([ProdutoImagemId], [ProdutoVarianteId], [ProdutoId])
+            VALUES ({mainImage.Id}, {otherProductVariantId}, {product.Id});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => crossProductLink);
+
+        var duplicateAssociation = removalVerificationContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoImagemVariantes] ([ProdutoImagemId], [ProdutoVarianteId], [ProdutoId])
+            VALUES ({mainImage.Id}, {mainVariant.Id}, {product.Id});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateAssociation);
+
+        var duplicateStorageKey = removalVerificationContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoImagens]
+                ([Id], [ProdutoId], [ChaveArmazenamento], [NomeOriginal], [TipoConteudo],
+                 [TamanhoBytes], [LarguraPixels], [AlturaPixels], [OrdemExibicao], [SlotGaleria],
+                 [Principal], [CriadoEmUtc])
+            VALUES
+                ({Guid.NewGuid()}, {otherProduct.Id}, {"products/vela/main.jpg"}, {"duplicada.jpg"},
+                 {"image/jpeg"}, {1024L}, {100}, {100}, {1}, {1}, {true}, {DateTimeOffset.UtcNow});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateStorageKey);
+
+        var duplicateMainImage = removalVerificationContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoImagens]
+                ([Id], [ProdutoId], [ChaveArmazenamento], [NomeOriginal], [TipoConteudo],
+                 [TamanhoBytes], [LarguraPixels], [AlturaPixels], [OrdemExibicao], [SlotGaleria],
+                 [Principal], [CriadoEmUtc])
+            VALUES
+                ({Guid.NewGuid()}, {product.Id}, {"products/vela/duplicate-main.jpg"}, {"duplicada.jpg"},
+                 {"image/jpeg"}, {1024L}, {100}, {100}, {3}, {3}, {true}, {DateTimeOffset.UtcNow});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateMainImage);
+
+        var outOfRangeSlot = removalVerificationContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoImagens]
+                ([Id], [ProdutoId], [ChaveArmazenamento], [NomeOriginal], [TipoConteudo],
+                 [TamanhoBytes], [LarguraPixels], [AlturaPixels], [OrdemExibicao], [SlotGaleria],
+                 [Principal], [CriadoEmUtc])
+            VALUES
+                ({Guid.NewGuid()}, {otherProduct.Id}, {"products/other/invalid-slot.jpg"}, {"invalid.jpg"},
+                 {"image/jpeg"}, {1024L}, {100}, {100}, {1}, {6}, {true}, {DateTimeOffset.UtcNow});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => outOfRangeSlot);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ProductImageGallerySlot_RejectsConcurrentSixthImage()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Sabonetes", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+        var product = Produto.CriarSimples("Sabonete", null, category, "UN", 15m);
+        for (var index = 1; index <= 4; index++)
+        {
+            AdicionarImagem(product, $"products/sabao/{index}.jpg", $"foto-{index}.jpg");
+        }
+
+        context.Produtos.Add(product);
+        await context.SaveChangesAsync();
+
+        var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstInsert = InsertConcurrentImageSlotAsync(
+            database,
+            start.Task,
+            product.Id,
+            "products/sabao/concurrent-a.jpg");
+        var secondInsert = InsertConcurrentImageSlotAsync(
+            database,
+            start.Task,
+            product.Id,
+            "products/sabao/concurrent-b.jpg");
+        start.SetResult(true);
+
+        var outcomes = await Task.WhenAll(firstInsert, secondInsert);
+
+        Assert.Single(outcomes, outcome => outcome is null);
+        var conflict = Assert.IsType<SqlException>(Assert.Single(outcomes, outcome => outcome is not null));
+        Assert.True(conflict.Number is 2601 or 2627);
+        await using var verificationContext = database.CreateVerificationContext();
+        Assert.Equal(5, await verificationContext.ProdutoImagens.CountAsync(image => image.ProdutoId == product.Id));
+    }
+
+    [SqlServerIntegrationFact]
     public async Task Migration_PreservesExistingVariantsWithoutInventingCharacteristicsOrMeasurements()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync(
@@ -92,6 +263,9 @@ public sealed class ProdutoSqlServerIntegrationTests
             migration => migration.EndsWith(
                 AddProductCharacteristicsMigrationSuffix,
                 StringComparison.Ordinal));
+        Assert.Contains(
+            appliedMigrations,
+            migration => migration.EndsWith(AddProductImagesMigrationSuffix, StringComparison.Ordinal));
 
         await using var verificationContext = database.CreateVerificationContext();
         var persisted = await verificationContext.Produtos
@@ -99,6 +273,7 @@ public sealed class ProdutoSqlServerIntegrationTests
             .Include(item => item.Variantes)
                 .ThenInclude(variant => variant.CaracteristicaValores)
             .Include(item => item.Caracteristicas)
+            .Include(item => item.Imagens)
             .SingleAsync(item => item.Id == productId);
 
         Assert.Equal(productId, persisted.Id);
@@ -108,6 +283,7 @@ public sealed class ProdutoSqlServerIntegrationTests
         Assert.Equal("Sabonetes", persisted.Categoria.Nome);
         Assert.True(persisted.Categoria.Ativa);
         Assert.True(persisted.Publicado);
+        Assert.Empty(persisted.Imagens);
         Assert.Empty(persisted.Caracteristicas);
         Assert.Equal(2, persisted.Variantes.Count);
         var defaultVariant = persisted.Variantes.Single(item => item.Id == defaultVariantId);
@@ -753,6 +929,45 @@ public sealed class ProdutoSqlServerIntegrationTests
                 ({id}, {productId}, {identification}, {normalizedIdentification}, {unit},
                  {price}, {active}, {isDefault});
             """);
+
+    private static ProdutoImagem AdicionarImagem(
+        Produto produto,
+        string chave,
+        string nomeOriginal) =>
+        produto.AdicionarImagem(
+            chave,
+            nomeOriginal,
+            "image/jpeg",
+            1024,
+            120,
+            120);
+
+    private static async Task<Exception?> InsertConcurrentImageSlotAsync(
+        SqlServerTestDatabase database,
+        Task start,
+        Guid productId,
+        string storageKey)
+    {
+        await start.ConfigureAwait(false);
+        await using var context = database.CreateVerificationContext();
+        try
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [ProdutoImagens]
+                    ([Id], [ProdutoId], [ChaveArmazenamento], [NomeOriginal], [TipoConteudo],
+                     [TamanhoBytes], [LarguraPixels], [AlturaPixels], [OrdemExibicao], [SlotGaleria],
+                     [Principal], [CriadoEmUtc])
+                VALUES
+                    ({Guid.NewGuid()}, {productId}, {storageKey}, {"concorrente.jpg"}, {"image/jpeg"},
+                     {1024L}, {100}, {100}, {5}, {5}, {false}, {DateTimeOffset.UtcNow});
+                """);
+            return null;
+        }
+        catch (SqlException exception)
+        {
+            return exception;
+        }
+    }
 
     private static async Task<Exception?> InsertConcurrentCombinationAsync(
         SqlServerTestDatabase database,

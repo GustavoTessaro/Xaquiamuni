@@ -372,6 +372,7 @@ public sealed class ProdutoTests
         var padrao = ProdutoVariante.Criar("200 g", "UN", 20m, padrao: true);
         var outra = ProdutoVariante.Criar("400 g", "UN", 30m);
         var produto = Produto.Criar("Vela", null, categoria, [padrao, outra]);
+        AdicionarImagem(produto);
         produto.Publicar();
 
         Assert.Throws<InvalidOperationException>(
@@ -400,6 +401,7 @@ public sealed class ProdutoTests
         Assert.Throws<InvalidOperationException>(() => produto.DesativarVariante(padrao.Id));
         produto.AtivarVariante(outra.Id);
         produto.DefinirVariantePadrao(outra.Id);
+        AdicionarImagem(produto);
         produto.Publicar();
         produto.DesativarVariante(padrao.Id);
 
@@ -423,7 +425,131 @@ public sealed class ProdutoTests
         Assert.True(padrao.Padrao);
     }
 
+    [Fact]
+    public void Imagens_FirstImageBecomesMainAndGalleryRejectsSixthImage()
+    {
+        var product = Produto.CriarSimples("Sabonete", null, CategoriaAtiva(), "UN", 15m);
+
+        var images = Enumerable.Range(1, ProdutoImagem.QuantidadeMaximaPorProduto)
+            .Select(index => AdicionarImagem(product, $"sabao/{index}.jpg"))
+            .ToArray();
+
+        Assert.True(images[0].Principal);
+        Assert.All(images.Skip(1), image => Assert.False(image.Principal));
+        Assert.Equal(ProdutoImagem.QuantidadeMaximaPorProduto, product.Imagens.Count);
+        Assert.Throws<InvalidOperationException>(() => AdicionarImagem(product, "sabao/6.jpg"));
+    }
+
+    [Fact]
+    public void Imagens_CanChangeMainAndReorderWithoutDuplicatingPositions()
+    {
+        var product = Produto.CriarSimples("Sabonete", null, CategoriaAtiva(), "UN", 15m);
+        var first = AdicionarImagem(product, "sabao/first.jpg");
+        var second = AdicionarImagem(product, "sabao/second.jpg");
+        var third = AdicionarImagem(product, "sabao/third.jpg");
+
+        product.DefinirImagemPrincipal(second.Id);
+        product.ReordenarImagens([third.Id, second.Id, first.Id]);
+
+        Assert.True(second.Principal);
+        Assert.Equal(new[] { third.Id, second.Id, first.Id }, product.Imagens.Select(image => image.Id));
+        Assert.Equal(new[] { 1, 2, 3 }, product.Imagens.Select(image => image.OrdemExibicao));
+        Assert.Throws<ArgumentException>(() => product.ReordenarImagens([first.Id, first.Id, third.Id]));
+        Assert.Equal(new[] { 1, 2, 3 }, product.Imagens.Select(image => image.OrdemExibicao));
+    }
+
+    [Fact]
+    public void Imagens_RemovingMainPromotesAnotherAndLastImageCanOnlyBeRemovedWhenUnpublished()
+    {
+        var product = Produto.CriarSimples("Sabonete", null, CategoriaAtiva(), "UN", 15m);
+        var first = AdicionarImagem(product, "sabao/first.jpg");
+        var second = AdicionarImagem(product, "sabao/second.jpg");
+        var third = AdicionarImagem(product, "sabao/third.jpg");
+
+        product.RemoverImagem(first.Id);
+
+        Assert.False(first.Principal);
+        Assert.True(second.Principal);
+        Assert.Equal(new[] { 1, 2 }, product.Imagens.Select(image => image.OrdemExibicao));
+        product.RemoverImagem(second.Id);
+        product.RemoverImagem(third.Id);
+        Assert.Empty(product.Imagens);
+
+        var publishedProduct = Produto.CriarSimples("Vela", null, CategoriaAtiva(), "UN", 20m);
+        var onlyImage = AdicionarImagem(publishedProduct);
+        publishedProduct.Publicar();
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => publishedProduct.RemoverImagem(onlyImage.Id));
+
+        Assert.Contains("Despublique", exception.Message);
+        Assert.Single(publishedProduct.Imagens);
+        Assert.True(onlyImage.Principal);
+    }
+
+    [Fact]
+    public void Publicar_RequiresMainImageAndAcceptsValidProductWithMainImage()
+    {
+        var product = Produto.CriarSimples("Sabonete", null, CategoriaAtiva(), "UN", 15m);
+
+        var missingImage = Assert.Throws<InvalidOperationException>(() => product.Publicar());
+        Assert.Contains("imagem", missingImage.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(product.Publicado);
+
+        var image = AdicionarImagem(product);
+        product.Publicar();
+
+        Assert.True(product.Publicado);
+        Assert.True(image.Principal);
+    }
+
+    [Fact]
+    public void Imagens_CanBeSharedAcrossProductVariantsButNotAcrossProducts()
+    {
+        var product = CriarProdutoComDuasVariantes();
+        var variants = product.Variantes.ToArray();
+        var image = AdicionarImagem(product);
+
+        product.AssociarImagemAVariante(image.Id, variants[0].Id);
+        product.AssociarImagemAVariante(image.Id, variants[1].Id);
+
+        Assert.Equal(2, image.Variantes.Count);
+        Assert.Throws<InvalidOperationException>(
+            () => product.AssociarImagemAVariante(image.Id, variants[0].Id));
+
+        var otherProduct = Produto.CriarSimples("Outro produto", null, CategoriaAtiva(), "UN", 10m);
+        var otherVariant = Assert.Single(otherProduct.Variantes);
+        Assert.Throws<ArgumentException>(
+            () => product.AssociarImagemAVariante(image.Id, otherVariant.Id));
+
+        product.DesassociarImagemDaVariante(image.Id, variants[0].Id);
+        Assert.Single(image.Variantes);
+    }
+
+    [Fact]
+    public void Imagens_RejectInvalidStorageReferencesAndMetadata()
+    {
+        var product = Produto.CriarSimples("Sabonete", null, CategoriaAtiva(), "UN", 15m);
+
+        Assert.Throws<ArgumentException>(() =>
+            product.AdicionarImagem("C:\\images\\photo.jpg", "photo.jpg", "image/jpeg", 10, 1, 1));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            product.AdicionarImagem("soap/photo.jpg", "photo.jpg", "image/jpeg", 0, 1, 1));
+        Assert.Empty(product.Imagens);
+    }
+
     private static Categoria CategoriaAtiva() => Categoria.Criar("Categoria", null, 0);
+
+    private static ProdutoImagem AdicionarImagem(
+        Produto produto,
+        string? chave = null) =>
+        produto.AdicionarImagem(
+            chave ?? $"images/{Guid.NewGuid():N}",
+            "photo.jpg",
+            "image/jpeg",
+            1024,
+            100,
+            100);
 
     private static Produto CriarProdutoComDuasVariantes(decimal? pesoPadrao = null)
     {

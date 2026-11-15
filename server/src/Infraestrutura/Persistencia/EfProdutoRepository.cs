@@ -15,19 +15,28 @@ public sealed class EfProdutoRepository : IProdutoRepository
         "UX_ProdutoVariantes_DefaultPerProduto";
     private const string VariantCombinationIndex =
         "UX_ProdutoVariantes_ProdutoId_CombinacaoHash";
+    private const string ImageMainIndex =
+        "UX_ProdutoImagens_PrincipalPorProduto";
     private static readonly string[] ProductCatalogUniqueConstraints =
     [
         "UX_ProdutoCaracteristicas_ProdutoId_NomeNormalizado",
         "UX_ProdutoCaracteristicas_ProdutoId_TipoMedidaFisica",
         "UX_ProdutoCaracteristicaValores_Produto_Caracteristica_NomeNormalizado",
-        "PK_ProdutoVarianteCaracteristicaValores"
+        "PK_ProdutoVarianteCaracteristicaValores",
+        "UX_ProdutoImagens_ChaveArmazenamento",
+        "UX_ProdutoImagens_ProdutoId_SlotGaleria",
+        ImageMainIndex,
+        "PK_ProdutoImagemVariantes"
     ];
     private static readonly string[] ProductCatalogForeignKeys =
     [
         "FK_ProdutoCaracteristicaValores_ProdutoCaracteristicas",
         "FK_ProdutoVarianteCaracteristicaValores_ProdutoCaracteristicaValores",
         "FK_ProdutoVarianteCaracteristicaValores_ProdutoCaracteristicas",
-        "FK_ProdutoVarianteCaracteristicaValores_ProdutoVariantes"
+        "FK_ProdutoVarianteCaracteristicaValores_ProdutoVariantes",
+        "FK_ProdutoImagens_Produtos_ProdutoId",
+        "FK_ProdutoImagemVariantes_ProdutoImagens_ProdutoId_ProdutoImagemId",
+        "FK_ProdutoImagemVariantes_ProdutoVariantes_ProdutoId_ProdutoVarianteId"
     ];
 
     private readonly XaquiamuniDbContext _dbContext;
@@ -54,6 +63,9 @@ public sealed class EfProdutoRepository : IProdutoRepository
                     .ThenInclude(associacao => associacao.Valor)
             .Include(produto => produto.Caracteristicas)
                 .ThenInclude(caracteristica => caracteristica.Valores)
+            .Include(produto => produto.Imagens)
+                .ThenInclude(imagem => imagem.Variantes)
+                    .ThenInclude(association => association.Variante)
             .AsSplitQuery()
             .AsQueryable();
 
@@ -108,7 +120,7 @@ public sealed class EfProdutoRepository : IProdutoRepository
                 return result;
             }
 
-            await SaveChangesWithDefaultSwitchAsync(cancellationToken).ConfigureAwait(false);
+            await SaveChangesWithUniqueSwitchesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             committed = true;
             return result;
@@ -134,7 +146,7 @@ public sealed class EfProdutoRepository : IProdutoRepository
         }
     }
 
-    private async Task SaveChangesWithDefaultSwitchAsync(CancellationToken cancellationToken)
+    private async Task SaveChangesWithUniqueSwitchesAsync(CancellationToken cancellationToken)
     {
         var demotedDefaults = _dbContext.ChangeTracker
             .Entries<ProdutoVariante>()
@@ -158,6 +170,32 @@ public sealed class EfProdutoRepository : IProdutoRepository
             var defaultProperty = entry.Property(variante => variante.Padrao);
             defaultProperty.OriginalValue = false;
             defaultProperty.IsModified = false;
+        }
+
+        var demotedMainImages = _dbContext.ChangeTracker
+            .Entries<ProdutoImagem>()
+            .Where(entry => entry.Property(image => image.Principal).OriginalValue
+                && (entry.State == EntityState.Deleted || !entry.Entity.Principal))
+            .ToArray();
+
+        foreach (var entry in demotedMainImages)
+        {
+            var rowsUpdated = await _dbContext.Database.ExecuteSqlInterpolatedAsync(
+                    $"UPDATE [ProdutoImagens] SET [Principal] = CAST(0 AS bit) WHERE [Id] = {entry.Entity.Id} AND [ProdutoId] = {entry.Entity.ProdutoId} AND [Principal] = CAST(1 AS bit)",
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (rowsUpdated != 1)
+            {
+                throw new DbUpdateConcurrencyException(
+                    "The stored main product image changed during the product update.");
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
+                var mainProperty = entry.Property(image => image.Principal);
+                mainProperty.OriginalValue = false;
+                mainProperty.IsModified = false;
+            }
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -240,5 +278,8 @@ public sealed class EfProdutoRepository : IProdutoRepository
             .Include(produto => produto.Variantes)
                 .ThenInclude(variante => variante.CaracteristicaValores)
                     .ThenInclude(associacao => associacao.Valor)
+            .Include(produto => produto.Imagens)
+                .ThenInclude(imagem => imagem.Variantes)
+                    .ThenInclude(association => association.Variante)
             .AsSplitQuery();
 }

@@ -22,6 +22,8 @@ public sealed class XaquiamuniDbContext
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Produto> Produtos => Set<Produto>();
     public DbSet<ProdutoVariante> ProdutoVariantes => Set<ProdutoVariante>();
+    public DbSet<ProdutoImagem> ProdutoImagens => Set<ProdutoImagem>();
+    public DbSet<ProdutoImagemVariante> ProdutoImagemVariantes => Set<ProdutoImagemVariante>();
     public DbSet<ProdutoCaracteristica> ProdutoCaracteristicas => Set<ProdutoCaracteristica>();
     public DbSet<ProdutoCaracteristicaValor> ProdutoCaracteristicaValores =>
         Set<ProdutoCaracteristicaValor>();
@@ -188,6 +190,15 @@ public sealed class XaquiamuniDbContext
             produto.Navigation(entity => entity.Caracteristicas)
                 .HasField("_caracteristicas")
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
+            produto.HasMany(entity => entity.Imagens)
+                .WithOne(image => image.Produto)
+                .HasForeignKey(image => image.ProdutoId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FK_ProdutoImagens_Produtos_ProdutoId")
+                .IsRequired();
+            produto.Navigation(entity => entity.Imagens)
+                .HasField("_imagens")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
 
             produto.HasIndex(entity => entity.CategoriaId)
                 .HasDatabaseName("IX_Produtos_CategoriaId");
@@ -274,6 +285,91 @@ public sealed class XaquiamuniDbContext
                 .IsUnique()
                 .HasFilter("[CombinacaoHash] IS NOT NULL")
                 .HasDatabaseName("UX_ProdutoVariantes_ProdutoId_CombinacaoHash");
+        });
+
+        builder.Entity<ProdutoImagem>(imagem =>
+        {
+            imagem.ToTable("ProdutoImagens", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_TamanhoBytes_Positive",
+                    "[TamanhoBytes] > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_Dimensoes_Positive",
+                    "[LarguraPixels] > 0 AND [AlturaPixels] > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_OrdemExibicao_Valid",
+                    "[OrdemExibicao] BETWEEN 1 AND 5");
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_SlotGaleria_Valid",
+                    "[SlotGaleria] BETWEEN 1 AND 5");
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_CriadoEmUtc",
+                    "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoImagens_Metadata_NotBlank",
+                    "LEN(LTRIM(RTRIM([ChaveArmazenamento]))) > 0 AND "
+                    + "LEN(LTRIM(RTRIM([NomeOriginal]))) > 0 AND "
+                    + "LEN(LTRIM(RTRIM([TipoConteudo]))) > 0");
+            });
+            imagem.HasKey(entity => entity.Id);
+            imagem.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            imagem.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            imagem.Property(entity => entity.ChaveArmazenamento)
+                .HasMaxLength(ProdutoImagem.ChaveArmazenamentoMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            imagem.Property(entity => entity.NomeOriginal)
+                .HasMaxLength(ProdutoImagem.NomeOriginalMaxLength)
+                .IsRequired();
+            imagem.Property(entity => entity.TipoConteudo)
+                .HasMaxLength(ProdutoImagem.TipoConteudoMaxLength)
+                .IsRequired();
+            imagem.Property(entity => entity.TamanhoBytes)
+                .IsRequired();
+            imagem.Property(entity => entity.LarguraPixels)
+                .IsRequired();
+            imagem.Property(entity => entity.AlturaPixels)
+                .IsRequired();
+            imagem.Property(entity => entity.OrdemExibicao)
+                .IsRequired();
+            imagem.Property(entity => entity.SlotGaleria)
+                .IsRequired();
+            imagem.Property(entity => entity.Principal)
+                .IsRequired();
+            imagem.Property(entity => entity.CriadoEmUtc)
+                .HasColumnType("datetimeoffset(7)")
+                .IsRequired();
+            imagem.HasAlternateKey(entity => new { entity.ProdutoId, entity.Id })
+                .HasName("AK_ProdutoImagens_ProdutoId_Id");
+            imagem.HasMany(entity => entity.Variantes)
+                .WithOne(association => association.Imagem)
+                .HasForeignKey(association => new
+                {
+                    association.ProdutoId,
+                    association.ProdutoImagemId
+                })
+                .HasPrincipalKey(entity => new { entity.ProdutoId, entity.Id })
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName(
+                    "FK_ProdutoImagemVariantes_ProdutoImagens_ProdutoId_ProdutoImagemId")
+                .IsRequired();
+            imagem.Navigation(entity => entity.Variantes)
+                .HasField("_variantes")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+            imagem.HasIndex(entity => entity.ChaveArmazenamento)
+                .IsUnique()
+                .HasDatabaseName("UX_ProdutoImagens_ChaveArmazenamento");
+            imagem.HasIndex(entity => new { entity.ProdutoId, entity.SlotGaleria })
+                .IsUnique()
+                .HasDatabaseName("UX_ProdutoImagens_ProdutoId_SlotGaleria");
+            imagem.HasIndex(entity => entity.ProdutoId)
+                .IsUnique()
+                .HasFilter("[Principal] = 1")
+                .HasDatabaseName("UX_ProdutoImagens_PrincipalPorProduto");
         });
 
         builder.Entity<ProdutoCaracteristica>(caracteristica =>
@@ -413,6 +509,38 @@ public sealed class XaquiamuniDbContext
 
             associacao.HasIndex(entity => new { entity.ProdutoId, entity.ProdutoVarianteId })
                 .HasDatabaseName("IX_ProdutoVarianteCaracteristicaValores_Produto_Variante");
+        });
+
+        builder.Entity<ProdutoImagemVariante>(associacao =>
+        {
+            associacao.ToTable("ProdutoImagemVariantes");
+            associacao.HasKey(entity => new
+            {
+                entity.ProdutoImagemId,
+                entity.ProdutoVarianteId
+            });
+            associacao.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            associacao.Property(entity => entity.ProdutoImagemId)
+                .IsRequired();
+            associacao.Property(entity => entity.ProdutoVarianteId)
+                .IsRequired();
+
+            associacao.HasOne(entity => entity.Variante)
+                .WithMany()
+                .HasForeignKey(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoVarianteId
+                })
+                .HasPrincipalKey(entity => new { entity.ProdutoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName(
+                    "FK_ProdutoImagemVariantes_ProdutoVariantes_ProdutoId_ProdutoVarianteId")
+                .IsRequired();
+
+            associacao.HasIndex(entity => new { entity.ProdutoId, entity.ProdutoVarianteId })
+                .HasDatabaseName("IX_ProdutoImagemVariantes_Produto_Variante");
         });
 
         builder.Entity<ClientePerfil>(profile =>

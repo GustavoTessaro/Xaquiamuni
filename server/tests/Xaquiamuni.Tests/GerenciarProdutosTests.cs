@@ -467,6 +467,15 @@ public sealed class GerenciarProdutosTests
         Assert.Equal(ProdutoStatus.CategoryInactive, rejected.Status);
 
         category.DefinirAtiva(true);
+        var missingImage = await manager.AlterarPublicacaoAsync(product.Id, true);
+        Assert.Equal(ProdutoStatus.Conflict, missingImage.Status);
+        product.AdicionarImagem(
+            $"products/{Guid.NewGuid():N}",
+            "photo.jpg",
+            "image/jpeg",
+            1024,
+            100,
+            100);
         var published = await manager.AlterarPublicacaoAsync(product.Id, true);
         var unpublished = await manager.AlterarPublicacaoAsync(product.Id, false);
 
@@ -486,6 +495,13 @@ public sealed class GerenciarProdutosTests
         var candleResult = await manager.CadastrarAsync(CreateInput(candles.Id, "Vela de Lavanda"));
         var soap = Assert.IsType<Produto>(soapResult.Produto);
         var candle = Assert.IsType<Produto>(candleResult.Produto);
+        soap.AdicionarImagem(
+            $"products/{Guid.NewGuid():N}",
+            "photo.jpg",
+            "image/jpeg",
+            1024,
+            100,
+            100);
         soap.Publicar();
 
         var filtered = await manager.ListarAsync(new ProdutoFiltro("LAVANDA", soaps.Id, true));
