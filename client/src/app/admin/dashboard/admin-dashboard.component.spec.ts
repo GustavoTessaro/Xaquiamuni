@@ -37,18 +37,17 @@ describe('AdminDashboardComponent', () => {
     vi.restoreAllMocks();
   });
 
-  it('shows the initial panel and clearly marks future modules as unavailable', () => {
+  it('shows the initial panel and links to available product and category management', () => {
     const content = fixture.nativeElement.textContent;
 
     expect(content).toContain('Visão geral');
     expect(content).toContain('Produtos');
     expect(content).toContain('Categorias');
-    expect(content).toContain('Em breve');
-    expect(content).toContain('produtos será implementado em uma próxima etapa');
     expect(fixture.nativeElement.querySelector('a[href="/admin"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/admin/produtos"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/admin/produtos"]').textContent).toContain('Produtos');
     expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]')).not.toBeNull();
     expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]').textContent).toContain('Categorias');
-    expect(fixture.nativeElement.querySelector('a[href="/admin/produtos"]')).toBeNull();
   });
 
   it('logs out and returns to the administrative login', () => {

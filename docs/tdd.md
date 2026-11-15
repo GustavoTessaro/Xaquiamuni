@@ -125,7 +125,7 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 | Módulo | Responsabilidade | PRD |
 | --- | --- | --- |
 | Identidade | ASP.NET Core Identity, cookie compartilhado, antifalsificação, cadastro/login de clientes, confirmação/reenvio, recuperação/redefinição e login inicial exclusivo para `ADMIN`; permissões finas para funcionários permanecem futuras | RF-01–03, RF-27–31, RN-13, RN-16, RN-21–33 |
-| Catálogo | Backend administrativo de categorias implementado na F3.2.1; CRUD de produtos, variantes/SKUs, fotos, publicação, preços e vitrine continuam futuros | RF-04–05 |
+| Catálogo | Categorias administrativas e CRUD/API de produtos e variantes com gerenciamento Angular implementados; fotos e vitrine pública continuam futuras | RF-04–05 |
 | Estoque | Insumos, lotes acabados, saldos, reservas, movimentos e mínimos | RF-06–08, RN-01–04, RN-17 |
 | Produção | Fichas versionadas, planejamento, reservas, execução e conclusão | RF-09–14, RN-03–06, RN-18 |
 | Comércio | Carrinho, pedidos, acompanhamento e venda externa | RF-15–19, RF-26, RN-07–09 |
@@ -135,8 +135,8 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 
 ### 3.4 Frontend e experiência
 
-- Implementadas: rotas de cliente para cadastro, login, confirmação e recuperação; `/admin/login` para autenticação administrativa e `/admin` para o painel inicial protegido por guarda. A guarda melhora a navegação; a autorização permanece no backend.
-- Futuras: vitrine, produto, carrinho, checkout, perfil, pedidos e os módulos administrativos de produtos, estoque, fichas, produção, vendas e configurações.
+- Implementadas: rotas de cliente para cadastro, login, confirmação e recuperação; `/admin/login`, `/admin`, `/admin/categorias` e `/admin/produtos` protegidas conforme o fluxo administrativo. O painel permite gerenciar categorias, produtos, publicação e variantes. A guarda melhora a navegação; a autorização permanece no backend.
+- Futuras: vitrine pública, carrinho, checkout, perfil, pedidos e os módulos administrativos de estoque, fichas, produção, vendas e configurações.
 - Carregar módulos por rota quando apropriado; serviços de API tipados e estados explícitos de `carregando`, `vazio`, `erro` e `sucesso`.
 - Layout mobile-first: navegação simplificada, formulários com rótulos, toque confortável, tabelas adaptadas a cartões no celular e confirmação para ações irreversíveis.
 - Exibir quantidade **vendável**, não saldo bruto; informar indisponibilidade sem permitir compra de lote vencido.
@@ -467,8 +467,11 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | F2.2 | Encerramento documental e transição de fase | PRD/TDD atualizados; F2 concluída; F3 é a próxima fase |
 | F3.1 | **Concluída:** login ADMIN reutilizando Identity/cookie, endpoints de sessão e logout protegidos, rotas `/admin/login` e `/admin`, painel inicial e provisionamento local interativo | Testes focados: 12 backend e 60 frontend aprovados; builds backend e frontend aprovados; sem CRUD ou catálogo |
 | F3.2.1 | **Concluída nesta entrega:** entidade, casos de uso, persistência, migration e API administrativa para categorias dinâmicas | 18 testes focados aprovados; migration e unicidade concorrente verificadas na fixture SQL descartável; build backend aprovado |
-| F3.2.2 | Interface administrativa de categorias | Próxima etapa, aguardando revisão e aprovação desta entrega |
-| F3.3+ | Produtos, variantes, imagens, preços e vitrine mobile | Futuros; dependem de decisões específicas e não foram iniciados |
+| F3.2.2 | **Concluída:** interface administrativa de categorias | Aprovada; testes focados e build Angular validados |
+| F3.3.1 | **Concluída:** domínio e persistência de produtos e variantes | Migration validada em fixture descartável; não aplicada ao banco de desenvolvimento |
+| F3.3.2 | **Concluída:** casos de uso e API administrativa de produtos e variantes | Testes focados, integração SQL descartável e build aprovados |
+| F3.3.3 | **Concluída nesta entrega:** frontend administrativo de produtos e variantes | Testes focados, proteção da rota e build Angular aprovados |
+| F3+ | Fotos e vitrine pública do catálogo | Futuros; não implementados nesta etapa |
 | F4 | Matérias-primas, estoque acabado, lotes, validade e movimentos | Integridade e auditoria testadas |
 | F5 | Fichas técnicas, capacidade e ordens com reserva | Concorrência e cálculo aprovados |
 | F6 | Execução, conclusão parcial/cancelamento e entrada de lotes | Consumo e rendimento consistentes |

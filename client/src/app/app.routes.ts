@@ -11,6 +11,12 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
+  {
+    path: 'admin/produtos',
+    loadComponent: () => import('./admin/produtos/admin-produtos.component')
+      .then((module) => module.AdminProdutosComponent),
+    canActivate: [adminAuthGuard],
+  },
   { path: 'admin/categorias', component: AdminCategoriasComponent, canActivate: [adminAuthGuard] },
   { path: 'admin', component: AdminDashboardComponent, canActivate: [adminAuthGuard] },
   { path: 'confirm-email', component: ConfirmEmailComponent },

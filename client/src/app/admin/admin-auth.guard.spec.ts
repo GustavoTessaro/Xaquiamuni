@@ -6,9 +6,11 @@ import { vi } from 'vitest';
 import { routes } from '../app.routes';
 import { AdminAuthService, AdminSession } from '../core/admin-auth/admin-auth.service';
 import { CategoriasService } from '../core/admin-categorias/categorias.service';
+import { ProdutosService } from '../core/admin-produtos/produtos.service';
 import { AdminCategoriasComponent } from './categorias/admin-categorias.component';
 import { AdminDashboardComponent } from './dashboard/admin-dashboard.component';
 import { AdminLoginComponent } from './login/admin-login.component';
+import { AdminProdutosComponent } from './produtos/admin-produtos.component';
 
 describe('adminAuthGuard', () => {
   let getCurrentSession: ReturnType<typeof vi.fn<AdminAuthService['getCurrentSession']>>;
@@ -121,5 +123,61 @@ describe('adminAuthGuard', () => {
 
     expect(TestBed.inject(Router).url).toBe('/admin/categorias');
     expect(harness.routeNativeElement?.textContent).toContain('Categorias');
+  });
+
+  it('protects the products route and redirects a session without access', async () => {
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        {
+          provide: AdminAuthService,
+          useValue: {
+            getCurrentSession,
+            login: vi.fn(),
+            logout: vi.fn(),
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/admin/produtos', AdminLoginComponent);
+
+    expect(TestBed.inject(Router).url).toBe('/admin/login');
+    expect(getCurrentSession).toHaveBeenCalledOnce();
+  });
+
+  it('allows an authorized administrator to navigate to products', async () => {
+    getCurrentSession.mockReturnValue(of({
+      userId: '4c4a31ce-0a27-4c0e-b903-a96f62fb81df',
+    } satisfies AdminSession));
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        {
+          provide: AdminAuthService,
+          useValue: {
+            getCurrentSession,
+            login: vi.fn(),
+            logout: vi.fn(),
+          },
+        },
+        {
+          provide: CategoriasService,
+          useValue: { listar: vi.fn(() => of([])) },
+        },
+        {
+          provide: ProdutosService,
+          useValue: { listar: vi.fn(() => of([])) },
+        },
+      ],
+    }).compileComponents();
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl('/admin/produtos', AdminProdutosComponent);
+    await harness.fixture.whenStable();
+
+    expect(TestBed.inject(Router).url).toBe('/admin/produtos');
+    expect(harness.routeNativeElement?.textContent).toContain('Produtos');
   });
 });

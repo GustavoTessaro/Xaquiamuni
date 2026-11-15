@@ -1,0 +1,558 @@
+<app-admin-workspace activePage="products">
+  <div class="space-y-6">
+    @if (formularioProdutoVisivel()) {
+      <app-admin-produto-form
+        [categorias]="categorias()"
+        [produto]="produtoEditando()"
+        [salvando]="salvandoProduto()"
+        [mensagemErro]="erroOperacao()"
+        (salvar)="salvarProduto($event)"
+        (cancelar)="cancelarFormularioProduto()"
+      />
+    } @else if (produtoVariantes(); as produto) {
+      <section class="space-y-5" aria-labelledby="variants-title">
+        <header class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-emerald-800">Catálogo</p>
+            <h1
+              id="variants-title"
+              class="mt-1 break-words text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
+            >
+              Variantes de {{ produto.nome }}
+            </h1>
+            <p class="mt-2 text-sm text-slate-600">
+              A publicação não representa disponibilidade para compra; o estoque será tratado na F4.
+            </p>
+          </div>
+          <button
+            type="button"
+            (click)="fecharGerenciamentoVariantes()"
+            [disabled]="salvandoVariante() || variantesEmAtualizacao().size > 0"
+            class="min-h-11 shrink-0 rounded-xl border border-emerald-800 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+          >
+            Voltar aos produtos
+          </button>
+        </header>
+
+        @if (erroVariantes()) {
+          <p
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            role="alert"
+            aria-live="assertive"
+          >
+            {{ erroVariantes() }}
+          </p>
+        }
+        @if (mensagemVariantes()) {
+          <p
+            class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+            role="status"
+            aria-live="polite"
+          >
+            {{ mensagemVariantes() }}
+          </p>
+        }
+        @if (!produto.categoriaAtiva) {
+          <p
+            class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+            role="status"
+          >
+            A categoria deste produto está inativa. A publicação exige uma categoria ativa; reativar
+            a categoria não republica este produto automaticamente.
+          </p>
+        }
+
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <p class="text-sm text-slate-600">
+            {{ quantidadeVariantesAtivas(produto) }} ativas de
+            {{ produto.variantes.length }} variantes
+          </p>
+          <button
+            type="button"
+            (click)="iniciarAdicaoVariante()"
+            [disabled]="
+              salvandoVariante() || variantesEmAtualizacao().size > 0 || varianteFormMode() !== null
+            "
+            class="min-h-11 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
+          >
+            Adicionar variante
+          </button>
+        </div>
+
+        @if (varianteFormMode()) {
+          <app-admin-produto-variante-form
+            [variante]="varianteEditando()"
+            [salvando]="salvandoVariante()"
+            [mensagemErro]="erroVariantes()"
+            (salvar)="salvarVariante($event)"
+            (cancelar)="cancelarFormularioVariante()"
+          />
+        }
+
+        @if (produto.variantes.length === 0) {
+          <p
+            class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600"
+          >
+            Nenhuma variante cadastrada.
+          </p>
+        } @else {
+          <ul class="grid list-none gap-3 p-0 md:grid-cols-2">
+            @for (variante of produto.variantes; track variante.id) {
+              <li>
+                <article class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div class="min-w-0">
+                      <h2 class="break-words text-lg font-semibold text-slate-900">
+                        {{ variante.identificacao }}
+                      </h2>
+                      <p class="mt-1 text-sm text-slate-600">
+                        {{ variante.unidadeVenda }} · {{ formatarPreco(variante.precoVenda) }}
+                      </p>
+                    </div>
+                    <div class="flex flex-wrap gap-2">
+                      <span
+                        [class]="
+                          variante.ativa
+                            ? 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900'
+                            : 'rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700'
+                        "
+                      >
+                        {{ variante.ativa ? 'Ativa' : 'Inativa' }}
+                      </span>
+                      @if (variante.padrao) {
+                        <span
+                          class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
+                        >
+                          Padrão
+                        </span>
+                      }
+                    </div>
+                  </div>
+                  <div class="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                    <button
+                      type="button"
+                      (click)="iniciarEdicaoVariante(variante)"
+                      [disabled]="
+                        salvandoVariante() ||
+                        variantesEmAtualizacao().size > 0 ||
+                        varianteFormMode() !== null
+                      "
+                      [attr.aria-label]="'Editar variante ' + variante.identificacao"
+                      class="min-h-10 rounded-lg border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+                    >
+                      Editar
+                    </button>
+                    @if (variante.ativa && !variante.padrao) {
+                      <button
+                        type="button"
+                        (click)="definirVariantePadrao(variante)"
+                        [disabled]="variantesEmAtualizacao().size > 0"
+                        class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:opacity-60"
+                      >
+                        Definir como padrão
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      (click)="alterarStatusVariante(variante, !variante.ativa)"
+                      [disabled]="
+                        variantesEmAtualizacao().size > 0 ||
+                        (!variante.ativa && quantidadeVariantesAtivas(produto) === 0) ||
+                        (variante.ativa && quantidadeVariantesAtivas(produto) <= 1)
+                      "
+                      [attr.aria-label]="
+                        (variante.ativa ? 'Desativar variante ' : 'Ativar variante ') +
+                        variante.identificacao
+                      "
+                      [attr.aria-busy]="variantePendente(produto.id, variante.id)"
+                      class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {{
+                        variantePendente(produto.id, variante.id)
+                          ? 'Atualizando...'
+                          : variante.ativa
+                            ? 'Desativar'
+                            : 'Ativar'
+                      }}
+                    </button>
+                  </div>
+
+                  @if (varianteParaDesativar() === variante.id) {
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                      <p class="text-sm font-semibold text-amber-950">
+                        Escolha uma variante ativa para promover antes de desativar a padrão.
+                      </p>
+                      <label
+                        [for]="'replacement-default-' + variante.id"
+                        class="mt-3 block text-sm font-medium text-amber-950"
+                      >
+                        Nova variante padrão
+                      </label>
+                      <select
+                        [id]="'replacement-default-' + variante.id"
+                        [value]="novoPadraoId()"
+                        (change)="selecionarNovoPadrao($event)"
+                        class="mt-1 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3"
+                      >
+                        <option value="">Selecione uma variante ativa</option>
+                        @for (alternativa of variantesAtivas(produto); track alternativa.id) {
+                          @if (alternativa.id !== variante.id) {
+                            <option [value]="alternativa.id">
+                              {{ alternativa.identificacao }}
+                            </option>
+                          }
+                        }
+                      </select>
+                      <div class="mt-3 flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          (click)="confirmarDesativacaoVariante()"
+                          [disabled]="!novoPadraoId() || variantePendente(produto.id, variante.id)"
+                          class="min-h-10 rounded-lg bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-50"
+                        >
+                          {{
+                            variantePendente(produto.id, variante.id)
+                              ? 'Atualizando...'
+                              : 'Promover e desativar'
+                          }}
+                        </button>
+                        <button
+                          type="button"
+                          (click)="cancelarDesativacaoVariante()"
+                          [disabled]="variantePendente(produto.id, variante.id)"
+                          class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  }
+                </article>
+              </li>
+            }
+          </ul>
+        }
+      </section>
+    } @else {
+      <section
+        class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"
+        aria-labelledby="products-title"
+      >
+        <div>
+          <p class="text-sm font-medium text-emerald-800">Catálogo</p>
+          <h1
+            id="products-title"
+            class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
+          >
+            Produtos
+          </h1>
+          <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+            Gerencie produtos, variantes e publicação. A disponibilidade para compra depende do
+            estoque.
+          </p>
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            (click)="carregarProdutos()"
+            [disabled]="carregando()"
+            class="min-h-11 rounded-xl border border-emerald-800 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-wait disabled:opacity-60"
+          >
+            {{ carregando() ? 'Atualizando...' : 'Atualizar lista' }}
+          </button>
+          <button
+            type="button"
+            (click)="abrirNovoProduto()"
+            [disabled]="salvandoProduto() || !!carregandoDetalheId()"
+            class="min-h-11 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            Novo produto
+          </button>
+        </div>
+      </section>
+
+      @if (mensagem()) {
+        <p
+          class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          role="status"
+          aria-live="polite"
+        >
+          {{ mensagem() }}
+        </p>
+      }
+
+      @if (erroOperacao()) {
+        <p
+          class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+          role="alert"
+          aria-live="assertive"
+        >
+          {{ erroOperacao() }}
+        </p>
+      }
+
+      @if (erroCarregamento()) {
+        <div
+          class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          role="alert"
+          aria-live="assertive"
+        >
+          <p class="text-sm text-red-800">{{ erroCarregamento() }}</p>
+          <button
+            type="button"
+            (click)="carregarProdutos()"
+            [disabled]="carregando()"
+            class="min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold text-red-900 underline underline-offset-4 disabled:opacity-60"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      }
+
+      <section class="grid gap-3 sm:grid-cols-3" aria-label="Resumo geral dos produtos">
+        <article class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm">
+          <p class="text-sm text-slate-600">Total</p>
+          <p class="mt-1 text-2xl font-semibold text-slate-900" aria-label="Total de produtos">
+            {{ total() }}
+          </p>
+          <p class="mt-1 text-xs text-slate-500">Catálogo completo, sem aplicar os filtros.</p>
+        </article>
+        <article class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm">
+          <p class="text-sm text-slate-600">Publicados</p>
+          <p class="mt-1 text-2xl font-semibold text-emerald-900" aria-label="Produtos publicados">
+            {{ publicados() }}
+          </p>
+        </article>
+        <article class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm">
+          <p class="text-sm text-slate-600">Não publicados</p>
+          <p
+            class="mt-1 text-2xl font-semibold text-slate-700"
+            aria-label="Produtos não publicados"
+          >
+            {{ naoPublicados() }}
+          </p>
+        </article>
+      </section>
+
+      <section
+        class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-5"
+        aria-label="Pesquisar e filtrar produtos"
+      >
+        <div
+          class="grid gap-4 lg:grid-cols-[minmax(12rem,1fr)_minmax(12rem,0.8fr)_auto] lg:items-end"
+        >
+          <div>
+            <label for="product-search" class="block text-sm font-semibold text-slate-800"
+              >Buscar por nome</label
+            >
+            <input
+              id="product-search"
+              type="search"
+              [value]="busca()"
+              (input)="definirBusca($event)"
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              placeholder="Ex.: Sabonete de lavanda"
+            />
+          </div>
+          <div>
+            <label for="category-filter" class="block text-sm font-semibold text-slate-800"
+              >Categoria</label
+            >
+            <select
+              id="category-filter"
+              [value]="categoriaFiltro()"
+              (change)="definirCategoria($event)"
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              <option value="">Todas as categorias</option>
+              @for (categoria of categorias(); track categoria.id) {
+                <option [value]="categoria.id">
+                  {{ categoria.nome }}{{ categoria.ativa ? '' : ' (inativa)' }}
+                </option>
+              }
+            </select>
+          </div>
+          <div class="flex flex-wrap gap-2" role="group" aria-label="Filtrar por publicação">
+            <button
+              type="button"
+              (click)="definirFiltroPublicacao('all')"
+              [attr.aria-pressed]="filtroPublicacaoSelecionado('all')"
+              [class]="
+                filtroPublicacaoSelecionado('all')
+                  ? 'min-h-10 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white'
+                  : 'min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50'
+              "
+            >
+              Todos
+            </button>
+            <button
+              type="button"
+              (click)="definirFiltroPublicacao('published')"
+              [attr.aria-pressed]="filtroPublicacaoSelecionado('published')"
+              [class]="
+                filtroPublicacaoSelecionado('published')
+                  ? 'min-h-10 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white'
+                  : 'min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50'
+              "
+            >
+              Publicados
+            </button>
+            <button
+              type="button"
+              (click)="definirFiltroPublicacao('unpublished')"
+              [attr.aria-pressed]="filtroPublicacaoSelecionado('unpublished')"
+              [class]="
+                filtroPublicacaoSelecionado('unpublished')
+                  ? 'min-h-10 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white'
+                  : 'min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50'
+              "
+            >
+              Não publicados
+            </button>
+          </div>
+        </div>
+      </section>
+
+      @if (carregando() && produtos().length === 0) {
+        <p
+          class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600 shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          Carregando produtos...
+        </p>
+      } @else if (erroCarregamento() && produtos().length === 0) {
+        <p class="sr-only">A lista de produtos está indisponível.</p>
+      } @else if (produtos().length === 0) {
+        <section
+          class="rounded-2xl border border-dashed border-emerald-900/30 bg-white px-5 py-10 text-center shadow-sm"
+          aria-labelledby="products-empty-title"
+        >
+          <h2 id="products-empty-title" class="text-lg font-semibold text-slate-900">
+            Nenhum produto cadastrado
+          </h2>
+          <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
+            Cadastre um produto com sua variante padrão para começar.
+          </p>
+          <button
+            type="button"
+            (click)="abrirNovoProduto()"
+            class="mt-5 min-h-11 rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900"
+          >
+            Novo produto
+          </button>
+        </section>
+      } @else if (produtosVisiveis().length === 0) {
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white px-5 py-10 text-center shadow-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <h2 class="text-lg font-semibold text-slate-900">Nenhum produto encontrado</h2>
+          <p class="mt-2 text-sm text-slate-600">Tente outra busca ou altere os filtros.</p>
+          <button
+            type="button"
+            (click)="limparFiltros()"
+            class="mt-4 min-h-10 rounded-xl px-4 text-sm font-semibold text-emerald-800 underline underline-offset-4"
+          >
+            Limpar busca e filtros
+          </button>
+        </section>
+      } @else {
+        <ul class="grid list-none gap-3 p-0 md:grid-cols-2">
+          @for (produto of produtosVisiveis(); track produto.id) {
+            <li>
+              <article
+                class="h-full rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <h2 class="break-words text-lg font-semibold text-slate-900">
+                      {{ produto.nome }}
+                    </h2>
+                    <p class="mt-1 text-sm text-slate-600">{{ produto.categoriaNome }}</p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      [class]="
+                        produto.publicado
+                          ? 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900'
+                          : 'rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-700'
+                      "
+                    >
+                      {{ produto.publicado ? 'Publicado' : 'Não publicado' }}
+                    </span>
+                    @if (!produto.categoriaAtiva) {
+                      <span
+                        class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
+                      >
+                        Categoria inativa
+                      </span>
+                    }
+                  </div>
+                </div>
+                <div class="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-4 text-sm">
+                  <div>
+                    <p class="text-slate-500">
+                      {{
+                        quantidadeVariantesAtivas(produto) > 1
+                          ? 'Faixa de preços ativos'
+                          : 'Preço padrão'
+                      }}
+                    </p>
+                    <p class="mt-1 font-semibold text-slate-900">{{ precoResumo(produto) }}</p>
+                  </div>
+                  <div>
+                    <p class="text-slate-500">Variantes</p>
+                    <p class="mt-1 font-semibold text-slate-900">{{ produto.variantes.length }}</p>
+                  </div>
+                </div>
+                <p class="mt-3 text-xs text-slate-500">
+                  Publicação não indica disponibilidade em estoque.
+                </p>
+                <div class="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+                  <button
+                    type="button"
+                    (click)="editarProduto(produto)"
+                    [disabled]="!!carregandoDetalheId() || salvandoProduto()"
+                    [attr.aria-label]="'Editar ' + produto.nome"
+                    class="min-h-10 rounded-lg border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+                  >
+                    {{ carregandoDetalheId() === produto.id ? 'Carregando...' : 'Editar' }}
+                  </button>
+                  <button
+                    type="button"
+                    (click)="abrirGerenciamentoVariantes(produto)"
+                    [disabled]="carregandoVariantes()"
+                    [attr.aria-label]="'Gerenciar variantes de ' + produto.nome"
+                    class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                  >
+                    Gerenciar variantes
+                  </button>
+                  <button
+                    type="button"
+                    (click)="publicar(produto)"
+                    [disabled]="produtoPendente(produto.id)"
+                    [attr.aria-busy]="produtoPendente(produto.id)"
+                    [attr.aria-label]="
+                      (produto.publicado ? 'Despublicar ' : 'Publicar ') + produto.nome
+                    "
+                    class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:cursor-wait disabled:opacity-60"
+                  >
+                    {{
+                      produtoPendente(produto.id)
+                        ? 'Atualizando...'
+                        : produto.publicado
+                          ? 'Despublicar'
+                          : 'Publicar'
+                    }}
+                  </button>
+                </div>
+              </article>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </div>
+</app-admin-workspace>
