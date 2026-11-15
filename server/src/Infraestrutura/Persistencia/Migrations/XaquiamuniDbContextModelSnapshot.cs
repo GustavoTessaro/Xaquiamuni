@@ -153,6 +153,44 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Categoria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Descricao")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeNormalizado")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<int>("OrdemExibicao")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("NomeNormalizado")
+                        .IsUnique()
+                        .HasDatabaseName("UX_Categorias_NomeNormalizado");
+
+                    b.ToTable("Categorias", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Categorias_OrdemExibicao_NonNegative", "[OrdemExibicao] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClienteEndereco", b =>
                 {
                     b.Property<Guid>("Id")

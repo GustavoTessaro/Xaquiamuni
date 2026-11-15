@@ -5,14 +5,14 @@
 | Campo | Informação |
 | --- | --- |
 | Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão | 0.5 — acesso administrativo inicial da F3.1 |
-| Data | 14/11/2026 |
-| Status | **F2 concluída; acesso administrativo inicial da F3.1 implementado; F3.2 — Catálogo de Produtos é a próxima etapa e não foi iniciada; produção pendente** |
+| Versão | 0.6 — backend de categorias da F3.2.1 |
+| Data | 15/11/2026 |
+| Status | **F2 e F3.1 concluídas; backend administrativo de categorias da F3.2.1 implementado; frontend e demais módulos do catálogo pendentes; produção pendente** |
 | Documento-base | `docs/prd.md`, versão 0.5 |
 | Referência estrutural | Projeto NoteKeeper; reaproveitar princípios e organização, **não copiar código ou assumir detalhes não verificados** |
 | Decisão recente | Solicitante concordou em seguir com as propostas iniciais de produção e pagamento, sujeitas a detalhamento |
 
-> **Convenções:** **Implementado** = comportamento verificado no código e coberto por testes; **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia ainda sujeita a validação; **Pendente** = requer informação, validação ou integração. A F2 está concluída e a F3.1 implementa o acesso administrativo inicial. O gate de confirmação para login de `CLIENTE` é explícito e está ativo, embora `RequireConfirmedEmail` global permaneça `false`. Testes manuais anteriores validaram envio real com Resend em ambientes isolados; implantação e operação de produção não estão homologadas.
+> **Convenções:** **Implementado** = comportamento verificado no código e coberto por testes; **Confirmado** = definido nas entrevistas ou pelo solicitante; **Proposto** = decisão de engenharia ainda sujeita a validação; **Pendente** = requer informação, validação ou integração. A F2 e o acesso administrativo inicial da F3.1 estão concluídos; a F3.2.1 implementa somente o backend administrativo de categorias dinâmicas. O gate de confirmação para login de `CLIENTE` é explícito e está ativo, embora `RequireConfirmedEmail` global permaneça `false`. Testes manuais anteriores validaram envio real com Resend em ambientes isolados; implantação e operação de produção não estão homologadas.
 
 ## 1. Resumo e objetivos técnicos
 
@@ -103,10 +103,10 @@ Xaquiamuni/
 ├── server/
 │   ├── Xaquiamuni.slnx
 │   ├── src/
-│   │   ├── Api/                  # endpoints HTTP e composição
-│   │   ├── Aplicacao/            # casos de uso e contratos
-│   │   ├── Dominio/              # regras e entidades
-│   │   ├── Infraestrutura/       # Identity, SQL Server, Outbox e Resend
+│   │   ├── Api/                  # endpoints HTTP e composição; Catalogo/AdminCategoriaEndpoints
+│   │   ├── Aplicacao/            # casos de uso e contratos; Catalogo
+│   │   ├── Dominio/              # regras e entidades; Categoria
+│   │   ├── Infraestrutura/       # Identity, SQL Server, Outbox, Resend e repositório de categorias
 │   │   └── Admin/
 │   └── tests/Xaquiamuni.Tests/
 │       └── Integration/          # integração SQL opt-in com bancos temporários
@@ -125,7 +125,7 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 | Módulo | Responsabilidade | PRD |
 | --- | --- | --- |
 | Identidade | ASP.NET Core Identity, cookie compartilhado, antifalsificação, cadastro/login de clientes, confirmação/reenvio, recuperação/redefinição e login inicial exclusivo para `ADMIN`; permissões finas para funcionários permanecem futuras | RF-01–03, RF-27–31, RN-13, RN-16, RN-21–33 |
-| Catálogo | Categorias, produtos, variantes/SKUs, fotos, publicação e preços | RF-04–05 |
+| Catálogo | Backend administrativo de categorias implementado na F3.2.1; CRUD de produtos, variantes/SKUs, fotos, publicação, preços e vitrine continuam futuros | RF-04–05 |
 | Estoque | Insumos, lotes acabados, saldos, reservas, movimentos e mínimos | RF-06–08, RN-01–04, RN-17 |
 | Produção | Fichas versionadas, planejamento, reservas, execução e conclusão | RF-09–14, RN-03–06, RN-18 |
 | Comércio | Carrinho, pedidos, acompanhamento e venda externa | RF-15–19, RF-26, RN-07–09 |
@@ -165,7 +165,8 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 | --- | --- |
 | Usuario / Perfil / Permissao | IdentityId, papel, status, políticas autorizadas |
 | Cliente / Endereco | usuário, nome, CPF normalizado e protegido, e-mail, telefone, CEP, endereço |
-| Categoria / Produto / Variante | descrição, preço, publicação, unidade de venda, imagens, ficha técnica aplicável |
+| Categoria | `Id`, nome e chave normalizada únicos, descrição opcional, status ativo/inativo e ordem de exibição; persistida na F3.2.1. Produtos e variantes permanecem futuros |
+| Produto / Variante | descrição, preço, publicação, unidade de venda, imagens e ficha técnica aplicável; modelo e implementação permanecem futuros |
 | MateriaPrima | nome, unidade-base, mínimo, ativo; movimentações e reservas |
 | LoteMateriaPrima (opcional) | origem, validade e custo de aquisição se rastreabilidade por lote de insumo for aprovada |
 | FichaTecnica / FichaComponente | produto/variante, versão, material, quantidade por unidade, custo de referência |
@@ -213,6 +214,7 @@ A estrutura acima reflete os projetos existentes usados pelo fluxo F2; módulos 
 - Outbox usa chave ativa única filtrada, `RowVersion` do SQL Server e updates condicionais por estado/lease/versão; preservar mensagens históricas ao liberar a chave. O fingerprint de geração é nulo para `EmailConfirmation` e obrigatório para `PasswordReset`.
 - Recuperação só cria mensagem para conta confirmada. A chave de deduplicação impede mensagem ativa duplicada; a persistência aplica cooldown de 2 minutos e máximo de 5 solicitações aceitas por conta em janela móvel de 1 hora.
 - O fingerprint de recuperação é SHA-256 com propósito/versionamento explícitos sobre o `SecurityStamp`; comparar em tempo constante e não armazenar nem expor o stamp bruto ou token.
+- Categorias: o nome é obrigatório (até 100 caracteres), a descrição é opcional (até 500), espaços consecutivos são reduzidos e espaços externos removidos; a ordem é inteira e não negativa. `NomeNormalizado` usa `ToUpperInvariant()` e collation `Latin1_General_100_BIN2`, com índice único SQL Server. A aplicação pré-consulta conflitos e o repositório traduz violações concorrentes desse índice para conflito de domínio. A listagem inclui ativos e inativos e ordena por `OrdemExibicao`, com `Id` como desempate determinístico. Não há exclusão física, hierarquia ou seed automático.
 
 ### 4.5 Transações e concorrência
 
@@ -239,8 +241,9 @@ A cadeia de migrations existente no código contém, em ordem:
 3. `20261111221631_AddEmailOutbox`
 4. `20261112023420_AddPasswordResetEmailOutboxType`
 5. `20261112033043_AddPasswordResetCredentialGenerationFingerprint`
+6. `20261115000009_AddCategorias`
 
-O schema modelado inclui tabelas do ASP.NET Core Identity, `ClientePerfis`, `ClienteEnderecos` e `EmailOutbox`. A migration mais recente adiciona `CredentialGenerationFingerprint binary(32) NULL` e uma constraint que exige `NULL` para `EmailConfirmation` e exatamente 32 bytes para `PasswordReset`. `EmailOutbox` também contém tipo/status, tentativas e timestamps UTC, chave ativa de deduplicação, lease e `RowVersion`; índices e constraints preservam deduplicação ativa e integridade por tipo. Isso descreve a cadeia versionada no repositório, não comprova aplicação em banco de produção ou Azure. Os testes de integração aplicam migrations somente nos bancos temporários próprios da fixture.
+O schema modelado inclui tabelas do ASP.NET Core Identity, `ClientePerfis`, `ClienteEnderecos`, `EmailOutbox` e `Categorias`. A migration de fingerprint adiciona `CredentialGenerationFingerprint binary(32) NULL` e uma constraint que exige `NULL` para `EmailConfirmation` e exatamente 32 bytes para `PasswordReset`. `EmailOutbox` também contém tipo/status, tentativas e timestamps UTC, chave ativa de deduplicação, lease e `RowVersion`; índices e constraints preservam deduplicação ativa e integridade por tipo. A migration `AddCategorias` cria somente a tabela de categorias, a constraint de ordem não negativa, collation binária na chave normalizada e seu índice único. Isso descreve a cadeia versionada no repositório, não comprova aplicação em banco de produção ou Azure. A migration de categorias foi aplicada pelos testes somente em banco descartável da fixture local.
 
 ## 5. Regras de cálculo e estados
 
@@ -310,7 +313,7 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 
 ### 6.1 Convenções
 
-- As rotas HTTP de autenticação de clientes implementadas na F2 usam `/api/auth`; as rotas de autenticação administrativa adicionadas na F3.1 usam `/api/admin/auth` (sem segmento `/v1`). JSON e DTOs são separados das entidades. Prefixos de recursos de negócio ainda não implementados serão definidos junto a seus contratos.
+- As rotas HTTP de autenticação de clientes implementadas na F2 usam `/api/auth`; as rotas de autenticação administrativa adicionadas na F3.1 usam `/api/admin/auth` (sem segmento `/v1`). Os endpoints administrativos de categorias da F3.2.1 usam `/api/admin/categorias`. JSON e DTOs são separados das entidades. Prefixos de recursos de negócio ainda não implementados serão definidos junto a seus contratos.
 - Erros padronizados (`ProblemDetails`), validação por campo, códigos HTTP coerentes: `400` entrada inválida, `401` não autenticado, `403` proibido, `404` ausente, `409` conflito de estado/saldo.
 - Identidade e autorização derivadas da sessão autenticada, nunca do `userId` arbitrário enviado pelo navegador.
 - `Idempotency-Key` para comandos críticos de criação/conclusão/pagamento/venda externa; mesmo comando retorna resultado anterior, chave reutilizada com payload distinto retorna conflito.
@@ -318,7 +321,7 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 - Endpoints mutáveis de autenticação são anônimos ou autenticados conforme a operação e protegidos por antifalsificação; o token é obtido em `GET /api/auth/csrf` e enviado no cabeçalho `X-XSRF-TOKEN`.
 - Respostas de autenticação usam `Cache-Control: no-store`; políticas de rate limiting fixas e independentes protegem reenvio de confirmação, solicitação de recuperação e redefinição.
 
-### 6.2 Endpoints de autenticação implementados e catálogo de negócio proposto
+### 6.2 Endpoints implementados e catálogo de negócio futuro
 
 | Recurso | Exemplos de rotas | Acesso |
 | --- | --- | --- |
@@ -330,6 +333,11 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 | Login administrativo | `POST /api/admin/auth/login` | Anônimo + antifalsificação; `204`, `400` ou `401`; somente conta com papel `ADMIN` pode autenticar; credenciais inválidas e papéis não autorizados recebem resposta genérica sem sessão |
 | Sessão administrativa | `GET /api/admin/auth/me` | Política `Administracao` (usuário autenticado com papel `ADMIN`); `200`, `401` ou `403`; retorna somente o identificador |
 | Logout administrativo | `POST /api/admin/auth/logout` | Política `Administracao` + antifalsificação; `204`, `400`, `401` ou `403`; encerra o mesmo cookie seguro compartilhado |
+| Listar categorias administrativas | `GET /api/admin/categorias` | Política `Administracao`; `200`, `401` ou `403`; inclui categorias ativas e inativas, ordenadas por exibição e `Id` |
+| Consultar categoria | `GET /api/admin/categorias/{id}` | Política `Administracao`; `200`, `401`, `403` ou `404` |
+| Cadastrar categoria | `POST /api/admin/categorias` | Política `Administracao` + antifalsificação; `201` com `Location`, `400`, `401`, `403` ou `409` |
+| Editar categoria | `PUT /api/admin/categorias/{id}` | Política `Administracao` + antifalsificação; `200`, `400`, `401`, `403`, `404` ou `409` |
+| Ativar/desativar categoria | `PATCH /api/admin/categorias/{id}/status` | Política `Administracao` + antifalsificação; `200`, `400`, `401`, `403` ou `404` |
 | Confirmação | `POST /api/auth/confirm-email` | Anônimo + antifalsificação; recebe e-mail/token no corpo; `204`, `400` ou `500` |
 | Reenvio | `POST /api/auth/resend-confirmation-email` | Anônimo + antifalsificação + política exclusiva; `202` genérico, `400`, `429` com `Retry-After` quando disponível ou erro inesperado |
 | Solicitar recuperação | `POST /api/auth/forgot-password` | Anônimo + antifalsificação + política exclusiva; JSON `{ "email": ... }`; `202` com `{ "message": ... }` genérico para e-mail válido, mesmo sem conta elegível; `400` para entrada inválida e `429` ao exceder limite |
@@ -345,7 +353,11 @@ Custo unitário estimado = materiais consumidos + embalagem + mão de obra aloca
 | Pagamento | `POST /pedidos/{id}/cobrancas`, `POST /webhooks/pagamentos/{provedor}` | Autenticado / webhook autenticado pelo provedor; condicionado |
 | Gestão | `GET /admin/dashboard`, demais consultas | Administrativo; condicionado |
 
-Apenas os endpoints do bloco de autenticação estão implementados; os exemplos de catálogo de negócio continuam propostos, sem prefixo ou contrato final definido. Reenvio e recuperação retornam `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política independente da rota, com `Retry-After` quando disponível. As três políticas de reenvio, recuperação e redefinição são fixed-window, cada uma com 10 requisições por minuto por IP e fila zero; a identificação usa `RemoteIpAddress`, sem confiar diretamente em headers de forwarding. Regras adicionais de cooldown/deduplicação/limite de recuperação são aplicadas por conta na Outbox. As rotas administrativas atuais aceitam exclusivamente `ADMIN`; funcionários permanecem sem acesso até haver matriz e política específicas.
+Os endpoints de autenticação, login administrativo e gerenciamento de categorias estão implementados; produtos, variantes, imagens, preços e consulta pública de catálogo continuam futuros. Reenvio e recuperação retornam `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política independente da rota, com `Retry-After` quando disponível. As três políticas de reenvio, recuperação e redefinição são fixed-window, cada uma com 10 requisições por minuto por IP e fila zero; a identificação usa `RemoteIpAddress`, sem confiar diretamente em headers de forwarding. Regras adicionais de cooldown/deduplicação/limite de recuperação são aplicadas por conta na Outbox. As rotas administrativas atuais aceitam exclusivamente `ADMIN`; funcionários permanecem sem acesso até haver matriz e política específicas.
+
+#### Categorias administrativas (F3.2.1)
+
+Os endpoints `/api/admin/categorias` aplicam a política `Administracao` em todo o grupo; operações mutáveis também exigem o token antifalsificação obtido em `GET /api/auth/csrf`, enviado no cabeçalho `X-XSRF-TOKEN` junto ao cookie XSRF. Os DTOs não expõem entidades EF. O nome é normalizado no domínio, com conflito reportado como `409`; a restrição de unicidade no SQL Server cobre também gravações concorrentes. Novas categorias começam ativas. O `PATCH` recebe o novo booleano `ativa`. Não existem endpoint público, exclusão definitiva, subcategorias ou seed nesta etapa.
 
 ### 6.3 Fluxos de integração
 
@@ -384,7 +396,7 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 - Chave Resend e remetente são configurações exclusivas do servidor; o sender `HttpClient` tem timeout de 30 segundos, não segue redirects e só é registrado com `ResendEmail.Enabled=true`. Worker e Resend têm padrão desabilitado. Envio real foi validado manualmente somente em ambientes isolados.
 - Link de recuperação contém e-mail e token somente no fragmento `/reset-password#...`; o Angular remove esses valores da URL antes de prosseguir e não os grava em armazenamento local. Respostas de autenticação usam `no-store`.
 - Validar CPF no servidor; proteger dados pessoais em logs, respostas e telas; definir finalidade, retenção e procedimentos de exclusão/correção com a proprietária antes do uso real.
-- Autorização por endpoint e caso de uso. A política `Administracao` exige autenticação e papel `ADMIN`; funcionário não acessa os endpoints administrativos iniciais. Permissões administrativas de funcionário e a matriz fina permanecem pendentes; cliente acessa apenas seus próprios recursos.
+- Autorização por endpoint e caso de uso. A política `Administracao` exige autenticação e papel `ADMIN`; funcionário e cliente não acessam os endpoints administrativos iniciais, inclusive o gerenciamento de categorias. Escritas de categoria exigem antifalsificação. Permissões administrativas de funcionário e a matriz fina permanecem pendentes; cliente acessa apenas seus próprios recursos.
 - Para o cliente navegador da F2, cookie é o modelo selecionado; não há JWT implementado. Outro tipo de cliente exigiria decisão própria antes de adotar mecanismo diferente.
 - Configurações por ambiente e segredos fora do Git; logs estruturados sem tokens, CPF integral ou payload sensível de pagamento.
 - HTTPS em produção, CORS restrito às origens autorizadas, validação de uploads e limites de requisição.
@@ -400,6 +412,7 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 | Infrastructure | Integração com SQL Server real, transações, índices e concorrência | Sem reservas/vendas duplicadas |
 | API | Testes de endpoints, identidade, validação, conflito e acesso indevido | Contratos verificáveis |
 | Acesso administrativo F3.1 | Testes de caso de uso, integração HTTP/SQL descartável e specs Angular para login, papéis, antifalsificação, cookie, SecurityStamp, guarda, sessão, erros e logout; regressão do gate de cliente | Apenas `ADMIN` cria sessão administrativa; fluxos de cliente permanecem inalterados |
+| Categorias F3.2.1 | Testes de domínio/aplicação, API HTTP para autorização e antifalsificação e SQL Server descartável para migration, índice único concorrente e ordenação | Normalização/validação, CRUD sem exclusão, conflito `409`, status ativo/inativo e ordenação determinística |
 | Confirmação/reenvio F2 | Testes unitários de caso de uso/Outbox, testes HTTP com doubles, specs Angular e integração de endpoint/Outbox com SQL Server real isolado | Elegibilidade, resposta genérica, antifalsificação, rate limit, cooldown, limites, deduplicação, concorrência e histórico |
 | Recuperação/redefinição | Testes unitários, HTTP/API e SQL Server isolado para elegibilidade, resposta genérica, limites, fingerprint, processor, tokens, transação, concorrência, rollback, cancelamento e sessão; specs Angular para fragmento e formulários | Token temporário e de uso único, Outbox consistente, sessão anterior invalidada, nenhum segredo persistido ou exposto |
 | Visibilidade de senha | Specs focadas para os cinco campos de login/cadastro/redefinição | Campos ocultos inicialmente, alternância independente, valor/validação preservados, sem submit e ocultação após limpeza/sucesso |
@@ -419,12 +432,15 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 8. Pedido preserva preços, endereço e frete históricos após alteração de cadastros.
 9. Vendas externas movimentam estoque sem criar pedido online fictício.
 10. Simulação de frete para Vacaria oferece retirada gratuita e entrega própria R$ 10 somente em área elegível.
+11. Categorias administrativas aceitam nomes normalizados únicos, listam ativos e inativos em ordem determinística e bloqueiam anônimos, `CLIENTE` e `FUNCIONARIO`; escritas sem antifalsificação são rejeitadas.
 
 **Rastreabilidade:** CA-01 a CA-20 do PRD v0.5.
 
 **Integração SQL F2:** testes opt-in via `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION=1`; a fixture valida `.\SQLEXPRESS`, cria bancos temporários `Xaquiamuni_IntegrationTest_*`, aplica migrations somente neles e remove apenas os bancos criados pela própria fixture. O fluxo de Resend integrado usa handler HTTP simulado; o teste do endpoint usa Identity e SQL reais no banco temporário, com worker e Resend desabilitados. A suíte não deve apontar para `XaquiamuniDev` nem para Azure SQL.
 
 **Validação focada F3.1:** 12 testes backend aprovados (incluindo integração SQL pela fixture descartável local) e 60 testes frontend aprovados; build da solução backend sem avisos/erros e build Angular aprovados. Nenhum serviço de API/Angular foi iniciado e nenhum e-mail foi enviado nesta etapa.
+
+**Validação focada F3.2.1:** 19 testes de categoria aprovados, sem falhas ou ignorados, mais 5 testes da política de autorização existente; os três testes de integração SQL usaram exclusivamente bancos temporários da fixture em `.\SQLEXPRESS`, incluindo aplicação da migration e inserções concorrentes contra o índice único. O build da solução backend passou sem avisos ou erros. A variável `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION` foi limitada ao processo de teste e não restaram bancos temporários da fixture.
 
 **Validação manual F2:** em ambientes locais isolados, foram validados cadastro de cliente, recebimento do primeiro e-mail via Resend real, bloqueio do login antes da confirmação, reenvio pela interface, recebimento do segundo e-mail, confirmação pelo novo link e login após confirmação. A recuperação e redefinição também foram validadas com Resend real, senha antiga rejeitada e novo login aprovado. Consultas somente leitura a bancos descartáveis confirmaram os estados esperados da conta e Outbox. Essas validações não comprovam entrega, disponibilidade ou implantação em produção.
 
@@ -450,7 +466,9 @@ Não existem metas aprovadas de latência, concorrência, disponibilidade, cober
 | F2.1/F2.1.1 | Gate global final e correção das assertions de integração SQL do template de confirmação | 777 testes aprovados, sem falhas ou ignorados; builds aprovados; integração SQL somente pela fixture isolada |
 | F2.2 | Encerramento documental e transição de fase | PRD/TDD atualizados; F2 concluída; F3 é a próxima fase |
 | F3.1 | **Concluída:** login ADMIN reutilizando Identity/cookie, endpoints de sessão e logout protegidos, rotas `/admin/login` e `/admin`, painel inicial e provisionamento local interativo | Testes focados: 12 backend e 60 frontend aprovados; builds backend e frontend aprovados; sem CRUD ou catálogo |
-| F3.2 | Catálogo de Produtos, categorias, variantes, imagens e vitrine mobile | Próxima etapa; ainda não iniciada |
+| F3.2.1 | **Concluída nesta entrega:** entidade, casos de uso, persistência, migration e API administrativa para categorias dinâmicas | 18 testes focados aprovados; migration e unicidade concorrente verificadas na fixture SQL descartável; build backend aprovado |
+| F3.2.2 | Interface administrativa de categorias | Próxima etapa, aguardando revisão e aprovação desta entrega |
+| F3.3+ | Produtos, variantes, imagens, preços e vitrine mobile | Futuros; dependem de decisões específicas e não foram iniciados |
 | F4 | Matérias-primas, estoque acabado, lotes, validade e movimentos | Integridade e auditoria testadas |
 | F5 | Fichas técnicas, capacidade e ordens com reserva | Concorrência e cálculo aprovados |
 | F6 | Execução, conclusão parcial/cancelamento e entrada de lotes | Consumo e rendimento consistentes |
@@ -522,3 +540,4 @@ Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pend�
 | 0.3 | 12/11/2026 | Fluxo de recuperação/redefinição concluído; migrations e schema registrados; validação manual isolada e gates globais documentados; limitações de produção explicitadas. |
 | 0.4 | 14/11/2026 | F2 encerrada; contratos atualizados para gate específico de confirmação de `CLIENTE`; validações manuais com Resend real em ambientes isolados e gate final de 777 testes/builds registrados; F3 definida como próxima fase; requisitos de produção e decisão sobre branch reutilizável documentados. |
 | 0.5 | 14/11/2026 | F3.1 concluída com autenticação administrativa exclusiva para `ADMIN`, painel inicial, endpoints protegidos e provisionador local interativo; testes focados e limitações de provisionamento de produção registrados; F3.2 — Catálogo de Produtos definida como próxima etapa, sem implementação iniciada. |
+| 0.6 | 15/11/2026 | F3.2.1 implementa backend de categorias dinâmicas, unicidade SQL Server, endpoints ADMIN com antifalsificação, migration e testes focados; frontend e demais módulos do catálogo permanecem pendentes. |

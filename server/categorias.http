@@ -1,0 +1,55 @@
+@baseUrl = https://localhost:7231
+@adminCookie = <valor-do-cookie-ADMIN>
+@xsrfCookieValue = <valor-do-cookie-XSRF-TOKEN>
+@xsrfRequestToken = <requestToken-retornado-pelo-endpoint-csrf>
+@categoriaId = <guid-da-categoria>
+
+### Obter token antifalsificação; repetir com o cookie administrativo e copiar requestToken + cookie XSRF-TOKEN
+GET {{baseUrl}}/api/auth/csrf
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Listar categorias (ativas e inativas)
+GET {{baseUrl}}/api/admin/categorias
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Consultar categoria
+GET {{baseUrl}}/api/admin/categorias/{{categoriaId}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Consultar categoria inexistente (esperado: 404)
+GET {{baseUrl}}/api/admin/categorias/00000000-0000-0000-0000-000000000000
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Cadastrar categoria
+POST {{baseUrl}}/api/admin/categorias
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Sabonetes Artesanais",
+  "descricao": "Produtos artesanais de fabricação própria",
+  "ordemExibicao": 0
+}
+
+### Editar categoria
+PUT {{baseUrl}}/api/admin/categorias/{{categoriaId}}
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Sabonetes Artesanais Naturais",
+  "descricao": "Sabonetes de fabricação própria",
+  "ordemExibicao": 1
+}
+
+### Desativar categoria
+PATCH {{baseUrl}}/api/admin/categorias/{{categoriaId}}/status
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "ativa": false
+}

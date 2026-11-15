@@ -1,4 +1,5 @@
 using Xaquiamuni.Api.Autenticacao;
+using Xaquiamuni.Api.Catalogo;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Infraestrutura;
 
@@ -91,6 +92,7 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapXaquiamuniCsrfEndpoint();
 app.MapXaquiamuniAuthEndpoints();
 app.MapXaquiamuniAdminAuthEndpoints();
+app.MapAdminCategoriaEndpoints();
 
 app.Run();
 

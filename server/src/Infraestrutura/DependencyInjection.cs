@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
+using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Autenticacao;
@@ -35,6 +36,8 @@ public static class DependencyInjection
         });
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<IClienteRepository, ClienteRepository>();
+        services.AddScoped<ICategoriaRepository, EfCategoriaRepository>();
+        services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationResendOutbox, SqlServerEmailConfirmationResendOutbox>();

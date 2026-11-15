@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Valores;
 using Xaquiamuni.Infraestrutura.Identidade;
@@ -18,6 +19,7 @@ public sealed class XaquiamuniDbContext
 
     public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
+    public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -110,6 +112,33 @@ public sealed class XaquiamuniDbContext
                 .HasFilter("[ActiveDeduplicationKey] IS NOT NULL");
             outbox.HasIndex(message => message.UserId)
                 .HasDatabaseName("IX_EmailOutbox_UserId");
+        });
+
+        builder.Entity<Categoria>(categoria =>
+        {
+            categoria.ToTable("Categorias", table =>
+                table.HasCheckConstraint(
+                    "CK_Categorias_OrdemExibicao_NonNegative",
+                    "[OrdemExibicao] >= 0"));
+            categoria.HasKey(entity => entity.Id);
+            categoria.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            categoria.Property(entity => entity.Nome)
+                .HasMaxLength(Categoria.NomeMaxLength)
+                .IsRequired();
+            categoria.Property(entity => entity.NomeNormalizado)
+                .HasMaxLength(Categoria.NomeMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            categoria.Property(entity => entity.Descricao)
+                .HasMaxLength(Categoria.DescricaoMaxLength);
+            categoria.Property(entity => entity.Ativa)
+                .IsRequired();
+            categoria.Property(entity => entity.OrdemExibicao)
+                .IsRequired();
+            categoria.HasIndex(entity => entity.NomeNormalizado)
+                .IsUnique()
+                .HasDatabaseName("UX_Categorias_NomeNormalizado");
         });
 
         builder.Entity<ClientePerfil>(profile =>
