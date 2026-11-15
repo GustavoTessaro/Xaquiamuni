@@ -44,9 +44,11 @@ describe('AdminDashboardComponent', () => {
     expect(content).toContain('Produtos');
     expect(content).toContain('Categorias');
     expect(content).toContain('Em breve');
-    expect(content).toContain('serão disponibilizados nas próximas etapas');
+    expect(content).toContain('produtos será implementado em uma próxima etapa');
+    expect(fixture.nativeElement.querySelector('a[href="/admin"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]').textContent).toContain('Categorias');
     expect(fixture.nativeElement.querySelector('a[href="/admin/produtos"]')).toBeNull();
-    expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]')).toBeNull();
   });
 
   it('logs out and returns to the administrative login', () => {
