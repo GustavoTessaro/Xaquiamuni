@@ -22,6 +22,11 @@ public sealed class XaquiamuniDbContext
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Produto> Produtos => Set<Produto>();
     public DbSet<ProdutoVariante> ProdutoVariantes => Set<ProdutoVariante>();
+    public DbSet<ProdutoCaracteristica> ProdutoCaracteristicas => Set<ProdutoCaracteristica>();
+    public DbSet<ProdutoCaracteristicaValor> ProdutoCaracteristicaValores =>
+        Set<ProdutoCaracteristicaValor>();
+    public DbSet<ProdutoVarianteCaracteristicaValor> ProdutoVarianteCaracteristicaValores =>
+        Set<ProdutoVarianteCaracteristicaValor>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -175,6 +180,14 @@ public sealed class XaquiamuniDbContext
             produto.Navigation(entity => entity.Variantes)
                 .HasField("_variantes")
                 .UsePropertyAccessMode(PropertyAccessMode.Field);
+            produto.HasMany(entity => entity.Caracteristicas)
+                .WithOne(characteristic => characteristic.Produto)
+                .HasForeignKey(characteristic => characteristic.ProdutoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            produto.Navigation(entity => entity.Caracteristicas)
+                .HasField("_caracteristicas")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
 
             produto.HasIndex(entity => entity.CategoriaId)
                 .HasDatabaseName("IX_Produtos_CategoriaId");
@@ -193,6 +206,12 @@ public sealed class XaquiamuniDbContext
                 table.HasCheckConstraint(
                     "CK_ProdutoVariantes_PrecoVenda_Positive",
                     "[PrecoVenda] > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_PesoLiquidoGramas_Positive",
+                    "[PesoLiquidoGramas] IS NULL OR [PesoLiquidoGramas] > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoVariantes_VolumeLiquidoMililitros_Positive",
+                    "[VolumeLiquidoMililitros] IS NULL OR [VolumeLiquidoMililitros] > 0");
                 table.HasCheckConstraint(
                     "CK_ProdutoVariantes_Default_Active",
                     "[Padrao] = 0 OR [Ativa] = 1");
@@ -219,6 +238,30 @@ public sealed class XaquiamuniDbContext
                 .IsRequired();
             variante.Property(entity => entity.Padrao)
                 .IsRequired();
+            variante.Property<decimal?>("_pesoLiquidoGramas")
+                .HasColumnName("PesoLiquidoGramas")
+                .HasPrecision(MedidaFisicaCatalogo.Precision, MedidaFisicaCatalogo.Scale);
+            variante.Property<decimal?>("_volumeLiquidoMililitros")
+                .HasColumnName("VolumeLiquidoMililitros")
+                .HasPrecision(MedidaFisicaCatalogo.Precision, MedidaFisicaCatalogo.Scale);
+            variante.Property<byte[]?>("_combinacaoHash")
+                .HasColumnName("CombinacaoHash")
+                .HasColumnType("binary(32)");
+            variante.HasAlternateKey(entity => new { entity.ProdutoId, entity.Id })
+                .HasName("AK_ProdutoVariantes_ProdutoId_Id");
+            variante.HasMany(entity => entity.CaracteristicaValores)
+                .WithOne(association => association.Variante)
+                .HasForeignKey(association => new
+                {
+                    association.ProdutoId,
+                    association.ProdutoVarianteId
+                })
+                .HasPrincipalKey(entity => new { entity.ProdutoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            variante.Navigation(entity => entity.CaracteristicaValores)
+                .HasField("_caracteristicaValores")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
 
             variante.HasIndex(entity => new { entity.ProdutoId, entity.IdentificacaoNormalizada })
                 .IsUnique()
@@ -227,6 +270,149 @@ public sealed class XaquiamuniDbContext
                 .IsUnique()
                 .HasFilter("[Padrao] = 1")
                 .HasDatabaseName("UX_ProdutoVariantes_DefaultPerProduto");
+            variante.HasIndex("ProdutoId", "_combinacaoHash")
+                .IsUnique()
+                .HasFilter("[CombinacaoHash] IS NOT NULL")
+                .HasDatabaseName("UX_ProdutoVariantes_ProdutoId_CombinacaoHash");
+        });
+
+        builder.Entity<ProdutoCaracteristica>(caracteristica =>
+        {
+            caracteristica.ToTable("ProdutoCaracteristicas", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_ProdutoCaracteristicas_Nome_NotBlank",
+                    "LEN(LTRIM(RTRIM([Nome]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_ProdutoCaracteristicas_TipoMedidaFisica_Valid",
+                    "[TipoMedidaFisica] IS NULL OR [TipoMedidaFisica] IN (1, 2)");
+            });
+            caracteristica.HasKey(entity => entity.Id);
+            caracteristica.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            caracteristica.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            caracteristica.Property(entity => entity.Nome)
+                .HasMaxLength(ProdutoCaracteristica.NomeMaxLength)
+                .IsRequired();
+            caracteristica.Property(entity => entity.NomeNormalizado)
+                .HasMaxLength(ProdutoCaracteristica.NomeMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            caracteristica.Property(entity => entity.TipoMedidaFisica)
+                .HasConversion<short>()
+                .HasColumnType("smallint");
+            caracteristica.HasAlternateKey(entity => new { entity.ProdutoId, entity.Id })
+                .HasName("AK_ProdutoCaracteristicas_ProdutoId_Id");
+            caracteristica.HasMany(entity => entity.Valores)
+                .WithOne(value => value.Caracteristica)
+                .HasForeignKey(value => new
+                {
+                    value.ProdutoId,
+                    value.ProdutoCaracteristicaId
+                })
+                .HasPrincipalKey(entity => new { entity.ProdutoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            caracteristica.Navigation(entity => entity.Valores)
+                .HasField("_valores")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+
+            caracteristica.HasIndex(entity => new { entity.ProdutoId, entity.NomeNormalizado })
+                .IsUnique()
+                .HasDatabaseName("UX_ProdutoCaracteristicas_ProdutoId_NomeNormalizado");
+            caracteristica.HasIndex(entity => new { entity.ProdutoId, entity.TipoMedidaFisica })
+                .IsUnique()
+                .HasFilter("[TipoMedidaFisica] IS NOT NULL")
+                .HasDatabaseName("UX_ProdutoCaracteristicas_ProdutoId_TipoMedidaFisica");
+        });
+
+        builder.Entity<ProdutoCaracteristicaValor>(valor =>
+        {
+            valor.ToTable("ProdutoCaracteristicaValores", table =>
+                table.HasCheckConstraint(
+                    "CK_ProdutoCaracteristicaValores_ValorMedidaCanonico_Positive",
+                    "[ValorMedidaCanonico] IS NULL OR [ValorMedidaCanonico] > 0"));
+            valor.HasKey(entity => entity.Id);
+            valor.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            valor.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            valor.Property(entity => entity.ProdutoCaracteristicaId)
+                .IsRequired();
+            valor.Property(entity => entity.Nome)
+                .HasMaxLength(ProdutoCaracteristica.NomeMaxLength)
+                .IsRequired();
+            valor.Property(entity => entity.NomeNormalizado)
+                .HasMaxLength(ProdutoCaracteristica.NomeMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            valor.Property(entity => entity.ValorMedidaCanonico)
+                .HasPrecision(MedidaFisicaCatalogo.Precision, MedidaFisicaCatalogo.Scale);
+            valor.HasAlternateKey(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoCaracteristicaId,
+                    entity.Id
+                })
+                .HasName("AK_ProdutoCaracteristicaValores_Produto_Caracteristica_Id");
+
+            valor.HasIndex(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoCaracteristicaId,
+                    entity.NomeNormalizado
+                })
+                .IsUnique()
+                .HasDatabaseName("UX_ProdutoCaracteristicaValores_Produto_Caracteristica_NomeNormalizado");
+        });
+
+        builder.Entity<ProdutoVarianteCaracteristicaValor>(associacao =>
+        {
+            associacao.ToTable("ProdutoVarianteCaracteristicaValores");
+            associacao.HasKey(entity => new
+            {
+                entity.ProdutoVarianteId,
+                entity.ProdutoCaracteristicaId
+            });
+            associacao.Property(entity => entity.ProdutoId)
+                .IsRequired();
+            associacao.Property(entity => entity.ProdutoVarianteId)
+                .IsRequired();
+            associacao.Property(entity => entity.ProdutoCaracteristicaId)
+                .IsRequired();
+            associacao.Property(entity => entity.ProdutoCaracteristicaValorId)
+                .IsRequired();
+
+            associacao.HasOne(entity => entity.Caracteristica)
+                .WithMany()
+                .HasForeignKey(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoCaracteristicaId
+                })
+                .HasPrincipalKey(entity => new { entity.ProdutoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+            associacao.HasOne(entity => entity.Valor)
+                .WithMany()
+                .HasForeignKey(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoCaracteristicaId,
+                    entity.ProdutoCaracteristicaValorId
+                })
+                .HasPrincipalKey(entity => new
+                {
+                    entity.ProdutoId,
+                    entity.ProdutoCaracteristicaId,
+                    entity.Id
+                })
+                .OnDelete(DeleteBehavior.Restrict)
+                .IsRequired();
+
+            associacao.HasIndex(entity => new { entity.ProdutoId, entity.ProdutoVarianteId })
+                .HasDatabaseName("IX_ProdutoVarianteCaracteristicaValores_Produto_Variante");
         });
 
         builder.Entity<ClientePerfil>(profile =>

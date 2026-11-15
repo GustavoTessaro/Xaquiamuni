@@ -13,6 +13,22 @@ public sealed class EfProdutoRepository : IProdutoRepository
         "UX_ProdutoVariantes_ProdutoId_IdentificacaoNormalizada";
     private const string DefaultVariantIndex =
         "UX_ProdutoVariantes_DefaultPerProduto";
+    private const string VariantCombinationIndex =
+        "UX_ProdutoVariantes_ProdutoId_CombinacaoHash";
+    private static readonly string[] ProductCatalogUniqueConstraints =
+    [
+        "UX_ProdutoCaracteristicas_ProdutoId_NomeNormalizado",
+        "UX_ProdutoCaracteristicas_ProdutoId_TipoMedidaFisica",
+        "UX_ProdutoCaracteristicaValores_Produto_Caracteristica_NomeNormalizado",
+        "PK_ProdutoVarianteCaracteristicaValores"
+    ];
+    private static readonly string[] ProductCatalogForeignKeys =
+    [
+        "FK_ProdutoCaracteristicaValores_ProdutoCaracteristicas",
+        "FK_ProdutoVarianteCaracteristicaValores_ProdutoCaracteristicaValores",
+        "FK_ProdutoVarianteCaracteristicaValores_ProdutoCaracteristicas",
+        "FK_ProdutoVarianteCaracteristicaValores_ProdutoVariantes"
+    ];
 
     private readonly XaquiamuniDbContext _dbContext;
 
@@ -31,6 +47,14 @@ public sealed class EfProdutoRepository : IProdutoRepository
             .AsNoTracking()
             .Include(produto => produto.Categoria)
             .Include(produto => produto.Variantes)
+                .ThenInclude(variante => variante.CaracteristicaValores)
+                    .ThenInclude(associacao => associacao.Caracteristica)
+            .Include(produto => produto.Variantes)
+                .ThenInclude(variante => variante.CaracteristicaValores)
+                    .ThenInclude(associacao => associacao.Valor)
+            .Include(produto => produto.Caracteristicas)
+                .ThenInclude(caracteristica => caracteristica.Valores)
+            .AsSplitQuery()
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filtro.Busca))
@@ -59,10 +83,8 @@ public sealed class EfProdutoRepository : IProdutoRepository
     public Task<Produto?> ConsultarAsync(
         Guid id,
         CancellationToken cancellationToken = default) =>
-        _dbContext.Produtos
+        IncluirAgregado(_dbContext.Produtos)
             .AsNoTracking()
-            .Include(produto => produto.Categoria)
-            .Include(produto => produto.Variantes)
             .SingleOrDefaultAsync(produto => produto.Id == id, cancellationToken);
 
     public async Task<ProdutoResult> ExecutarMutacaoAsync(
@@ -163,15 +185,20 @@ public sealed class EfProdutoRepository : IProdutoRepository
 
             if (sqlException.Number is 2601 or 2627
                 && (sqlException.Message.Contains(VariantIdentityIndex, StringComparison.OrdinalIgnoreCase)
-                    || sqlException.Message.Contains(DefaultVariantIndex, StringComparison.OrdinalIgnoreCase)))
+                    || sqlException.Message.Contains(DefaultVariantIndex, StringComparison.OrdinalIgnoreCase)
+                    || sqlException.Message.Contains(VariantCombinationIndex, StringComparison.OrdinalIgnoreCase)
+                    || ProductCatalogUniqueConstraints.Any(constraint =>
+                        sqlException.Message.Contains(constraint, StringComparison.OrdinalIgnoreCase))))
             {
                 return true;
             }
 
             if (sqlException.Number == 547
-                && sqlException.Message.Contains(
-                    "FK_Produtos_Categorias_CategoriaId",
-                    StringComparison.OrdinalIgnoreCase))
+                && (sqlException.Message.Contains(
+                        "FK_Produtos_Categorias_CategoriaId",
+                        StringComparison.OrdinalIgnoreCase)
+                    || ProductCatalogForeignKeys.Any(constraint =>
+                        sqlException.Message.Contains(constraint, StringComparison.OrdinalIgnoreCase))))
             {
                 return true;
             }
@@ -192,9 +219,7 @@ public sealed class EfProdutoRepository : IProdutoRepository
         public Task<Produto?> BuscarProdutoAsync(
             Guid id,
             CancellationToken cancellationToken = default) =>
-            dbContext.Produtos
-                .Include(produto => produto.Categoria)
-                .Include(produto => produto.Variantes)
+            IncluirAgregado(dbContext.Produtos)
                 .SingleOrDefaultAsync(produto => produto.Id == id, cancellationToken);
 
         public void Adicionar(Produto produto)
@@ -203,4 +228,17 @@ public sealed class EfProdutoRepository : IProdutoRepository
             dbContext.Produtos.Add(produto);
         }
     }
+
+    private static IQueryable<Produto> IncluirAgregado(IQueryable<Produto> produtos) =>
+        produtos
+            .Include(produto => produto.Categoria)
+            .Include(produto => produto.Caracteristicas)
+                .ThenInclude(caracteristica => caracteristica.Valores)
+            .Include(produto => produto.Variantes)
+                .ThenInclude(variante => variante.CaracteristicaValores)
+                    .ThenInclude(associacao => associacao.Caracteristica)
+            .Include(produto => produto.Variantes)
+                .ThenInclude(variante => variante.CaracteristicaValores)
+                    .ThenInclude(associacao => associacao.Valor)
+            .AsSplitQuery();
 }

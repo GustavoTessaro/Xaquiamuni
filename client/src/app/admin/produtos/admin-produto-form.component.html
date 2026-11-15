@@ -36,7 +36,9 @@
     novalidate
   >
     <div class="sm:col-span-2">
-      <label for="product-name" class="block text-sm font-semibold text-slate-800">Nome</label>
+      <label for="product-name" class="block text-sm font-semibold text-slate-800"
+        >Nome do produto</label
+      >
       <input
         id="product-name"
         formControlName="nome"
@@ -102,42 +104,129 @@
     </div>
 
     @if (!produto()) {
-      <fieldset class="sm:col-span-2">
-        <legend class="text-sm font-semibold text-slate-800">Variante padrão obrigatória</legend>
-        <p class="mt-1 text-xs text-slate-500">
-          Produto simples usa a identificação “Padrão”. Você pode personalizá-la e incluir outras
-          variantes.
-        </p>
-        <div [formGroup]="variantePadraoForm" class="mt-3 grid gap-4 sm:grid-cols-3">
-          <div>
-            <label for="default-variant-name" class="block text-sm font-medium text-slate-700"
-              >Identificação</label
-            >
+      <fieldset class="sm:col-span-2 rounded-xl border border-emerald-950/10 bg-emerald-50/50 p-4">
+        <legend class="px-1 text-sm font-semibold text-emerald-950">
+          Como este produto será vendido?
+        </legend>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <label
+            for="product-mode-simple"
+            class="flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 focus-within:outline-2 focus-within:outline-emerald-800"
+          >
             <input
-              id="default-variant-name"
-              formControlName="identificacao"
-              maxlength="100"
-              required
-              class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              id="product-mode-simple"
+              type="radio"
+              name="product-mode"
+              value="simples"
+              [checked]="modoAtual() === 'simples'"
+              (change)="selecionarModoCadastro('simples', $event)"
+              class="mt-1 accent-emerald-800"
             />
-            @if (erroCampo(variantePadraoForm, 'identificacao')) {
-              <p class="mt-1 text-sm text-red-700">
-                {{ erroCampo(variantePadraoForm, 'identificacao') }}
-              </p>
-            }
-          </div>
-          <div>
-            <label for="default-variant-unit" class="block text-sm font-medium text-slate-700"
-              >Unidade de venda</label
-            >
+            <span>
+              <span class="block text-sm font-semibold text-slate-900">Produto simples</span>
+              <span class="mt-0.5 block text-xs text-slate-600">
+                Possui um único preço e não tem opções para o cliente escolher.
+              </span>
+            </span>
+          </label>
+          <label
+            for="product-mode-options"
+            class="flex min-h-20 cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 focus-within:outline-2 focus-within:outline-emerald-800"
+          >
             <input
+              id="product-mode-options"
+              type="radio"
+              name="product-mode"
+              value="opcoes"
+              [checked]="modoAtual() === 'opcoes'"
+              (change)="selecionarModoCadastro('opcoes', $event)"
+              class="mt-1 accent-emerald-800"
+            />
+            <span>
+              <span class="block text-sm font-semibold text-slate-900">Produto com opções</span>
+              <span class="mt-0.5 block text-xs text-slate-600">
+                O cliente pode escolher peso, cor, fragrância, tamanho ou outras características.
+              </span>
+            </span>
+          </label>
+        </div>
+        @if (confirmarModoSimples()) {
+          <div
+            class="mt-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
+            role="group"
+            aria-labelledby="confirm-simple-mode-title"
+            aria-live="polite"
+          >
+            <p id="confirm-simple-mode-title" class="text-sm font-semibold text-amber-950">
+              Trocar para produto simples?
+            </p>
+            <p class="mt-1 text-sm text-amber-900">
+              As características e combinações adicionais serão removidas. O preço, a unidade e as
+              medidas da opção principal serão mantidos.
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                (click)="cancelarTrocaParaSimples()"
+                class="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-800"
+              >
+                Manter produto com opções
+              </button>
+              <button
+                type="button"
+                (click)="confirmarTrocaParaSimples()"
+                class="min-h-10 rounded-lg bg-amber-800 px-3 text-sm font-semibold text-white"
+              >
+                Descartar opções e continuar
+              </button>
+            </div>
+          </div>
+        }
+      </fieldset>
+    } @else {
+      <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+        <p class="text-sm font-semibold text-slate-800">
+          {{ modoAtual() === 'simples' ? 'Produto simples' : 'Produto com opções' }}
+        </p>
+        <p class="mt-1 text-sm text-slate-600">
+          O formato atual é mantido na edição para preservar as combinações e os vínculos
+          existentes. Você pode alterar os dados sem recriar as opções.
+        </p>
+      </div>
+    }
+
+    @if (modoAtual() === 'simples') {
+      <fieldset
+        [formGroup]="variantePadraoForm"
+        class="sm:col-span-2 rounded-xl border border-slate-200 p-4 sm:p-5"
+      >
+        <legend class="px-1 text-sm font-semibold text-slate-800">Dados de venda</legend>
+        <p class="text-sm text-slate-600">
+          Esta versão é criada e identificada automaticamente. A unidade comercial indica como
+          vender; peso e volume são medidas físicas opcionais.
+        </p>
+        <div class="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label for="default-variant-unit" class="block text-sm font-medium text-slate-700">
+              Como este produto será vendido?
+            </label>
+            <select
               id="default-variant-unit"
               formControlName="unidadeVenda"
-              maxlength="10"
               required
-              placeholder="UN, G ou ML"
-              class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 uppercase focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
-            />
+              [attr.aria-invalid]="erroCampo(variantePadraoForm, 'unidadeVenda') ? 'true' : null"
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              @for (
+                unidade of unidadesOptions(variantePadraoForm.controls.unidadeVenda.value);
+                track unidade.codigo
+              ) {
+                <option [value]="unidade.codigo">{{ unidade.nome }} ({{ unidade.codigo }})</option>
+              }
+            </select>
+            <p class="mt-1.5 text-xs text-slate-500">
+              Ex.: unidade, kit ou pacote. Esta é a forma de venda, não uma medida física.
+            </p>
             @if (erroCampo(variantePadraoForm, 'unidadeVenda')) {
               <p class="mt-1 text-sm text-red-700">
                 {{ erroCampo(variantePadraoForm, 'unidadeVenda') }}
@@ -145,111 +234,626 @@
             }
           </div>
           <div>
-            <label for="default-variant-price" class="block text-sm font-medium text-slate-700"
-              >Preço (BRL)</label
-            >
-            <input
-              id="default-variant-price"
+            <label for="default-variant-price" class="block text-sm font-medium text-slate-700">
+              Preço de venda
+            </label>
+            <app-brl-currency-input
               formControlName="precoVenda"
-              type="number"
-              min="0.01"
-              step="0.01"
-              required
-              inputmode="decimal"
-              class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              inputId="default-variant-price"
+              [required]="true"
+              [invalid]="!!erroCampo(variantePadraoForm, 'precoVenda')"
+              describedBy="default-variant-price-help"
             />
+            <p id="default-variant-price-help" class="mt-1.5 text-xs text-slate-500">
+              Valor em reais; digite os números, incluindo os centavos.
+            </p>
             @if (erroCampo(variantePadraoForm, 'precoVenda')) {
               <p class="mt-1 text-sm text-red-700">
                 {{ erroCampo(variantePadraoForm, 'precoVenda') }}
               </p>
             }
           </div>
+          <div>
+            <label for="simple-weight" class="block text-sm font-medium text-slate-700">
+              Peso líquido <span class="font-normal text-slate-500">(opcional)</span>
+            </label>
+            <div class="mt-1.5 flex gap-2">
+              <input
+                id="simple-weight"
+                formControlName="peso"
+                inputmode="decimal"
+                placeholder="Ex.: 100"
+                [attr.aria-invalid]="
+                  !medirRawValido(
+                    variantePadraoForm.controls.peso.value,
+                    variantePadraoForm.controls.pesoUnidade.value
+                  )
+                "
+                class="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3"
+              />
+              <select
+                id="simple-weight-unit"
+                formControlName="pesoUnidade"
+                aria-label="Unidade do peso"
+                class="min-h-11 rounded-xl border border-slate-300 bg-white px-3"
+              >
+                <option value="G">g</option>
+                <option value="KG">kg</option>
+              </select>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">
+              Informe o peso do produto sem a embalagem. Será convertido para gramas sem
+              arredondamento.
+            </p>
+            @if (
+              !medirRawValido(
+                variantePadraoForm.controls.peso.value,
+                variantePadraoForm.controls.pesoUnidade.value
+              )
+            ) {
+              <p class="mt-1 text-sm text-red-700">
+                Informe uma medida positiva sem arredondamento.
+              </p>
+            }
+          </div>
+          <div>
+            <label for="simple-volume" class="block text-sm font-medium text-slate-700">
+              Volume líquido <span class="font-normal text-slate-500">(opcional)</span>
+            </label>
+            <div class="mt-1.5 flex gap-2">
+              <input
+                id="simple-volume"
+                formControlName="volume"
+                inputmode="decimal"
+                placeholder="Ex.: 250"
+                [attr.aria-invalid]="
+                  !medirRawValido(
+                    variantePadraoForm.controls.volume.value,
+                    variantePadraoForm.controls.volumeUnidade.value
+                  )
+                "
+                class="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3"
+              />
+              <select
+                id="simple-volume-unit"
+                formControlName="volumeUnidade"
+                aria-label="Unidade do volume"
+                class="min-h-11 rounded-xl border border-slate-300 bg-white px-3"
+              >
+                <option value="ML">ml</option>
+                <option value="L">L</option>
+              </select>
+            </div>
+            <p class="mt-1 text-xs text-slate-500">
+              Informe o volume do conteúdo. Será convertido para mililitros sem arredondamento.
+            </p>
+            @if (
+              !medirRawValido(
+                variantePadraoForm.controls.volume.value,
+                variantePadraoForm.controls.volumeUnidade.value
+              )
+            ) {
+              <p class="mt-1 text-sm text-red-700">
+                Informe uma medida positiva sem arredondamento.
+              </p>
+            }
+          </div>
         </div>
       </fieldset>
+    } @else {
+      <section class="sm:col-span-2" aria-labelledby="features-title">
+        <div class="rounded-xl border border-emerald-950/10 bg-emerald-50/40 p-4 sm:p-5">
+          <h3 id="features-title" class="text-base font-semibold text-emerald-950">
+            Quais opções o cliente poderá escolher?
+          </h3>
+          <p class="mt-1 text-sm text-slate-600">
+            Adicione características e os valores realmente disponíveis. Medidas são informadas como
+            números, sem interpretar textos.
+          </p>
+          <div class="mt-4 flex flex-wrap gap-2" role="group" aria-label="Adicionar característica">
+            <button
+              type="button"
+              (click)="adicionarCaracteristica('PesoLiquido')"
+              [disabled]="temCaracteristicaFisica('PesoLiquido')"
+              class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Peso
+            </button>
+            <button
+              type="button"
+              (click)="adicionarCaracteristica('VolumeLiquido')"
+              [disabled]="temCaracteristicaFisica('VolumeLiquido')"
+              class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Volume
+            </button>
+            <button
+              type="button"
+              (click)="adicionarCaracteristica(null, 'Cor')"
+              class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-white"
+            >
+              Cor
+            </button>
+            <button
+              type="button"
+              (click)="adicionarCaracteristica(null, 'Fragrância')"
+              class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-white"
+            >
+              Fragrância
+            </button>
+            <button
+              type="button"
+              (click)="adicionarCaracteristica(null, 'Tamanho')"
+              class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-white"
+            >
+              Tamanho
+            </button>
+            <button
+              type="button"
+              (click)="adicionarCaracteristica(null)"
+              class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-white"
+            >
+              Outra característica
+            </button>
+          </div>
+        </div>
 
-      <section class="sm:col-span-2" aria-label="Variantes adicionais">
-        <div class="flex flex-wrap items-center justify-between gap-3">
+        @for (
+          caracteristica of caracteristicas();
+          track caracteristica.referencia
+        ) {
+          @if (!caracteristica.removida) {
+            <fieldset class="mt-4 rounded-xl border border-slate-200 p-4">
+              <legend class="px-1 text-sm font-semibold text-slate-800">
+                {{
+                  tituloCaracteristica(caracteristica)
+                }}
+              </legend>
+              <div class="grid gap-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                <div>
+                  <label
+                    [for]="'feature-name-' + caracteristica.referencia"
+                    class="block text-sm font-medium text-slate-700"
+                    >Nome da característica</label
+                  >
+                  <input
+                    [id]="'feature-name-' + caracteristica.referencia"
+                    [formControl]="caracteristica.nome"
+                    maxlength="100"
+                    [readonly]="!!caracteristica.tipoMedidaFisica"
+                    placeholder="Ex.: Material, Aroma"
+                    [attr.aria-invalid]="erroNomeCaracteristica(caracteristica) ? 'true' : null"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                  @if (erroNomeCaracteristica(caracteristica)) {
+                    <p class="mt-1 text-sm text-red-700">
+                      {{ erroNomeCaracteristica(caracteristica) }}
+                    </p>
+                  }
+                </div>
+                <button
+                  type="button"
+                  (click)="removerCaracteristica(caracteristica)"
+                  [disabled]="caracteristicaEmUso(caracteristica)"
+                  class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline disabled:cursor-not-allowed disabled:opacity-50"
+                  [attr.aria-label]="'Remover característica ' + caracteristica.nome.value"
+                >
+                  Remover característica
+                </button>
+              </div>
+              @if (caracteristicaEmUso(caracteristica)) {
+                <p class="mt-1 text-xs text-slate-500">
+                  Esta característica está vinculada a uma combinação e não pode ser removida.
+                </p>
+              }
+
+              <div class="mt-4 space-y-3">
+                @for (
+                  valor of caracteristica.valores;
+                  track valor.referencia
+                ) {
+                  @if (!valor.removido) {
+                    <div
+                      class="grid gap-3 rounded-lg bg-slate-50 p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end"
+                    >
+                      @if (caracteristica.tipoMedidaFisica) {
+                        <div>
+                          <label
+                            [for]="'measure-value-' + valor.referencia"
+                            class="block text-sm font-medium text-slate-700"
+                          >
+                            {{ tituloCaracteristica(caracteristica) }}
+                            {{ indiceValorVisivel(caracteristica, valor) }}
+                          </label>
+                          <div class="mt-1.5 flex gap-2">
+                            <input
+                              [id]="'measure-value-' + valor.referencia"
+                              [formControl]="valor.medida"
+                              inputmode="decimal"
+                              placeholder="Ex.: 100"
+                              [attr.aria-invalid]="
+                                !medidaObrigatoriaValida(valor.medida.value, valor.unidade.value)
+                              "
+                              class="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3"
+                            />
+                            <select
+                              [formControl]="valor.unidade"
+                              aria-label="Unidade da medida"
+                              class="min-h-11 rounded-xl border border-slate-300 bg-white px-3"
+                            >
+                              @if (caracteristica.tipoMedidaFisica === 'PesoLiquido') {
+                                <option value="G">g</option>
+                                <option value="KG">kg</option>
+                              } @else {
+                                <option value="ML">ml</option>
+                                <option value="L">L</option>
+                              }
+                            </select>
+                          </div>
+                          <p class="mt-1 text-xs text-slate-500">
+                            O valor será salvo em
+                            {{
+                              caracteristica.tipoMedidaFisica === 'PesoLiquido'
+                                ? 'gramas'
+                                : 'mililitros'
+                            }}.
+                          </p>
+                          @if (
+                            enviado() &&
+                            !medidaObrigatoriaValida(valor.medida.value, valor.unidade.value)
+                          ) {
+                            <p class="mt-1 text-sm text-red-700">
+                              Informe uma medida positiva sem arredondamento.
+                            </p>
+                          }
+                        </div>
+                      } @else {
+                        <div>
+                          <label
+                            [for]="'feature-value-' + valor.referencia"
+                            class="block text-sm font-medium text-slate-700"
+                          >
+                            Valor {{ indiceValorVisivel(caracteristica, valor) }}
+                          </label>
+                          <input
+                            [id]="'feature-value-' + valor.referencia"
+                            [formControl]="valor.nome"
+                            maxlength="100"
+                            placeholder="Ex.: Branca, Lavanda ou Pequeno"
+                            [attr.aria-invalid]="erroNomeValor(valor) ? 'true' : null"
+                            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                          />
+                          @if (erroNomeValor(valor)) {
+                            <p class="mt-1 text-sm text-red-700">{{ erroNomeValor(valor) }}</p>
+                          }
+                        </div>
+                      }
+                      <button
+                        type="button"
+                        (click)="removerValor(caracteristica, valor)"
+                        [disabled]="valorEmUso(caracteristica, valor)"
+                        class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline disabled:cursor-not-allowed disabled:opacity-50"
+                        [attr.aria-label]="'Remover valor ' + exibirValor(valor, caracteristica)"
+                      >
+                        Remover valor
+                      </button>
+                    </div>
+                  }
+                }
+              </div>
+              <button
+                type="button"
+                (click)="adicionarValor(caracteristica)"
+                class="mt-3 min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Adicionar valor
+              </button>
+            </fieldset>
+          }
+        }
+      </section>
+
+      <section class="sm:col-span-2" aria-labelledby="combinations-title">
+        <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 class="text-sm font-semibold text-slate-800">Outras variantes</h3>
-            <p class="mt-1 text-xs text-slate-500">
-              Opcional. A primeira variante continua sendo a padrão.
+            <h3 id="combinations-title" class="text-base font-semibold text-slate-900">
+              Quais combinações você vende?
+            </h3>
+            <p class="mt-1 text-sm text-slate-600">
+              Cadastre somente as combinações disponíveis; as demais não serão criadas
+              automaticamente.
             </p>
           </div>
           <button
             type="button"
-            (click)="adicionarVariante()"
-            class="min-h-10 rounded-xl border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            (click)="adicionarCombinacao()"
+            class="min-h-10 rounded-xl border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
           >
-            Adicionar variante
+            Adicionar combinação
           </button>
         </div>
-        @for (variante of variantesAdicionais.controls; track $index; let i = $index) {
-          <fieldset
-            [formGroup]="variante"
-            class="mt-4 grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-4"
-          >
-            <legend class="px-1 text-xs font-medium text-slate-600">Variante {{ i + 1 }}</legend>
-            <div>
-              <label [for]="'variant-name-' + i" class="block text-sm font-medium text-slate-700"
-                >Identificação</label
-              >
-              <input
-                [id]="'variant-name-' + i"
-                formControlName="identificacao"
-                maxlength="100"
-                required
-                class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-              />
-              @if (erroCampo(variante, 'identificacao')) {
-                <p class="mt-1 text-sm text-red-700">{{ erroCampo(variante, 'identificacao') }}</p>
+
+        @for (variante of variantes(); track variante.id ?? $index; let variantIndex = $index) {
+          <fieldset class="mt-4 rounded-xl border border-slate-200 bg-white p-4 sm:p-5">
+            <legend class="px-1 text-sm font-semibold text-slate-800">
+              Combinação {{ variantIndex + 1 }}
+              @if (variante.padrao) {
+                <span class="text-emerald-800">· opção principal</span>
+              }
+            </legend>
+            @if (caracteristicas().length === 0) {
+              <p class="text-sm text-amber-800">
+                Adicione uma característica para montar opções de venda.
+              </p>
+            }
+            <div class="grid gap-4 sm:grid-cols-2">
+              @for (caracteristica of caracteristicas(); track caracteristica.referencia) {
+                @if (!caracteristica.removida) {
+                  <div>
+                    <label
+                      [for]="'selection-' + variantIndex + '-' + caracteristica.referencia"
+                      class="block text-sm font-medium text-slate-700"
+                    >
+                      {{ caracteristica.nome.value }}
+                    </label>
+                    <select
+                      [id]="'selection-' + variantIndex + '-' + caracteristica.referencia"
+                      [value]="variante.selecoes[caracteristica.referencia]?.value ?? ''"
+                      (change)="atualizarSelecao(variante, caracteristica, $event)"
+                      class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                    >
+                      <option value="">
+                        Selecione {{ caracteristica.nome.value.toLocaleLowerCase('pt-BR') }}
+                      </option>
+                      @for (valor of caracteristica.valores; track valor.referencia) {
+                        @if (!valor.removido) {
+                          <option [value]="valor.referencia">
+                            {{ exibirValor(valor, caracteristica) }}
+                          </option>
+                        }
+                      }
+                    </select>
+                  </div>
+                }
               }
             </div>
-            <div>
-              <label [for]="'variant-unit-' + i" class="block text-sm font-medium text-slate-700"
-                >Unidade</label
-              >
-              <input
-                [id]="'variant-unit-' + i"
-                formControlName="unidadeVenda"
-                maxlength="10"
-                required
-                placeholder="UN, G ou ML"
-                class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3 uppercase"
-              />
-              @if (erroCampo(variante, 'unidadeVenda')) {
-                <p class="mt-1 text-sm text-red-700">{{ erroCampo(variante, 'unidadeVenda') }}</p>
+            <p class="mt-3 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
+              Combinação: {{ combinacaoLegivel(variante) }}
+            </p>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div>
+                <div class="flex items-center justify-between gap-2">
+                  <label
+                    [for]="'combination-name-' + variantIndex"
+                    class="block text-sm font-medium text-slate-700"
+                  >
+                    Identificação da opção
+                  </label>
+                  @if (!variante.identificacaoManual) {
+                    <button
+                      type="button"
+                      (click)="habilitarIdentificacaoManual(variante)"
+                      class="text-xs font-semibold text-emerald-800 underline"
+                    >
+                      Ajustar
+                    </button>
+                  } @else {
+                    <button
+                      type="button"
+                      (click)="recarregarNome(variante)"
+                      class="text-xs font-semibold text-emerald-800 underline"
+                    >
+                      Usar combinação
+                    </button>
+                  }
+                </div>
+                <input
+                  [id]="'combination-name-' + variantIndex"
+                  [formControl]="variante.identificacao"
+                  maxlength="100"
+                  (input)="atualizarIdentificacaoManual(variante, $event)"
+                  [readonly]="!variante.identificacaoManual"
+                  [attr.aria-invalid]="erroVarianteCampo(variante, 'identificacao') ? 'true' : null"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (erroVarianteCampo(variante, 'identificacao')) {
+                  <p class="mt-1 text-sm text-red-700">
+                    {{ erroVarianteCampo(variante, 'identificacao') }}
+                  </p>
+                }
+                <p class="mt-1 text-xs text-slate-500">
+                  Gerada a partir das escolhas; você pode ajustar o texto.
+                </p>
+              </div>
+              <div>
+                <label
+                  [for]="'combination-unit-' + variantIndex"
+                  class="block text-sm font-medium text-slate-700"
+                  >Como esta opção será vendida?</label
+                >
+                <select
+                  [id]="'combination-unit-' + variantIndex"
+                  [formControl]="variante.unidadeVenda"
+                  [attr.aria-invalid]="erroVarianteCampo(variante, 'unidadeVenda') ? 'true' : null"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  @for (unidade of unidadeOptions(variante); track unidade.codigo) {
+                    <option [value]="unidade.codigo">
+                      {{ unidade.nome }} ({{ unidade.codigo }})
+                    </option>
+                  }
+                </select>
+                <p class="mt-1 text-xs text-slate-500">
+                  Ex.: unidade, kit ou pacote. Não é uma medida física.
+                </p>
+                @if (erroVarianteCampo(variante, 'unidadeVenda')) {
+                  <p class="mt-1 text-sm text-red-700">
+                    {{ erroVarianteCampo(variante, 'unidadeVenda') }}
+                  </p>
+                }
+              </div>
+              <div>
+                <label
+                  [for]="'combination-price-' + variantIndex"
+                  class="block text-sm font-medium text-slate-700"
+                  >Preço de venda</label
+                >
+                <app-brl-currency-input
+                  [formControl]="variante.precoVenda"
+                  [inputId]="'combination-price-' + variantIndex"
+                  [required]="true"
+                  [invalid]="!!erroVarianteCampo(variante, 'precoVenda')"
+                  [describedBy]="
+                    erroVarianteCampo(variante, 'precoVenda')
+                      ? 'combination-price-error-' + variantIndex
+                      : null
+                  "
+                />
+                @if (erroVarianteCampo(variante, 'precoVenda')) {
+                  <p
+                    [id]="'combination-price-error-' + variantIndex"
+                    class="mt-1 text-sm text-red-700"
+                  >
+                    {{ erroVarianteCampo(variante, 'precoVenda') }}
+                  </p>
+                }
+              </div>
+              @if (!medidaDerivada(variante, 'PesoLiquido')) {
+                <div>
+                  <label
+                    [for]="'combination-weight-' + variantIndex"
+                    class="block text-sm font-medium text-slate-700"
+                    >Peso líquido (opcional)</label
+                  >
+                  <div class="mt-1.5 flex gap-2">
+                    <input
+                      [id]="'combination-weight-' + variantIndex"
+                      [formControl]="variante.peso"
+                      inputmode="decimal"
+                      placeholder="Ex.: 100"
+                      [attr.aria-invalid]="
+                        medidaVarianteValida(variante, 'PesoLiquido') ? null : 'true'
+                      "
+                      class="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3"
+                    />
+                    <select
+                      [formControl]="variante.pesoUnidade"
+                      aria-label="Unidade do peso"
+                      class="min-h-11 rounded-xl border border-slate-300 bg-white px-3"
+                    >
+                      <option value="G">g</option>
+                      <option value="KG">kg</option>
+                    </select>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-500">
+                    Informe o peso do produto sem a embalagem.
+                  </p>
+                  @if (!medidaVarianteValida(variante, 'PesoLiquido')) {
+                    <p class="mt-1 text-sm text-red-700">
+                      Informe um peso positivo sem arredondamento.
+                    </p>
+                  }
+                </div>
+              } @else {
+                <p class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+                  Peso definido pela característica: {{ medidaDerivada(variante, 'PesoLiquido') }}
+                </p>
+              }
+              @if (!medidaDerivada(variante, 'VolumeLiquido')) {
+                <div>
+                  <label
+                    [for]="'combination-volume-' + variantIndex"
+                    class="block text-sm font-medium text-slate-700"
+                    >Volume líquido (opcional)</label
+                  >
+                  <div class="mt-1.5 flex gap-2">
+                    <input
+                      [id]="'combination-volume-' + variantIndex"
+                      [formControl]="variante.volume"
+                      inputmode="decimal"
+                      placeholder="Ex.: 250"
+                      [attr.aria-invalid]="
+                        medidaVarianteValida(variante, 'VolumeLiquido') ? null : 'true'
+                      "
+                      class="min-h-11 min-w-0 flex-1 rounded-xl border border-slate-300 px-3"
+                    />
+                    <select
+                      [formControl]="variante.volumeUnidade"
+                      aria-label="Unidade do volume"
+                      class="min-h-11 rounded-xl border border-slate-300 bg-white px-3"
+                    >
+                      <option value="ML">ml</option>
+                      <option value="L">L</option>
+                    </select>
+                  </div>
+                  <p class="mt-1 text-xs text-slate-500">Informe o volume do conteúdo.</p>
+                  @if (!medidaVarianteValida(variante, 'VolumeLiquido')) {
+                    <p class="mt-1 text-sm text-red-700">
+                      Informe um volume positivo sem arredondamento.
+                    </p>
+                  }
+                </div>
+              } @else {
+                <p class="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-900">
+                  Volume definido pela característica:
+                  {{ medidaDerivada(variante, 'VolumeLiquido') }}
+                </p>
               }
             </div>
-            <div>
-              <label [for]="'variant-price-' + i" class="block text-sm font-medium text-slate-700"
-                >Preço (BRL)</label
-              >
-              <input
-                [id]="'variant-price-' + i"
-                formControlName="precoVenda"
-                type="number"
-                min="0.01"
-                step="0.01"
-                required
-                inputmode="decimal"
-                class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-              />
-              @if (erroCampo(variante, 'precoVenda')) {
-                <p class="mt-1 text-sm text-red-700">{{ erroCampo(variante, 'precoVenda') }}</p>
+            <div
+              class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4"
+            >
+              <label class="flex items-start gap-2 text-sm text-slate-700">
+                <input
+                  type="radio"
+                  name="principal-combination"
+                  [checked]="variante.padrao"
+                  [disabled]="!variante.ativa.value || (produto() && !variante.id)"
+                  (change)="definirPadrao(variante)"
+                  class="mt-1 accent-emerald-800"
+                />
+                <span>Esta será a opção apresentada inicialmente ao cliente.</span>
+              </label>
+              <label class="flex items-center gap-2 text-sm text-slate-700">
+                <input
+                  type="checkbox"
+                  [checked]="variante.ativa.value"
+                  [disabled]="variante.padrao"
+                  (change)="alterarAtivaEvent(variante, $event)"
+                  class="accent-emerald-800"
+                />
+                Opção ativa
+              </label>
+              @if (!variante.id) {
+                <button
+                  type="button"
+                  (click)="removerCombinacao(variante)"
+                  [disabled]="variante.padrao"
+                  class="min-h-9 rounded-lg px-3 text-sm font-semibold text-slate-700 underline disabled:opacity-40"
+                >
+                  Remover combinação
+                </button>
               }
             </div>
-            <div class="flex items-end">
-              <button
-                type="button"
-                (click)="removerVariante(i)"
-                class="min-h-11 rounded-xl px-3 text-sm font-semibold text-slate-700 underline underline-offset-4"
-              >
-                Remover do cadastro
-              </button>
-            </div>
+            @if (produto() && !variante.id) {
+              <p class="mt-2 text-xs text-slate-500">
+                Uma nova opção não pode ser marcada como principal antes de ser salva. Depois, use
+                “Gerenciar opções” para apresentá-la primeiro.
+              </p>
+            }
           </fieldset>
         }
       </section>
+    }
+
+    @if (erroConfiguracao()) {
+      <p
+        class="sm:col-span-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ erroConfiguracao() }}
+      </p>
     }
 
     <div class="flex flex-wrap items-end gap-3 sm:col-span-2 sm:justify-end">

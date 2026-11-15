@@ -1,11 +1,14 @@
 <section
   class="rounded-xl border border-emerald-950/10 bg-slate-50 p-4"
-  aria-labelledby="variant-form-title"
+  aria-labelledby="option-form-title"
 >
   <div class="flex flex-wrap items-start justify-between gap-3">
-    <h3 id="variant-form-title" class="font-semibold text-slate-900">
-      {{ variante() ? 'Editar variante' : 'Adicionar variante' }}
-    </h3>
+    <div>
+      <p class="text-xs font-medium text-emerald-800">Catálogo</p>
+      <h3 id="option-form-title" class="mt-1 font-semibold text-slate-900">
+        {{ variante() ? 'Editar opção' : 'Adicionar opção' }}
+      </h3>
+    </div>
     <button
       type="button"
       (click)="cancelar.emit()"
@@ -26,51 +29,102 @@
     </p>
   }
 
-  <form [formGroup]="form" (ngSubmit)="submit()" novalidate class="mt-4 grid gap-4 sm:grid-cols-4">
+  <p class="mt-3 text-sm text-slate-600">
+    Uma opção é uma versão do mesmo produto, com identificação, unidade e preço próprios.
+  </p>
+  @if (variante()?.padrao) {
+    <p
+      class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-950"
+    >
+      Esta é a opção principal e precisa continuar ativa. Para desativá-la, escolha outra opção
+      ativa no gerenciamento, onde a troca é feita na mesma operação.
+    </p>
+  } @else if (variante()?.ativa === false) {
+    <p class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+      Esta opção está inativa. Salvar seus dados não a reativa; use a ação de ativação no
+      gerenciamento de opções.
+    </p>
+  } @else if (!variante()) {
+    <p class="mt-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700">
+      A nova opção começa ativa e não principal. Você poderá defini-la como principal no
+      gerenciamento.
+    </p>
+  }
+
+  <form
+    [formGroup]="form"
+    (ngSubmit)="submit()"
+    novalidate
+    class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
+  >
     <div>
-      <label for="managed-variant-name" class="block text-sm font-medium text-slate-700"
-        >Identificação</label
-      >
+      <label for="managed-variant-name" class="block text-sm font-medium text-slate-700">
+        Identificação da opção
+      </label>
       <input
         id="managed-variant-name"
         formControlName="identificacao"
         maxlength="100"
         required
-        class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+        placeholder="Ex.: 100 g, 200 g, Lavanda, Grande"
+        [attr.aria-invalid]="erroCampo('identificacao') ? 'true' : null"
+        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
       />
       @if (erroCampo('identificacao')) {
         <p class="mt-1 text-sm text-red-700">{{ erroCampo('identificacao') }}</p>
       }
     </div>
     <div>
-      <label for="managed-variant-unit" class="block text-sm font-medium text-slate-700"
-        >Unidade de venda</label
-      >
-      <input
+      <label for="managed-variant-unit" class="block text-sm font-medium text-slate-700">
+        Como esta opção será vendida?
+      </label>
+      <select
         id="managed-variant-unit"
         formControlName="unidadeVenda"
-        maxlength="10"
         required
-        placeholder="UN, G ou ML"
-        class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 uppercase"
-      />
+        [attr.aria-invalid]="erroCampo('unidadeVenda') ? 'true' : null"
+        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+      >
+        @for (unidade of unidadesVenda; track unidade) {
+          <option [value]="unidade">
+            {{
+              unidade === 'UN'
+                ? 'Unidade'
+                : unidade === 'KIT'
+                  ? 'Kit'
+                  : unidade === 'PAR'
+                    ? 'Par'
+                    : unidade === 'PCT'
+                      ? 'Pacote'
+                      : unidade === 'CX'
+                        ? 'Caixa'
+                        : 'Conjunto'
+            }}
+            ({{ unidade }})
+          </option>
+        }
+        @if (variante() && unidadeLegada(variante()!.unidadeVenda)) {
+          <option [value]="variante()!.unidadeVenda">
+            {{ variante()!.unidadeVenda }} (legada — manter)
+          </option>
+        }
+      </select>
+      <p class="mt-1.5 text-xs text-slate-500">
+        Ex.: unidade, kit ou pacote. Esta é a forma de venda, não uma medida física.
+      </p>
       @if (erroCampo('unidadeVenda')) {
         <p class="mt-1 text-sm text-red-700">{{ erroCampo('unidadeVenda') }}</p>
       }
     </div>
     <div>
-      <label for="managed-variant-price" class="block text-sm font-medium text-slate-700"
-        >Preço (BRL)</label
-      >
-      <input
-        id="managed-variant-price"
+      <label for="managed-variant-price" class="block text-sm font-medium text-slate-700">
+        Preço de venda
+      </label>
+      <app-brl-currency-input
         formControlName="precoVenda"
-        type="number"
-        min="0.01"
-        step="0.01"
-        required
-        inputmode="decimal"
-        class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+        inputId="managed-variant-price"
+        [required]="true"
+        [invalid]="!!erroCampo('precoVenda')"
       />
       @if (erroCampo('precoVenda')) {
         <p class="mt-1 text-sm text-red-700">{{ erroCampo('precoVenda') }}</p>
@@ -83,7 +137,7 @@
         [attr.aria-busy]="salvando()"
         class="min-h-11 w-full rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-70"
       >
-        {{ salvando() ? 'Salvando...' : 'Salvar variante' }}
+        {{ salvando() ? 'Salvando...' : 'Salvar opção' }}
       </button>
     </div>
   </form>

@@ -23,7 +23,7 @@ public static class AdminProdutoEndpoints
 
         group.MapGet("/{id:guid}", ConsultarAsync)
             .WithName("GetAdminProduct")
-            .WithSummary("Consulta um produto e suas variantes.")
+            .WithSummary("Consulta um produto, suas características, valores e variantes.")
             .Produces<ProdutoResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
@@ -39,7 +39,7 @@ public static class AdminProdutoEndpoints
         group.MapPut("/{id:guid}", EditarAsync)
             .RequireXaquiamuniAntiforgery()
             .WithName("UpdateAdminProduct")
-            .WithSummary("Edita nome, descrição e categoria de um produto.")
+            .WithSummary("Edita dados, características, valores e variantes de um produto.")
             .Produces<ProdutoResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -57,7 +57,7 @@ public static class AdminProdutoEndpoints
         group.MapPut("/{id:guid}/variantes/{varianteId:guid}", EditarVarianteAsync)
             .RequireXaquiamuniAntiforgery()
             .WithName("UpdateAdminProductVariant")
-            .WithSummary("Edita identificação, unidade de venda e preço da variante.")
+            .WithSummary("Edita dados comerciais, medidas e combinação da variante.")
             .Produces<ProdutoResponse>(StatusCodes.Status200OK)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status404NotFound)
@@ -258,7 +258,7 @@ public static class AdminProdutoEndpoints
             detail: detail);
 }
 
-/// <summary>Payload para cadastro de produto e sua variante padrão obrigatória.</summary>
+/// <summary>Payload para cadastrar um produto e suas variantes, características e valores.</summary>
 public sealed record ProdutoCadastroRequest
 {
     /// <summary>Nome do produto.</summary>
@@ -270,17 +270,30 @@ public sealed record ProdutoCadastroRequest
     /// <summary>Identificador da categoria ativa.</summary>
     public Guid? CategoriaId { get; init; }
 
-    /// <summary>Dados da variante padrão ativa.</summary>
+    /// <summary>Dados comerciais e medidas da variante padrão.</summary>
     public ProdutoVarianteRequest? VariantePadrao { get; init; }
 
-    /// <summary>Variantes adicionais, criadas ativas e não padrão.</summary>
+    /// <summary>Variantes adicionais explícitas.</summary>
     public IReadOnlyList<ProdutoVarianteRequest?>? Variantes { get; init; }
 
+    /// <summary>Indica produto simples; sua variante padrão recebe internamente a identificação Padrão.</summary>
+    public bool? Simples { get; init; }
+
+    /// <summary>Características e valores pertencentes ao produto.</summary>
+    public IReadOnlyList<ProdutoCaracteristicaRequest?>? Caracteristicas { get; init; }
+
     public ProdutoCadastroInput ToInput() =>
-        new(Nome, Descricao, CategoriaId, VariantePadrao?.ToInput(), Variantes?.Select(item => item?.ToInput()).ToArray());
+        new(
+            Nome,
+            Descricao,
+            CategoriaId,
+            VariantePadrao?.ToInput(),
+            Variantes?.Select(item => item?.ToInput()).ToArray(),
+            Simples,
+            Caracteristicas?.Select(item => item?.ToInput()).ToArray());
 }
 
-/// <summary>Payload para edição dos dados principais do produto.</summary>
+/// <summary>Payload para editar os dados do produto e, opcionalmente, seu agregado de variantes.</summary>
 public sealed record ProdutoEdicaoRequest
 {
     /// <summary>Nome do produto.</summary>
@@ -292,22 +305,142 @@ public sealed record ProdutoEdicaoRequest
     /// <summary>Categoria desejada para o produto.</summary>
     public Guid? CategoriaId { get; init; }
 
-    public ProdutoEdicaoInput ToInput() => new(Nome, Descricao, CategoriaId);
+    /// <summary>Características a adicionar ou atualizar; omissão preserva as existentes.</summary>
+    public IReadOnlyList<ProdutoCaracteristicaRequest?>? Caracteristicas { get; init; }
+
+    /// <summary>Variantes a adicionar ou atualizar por ID; omissão preserva todas as variantes.</summary>
+    public IReadOnlyList<ProdutoVarianteRequest?>? Variantes { get; init; }
+
+    public ProdutoEdicaoInput ToInput() =>
+        new(
+            Nome,
+            Descricao,
+            CategoriaId,
+            Caracteristicas?.Select(item => item?.ToInput()).ToArray(),
+            Variantes?.Select(item => item?.ToInput()).ToArray());
 }
 
-/// <summary>Payload para criar ou editar os dados comerciais de uma variante.</summary>
+/// <summary>Payload para criar ou editar os dados comerciais, medidas e combinação de uma variante.</summary>
 public sealed record ProdutoVarianteRequest
 {
+    /// <summary>ID persistido; omitido somente para criar uma nova variante.</summary>
+    public Guid? Id { get; init; }
+
     /// <summary>Identificação da apresentação da variante.</summary>
     public string? Identificacao { get; init; }
 
     /// <summary>Código da unidade de venda da variante.</summary>
     public string? UnidadeVenda { get; init; }
 
-    /// <summary>Preço de venda positivo, com precisão monetária BRL.</summary>
-    public decimal PrecoVenda { get; init; }
+    /// <summary>Preço de venda positivo, com precisão monetária.</summary>
+    public decimal? PrecoVenda { get; init; }
 
-    public ProdutoVarianteInput ToInput() => new(Identificacao, UnidadeVenda, PrecoVenda);
+    /// <summary>Peso líquido em gramas, opcional.</summary>
+    public decimal? PesoLiquidoGramas { get; init; }
+
+    /// <summary>Volume líquido em mililitros, opcional.</summary>
+    public decimal? VolumeLiquidoMililitros { get; init; }
+
+    /// <summary>Valores de características selecionados pela variante; IDs ou referências temporárias.</summary>
+    public IReadOnlyList<ProdutoVarianteCaracteristicaRequest?>? Caracteristicas { get; init; }
+
+    /// <summary>Estado ativo desejado em uma edição.</summary>
+    public bool? Ativa { get; init; }
+
+    /// <summary>Define esta variante como padrão na edição do agregado.</summary>
+    public bool? Padrao { get; init; }
+
+    /// <summary>Novo padrão ao desativar a variante padrão atual.</summary>
+    public Guid? NovoPadraoId { get; init; }
+
+    /// <summary>Permite limpar explicitamente medidas diretas enviando-as como nulas.</summary>
+    public bool AtualizarMedidas { get; init; }
+
+    public ProdutoVarianteInput ToInput() =>
+        new(
+            Identificacao,
+            UnidadeVenda,
+            PrecoVenda,
+            Id,
+            PesoLiquidoGramas,
+            VolumeLiquidoMililitros,
+            Caracteristicas?.Select(item => item?.ToInput()).ToArray(),
+            Ativa,
+            Padrao,
+            NovoPadraoId,
+            AtualizarMedidas);
+}
+
+/// <summary>Payload para adicionar ou atualizar uma característica do produto.</summary>
+public sealed record ProdutoCaracteristicaRequest
+{
+    /// <summary>Referência temporária para vínculos no mesmo cadastro.</summary>
+    public string? Referencia { get; init; }
+
+    /// <summary>ID persistido para atualizar ou remover uma característica existente.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Nome da característica, como cor, fragrância ou tamanho.</summary>
+    public string? Nome { get; init; }
+
+    /// <summary>Tipo físico PesoLiquido ou VolumeLiquido; nulo para característica genérica.</summary>
+    public string? TipoMedidaFisica { get; init; }
+
+    /// <summary>Valores disponíveis para esta característica.</summary>
+    public IReadOnlyList<ProdutoCaracteristicaValorRequest?>? Valores { get; init; }
+
+    /// <summary>Solicita remoção; só é aceita quando não há vínculos em variantes.</summary>
+    public bool Remover { get; init; }
+
+    public ProdutoCaracteristicaInput ToInput() =>
+        new(
+            Referencia,
+            Id,
+            Nome,
+            TipoMedidaFisica,
+            Valores?.Select(item => item?.ToInput()).ToArray(),
+            Remover);
+}
+
+/// <summary>Payload para adicionar, atualizar ou remover um valor de característica.</summary>
+public sealed record ProdutoCaracteristicaValorRequest
+{
+    /// <summary>Referência temporária para vínculos no mesmo cadastro.</summary>
+    public string? Referencia { get; init; }
+
+    /// <summary>ID persistido para atualizar ou remover um valor existente.</summary>
+    public Guid? Id { get; init; }
+
+    /// <summary>Texto do valor genérico; nulo para valores de medidas físicas.</summary>
+    public string? Nome { get; init; }
+
+    /// <summary>Valor numérico em gramas ou mililitros, conforme o tipo da característica.</summary>
+    public decimal? ValorMedidaCanonico { get; init; }
+
+    /// <summary>Solicita remoção; só é aceita quando não há vínculos em variantes.</summary>
+    public bool Remover { get; init; }
+
+    public ProdutoCaracteristicaValorInput ToInput() =>
+        new(Referencia, Id, Nome, ValorMedidaCanonico, Remover);
+}
+
+/// <summary>Vínculo de uma variante a um valor, por IDs persistidos ou referências temporárias.</summary>
+public sealed record ProdutoVarianteCaracteristicaRequest
+{
+    /// <summary>ID persistido da característica.</summary>
+    public Guid? CaracteristicaId { get; init; }
+
+    /// <summary>Referência da característica enviada nesta mesma operação.</summary>
+    public string? ReferenciaCaracteristica { get; init; }
+
+    /// <summary>ID persistido do valor.</summary>
+    public Guid? ValorId { get; init; }
+
+    /// <summary>Referência do valor enviado nesta mesma operação.</summary>
+    public string? ReferenciaValor { get; init; }
+
+    public ProdutoVarianteCaracteristicaInput ToInput() =>
+        new(CaracteristicaId, ReferenciaCaracteristica, ValorId, ReferenciaValor);
 }
 
 /// <summary>Payload para ativar ou desativar uma variante.</summary>
@@ -327,26 +460,75 @@ public sealed record ProdutoPublicacaoRequest
     public bool? Publicado { get; init; }
 }
 
-/// <summary>Representação administrativa de uma variante de produto.</summary>
+/// <summary>Associação devolvida para reconstruir as características de uma variante.</summary>
+public sealed record ProdutoVarianteCaracteristicaResponse(
+    Guid CaracteristicaId,
+    string CaracteristicaNome,
+    Guid ValorId,
+    string ValorNome,
+    decimal? ValorMedidaCanonico);
+
+/// <summary>Valor configurado em uma característica do produto.</summary>
+public sealed record ProdutoCaracteristicaValorResponse(
+    Guid Id,
+    string Nome,
+    decimal? ValorMedidaCanonico);
+
+/// <summary>Característica configurada no produto e seus valores possíveis.</summary>
+public sealed record ProdutoCaracteristicaResponse(
+    Guid Id,
+    string Nome,
+    string? TipoMedidaFisica,
+    IReadOnlyList<ProdutoCaracteristicaValorResponse> Valores)
+{
+    public static ProdutoCaracteristicaResponse From(ProdutoCaracteristica characteristic) =>
+        new(
+            characteristic.Id,
+            characteristic.Nome,
+            characteristic.TipoMedidaFisica?.ToString(),
+            characteristic.Valores
+                .OrderBy(value => value.NomeNormalizado, StringComparer.Ordinal)
+                .Select(value => new ProdutoCaracteristicaValorResponse(
+                    value.Id,
+                    value.Nome,
+                    value.ValorMedidaCanonico))
+                .ToArray());
+}
+
+/// <summary>Representação administrativa completa de uma variante de produto.</summary>
 public sealed record ProdutoVarianteResponse(
     Guid Id,
     string Identificacao,
     string UnidadeVenda,
     decimal PrecoVenda,
     bool Ativa,
-    bool Padrao)
+    bool Padrao,
+    decimal? PesoLiquidoGramas,
+    decimal? VolumeLiquidoMililitros,
+    IReadOnlyList<ProdutoVarianteCaracteristicaResponse> Caracteristicas)
 {
-    public static ProdutoVarianteResponse From(ProdutoVariante variante) =>
+    public static ProdutoVarianteResponse From(ProdutoVariante variant) =>
         new(
-            variante.Id,
-            variante.Identificacao,
-            variante.UnidadeVenda,
-            variante.PrecoVenda,
-            variante.Ativa,
-            variante.Padrao);
+            variant.Id,
+            variant.Identificacao,
+            variant.UnidadeVenda,
+            variant.PrecoVenda,
+            variant.Ativa,
+            variant.Padrao,
+            variant.PesoLiquidoGramas,
+            variant.VolumeLiquidoMililitros,
+            variant.CaracteristicaValores
+                .OrderBy(value => value.Caracteristica.NomeNormalizado, StringComparer.Ordinal)
+                .Select(value => new ProdutoVarianteCaracteristicaResponse(
+                    value.Caracteristica.Id,
+                    value.Caracteristica.Nome,
+                    value.Valor.Id,
+                    value.Valor.Nome,
+                    value.Valor.ValorMedidaCanonico))
+                .ToArray());
 }
 
-/// <summary>Representação administrativa de um produto e suas variantes.</summary>
+/// <summary>Representação administrativa completa de um produto e de seu agregado.</summary>
 public sealed record ProdutoResponse(
     Guid Id,
     string Nome,
@@ -355,7 +537,8 @@ public sealed record ProdutoResponse(
     string CategoriaNome,
     bool CategoriaAtiva,
     bool Publicado,
-    IReadOnlyList<ProdutoVarianteResponse> Variantes)
+    IReadOnlyList<ProdutoVarianteResponse> Variantes,
+    IReadOnlyList<ProdutoCaracteristicaResponse> Caracteristicas)
 {
     public static ProdutoResponse From(Produto produto) =>
         new(
@@ -367,8 +550,12 @@ public sealed record ProdutoResponse(
             produto.Categoria.Ativa,
             produto.Publicado,
             produto.Variantes
-                .OrderByDescending(variante => variante.Padrao)
-                .ThenBy(variante => variante.IdentificacaoNormalizada, StringComparer.Ordinal)
+                .OrderByDescending(variant => variant.Padrao)
+                .ThenBy(variant => variant.IdentificacaoNormalizada, StringComparer.Ordinal)
                 .Select(ProdutoVarianteResponse.From)
+                .ToArray(),
+            produto.Caracteristicas
+                .OrderBy(characteristic => characteristic.NomeNormalizado, StringComparer.Ordinal)
+                .Select(ProdutoCaracteristicaResponse.From)
                 .ToArray());
 }

@@ -43,20 +43,27 @@ describe('AdminProdutosComponent', () => {
       {
         id: 'soap-default',
         identificacao: '100 g',
-        unidadeVenda: 'G',
+        unidadeVenda: 'UN',
         precoVenda: 20,
         ativa: true,
         padrao: true,
+        pesoLiquidoGramas: 100,
+        volumeLiquidoMililitros: null,
+        caracteristicas: [],
       },
       {
         id: 'soap-large',
         identificacao: '200 g',
-        unidadeVenda: 'G',
+        unidadeVenda: 'UN',
         precoVenda: 35,
         ativa: true,
         padrao: false,
+        pesoLiquidoGramas: 200,
+        volumeLiquidoMililitros: null,
+        caracteristicas: [],
       },
     ],
+    caracteristicas: [],
   };
   const candle: AdminProduto = {
     id: 'candle',
@@ -74,8 +81,12 @@ describe('AdminProdutosComponent', () => {
         precoVenda: 25,
         ativa: true,
         padrao: true,
+        pesoLiquidoGramas: null,
+        volumeLiquidoMililitros: null,
+        caracteristicas: [],
       },
     ],
+    caracteristicas: [],
   };
 
   beforeEach(async () => {
@@ -150,6 +161,43 @@ describe('AdminProdutosComponent', () => {
     );
   });
 
+  it('shows simple-product measures and sale units without zero placeholders or legacy conversion', () => {
+    const measured = {
+      ...candle,
+      variantes: [
+        {
+          ...candle.variantes[0],
+          pesoLiquidoGramas: 100,
+          volumeLiquidoMililitros: 250,
+        },
+      ],
+    };
+    const legacy = {
+      ...candle,
+      id: 'legacy',
+      nome: 'Produto legado',
+      variantes: [
+        {
+          ...candle.variantes[0],
+          unidadeVenda: 'G',
+          pesoLiquidoGramas: null,
+          volumeLiquidoMililitros: null,
+        },
+      ],
+    };
+    listarProdutos.mockReturnValueOnce(of([measured, legacy]));
+    fixture.destroy();
+    fixture = TestBed.createComponent(AdminProdutosComponent);
+    fixture.detectChanges();
+
+    expect(text()).toContain('100 g · 250 ml · Unidade');
+    expect(text()).toContain('G');
+    expect(text()).not.toContain('· 0 g');
+    expect(text()).not.toContain('· 0 ml');
+    expect(text()).not.toContain('Variantes');
+    expect(text()).not.toContain('Opções do produto');
+  });
+
   it('shows distinct empty catalog and no-results states', () => {
     listarProdutos.mockReturnValueOnce(of([]));
     fixture.destroy();
@@ -190,6 +238,77 @@ describe('AdminProdutosComponent', () => {
     expect(productNames()).toContain(soap.nome);
   });
 
+  it('renders persisted combinations using option names rather than internal references', () => {
+    const configured: AdminProduto = {
+      ...soap,
+      caracteristicas: [
+        {
+          id: 'weight',
+          nome: 'Peso',
+          tipoMedidaFisica: 'PesoLiquido',
+          valores: [{ id: '100g', nome: '', valorMedidaCanonico: 100 }],
+        },
+        {
+          id: 'color',
+          nome: 'Cor',
+          tipoMedidaFisica: null,
+          valores: [{ id: 'white', nome: 'Branca', valorMedidaCanonico: null }],
+        },
+        {
+          id: 'fragrance',
+          nome: 'Fragrância',
+          tipoMedidaFisica: null,
+          valores: [{ id: 'lavender', nome: 'Lavanda', valorMedidaCanonico: null }],
+        },
+      ],
+      variantes: [
+        {
+          ...soap.variantes[0],
+          caracteristicas: [
+            {
+              caracteristicaId: 'weight',
+              caracteristicaNome: 'Peso',
+              valorId: '100g',
+              valorNome: '',
+              valorMedidaCanonico: 100,
+            },
+            {
+              caracteristicaId: 'color',
+              caracteristicaNome: 'Cor',
+              valorId: 'white',
+              valorNome: 'Branca',
+              valorMedidaCanonico: null,
+            },
+            {
+              caracteristicaId: 'fragrance',
+              caracteristicaNome: 'Fragrância',
+              valorId: 'lavender',
+              valorNome: 'Lavanda',
+              valorMedidaCanonico: null,
+            },
+          ],
+        },
+        soap.variantes[1],
+      ],
+    };
+    listarProdutos.mockReturnValueOnce(of([configured, candle]));
+    fixture.destroy();
+    fixture = TestBed.createComponent(AdminProdutosComponent);
+    fixture.detectChanges();
+
+    expect(text()).toContain('100 g · Branca · Lavanda');
+    expect(text()).not.toContain('100g');
+    obterProduto.mockReturnValue(of(configured));
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    expect(text()).toContain('100 g · Branca · Lavanda');
+    expect(
+      Array.from(root().querySelectorAll('button')).find(
+        (button) => button.textContent?.trim() === 'Adicionar opção',
+      )?.disabled,
+    ).toBe(true);
+    expect(text()).toContain('volte aos produtos e edite este produto');
+  });
+
   it('creates a simple product and reports that it starts unpublished', () => {
     const newProduct: AdminProduto = {
       ...candle,
@@ -204,11 +323,11 @@ describe('AdminProdutosComponent', () => {
       descricao: null,
       categoriaId: 'soaps',
       variantePadrao: {
-        identificacao: 'Padrão',
         unidadeVenda: 'UN',
         precoVenda: 18.5,
       },
       variantes: [],
+      simples: true,
     };
     criarProduto.mockReturnValue(of(newProduct));
     clickButton('Novo produto');
@@ -224,7 +343,36 @@ describe('AdminProdutosComponent', () => {
     expect(productNames()).toContain(newProduct.nome);
   });
 
-  it('loads a fresh product before editing and saves only the product fields', () => {
+  it('keeps form data and shows a safe combination conflict after a failed save', () => {
+    criarProduto.mockReturnValue(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: {
+              title: 'Conflito no produto',
+              detail: 'Esta combinação já está cadastrada.',
+            },
+          }),
+      ),
+    );
+    clickButton('Novo produto');
+    setField('product-name', 'Sabonete com conflito');
+    setField('product-category', 'soaps');
+    setField('default-variant-price', '1500');
+    submitForm();
+
+    expect(text()).toContain('Esta combinação já está cadastrada.');
+    expect((root().querySelector('#product-name') as HTMLInputElement).value).toBe(
+      'Sabonete com conflito',
+    );
+    expect((root().querySelector('#default-variant-price') as HTMLInputElement).value).toBe(
+      'R$ 15,00',
+    );
+    expect(text()).not.toContain('SQL');
+  });
+
+  it('loads complete details before editing and preserves existing variant IDs', () => {
     const updated: AdminProduto = { ...soap, nome: 'Sabonete editado' };
     obterProduto.mockReturnValue(of(soap));
     editarProduto.mockReturnValue(of(updated));
@@ -235,11 +383,18 @@ describe('AdminProdutosComponent', () => {
     setField('product-category', 'soaps');
     submitForm();
 
-    expect(editarProduto).toHaveBeenCalledWith(soap.id, {
-      nome: updated.nome,
-      descricao: null,
-      categoriaId: 'soaps',
-    } satisfies AdminProdutoEdicaoRequest);
+    expect(editarProduto).toHaveBeenCalledWith(
+      soap.id,
+      expect.objectContaining({
+        nome: updated.nome,
+        descricao: null,
+        categoriaId: 'soaps',
+        variantes: expect.arrayContaining([
+          expect.objectContaining({ id: 'soap-default', padrao: true }),
+          expect.objectContaining({ id: 'soap-large', padrao: false }),
+        ]),
+      }) satisfies AdminProdutoEdicaoRequest,
+    );
     expect(productNames()).toContain(updated.nome);
     expect(text()).toContain('Produto atualizado com sucesso.');
   });
@@ -294,8 +449,8 @@ describe('AdminProdutosComponent', () => {
     };
     obterProduto.mockReturnValue(of(soap));
     alterarStatusVariante.mockReturnValue(of(changed));
-    clickButton('Gerenciar variantes de Sabonete de Lavanda');
-    clickButton('Desativar variante 100 g');
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Desativar opção 100 g');
     setField('replacement-default-soap-default', 'soap-large');
     clickButton('Promover e desativar');
 
@@ -304,7 +459,7 @@ describe('AdminProdutosComponent', () => {
       ativa: false,
       novoPadraoId: 'soap-large',
     });
-    expect(text()).toContain('Variante desativada com sucesso.');
+    expect(text()).toContain('Opção desativada com sucesso.');
     expect(text()).toContain('200 g');
   });
 
@@ -330,20 +485,20 @@ describe('AdminProdutosComponent', () => {
     obterProduto.mockReturnValue(of(productWithInactiveVariant));
     alterarStatusVariante.mockReturnValue(of(activated));
     definirVariantePadrao.mockReturnValue(of(promoted));
-    clickButton('Gerenciar variantes de Sabonete de Lavanda');
-    clickButton('Ativar variante 200 g');
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Ativar opção 200 g');
     expect(alterarStatusVariante).toHaveBeenCalledWith(soap.id, 'soap-large', { ativa: true });
-    clickButton('Definir como padrão');
+    clickButton('Apresentar primeiro');
     expect(definirVariantePadrao).toHaveBeenCalledWith(soap.id, 'soap-large');
-    expect(text()).toContain('Variante padrão atualizada.');
+    expect(text()).toContain('Opção principal atualizada.');
   });
 
   it('prevents deactivating the last active variant', () => {
     obterProduto.mockReturnValue(of(candle));
-    clickButton('Gerenciar variantes de Vela de Lavanda');
+    clickButton('Gerenciar opções de Vela de Lavanda');
 
     const deactivate = Array.from(root().querySelectorAll('button')).find(
-      (button) => button.getAttribute('aria-label') === 'Desativar variante Padrão',
+      (button) => button.getAttribute('aria-label') === 'Desativar opção Padrão',
     );
     expect(deactivate?.disabled).toBe(true);
     expect(alterarStatusVariante).not.toHaveBeenCalled();
@@ -357,12 +512,16 @@ describe('AdminProdutosComponent', () => {
         {
           id: 'soap-small',
           identificacao: '50 g',
-          unidadeVenda: 'G',
+          unidadeVenda: 'KIT',
           precoVenda: 12,
           ativa: true,
           padrao: false,
+          pesoLiquidoGramas: null,
+          volumeLiquidoMililitros: null,
+          caracteristicas: [],
         },
       ],
+      caracteristicas: [],
     };
     const edited: AdminProduto = {
       ...added,
@@ -375,31 +534,31 @@ describe('AdminProdutosComponent', () => {
     obterProduto.mockReturnValue(of(soap));
     adicionarVariante.mockReturnValue(of(added));
     editarVariante.mockReturnValue(of(edited));
-    clickButton('Gerenciar variantes de Sabonete de Lavanda');
-    clickButton('Adicionar variante');
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Adicionar opção');
     setField('managed-variant-name', '50 g');
-    setField('managed-variant-unit', 'g');
-    setField('managed-variant-price', '12');
+    setField('managed-variant-unit', 'KIT');
+    setField('managed-variant-price', '1200');
     submitForm();
 
     expect(adicionarVariante).toHaveBeenCalledWith(soap.id, {
       identificacao: '50 g',
-      unidadeVenda: 'G',
+      unidadeVenda: 'KIT',
       precoVenda: 12,
     } satisfies AdminProdutoVarianteRequest);
-    expect(text()).toContain('Variante adicionada com sucesso.');
+    expect(text()).toContain('Opção adicionada com sucesso.');
 
-    clickButton('Editar variante 50 g');
+    clickButton('Editar opção 50 g');
     setField('managed-variant-name', '60 g');
-    setField('managed-variant-price', '14');
+    setField('managed-variant-price', '1400');
     submitForm();
 
     expect(editarVariante).toHaveBeenCalledWith(soap.id, 'soap-small', {
       identificacao: '60 g',
-      unidadeVenda: 'G',
+      unidadeVenda: 'KIT',
       precoVenda: 14,
     });
-    expect(text()).toContain('Variante atualizada com sucesso.');
+    expect(text()).toContain('Opção atualizada com sucesso.');
     expect(text()).not.toContain('Excluir variante');
   });
 

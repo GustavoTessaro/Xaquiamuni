@@ -10,15 +10,15 @@
         (cancelar)="cancelarFormularioProduto()"
       />
     } @else if (produtoVariantes(); as produto) {
-      <section class="space-y-5" aria-labelledby="variants-title">
+      <section class="space-y-5" aria-labelledby="options-title">
         <header class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div class="min-w-0">
             <p class="text-sm font-medium text-emerald-800">Catálogo</p>
             <h1
-              id="variants-title"
+              id="options-title"
               class="mt-1 break-words text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
             >
-              Variantes de {{ produto.nome }}
+              Opções do produto: {{ produto.nome }}
             </h1>
             <p class="mt-2 text-sm text-slate-600">
               A publicação não representa disponibilidade para compra; o estoque será tratado na F4.
@@ -65,17 +65,25 @@
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-slate-600">
             {{ quantidadeVariantesAtivas(produto) }} ativas de
-            {{ produto.variantes.length }} variantes
+            {{ produto.variantes.length }} opções
           </p>
+          @if (produto.caracteristicas.length > 0) {
+            <p class="text-sm text-slate-600">
+              Para cadastrar uma nova combinação, volte aos produtos e edite este produto.
+            </p>
+          }
           <button
             type="button"
             (click)="iniciarAdicaoVariante()"
             [disabled]="
-              salvandoVariante() || variantesEmAtualizacao().size > 0 || varianteFormMode() !== null
+              salvandoVariante() ||
+              variantesEmAtualizacao().size > 0 ||
+              varianteFormMode() !== null ||
+              produto.caracteristicas.length > 0
             "
             class="min-h-11 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
           >
-            Adicionar variante
+            Adicionar opção
           </button>
         </div>
 
@@ -93,7 +101,7 @@
           <p
             class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600"
           >
-            Nenhuma variante cadastrada.
+            Nenhuma opção cadastrada.
           </p>
         } @else {
           <ul class="grid list-none gap-3 p-0 md:grid-cols-2">
@@ -103,7 +111,7 @@
                   <div class="flex flex-wrap items-start justify-between gap-3">
                     <div class="min-w-0">
                       <h2 class="break-words text-lg font-semibold text-slate-900">
-                        {{ variante.identificacao }}
+                        {{ nomeLegivelVariante(produto, variante) }}
                       </h2>
                       <p class="mt-1 text-sm text-slate-600">
                         {{ variante.unidadeVenda }} · {{ formatarPreco(variante.precoVenda) }}
@@ -123,7 +131,7 @@
                         <span
                           class="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-900"
                         >
-                          Padrão
+                          Opção principal
                         </span>
                       }
                     </div>
@@ -137,7 +145,7 @@
                         variantesEmAtualizacao().size > 0 ||
                         varianteFormMode() !== null
                       "
-                      [attr.aria-label]="'Editar variante ' + variante.identificacao"
+                      [attr.aria-label]="'Editar opção ' + nomeLegivelVariante(produto, variante)"
                       class="min-h-10 rounded-lg border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
                     >
                       Editar
@@ -149,7 +157,7 @@
                         [disabled]="variantesEmAtualizacao().size > 0"
                         class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:opacity-60"
                       >
-                        Definir como padrão
+                        Apresentar primeiro
                       </button>
                     }
                     <button
@@ -161,8 +169,8 @@
                         (variante.ativa && quantidadeVariantesAtivas(produto) <= 1)
                       "
                       [attr.aria-label]="
-                        (variante.ativa ? 'Desativar variante ' : 'Ativar variante ') +
-                        variante.identificacao
+                        (variante.ativa ? 'Desativar opção ' : 'Ativar opção ') +
+                        nomeLegivelVariante(produto, variante)
                       "
                       [attr.aria-busy]="variantePendente(produto.id, variante.id)"
                       class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:cursor-not-allowed disabled:opacity-50"
@@ -180,13 +188,13 @@
                   @if (varianteParaDesativar() === variante.id) {
                     <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
                       <p class="text-sm font-semibold text-amber-950">
-                        Escolha uma variante ativa para promover antes de desativar a padrão.
+                        Escolha uma opção ativa para promover antes de desativar a principal.
                       </p>
                       <label
                         [for]="'replacement-default-' + variante.id"
                         class="mt-3 block text-sm font-medium text-amber-950"
                       >
-                        Nova variante padrão
+                        Nova opção principal
                       </label>
                       <select
                         [id]="'replacement-default-' + variante.id"
@@ -194,11 +202,11 @@
                         (change)="selecionarNovoPadrao($event)"
                         class="mt-1 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3"
                       >
-                        <option value="">Selecione uma variante ativa</option>
+                        <option value="">Selecione uma opção ativa</option>
                         @for (alternativa of variantesAtivas(produto); track alternativa.id) {
                           @if (alternativa.id !== variante.id) {
                             <option [value]="alternativa.id">
-                              {{ alternativa.identificacao }}
+                              {{ nomeLegivelVariante(produto, alternativa) }}
                             </option>
                           }
                         }
@@ -247,7 +255,7 @@
             Produtos
           </h1>
           <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Gerencie produtos, variantes e publicação. A disponibilidade para compra depende do
+            Gerencie produtos, opções e publicação. A disponibilidade para compra depende do
             estoque.
           </p>
         </div>
@@ -432,7 +440,7 @@
             Nenhum produto cadastrado
           </h2>
           <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
-            Cadastre um produto com sua variante padrão para começar.
+            Cadastre um produto com sua opção principal para começar.
           </p>
           <button
             type="button"
@@ -495,17 +503,37 @@
                   <div>
                     <p class="text-slate-500">
                       {{
-                        quantidadeVariantesAtivas(produto) > 1
-                          ? 'Faixa de preços ativos'
-                          : 'Preço padrão'
+                        produtoSimples(produto)
+                          ? 'Preço de venda'
+                          : quantidadeVariantesAtivas(produto) > 1
+                            ? 'Faixa de preços das opções'
+                            : 'Preço da opção principal'
                       }}
                     </p>
                     <p class="mt-1 font-semibold text-slate-900">{{ precoResumo(produto) }}</p>
                   </div>
-                  <div>
-                    <p class="text-slate-500">Variantes</p>
-                    <p class="mt-1 font-semibold text-slate-900">{{ produto.variantes.length }}</p>
-                  </div>
+                  @if (produtoSimples(produto)) {
+                    <div>
+                      <p class="text-slate-500">Venda e medidas</p>
+                      <p class="mt-1 font-semibold text-slate-900">
+                        {{ resumoVendaSimples(produto) }}
+                      </p>
+                    </div>
+                  } @else {
+                    <div class="col-span-2">
+                      <p class="text-slate-500">Opções do produto</p>
+                      @if (produto.caracteristicas.length > 0) {
+                        <p class="mt-1 font-semibold text-slate-900">
+                          {{ resumoCombinacoes(produto) }}
+                        </p>
+                      } @else {
+                        <p class="mt-1 font-semibold text-slate-900">
+                          {{ produto.variantes.length }}
+                          {{ produto.variantes.length === 1 ? 'opção' : 'opções' }}
+                        </p>
+                      }
+                    </div>
+                  }
                 </div>
                 <p class="mt-3 text-xs text-slate-500">
                   Publicação não indica disponibilidade em estoque.
@@ -524,10 +552,10 @@
                     type="button"
                     (click)="abrirGerenciamentoVariantes(produto)"
                     [disabled]="carregandoVariantes()"
-                    [attr.aria-label]="'Gerenciar variantes de ' + produto.nome"
+                    [attr.aria-label]="'Gerenciar opções de ' + produto.nome"
                     class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
-                    Gerenciar variantes
+                    Gerenciar opções
                   </button>
                   <button
                     type="button"

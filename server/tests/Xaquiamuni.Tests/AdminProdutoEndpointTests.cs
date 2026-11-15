@@ -86,11 +86,12 @@ public sealed class AdminProdutoEndpointTests
             {
                 Nome = "Sabonete",
                 CategoriaId = Guid.NewGuid(),
+                Simples = true,
                 VariantePadrao = new ProdutoVarianteRequest
                 {
-                    Identificacao = "Padrão",
                     UnidadeVenda = "UN",
-                    PrecoVenda = 20m
+                    PrecoVenda = 20m,
+                    PesoLiquidoGramas = 120.5m
                 }
             })
         };
@@ -104,7 +105,99 @@ public sealed class AdminProdutoEndpointTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         Assert.Equal($"/api/admin/produtos/{manager.CreatedProduct!.Id}", response.Headers.Location?.OriginalString);
         Assert.Equal(manager.CreatedProduct.Id, body?.Id);
+        Assert.True(manager.LastCadastroInput?.Simples);
+        Assert.Equal(120.5m, manager.LastCadastroInput?.VariantePadrao?.PesoLiquidoGramas);
         Assert.Equal(1, manager.MutationCalls);
+    }
+
+    [Fact]
+    public async Task GetProduct_ReturnsPersistentCharacteristicAndVariantIds()
+    {
+        var category = Categoria.Criar("Velas", null, 0);
+        var product = Produto.CriarSimples("Vela", null, category, "UN", 25m);
+        var color = product.AdicionarCaracteristica("Cor");
+        var white = color.AdicionarValor("Branca");
+        var variant = Assert.Single(product.Variantes);
+        product.AssociarValorCaracteristica(variant.Id, color.Id, white.Id);
+        var manager = new FakeGerenciarProdutos { ProductToReturn = product };
+        using var factory = CreateFactory(manager);
+        using var client = CreateClient(factory);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Get,
+            $"{AdminProdutoEndpoints.BasePath}/{product.Id}");
+        request.Headers.Add(TestAuthenticationHandler.RoleHeader, XaquiamuniRoles.Administrador);
+
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadFromJsonAsync<ProdutoResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(color.Id, Assert.Single(body!.Caracteristicas).Id);
+        Assert.Equal(white.Id, Assert.Single(body.Caracteristicas.Single().Valores).Id);
+        Assert.Equal(variant.Id, Assert.Single(body.Variantes).Id);
+        Assert.Equal(color.Id, Assert.Single(body.Variantes.Single().Caracteristicas).CaracteristicaId);
+    }
+
+    [Fact]
+    public async Task CreateProduct_MapsTemporaryCharacteristicReferences()
+    {
+        var manager = new FakeGerenciarProdutos();
+        using var factory = CreateFactory(manager);
+        using var client = CreateClient(factory);
+        var csrf = await GetCsrfAsync(client);
+        using var request = new HttpRequestMessage(HttpMethod.Post, AdminProdutoEndpoints.BasePath)
+        {
+            Content = JsonContent.Create(new ProdutoCadastroRequest
+            {
+                Nome = "Vela",
+                CategoriaId = Guid.NewGuid(),
+                Simples = false,
+                VariantePadrao = new ProdutoVarianteRequest
+                {
+                    Identificacao = "Branca",
+                    UnidadeVenda = "UN",
+                    PrecoVenda = 30m,
+                    Caracteristicas =
+                    [
+                        new ProdutoVarianteCaracteristicaRequest
+                        {
+                            ReferenciaCaracteristica = "cor",
+                            ReferenciaValor = "branca"
+                        }
+                    ]
+                },
+                Caracteristicas =
+                [
+                    new ProdutoCaracteristicaRequest
+                    {
+                        Referencia = "cor",
+                        Nome = "Cor",
+                        Valores =
+                        [
+                            new ProdutoCaracteristicaValorRequest
+                            {
+                                Referencia = "branca",
+                                Nome = "Branca"
+                            }
+                        ]
+                    }
+                ]
+            })
+        };
+        request.Headers.Add(TestAuthenticationHandler.RoleHeader, XaquiamuniRoles.Administrador);
+        request.Headers.Add("Cookie", $"{AntiforgeryConfiguration.CookieName}={csrf.CookieValue}");
+        request.Headers.Add(AntiforgeryConfiguration.HeaderName, csrf.RequestToken);
+
+        using var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var input = Assert.IsType<ProdutoCadastroInput>(manager.LastCadastroInput);
+        var characteristic = Assert.IsType<ProdutoCaracteristicaInput>(
+            Assert.Single(input.Caracteristicas!));
+        Assert.Equal("cor", characteristic.Referencia);
+        var variant = Assert.IsType<ProdutoVarianteInput>(input.VariantePadrao);
+        var association = Assert.IsType<ProdutoVarianteCaracteristicaInput>(
+            Assert.Single(variant.Caracteristicas!));
+        Assert.Equal("branca", association.ReferenciaValor);
     }
 
     [Fact]
@@ -248,6 +341,8 @@ public sealed class AdminProdutoEndpointTests
 
         public int MutationCalls { get; private set; }
         public Produto? CreatedProduct { get; private set; }
+        public Produto? ProductToReturn { get; init; }
+        public ProdutoCadastroInput? LastCadastroInput { get; private set; }
         public ProdutoFiltro? LastFilter { get; private set; }
         public Exception? ListFailure { get; init; }
 
@@ -267,13 +362,14 @@ public sealed class AdminProdutoEndpointTests
         public Task<Produto?> ConsultarAsync(
             Guid id,
             CancellationToken cancellationToken = default) =>
-            Task.FromResult<Produto?>(null);
+            Task.FromResult(ProductToReturn?.Id == id ? ProductToReturn : null);
 
         public Task<ProdutoResult> CadastrarAsync(
             ProdutoCadastroInput? input,
             CancellationToken cancellationToken = default)
         {
             MutationCalls++;
+            LastCadastroInput = input;
             CreatedProduct = Produto.CriarSimples(
                 input?.Nome,
                 input?.Descricao,

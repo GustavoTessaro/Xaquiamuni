@@ -4,7 +4,14 @@ import {
   AdminProdutoVariante,
   AdminProdutoVarianteRequest,
 } from '../../core/admin-produtos/produtos.service';
-import { currencyPrecision, MAX_PRECO_VARIANTE, nonWhitespace } from './produto-form.validators';
+import { BrlCurrencyInputComponent } from './brl-currency-input.component';
+import {
+  currencyPrecision,
+  MAX_PRECO_VARIANTE,
+  nonWhitespace,
+  UNIDADES_VENDA,
+  validSaleUnit,
+} from './produto-form.validators';
 
 type VarianteControls = {
   identificacao: FormControl<string>;
@@ -14,7 +21,7 @@ type VarianteControls = {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule],
+  imports: [BrlCurrencyInputComponent, ReactiveFormsModule],
   selector: 'app-admin-produto-variante-form',
   templateUrl: './admin-produto-variante-form.component.html',
 })
@@ -25,6 +32,7 @@ export class AdminProdutoVarianteFormComponent {
   readonly salvar = output<AdminProdutoVarianteRequest>();
   readonly cancelar = output<void>();
   protected readonly enviado = signal(false);
+  protected readonly unidadesVenda = UNIDADES_VENDA;
   protected readonly form = new FormGroup<VarianteControls>({
     identificacao: new FormControl('', {
       nonNullable: true,
@@ -32,7 +40,7 @@ export class AdminProdutoVarianteFormComponent {
     }),
     unidadeVenda: new FormControl('UN', {
       nonNullable: true,
-      validators: [Validators.required, Validators.maxLength(10)],
+      validators: [Validators.required, validSaleUnit],
     }),
     precoVenda: new FormControl<number | null>(null, {
       validators: [
@@ -53,6 +61,11 @@ export class AdminProdutoVarianteFormComponent {
         unidadeVenda: variante?.unidadeVenda ?? 'UN',
         precoVenda: variante?.precoVenda ?? null,
       });
+      this.form.controls.unidadeVenda.setValidators([
+        Validators.required,
+        (control) => validSaleUnit(control, variante?.unidadeVenda),
+      ]);
+      this.form.controls.unidadeVenda.updateValueAndValidity({ emitEvent: false });
     });
   }
 
@@ -61,17 +74,21 @@ export class AdminProdutoVarianteFormComponent {
     if (!control.invalid || (!control.touched && !this.enviado())) {
       return '';
     }
+    if (control.hasError('currencyPrecision')) {
+      return 'O preço não pode ser representado com precisão de centavos. Informe outro valor.';
+    }
+    if (control.hasError('invalidSaleUnit')) {
+      return 'Selecione uma das seis unidades comerciais disponíveis.';
+    }
     if (control.hasError('required') || control.hasError('whitespace')) {
       return field === 'identificacao'
-        ? 'Informe a identificação da variante.'
+        ? 'Informe uma identificação para a opção.'
         : field === 'unidadeVenda'
-          ? 'Informe a unidade de venda.'
+          ? 'Selecione a unidade de venda.'
           : 'Informe o preço de venda.';
     }
     if (control.hasError('maxlength')) {
-      return field === 'identificacao'
-        ? 'A identificação deve ter no máximo 100 caracteres.'
-        : 'A unidade deve ter no máximo 10 caracteres.';
+      return 'A identificação deve ter no máximo 100 caracteres.';
     }
     if (control.hasError('min')) {
       return 'O preço deve ser maior que zero.';
@@ -79,10 +96,11 @@ export class AdminProdutoVarianteFormComponent {
     if (control.hasError('max')) {
       return 'O preço excede o limite aceito.';
     }
-    if (control.hasError('currencyPrecision')) {
-      return 'Informe o preço com no máximo duas casas decimais.';
-    }
     return 'Revise este campo.';
+  }
+
+  protected unidadeLegada(unidade: string): boolean {
+    return !this.unidadesVenda.some((item) => item === unidade);
   }
 
   protected submit(): void {

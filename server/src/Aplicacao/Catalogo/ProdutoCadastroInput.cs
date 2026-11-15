@@ -5,4 +5,6 @@ public sealed record ProdutoCadastroInput(
     string? Descricao,
     Guid? CategoriaId,
     ProdutoVarianteInput? VariantePadrao,
-    IReadOnlyList<ProdutoVarianteInput?>? Variantes = null);
+    IReadOnlyList<ProdutoVarianteInput?>? Variantes = null,
+    bool? Simples = null,
+    IReadOnlyList<ProdutoCaracteristicaInput?>? Caracteristicas = null);

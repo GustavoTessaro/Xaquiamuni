@@ -2,15 +2,15 @@
 
 **Plataforma web de comércio eletrônico e gestão de produção artesanal**
 
-| Campo | Informação |
-| --- | --- |
-| Projeto | Xaquiamuni — E-commerce e Gestão Artesanal |
-| Versão do documento | 0.5 — encerramento da F2 e transição para F3 |
-| Data | 14/11/2026 |
-| Status | **F2 — Identidade e Autenticação concluída; funcionalidades e gates automatizados aprovados, com fluxos anteriores validados manualmente usando Resend real em ambiente isolado; implantação de produção pendente** |
-| Contexto | Trabalho de Conclusão de Curso — Academia do Programador |
-| Fonte principal | Entrevista com a proprietária (53 respostas, cinco esclarecimentos complementares e rodada posterior de decisões sobre cadastro, entregas, estoque e banco), logomarca e capturas do Instagram fornecidas pelo solicitante |
-| Escopo | Primeira entrega demonstrável e planejamento de evolução, com limites e pendências explícitos |
+| Campo               | Informação                                                                                                                                                                                                                 |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Projeto             | Xaquiamuni — E-commerce e Gestão Artesanal                                                                                                                                                                                 |
+| Versão do documento | 0.8 — interface administrativa de características e combinações                                                                                                                                                            |
+| Data                | 15/11/2026                                                                                                                                                                                                                 |
+| Status              | **F2 e F3.3.6.3 concluídas; domínio, persistência, API administrativa e interface de cadastro/edição para características, combinações e medidas físicas implementados; fotos, vitrine pública e produção pendentes**      |
+| Contexto            | Trabalho de Conclusão de Curso — Academia do Programador                                                                                                                                                                   |
+| Fonte principal     | Entrevista com a proprietária (53 respostas, cinco esclarecimentos complementares e rodada posterior de decisões sobre cadastro, entregas, estoque e banco), logomarca e capturas do Instagram fornecidas pelo solicitante |
+| Escopo              | Primeira entrega demonstrável e planejamento de evolução, com limites e pendências explícitos                                                                                                                              |
 
 > **Regra de leitura:** “Confirmado” significa declarado pela proprietária ou pelo solicitante; “Implementado” significa comportamento verificado no código e coberto por testes; “Proposto” significa sugestão ainda sujeita a aprovação; “Pendente” exige decisão ou validação antes de ativar o fluxo afetado. Critérios de aceite descrevem verificações; resultados só são afirmados quando há evidência.
 
@@ -28,7 +28,7 @@ Na F2 foram implementados cadastro de clientes com CPF protegido, perfil e ender
 
 ### 2.1 Negócio observado
 
-- **Confirmado:** marca Xaquiamuni Produtos Naturais, em atividade desde 2021; fabricação própria de sabonetes artesanais, incluindo sabonetes energizados, e velas artesanais. O *Sabonete para Descarrego* foi apontado como o produto mais vendido.
+- **Confirmado:** marca Xaquiamuni Produtos Naturais, em atividade desde 2021; fabricação própria de sabonetes artesanais, incluindo sabonetes energizados, e velas artesanais. O _Sabonete para Descarrego_ foi apontado como o produto mais vendido.
 - **Confirmado:** vendas atualmente por Instagram, Facebook, WhatsApp, presencialmente e em feiras; atendimento principalmente por WhatsApp.
 - **Confirmado:** controle de entradas e saídas pelo aplicativo **Trienta**, complementado por anotações; existe catálogo de produtos, valores e descrições nesse aplicativo. A plataforma Xaquiamuni deverá substituí-lo integralmente quando estiver pronta.
 - **Confirmado:** produtos prontos e produção sob encomenda; prazo médio declarado de aproximadamente duas semanas, dependente de materiais e quantidade. Entretanto, **o site não deve aceitar compra sem estoque pronto disponível**.
@@ -42,35 +42,35 @@ O planejamento de produção, os pedidos e os controles operacionais estão dist
 
 ### 2.3 Decisões confirmadas
 
-| Tema | Decisão |
-| --- | --- |
-| Compra no site | Apenas unidades prontas e disponíveis; sem venda online de produto esgotado |
-| Produção | Reservar matérias-primas já no planejamento |
-| Equipe | Funcionários com acesso limitado às tarefas autorizadas |
-| Canais registrados automaticamente | Pedidos do site; vendas de outros canais serão lançadas manualmente no painel, sem integração automática com esses canais |
-| Dados existentes | Catálogo de produtos, preços e descrições no Trienta; substituição total planejada, sem importação automática confirmada |
-| Dispositivo prioritário | Celular |
-| Produtos | Fabricação própria; sabonetes e velas; sem personalização de pedidos na operação atual |
-| Kits | Interesse futuro, não operação atual |
-| Pagamento | Pix, dinheiro e cartão aceitos atualmente; desejo de Pix online com confirmação automática |
-| Frete | Correios para regiões atendidas; entrega própria em Vacaria por R$ 10 e retirada local sem frete, com abrangência exata a confirmar |
-| Cadastro do cliente | Conta obrigatória antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo com CEP |
-| Confirmação de e-mail | Cadastro cria conta não confirmada e enfileira solicitação inicial; link válido por 24 horas; reenvio genérico com cooldown e limite por conta |
-| Banco PJ | Sicredi; disponibilidade de API Pix e condições contratuais não verificadas |
-| Rastreabilidade | Variações dos produtos podem exigir fichas técnicas/estoques distintos; registrar fabricação e validade por lote |
-| Precificação | Considerar matérias-primas, embalagem, mão de obra, frete, taxas e despesas, distinguindo margem e lucro |
+| Tema                               | Decisão                                                                                                                                        |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Compra no site                     | Apenas unidades prontas e disponíveis; sem venda online de produto esgotado                                                                    |
+| Produção                           | Reservar matérias-primas já no planejamento                                                                                                    |
+| Equipe                             | Funcionários com acesso limitado às tarefas autorizadas                                                                                        |
+| Canais registrados automaticamente | Pedidos do site; vendas de outros canais serão lançadas manualmente no painel, sem integração automática com esses canais                      |
+| Dados existentes                   | Catálogo de produtos, preços e descrições no Trienta; substituição total planejada, sem importação automática confirmada                       |
+| Dispositivo prioritário            | Celular                                                                                                                                        |
+| Produtos                           | Fabricação própria; sabonetes e velas; sem personalização de pedidos na operação atual                                                         |
+| Kits                               | Interesse futuro, não operação atual                                                                                                           |
+| Pagamento                          | Pix, dinheiro e cartão aceitos atualmente; desejo de Pix online com confirmação automática                                                     |
+| Frete                              | Correios para regiões atendidas; entrega própria em Vacaria por R$ 10 e retirada local sem frete, com abrangência exata a confirmar            |
+| Cadastro do cliente                | Conta obrigatória antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo com CEP                                        |
+| Confirmação de e-mail              | Cadastro cria conta não confirmada e enfileira solicitação inicial; link válido por 24 horas; reenvio genérico com cooldown e limite por conta |
+| Banco PJ                           | Sicredi; disponibilidade de API Pix e condições contratuais não verificadas                                                                    |
+| Rastreabilidade                    | Variações dos produtos podem exigir fichas técnicas/estoques distintos; registrar fabricação e validade por lote                               |
+| Precificação                       | Considerar matérias-primas, embalagem, mão de obra, frete, taxas e despesas, distinguindo margem e lucro                                       |
 
 ## 3. Objetivos e indicadores de sucesso
 
-| Objetivo | Como verificar | Meta da primeira entrega |
-| --- | --- | --- |
-| Organizar produção | Criar, acompanhar, concluir e cancelar ordens de produção em cenários de teste | Fluxos de aceite aprovados; melhoria real a medir em piloto |
-| Evitar uso duplicado de insumos | Tentar reservar o mesmo saldo em duas ordens simultâneas | Nenhuma reserva acima do saldo disponível |
-| Conhecer capacidade produtiva | Comparar cálculo de unidades possíveis com ficha técnica e saldo livre | Resultado correto nos cenários definidos |
-| Evitar venda de item indisponível | Simular duas compras concorrentes da última unidade | Nunca confirmar duas vendas da mesma unidade |
-| Simplificar a compra | Percorrer catálogo, carrinho, identificação e pedido no celular | Jornada demonstrável; usabilidade a validar com clientes |
-| Proteger operação | Exercitar permissões de administrador, funcionário e cliente | Nenhum acesso indevido nos cenários de aceite |
-| Preservar dados financeiros | Recalcular totais históricos com valores capturados no pedido | Concordância nos cenários de aceite |
+| Objetivo                          | Como verificar                                                                 | Meta da primeira entrega                                    |
+| --------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| Organizar produção                | Criar, acompanhar, concluir e cancelar ordens de produção em cenários de teste | Fluxos de aceite aprovados; melhoria real a medir em piloto |
+| Evitar uso duplicado de insumos   | Tentar reservar o mesmo saldo em duas ordens simultâneas                       | Nenhuma reserva acima do saldo disponível                   |
+| Conhecer capacidade produtiva     | Comparar cálculo de unidades possíveis com ficha técnica e saldo livre         | Resultado correto nos cenários definidos                    |
+| Evitar venda de item indisponível | Simular duas compras concorrentes da última unidade                            | Nunca confirmar duas vendas da mesma unidade                |
+| Simplificar a compra              | Percorrer catálogo, carrinho, identificação e pedido no celular                | Jornada demonstrável; usabilidade a validar com clientes    |
+| Proteger operação                 | Exercitar permissões de administrador, funcionário e cliente                   | Nenhum acesso indevido nos cenários de aceite               |
+| Preservar dados financeiros       | Recalcular totais históricos com valores capturados no pedido                  | Concordância nos cenários de aceite                         |
 
 Não há baseline de tempo economizado, faturamento, volume de pedidos, disponibilidade ou desempenho. Não inventar metas quantitativas antes de medir.
 
@@ -169,7 +169,7 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 
 ### 7.2 Catálogo e estoque
 
-- **RF-04 — Gerir produtos:** cadastrar, editar, listar e despublicar produtos com nome, descrição, categoria, preço, fotos e tipo de produção; permitir variantes que alterem estoque, ficha técnica e rastreabilidade, com identidade própria quando necessário.
+- **RF-04 — Gerir produtos:** cadastrar, editar, listar e despublicar produtos com nome, descrição, categoria, preço, fotos e tipo de produção; permitir variantes que alterem estoque, ficha técnica e rastreabilidade, com identidade própria quando necessário. No cadastro administrativo, oferecer produto simples (uma versão e um preço) ou produto com opções, sem persistir essa escolha como tipo distinto. Produtos simples podem ter peso e volume líquidos opcionais; a interface aceita g/kg e ml/L e envia valores canônicos sem arredondamento. O catálogo pode definir características por produto — como peso, volume, cor, fragrância, tamanho ou material — e registrar somente as combinações de valores efetivamente comercializadas. Cada variante mantém identidade, estado, unidade comercial e preço próprios. As unidades comerciais são `UN`, `KIT`, `PAR`, `PCT`, `CX` e `CJ`; composição de kits permanece fora do escopo atual. A interface administrativa reconstrói a edição com IDs persistidos, preserva variantes e oferece referências temporárias para cadastrar todo o agregado em uma única operação. A API e o formulário administrativo suportam esses campos; fotos, vitrine pública e produção permanecem futuros.
 - **RF-05 — Consultar vitrine:** exibir produtos publicados e disponíveis, preço e quantidade vendável quando adotada essa apresentação; produtos sem saldo não podem ser comprados.
 - **RF-06 — Gerir matérias-primas:** cadastrar nome, unidade física, saldo e mínimo; registrar entradas e ajustes com motivo, preservando histórico.
 - **RF-07 — Gerir estoque acabado:** registrar quantidades físicas por lote, fabricação, validade, reservas para pedidos e movimentações de entrada, saída e ajuste; impedir saldo disponível negativo e venda de lote vencido.
@@ -248,6 +248,8 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 - **RN-31 — Solicitações de recuperação:** respeitar cooldown mínimo de 2 minutos, no máximo 5 solicitações aceitas por conta em janela móvel de 1 hora e deduplicação enquanto houver mensagem `Pending` ou `Processing`. Esses limites são independentes dos limites de reenvio de confirmação.
 - **RN-32 — Redefinição segura:** alteração da senha e cancelamento transacional de mensagens de recuperação obsoletas devem ser atômicos; redefinição bem-sucedida invalida sessões anteriores pelo `SecurityStamp`, exigindo novo login.
 - **RN-33 — Envio e produção:** enfileirar uma mensagem não comprova sua entrega. Envio real de confirmação, reenvio e recuperação foi validado manualmente com Resend em ambiente isolado; isso não comprova prontidão de produção. Antes de ativar em produção, configurar e validar worker, Resend, domínio verificado, remetente, gestão de credenciais, URL pública HTTPS e Data Protection.
+- **RN-34 — Unidade, preço e medidas físicas do catálogo:** unidades comerciais válidas são `UN`, `KIT`, `PAR`, `PCT`, `CX` e `CJ`. `KIT` nesta etapa identifica apenas a unidade comercial; não representa composição, estoque de componentes nem ficha técnica de kit. Preços são informados em BRL com duas casas decimais. Peso líquido é opcional e canônico em gramas; volume líquido é opcional e canônico em mililitros. Medidas devem ser positivas, ter até três casas decimais e caber no limite persistido. Quando uma variante usa característica física de peso ou volume, o valor numérico canônico da característica é a fonte de verdade; medidas diretas não podem divergir.
+- **RN-35 — Características, combinações e legado:** características e seus valores pertencem ao produto e são normalizados para impedir duplicatas equivalentes. Uma variante pode associar no máximo um valor a cada característica; somente combinações explicitamente cadastradas são comercializadas, sem exigir o produto cartesiano. Combinações iguais no mesmo produto são rejeitadas, inclusive por integridade persistente sob concorrência. Variantes legadas sem características permanecem sem assinatura de combinação; nenhum peso, volume ou característica será inferido a partir de nomes ou identificações antigos. Valores legados da unidade de venda são preservados na migration; as seis unidades comerciais são validadas pelo domínio nas novas operações.
 
 ## 9. Requisitos não funcionais
 
@@ -264,22 +266,22 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 
 ## 10. Critérios de aceite
 
-| ID | Referências | Cenário verificável |
-| --- | --- | --- |
-| **CA-01** | RF-01–03, RNF-01–02 | Cliente não acessa pedido de outro; funcionário não executa operação proibida mesmo chamando a API diretamente; credenciais inválidas são rejeitadas. |
-| **CA-02** | RF-04–05, RN-01 | Produto publicado com 3 unidades permite até 3 unidades disponíveis; produto zerado não pode ser comprado; despublicado não aparece como comprável. |
-| **CA-03** | RF-06–08, RN-02 | Entradas e ajustes de matéria-prima preservam histórico; 2 kg e 200 ml não são somados como uma mesma quantidade. |
-| **CA-04** | RF-09–10, RN-04 | Ficha com 100 g de base e 5 ml de essência por unidade, saldos livres 850 g e 30 ml, resulta em capacidade de 6 unidades. |
-| **CA-05** | RF-11, RN-03 | Duas ordens concorrentes não reservam mais material que o saldo disponível; criação rejeitada não deixa reserva parcial. |
-| **CA-06** | RF-13–14, RN-05–06 | Conclusão válida consome a reserva e aumenta estoque acabado uma vez; repetição não duplica; cancelamento permitido libera reserva remanescente. |
-| **CA-07** | RF-15–17, RN-07 | Carrinho não garante saldo; duas tentativas simultâneas sobre a última unidade não resultam em duas compras confirmadas. |
-| **CA-08** | RF-16–19, RN-09 | Pedido registra preço e quantidade originais; mudança posterior no catálogo não modifica histórico; cliente vê somente seus pedidos. |
-| **CA-09** | RF-06–08, RF-26, RN-08 | Venda externa lançada manualmente reduz saldo vendável e registra receita uma única vez, sem criar pedido online fictício; lançamento repetido não duplica movimentações. |
-| **CA-10** | RF-20, RN-14 | **Se integração aprovada:** notificação válida confirma cobrança correspondente; notificação duplicada não duplica pagamento/baixa; comprovante enviado não confirma automaticamente. |
-| **CA-11** | RF-21, RN-15 | Para endereço elegível em Vacaria, checkout oferece retirada sem frete ou entrega local de R$ 10; para Correios, preço e prazo dependem de cotação válida antes da confirmação. |
-| **CA-12** | RF-22–25 | **Se módulos aprovados:** indicadores conferem com dados de origem, sugestões não alteram mínimo e alertas não são prometidos sem canal configurado. |
-| **CA-13** | RNF-04–05, RNF-10 | Jornadas principais são utilizáveis no celular, com campos identificados, foco e estados de erro compreensíveis. |
-| **CA-14** | RN-10–11, RNF-07 | Cálculo de preço/margem usa valores monetários consistentes e distingue margem de materiais de lucro líquido; histórico não muda com novos custos. |
+| ID        | Referências            | Cenário verificável                                                                                                                                                                   |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CA-01** | RF-01–03, RNF-01–02    | Cliente não acessa pedido de outro; funcionário não executa operação proibida mesmo chamando a API diretamente; credenciais inválidas são rejeitadas.                                 |
+| **CA-02** | RF-04–05, RN-01        | Produto publicado com 3 unidades permite até 3 unidades disponíveis; produto zerado não pode ser comprado; despublicado não aparece como comprável.                                   |
+| **CA-03** | RF-06–08, RN-02        | Entradas e ajustes de matéria-prima preservam histórico; 2 kg e 200 ml não são somados como uma mesma quantidade.                                                                     |
+| **CA-04** | RF-09–10, RN-04        | Ficha com 100 g de base e 5 ml de essência por unidade, saldos livres 850 g e 30 ml, resulta em capacidade de 6 unidades.                                                             |
+| **CA-05** | RF-11, RN-03           | Duas ordens concorrentes não reservam mais material que o saldo disponível; criação rejeitada não deixa reserva parcial.                                                              |
+| **CA-06** | RF-13–14, RN-05–06     | Conclusão válida consome a reserva e aumenta estoque acabado uma vez; repetição não duplica; cancelamento permitido libera reserva remanescente.                                      |
+| **CA-07** | RF-15–17, RN-07        | Carrinho não garante saldo; duas tentativas simultâneas sobre a última unidade não resultam em duas compras confirmadas.                                                              |
+| **CA-08** | RF-16–19, RN-09        | Pedido registra preço e quantidade originais; mudança posterior no catálogo não modifica histórico; cliente vê somente seus pedidos.                                                  |
+| **CA-09** | RF-06–08, RF-26, RN-08 | Venda externa lançada manualmente reduz saldo vendável e registra receita uma única vez, sem criar pedido online fictício; lançamento repetido não duplica movimentações.             |
+| **CA-10** | RF-20, RN-14           | **Se integração aprovada:** notificação válida confirma cobrança correspondente; notificação duplicada não duplica pagamento/baixa; comprovante enviado não confirma automaticamente. |
+| **CA-11** | RF-21, RN-15           | Para endereço elegível em Vacaria, checkout oferece retirada sem frete ou entrega local de R$ 10; para Correios, preço e prazo dependem de cotação válida antes da confirmação.       |
+| **CA-12** | RF-22–25               | **Se módulos aprovados:** indicadores conferem com dados de origem, sugestões não alteram mínimo e alertas não são prometidos sem canal configurado.                                  |
+| **CA-13** | RNF-04–05, RNF-10      | Jornadas principais são utilizáveis no celular, com campos identificados, foco e estados de erro compreensíveis.                                                                      |
+| **CA-14** | RN-10–11, RNF-07       | Cálculo de preço/margem usa valores monetários consistentes e distingue margem de materiais de lucro líquido; histórico não muda com novos custos.                                    |
 
 | **CA-15** | RF-03, RN-16 | Cadastro exige conta, CPF válido, nome, e-mail, telefone e endereço completo; cliente não acessa CPF/endereço de outro cliente. |
 | **CA-16** | RF-07, RN-17 | Lotes preservam fabricação e validade; lote vencido não compõe estoque vendável. |
@@ -287,6 +289,7 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 | **CA-18** | RF-03, RF-27–28, RN-21–28 | Cadastro deixa a conta não confirmada e cria uma solicitação inicial; link expira em 24 horas; reenvio não enumera contas, respeita cooldown/limite, evita duplicação e preserva histórico ao recuperar `DeadLetter`; credenciais corretas de `CLIENTE` não confirmado resultam em HTTP `403`/`EMAIL_NOT_CONFIRMED`, sem sessão. |
 | **CA-19** | RF-29–30, RN-29–32 | Solicitação válida sempre apresenta resposta genérica; apenas conta confirmada pode receber recuperação; link de 1 hora redefine a senha uma única vez, invalida sessões anteriores e exige novo login. |
 | **CA-20** | RF-31, RNF-04–05 | Os cinco campos de senha começam ocultos; controles independentes mostram/ocultam sem alterar valor, validação ou submeter formulário; acessibilidade por teclado e foco visível; limpeza/sucesso restaura ocultação. |
+| **CA-21** | RF-04, RN-34–35 | Medidas opcionais persistem em unidades canônicas; características físicas são a fonte da medida derivada; combinações incompletas são permitidas, combinações duplicadas são rejeitadas mesmo sob concorrência e registros legados mantêm seus dados sem inferência de medidas ou características. |
 
 Os números dos cenários são **exemplos de teste a executar**, não resultados de execução.
 
@@ -294,88 +297,88 @@ Os números dos cenários são **exemplos de teste a executar**, não resultados
 
 ### 11.1 Entidades conceituais
 
-| Entidade | Dados e relações principais |
-| --- | --- |
-| Usuário / perfil / permissão | Identificação, credencial protegida, papel e autorizações |
-| Cliente / endereço | Nome, CPF protegido, e-mail, telefone, endereços completos e pedidos próprios |
-| Produto / categoria / foto / variação | Descrição, preço, publicação, variações, estoque acabado e imagens |
-| Lote de produto acabado | Produto/variação, quantidade, data de fabricação, validade e movimentações |
-| Matéria-prima | Nome, unidade, mínimo, saldo e movimentos |
-| Ficha técnica / componente | Produto, material, quantidade, unidade e versão aplicável |
-| Ordem de produção | Produto, quantidade, prazo, estado, reservas, consumo e resultado |
-| Reserva / movimentação | Origem, quantidade, unidade, motivo, instante e responsável |
-| Carrinho / pedido / item | Cliente, produto, quantidade, preços capturados, estados e totais |
-| Venda externa / item | Canal, produtos, quantidades, valores, pagamento, movimentações e receita correspondente |
-| Pagamento | Pedido, método, estado, referência do provedor e eventos, se integrado |
-| Entrega | Modalidade, endereço, frete, rastreamento e estado |
-| Fornecedor / compra | Origem e custo de materiais, se aprovado |
-| Despesa / agenda / nota | Registros administrativos, se aprovados |
-| Auditoria | Ator, ação, instante e referência da operação |
+| Entidade                              | Dados e relações principais                                                              |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Usuário / perfil / permissão          | Identificação, credencial protegida, papel e autorizações                                |
+| Cliente / endereço                    | Nome, CPF protegido, e-mail, telefone, endereços completos e pedidos próprios            |
+| Produto / categoria / foto / variação | Descrição, preço, publicação, variações, estoque acabado e imagens                       |
+| Lote de produto acabado               | Produto/variação, quantidade, data de fabricação, validade e movimentações               |
+| Matéria-prima                         | Nome, unidade, mínimo, saldo e movimentos                                                |
+| Ficha técnica / componente            | Produto, material, quantidade, unidade e versão aplicável                                |
+| Ordem de produção                     | Produto, quantidade, prazo, estado, reservas, consumo e resultado                        |
+| Reserva / movimentação                | Origem, quantidade, unidade, motivo, instante e responsável                              |
+| Carrinho / pedido / item              | Cliente, produto, quantidade, preços capturados, estados e totais                        |
+| Venda externa / item                  | Canal, produtos, quantidades, valores, pagamento, movimentações e receita correspondente |
+| Pagamento                             | Pedido, método, estado, referência do provedor e eventos, se integrado                   |
+| Entrega                               | Modalidade, endereço, frete, rastreamento e estado                                       |
+| Fornecedor / compra                   | Origem e custo de materiais, se aprovado                                                 |
+| Despesa / agenda / nota               | Registros administrativos, se aprovados                                                  |
+| Auditoria                             | Ator, ação, instante e referência da operação                                            |
 
 O esquema físico, índices, migrações e contratos serão definidos no TDD, não neste PRD.
 
 ### 11.2 Integrações
 
-| Integração | Situação | Dependência |
-| --- | --- | --- |
-| Trienta | **Substituição total planejada, sem integração automática** | Catálogo, preços e descrições disponíveis; conferir exportação ou migrar manualmente, validar saldos |
-| Pix / Sicredi | **Sicredi é banco PJ; provedor não definido** | Verificar API Pix disponível para a conta, taxas, credenciais, webhooks, homologação e alternativa intermediada |
-| Correios | **Utilizados manualmente hoje** | Validar API/contrato, preços, CEP de origem, peso e medidas |
-| WhatsApp | **Canal de atendimento atual** | Link de contato pode ser simples; automação exige decisão própria |
-| Fotos de produtos | **Necessárias** | Definir armazenamento, limites, tratamento e custos no TDD |
+| Integração        | Situação                                                    | Dependência                                                                                                     |
+| ----------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| Trienta           | **Substituição total planejada, sem integração automática** | Catálogo, preços e descrições disponíveis; conferir exportação ou migrar manualmente, validar saldos            |
+| Pix / Sicredi     | **Sicredi é banco PJ; provedor não definido**               | Verificar API Pix disponível para a conta, taxas, credenciais, webhooks, homologação e alternativa intermediada |
+| Correios          | **Utilizados manualmente hoje**                             | Validar API/contrato, preços, CEP de origem, peso e medidas                                                     |
+| WhatsApp          | **Canal de atendimento atual**                              | Link de contato pode ser simples; automação exige decisão própria                                               |
+| Fotos de produtos | **Necessárias**                                             | Definir armazenamento, limites, tratamento e custos no TDD                                                      |
 
 ## 12. Riscos, premissas e dependências
 
-| Tema | Risco e encaminhamento |
-| --- | --- |
-| Prazo acadêmico | Data informada: 30/11/2026; acompanhamento e eventual ajuste de escopo serão decididos pelo solicitante, sem alterar silenciosamente os requisitos |
-| Divergência de estoque entre canais | Vendas externas precisam ser lançadas manualmente com agilidade; enquanto não lançadas, a disponibilidade online pode estar desatualizada |
-| Reserva de produção | Reserva sem política de cancelamento/consumo pode imobilizar insumos indefinidamente; definir transições |
-| Pedido sem pagamento | Reserva de produto pode expirar ou bloquear estoque; definir janela, cancelamento e recuperação |
-| Pix | Integração depende de provedor, contrato, ambiente de testes e segurança; não prometer confirmação sem infraestrutura |
-| Correios | Preço/prazo dependem de serviços e dados corretos; prever indisponibilidade e política alternativa |
-| Custos e precificação | Fórmula informada não cobre necessariamente mão de obra, embalagem, taxas e despesas; validar demonstrativos |
-| Dados de cliente | CPF foi escolhido como obrigatório; justificar finalidade, restringir acesso, definir retenção e validar obrigações de privacidade antes do uso real |
-| Produtos naturais | Não presumir certificação, segurança clínica ou alegações terapêuticas; conteúdo comercial precisa de validação da proprietária |
-| Fotografias e marca | Utilizar arquivos fornecidos/autorizados; preservar identidade da marca |
-| Testes com proprietária | Fluxos de autenticação foram validados manualmente em ambientes isolados; ajustes visuais da E4.4 foram cobertos por testes automatizados e a repetição manual da E4.5 foi dispensada. Usabilidade das fases futuras ainda deve ser validada. |
+| Tema                                | Risco e encaminhamento                                                                                                                                                                                                                        |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Prazo acadêmico                     | Data informada: 30/11/2026; acompanhamento e eventual ajuste de escopo serão decididos pelo solicitante, sem alterar silenciosamente os requisitos                                                                                            |
+| Divergência de estoque entre canais | Vendas externas precisam ser lançadas manualmente com agilidade; enquanto não lançadas, a disponibilidade online pode estar desatualizada                                                                                                     |
+| Reserva de produção                 | Reserva sem política de cancelamento/consumo pode imobilizar insumos indefinidamente; definir transições                                                                                                                                      |
+| Pedido sem pagamento                | Reserva de produto pode expirar ou bloquear estoque; definir janela, cancelamento e recuperação                                                                                                                                               |
+| Pix                                 | Integração depende de provedor, contrato, ambiente de testes e segurança; não prometer confirmação sem infraestrutura                                                                                                                         |
+| Correios                            | Preço/prazo dependem de serviços e dados corretos; prever indisponibilidade e política alternativa                                                                                                                                            |
+| Custos e precificação               | Fórmula informada não cobre necessariamente mão de obra, embalagem, taxas e despesas; validar demonstrativos                                                                                                                                  |
+| Dados de cliente                    | CPF foi escolhido como obrigatório; justificar finalidade, restringir acesso, definir retenção e validar obrigações de privacidade antes do uso real                                                                                          |
+| Produtos naturais                   | Não presumir certificação, segurança clínica ou alegações terapêuticas; conteúdo comercial precisa de validação da proprietária                                                                                                               |
+| Fotografias e marca                 | Utilizar arquivos fornecidos/autorizados; preservar identidade da marca                                                                                                                                                                       |
+| Testes com proprietária             | Fluxos de autenticação foram validados manualmente em ambientes isolados; ajustes visuais da E4.4 foram cobertos por testes automatizados e a repetição manual da E4.5 foi dispensada. Usabilidade das fases futuras ainda deve ser validada. |
 
 ## 13. Decisões encerradas e questões em aberto
 
 ### 13.1 Resoluções registradas nesta revisão
 
-| ID original | Resultado |
-| --- | --- |
-| P-01 | Entrega acadêmica informada para **30/11/2026**; solicitante acompanhará necessidade de ajuste de escopo. |
-| P-02 | Perfis limitados confirmados; **matriz fina de permissões adiada** até após o administrador. |
-| P-03 | **Conta e CPF obrigatórios**, com nome completo, e-mail, telefone e endereço completo com CEP. |
-| P-06 | Banco PJ identificado: **Sicredi**; **provedor/API Pix ainda pendente**. |
-| P-07 | **Vacaria: entrega própria R$ 10 ou retirada local sem frete**; CEPs, horários e local exato pendentes. |
-| P-11 | Variações afetam ficha técnica/estoque; **data de fabricação e validade por lote** necessárias. |
-| P-12 | **Vendas externas serão registradas manualmente no sistema**, com estoque e financeiro; não apenas ajustes sem origem. |
-| P-13 | Trienta contém catálogo, valores e descrições; **substituição total** confirmada; exportação não comprovada. |
-| P-14 | Precificação deve considerar embalagem, mão de obra, frete, taxas e despesas. |
-| P-16 | **Proposta inicial:** alertas internos no painel; canais adicionais pendentes. |
-| P-19 | Gate de confirmação no login de clientes implementado e validado: credenciais corretas de `CLIENTE` não confirmado resultam em HTTP `403` com código `EMAIL_NOT_CONFIRMED`; `RequireConfirmedEmail` global permanece `false`. |
+| ID original | Resultado                                                                                                                                                                                                                     |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P-01        | Entrega acadêmica informada para **30/11/2026**; solicitante acompanhará necessidade de ajuste de escopo.                                                                                                                     |
+| P-02        | Perfis limitados confirmados; **matriz fina de permissões adiada** até após o administrador.                                                                                                                                  |
+| P-03        | **Conta e CPF obrigatórios**, com nome completo, e-mail, telefone e endereço completo com CEP.                                                                                                                                |
+| P-06        | Banco PJ identificado: **Sicredi**; **provedor/API Pix ainda pendente**.                                                                                                                                                      |
+| P-07        | **Vacaria: entrega própria R$ 10 ou retirada local sem frete**; CEPs, horários e local exato pendentes.                                                                                                                       |
+| P-11        | Variações afetam ficha técnica/estoque; **data de fabricação e validade por lote** necessárias.                                                                                                                               |
+| P-12        | **Vendas externas serão registradas manualmente no sistema**, com estoque e financeiro; não apenas ajustes sem origem.                                                                                                        |
+| P-13        | Trienta contém catálogo, valores e descrições; **substituição total** confirmada; exportação não comprovada.                                                                                                                  |
+| P-14        | Precificação deve considerar embalagem, mão de obra, frete, taxas e despesas.                                                                                                                                                 |
+| P-16        | **Proposta inicial:** alertas internos no painel; canais adicionais pendentes.                                                                                                                                                |
+| P-19        | Gate de confirmação no login de clientes implementado e validado: credenciais corretas de `CLIENTE` não confirmado resultam em HTTP `403` com código `EMAIL_NOT_CONFIRMED`; `RequireConfirmedEmail` global permanece `false`. |
 
 ### 13.2 Pendências operacionais e técnicas
 
-| ID | Decisão pendente | Direção proposta / dependência |
-| --- | --- | --- |
-| **P-04** | Prazo de pagamento e política de reserva/baixa de produtos acabados | Proposta: reservar na criação do pedido, expirar após prazo configurável, baixar após pagamento confirmado. |
-| **P-05** | Cancelamentos, reembolsos, pagamentos tardios e pedidos não pagos | Proposta: estados distintos, liberação idempotente de reservas e estorno conciliado com provedor. |
-| **P-06** | API Pix direta do Sicredi ou intermediador; taxas e habilitação | Investigar documentação e disponibilidade real para conta PJ; não presumir integração. |
-| **P-07** | Abrangência da taxa local de R$ 10, endereço e horários de retirada | Confirmar com proprietária antes de ativar checkout real. |
-| **P-08** | CEP de origem, dimensões, peso, modalidade Correios e contingência | Confirmar com proprietária e verificar serviços disponíveis. |
-| **P-09** | Ordens com insumos insuficientes, cancelamento após início e produção parcial | Proposta: permitir rascunho sem reserva, mas confirmar planejamento apenas com reserva integral; registrar execução parcial. |
-| **P-10** | Momento de consumo e rendimento real | Proposta: reservar no planejamento e consumir ao registrar execução/conclusão, com ajustes auditáveis. |
-| **P-11** | Política de lotes: seleção, vencimento, perdas e descarte | Proposta: bloquear venda de vencidos; detalhar baixa por lote. |
-| **P-13** | Possibilidade de exportação do Trienta e método de conferência dos saldos iniciais | Validar exportação; senão, cadastrar e conferir manualmente. |
-| **P-15** | Quais módulos condicionados integrarão a entrega e em qual ordem | Definir conforme evolução do projeto, sem declarar implementações antecipadamente. |
-| **P-16** | Notificações além dos alertas internos | Definir necessidade de e-mail, WhatsApp ou push posteriormente. |
-| **P-17** | Permissões por operação para funcionários | Definir após o fluxo administrativo da proprietária. |
-| **P-18** | Regras de rateio de despesas e apresentação de margem/lucro | Validar com proprietária antes de automatizar sugestão de preços. |
-| **P-20** | Ativação de produção dos fluxos de e-mail | Confirmação, reenvio e recuperação foram enviados e validados manualmente com Resend em ambiente isolado; isso não constitui homologação de produção. Antes de ativar em produção, configurar e validar domínio verificado, remetente, gestão segura de segredos, URL pública HTTPS, Data Protection persistente/compartilhada, proxies confiáveis e ativação explícita do sender e worker. |
+| ID       | Decisão pendente                                                                   | Direção proposta / dependência                                                                                                                                                                                                                                                                                                                                                              |
+| -------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **P-04** | Prazo de pagamento e política de reserva/baixa de produtos acabados                | Proposta: reservar na criação do pedido, expirar após prazo configurável, baixar após pagamento confirmado.                                                                                                                                                                                                                                                                                 |
+| **P-05** | Cancelamentos, reembolsos, pagamentos tardios e pedidos não pagos                  | Proposta: estados distintos, liberação idempotente de reservas e estorno conciliado com provedor.                                                                                                                                                                                                                                                                                           |
+| **P-06** | API Pix direta do Sicredi ou intermediador; taxas e habilitação                    | Investigar documentação e disponibilidade real para conta PJ; não presumir integração.                                                                                                                                                                                                                                                                                                      |
+| **P-07** | Abrangência da taxa local de R$ 10, endereço e horários de retirada                | Confirmar com proprietária antes de ativar checkout real.                                                                                                                                                                                                                                                                                                                                   |
+| **P-08** | CEP de origem, dimensões, peso, modalidade Correios e contingência                 | Confirmar com proprietária e verificar serviços disponíveis.                                                                                                                                                                                                                                                                                                                                |
+| **P-09** | Ordens com insumos insuficientes, cancelamento após início e produção parcial      | Proposta: permitir rascunho sem reserva, mas confirmar planejamento apenas com reserva integral; registrar execução parcial.                                                                                                                                                                                                                                                                |
+| **P-10** | Momento de consumo e rendimento real                                               | Proposta: reservar no planejamento e consumir ao registrar execução/conclusão, com ajustes auditáveis.                                                                                                                                                                                                                                                                                      |
+| **P-11** | Política de lotes: seleção, vencimento, perdas e descarte                          | Proposta: bloquear venda de vencidos; detalhar baixa por lote.                                                                                                                                                                                                                                                                                                                              |
+| **P-13** | Possibilidade de exportação do Trienta e método de conferência dos saldos iniciais | Validar exportação; senão, cadastrar e conferir manualmente.                                                                                                                                                                                                                                                                                                                                |
+| **P-15** | Quais módulos condicionados integrarão a entrega e em qual ordem                   | Definir conforme evolução do projeto, sem declarar implementações antecipadamente.                                                                                                                                                                                                                                                                                                          |
+| **P-16** | Notificações além dos alertas internos                                             | Definir necessidade de e-mail, WhatsApp ou push posteriormente.                                                                                                                                                                                                                                                                                                                             |
+| **P-17** | Permissões por operação para funcionários                                          | Definir após o fluxo administrativo da proprietária.                                                                                                                                                                                                                                                                                                                                        |
+| **P-18** | Regras de rateio de despesas e apresentação de margem/lucro                        | Validar com proprietária antes de automatizar sugestão de preços.                                                                                                                                                                                                                                                                                                                           |
+| **P-20** | Ativação de produção dos fluxos de e-mail                                          | Confirmação, reenvio e recuperação foram enviados e validados manualmente com Resend em ambiente isolado; isso não constitui homologação de produção. Antes de ativar em produção, configurar e validar domínio verificado, remetente, gestão segura de segredos, URL pública HTTPS, Data Protection persistente/compartilhada, proxies confiáveis e ativação explícita do sender e worker. |
 
 **Regra de governança:** propostas acima são hipóteses de projeto aceitas como direção inicial pelo solicitante, mas ainda exigem detalhamento/validação antes de fluxos financeiros ou de estoque em produção.
 
@@ -397,12 +400,15 @@ F2 — **Identidade e Autenticação** — está concluída. A próxima fase é 
 2. Na F3, detalhar e implementar somente os requisitos aprovados para catálogo; decisões sobre pedidos/pagamentos (**P-04/P-05**), execução de produção (**P-09/P-10**), Correios e Pix continuam pendentes de validação específica.
 3. Após o commit documental, preservar uma branch `base/identidade-autenticacao` como referência reutilizável para projetos futuros. A branch não será criada nesta etapa.
 
-**Estado atual:** PRD versão 0.5; F2 concluída e F3 — Catálogo de Produtos — é a próxima fase. `RequireConfirmedEmail` global permanece `false`, com gate explícito para login de `CLIENTE` não confirmado. Funcionalidades não pertencentes à F2 e requisitos de produção continuam pendentes.
+**Estado atual:** PRD versão 0.8; F2 e F3.3.6.3 concluídas. O catálogo administrativo inclui características personalizáveis, combinações explícitas, medidas físicas canônicas e seis unidades comerciais, com suporte no domínio, persistência, API e interface. Edições mantêm IDs existentes; registros e unidades legados são preservados sem inferir medidas a partir dos nomes. Fotos, vitrine pública e composição de kits não foram implementadas; estoque e medidas logísticas permanecem futuros. `RequireConfirmedEmail` global permanece `false`, com gate explícito para login de `CLIENTE` não confirmado, e requisitos de produção continuam pendentes.
 
 ## 15. Histórico de versões
 
-| Versão | Data | Alterações |
-| --- | --- | --- |
-| 0.3 | 11/11/2026 | Cadastro, confirmação e reenvio de e-mail da F2; envio real pendente. |
-| 0.4 | 12/11/2026 | Recuperação e redefinição de senha implementadas e validadas manualmente com SQL isolado/remetente simulado; documentados controles de visibilidade dos cinco campos e pendências de produção. |
-| 0.5 | 14/11/2026 | F2 encerrada; gate final de 777 testes e builds aprovados; registro de validações manuais com Resend real em ambientes isolados; gate específico de confirmação para `CLIENTE`; F3 definida como próxima fase e branch reutilizável planejada após o commit documental. |
+| Versão | Data       | Alterações                                                                                                                                                                                                                                                               |
+| ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 0.3    | 11/11/2026 | Cadastro, confirmação e reenvio de e-mail da F2; envio real pendente.                                                                                                                                                                                                    |
+| 0.4    | 12/11/2026 | Recuperação e redefinição de senha implementadas e validadas manualmente com SQL isolado/remetente simulado; documentados controles de visibilidade dos cinco campos e pendências de produção.                                                                           |
+| 0.5    | 14/11/2026 | F2 encerrada; gate final de 777 testes e builds aprovados; registro de validações manuais com Resend real em ambientes isolados; gate específico de confirmação para `CLIENTE`; F3 definida como próxima fase e branch reutilizável planejada após o commit documental.  |
+| 0.6    | 15/11/2026 | Registradas as decisões de UX do cadastro de produtos, unidades comerciais `UN`/`KIT` e entrada de preço BRL; kits permanecem sem composição nesta etapa.                                                                                                                |
+| 0.7    | 15/11/2026 | F3.3.6.1: documentados o modelo persistente de características e combinações explícitas, medidas canônicas opcionais, seis unidades comerciais, integridade e compatibilidade legada; API, DTOs, interface, estoque e medidas logísticas permanecem fora desta subetapa. |
+| 0.8    | 15/11/2026 | F3.3.6.2–F3.3.6.3: API administrativa e interface para produtos simples, características físicas/personalizadas e combinações explícitas; edição preserva identidades e medidas legadas; vitrine, fotos, estoque, kits e medidas logísticas seguem futuros.              |

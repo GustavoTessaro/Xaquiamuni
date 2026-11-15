@@ -24,6 +24,15 @@ import { AdminProdutoVarianteFormComponent } from './admin-produto-variante-form
 type PublicacaoFilter = 'all' | 'published' | 'unpublished';
 type VarianteFormMode = 'create' | 'edit' | null;
 
+const UNIDADE_VENDA_LABEL: Readonly<Record<string, string>> = {
+  UN: 'Unidade',
+  KIT: 'Kit',
+  PAR: 'Par',
+  PCT: 'Pacote',
+  CX: 'Caixa',
+  CJ: 'Conjunto',
+};
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AdminWorkspaceComponent, AdminProdutoFormComponent, AdminProdutoVarianteFormComponent],
@@ -236,7 +245,7 @@ export class AdminProdutosComponent {
         error: (error: unknown) => {
           if (!this.redirecionarSessaoExpirada(error)) {
             this.erroOperacao.set(
-              this.mensagemErroHttp(error, 'Não foi possível carregar as variantes do produto.'),
+              this.mensagemErroHttp(error, 'Não foi possível carregar as opções do produto.'),
             );
           }
         },
@@ -318,8 +327,8 @@ export class AdminProdutosComponent {
           this.varianteEditando.set(null);
           this.mensagemVariantes.set(
             mode === 'create'
-              ? 'Variante adicionada com sucesso.'
-              : 'Variante atualizada com sucesso.',
+              ? 'Opção adicionada com sucesso.'
+              : 'Opção atualizada com sucesso.',
           );
         },
         error: (error: unknown) => {
@@ -327,7 +336,7 @@ export class AdminProdutosComponent {
             this.erroVariantes.set(
               this.mensagemErroHttp(
                 error,
-                'Não foi possível salvar a variante. Revise os dados e tente novamente.',
+                'Não foi possível salvar a opção. Revise os dados e tente novamente.',
               ),
             );
           }
@@ -352,12 +361,12 @@ export class AdminProdutosComponent {
         next: (updated) => {
           this.atualizarProduto(updated);
           this.produtoVariantes.set(updated);
-          this.mensagemVariantes.set('Variante padrão atualizada.');
+          this.mensagemVariantes.set('Opção principal atualizada.');
         },
         error: (error: unknown) => {
           if (!this.redirecionarSessaoExpirada(error)) {
             this.erroVariantes.set(
-              this.mensagemErroHttp(error, 'Não foi possível alterar a variante padrão.'),
+              this.mensagemErroHttp(error, 'Não foi possível alterar a opção principal.'),
             );
           }
         },
@@ -494,8 +503,71 @@ export class AdminProdutosComponent {
       : `${this.formatarMoeda(menor)} – ${this.formatarMoeda(maior)}`;
   }
 
+  protected produtoSimples(produto: AdminProduto): boolean {
+    return produto.caracteristicas.length === 0 && produto.variantes.length === 1;
+  }
+
+  protected resumoVendaSimples(produto: AdminProduto): string {
+    const variante = produto.variantes[0];
+    if (!variante) {
+      return '';
+    }
+    const detalhes: string[] = [];
+    if (variante.pesoLiquidoGramas != null) {
+      detalhes.push(`${this.formatarMedida(variante.pesoLiquidoGramas)} g`);
+    }
+    if (variante.volumeLiquidoMililitros != null) {
+      detalhes.push(`${this.formatarMedida(variante.volumeLiquidoMililitros)} ml`);
+    }
+    detalhes.push(UNIDADE_VENDA_LABEL[variante.unidadeVenda] ?? variante.unidadeVenda);
+    return detalhes.join(' · ');
+  }
+
   protected formatarPreco(preco: number): string {
     return this.formatarMoeda(preco);
+  }
+
+  protected nomeLegivelVariante(produto: AdminProduto, variante: AdminProdutoVariante): string {
+    const caracteristicas = [...variante.caracteristicas].sort((left, right) => {
+      const featureOrder = (id: string): number => {
+        const feature = produto.caracteristicas.find((item) => item.id === id);
+        if (feature?.tipoMedidaFisica === 'PesoLiquido') {
+          return 0;
+        }
+        if (feature?.tipoMedidaFisica === 'VolumeLiquido') {
+          return 1;
+        }
+        return 2 + produto.caracteristicas.findIndex((item) => item.id === id);
+      };
+      return featureOrder(left.caracteristicaId) - featureOrder(right.caracteristicaId);
+    });
+    if (caracteristicas.length === 0) {
+      return variante.identificacao;
+    }
+    return caracteristicas
+      .map((associacao) => {
+        const caracteristica = produto.caracteristicas.find(
+          (item) => item.id === associacao.caracteristicaId,
+        );
+        if (associacao.valorMedidaCanonico !== null && caracteristica?.tipoMedidaFisica) {
+          const unidade = caracteristica.tipoMedidaFisica === 'PesoLiquido' ? 'g' : 'ml';
+          const medida = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(
+            associacao.valorMedidaCanonico,
+          );
+          return `${medida} ${unidade}`;
+        }
+        return associacao.valorNome;
+      })
+      .join(' · ');
+  }
+
+  protected resumoCombinacoes(produto: AdminProduto): string {
+    const ativas = produto.variantes.filter((variante) => variante.ativa);
+    const resumo = ativas
+      .slice(0, 3)
+      .map((variante) => this.nomeLegivelVariante(produto, variante));
+    const restantes = ativas.length - resumo.length;
+    return `${resumo.join(' · ')}${restantes > 0 ? ` · +${restantes}` : ''}`;
   }
 
   protected produtoPendente(id: string): boolean {
@@ -539,7 +611,7 @@ export class AdminProdutosComponent {
           this.varianteParaDesativar.set(null);
           this.novoPadraoId.set('');
           this.mensagemVariantes.set(
-            ativa ? 'Variante ativada com sucesso.' : 'Variante desativada com sucesso.',
+            ativa ? 'Opção ativada com sucesso.' : 'Opção desativada com sucesso.',
           );
         },
         error: (error: unknown) => {
@@ -548,8 +620,8 @@ export class AdminProdutosComponent {
               this.mensagemErroHttp(
                 error,
                 ativa
-                  ? 'Não foi possível ativar a variante.'
-                  : 'Não foi possível desativar a variante.',
+                  ? 'Não foi possível ativar a opção.'
+                  : 'Não foi possível desativar a opção.',
               ),
             );
           }
@@ -573,6 +645,10 @@ export class AdminProdutosComponent {
       : new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }
 
+  private formatarMedida(value: number): string {
+    return new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 }).format(value);
+  }
+
   private mensagemErroHttp(error: unknown, fallback: string): string {
     if (!(error instanceof HttpErrorResponse)) {
       return fallback;
@@ -581,7 +657,7 @@ export class AdminProdutosComponent {
       return 'Você não tem permissão para executar esta ação.';
     }
     if (error.status === 404) {
-      return 'O produto, a categoria ou a variante não está mais disponível. Atualize os dados.';
+      return 'O produto, a categoria ou a opção não está mais disponível. Atualize os dados.';
     }
     if (error.status === 400) {
       return 'Os dados informados são inválidos. Revise os campos e tente novamente.';

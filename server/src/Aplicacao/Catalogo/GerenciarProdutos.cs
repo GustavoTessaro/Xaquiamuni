@@ -35,12 +35,6 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             return Invalid("categoriaId", "A categoria é obrigatória.");
         }
 
-        var creationError = CriarVariantes(input, out var variantes);
-        if (creationError is not null)
-        {
-            return creationError;
-        }
-
         return await _repository.ExecutarMutacaoAsync(async (session, token) =>
         {
             var categoria = await session.BuscarCategoriaAsync(input.CategoriaId!.Value, token)
@@ -57,7 +51,12 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
 
             try
             {
-                var produto = Produto.Criar(input.Nome, input.Descricao, categoria, variantes);
+                var produto = CriarProduto(input, categoria);
+                var references = AplicarCaracteristicas(produto, input.Caracteristicas, creating: true);
+                AplicarAssociacoesVariantes(
+                    produto,
+                    CriarVariantesInput(input),
+                    references);
                 session.Adicionar(produto);
                 return ProdutoResult.Success(produto);
             }
@@ -119,7 +118,24 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
                     produto.AlterarCategoria(categoria);
                 }
 
+                var references = AplicarCaracteristicas(
+                    produto,
+                    input.Caracteristicas,
+                    creating: false);
+                if (input.Variantes is not null)
+                {
+                    var appliedVariants = AplicarVariantesEdicao(
+                        produto,
+                        input.Variantes,
+                        references);
+                    AplicarEstadosVariantes(produto, appliedVariants);
+                }
+
                 return ProdutoResult.Success(produto);
+            }
+            catch (InvalidOperationException exception)
+            {
+                return ProdutoResult.Conflict(exception.Message);
             }
             catch (ArgumentException exception)
             {
@@ -136,6 +152,11 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
         if (input is null)
         {
             return Invalid("variante", "Os dados da variante são obrigatórios.");
+        }
+
+        if (input.Padrao == true)
+        {
+            return Invalid("variantePadrao", "Use a operação de definição de variante padrão após o cadastro.");
         }
 
         ProdutoVariante variante;
@@ -159,6 +180,12 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             try
             {
                 produto.AdicionarVariante(variante);
+                var references = AplicarCaracteristicas(produto, null, creating: false);
+                AplicarAssociacoesVariante(
+                    produto,
+                    variante,
+                    input.Caracteristicas,
+                    references);
                 return ProdutoResult.Success(produto);
             }
             catch (InvalidOperationException exception)
@@ -183,6 +210,11 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             return Invalid("variante", "Os dados da variante são obrigatórios.");
         }
 
+        if (input.Id is not null && input.Id != varianteId)
+        {
+            return Invalid("varianteId", "O ID do corpo deve corresponder à variante da rota.");
+        }
+
         return await _repository.ExecutarMutacaoAsync(async (session, token) =>
         {
             var produto = await session.BuscarProdutoAsync(produtoId, token).ConfigureAwait(false);
@@ -198,11 +230,33 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
 
             try
             {
+                var variante = produto.Variantes.Single(item => item.Id == varianteId);
                 produto.AtualizarVariante(
                     varianteId,
-                    input.Identificacao,
-                    input.UnidadeVenda,
-                    input.PrecoVenda);
+                    input.Identificacao ?? variante.Identificacao,
+                    input.UnidadeVenda ?? variante.UnidadeVenda,
+                    input.PrecoVenda ?? variante.PrecoVenda);
+                var references = AplicarCaracteristicas(produto, null, creating: false);
+                if (input.Caracteristicas is not null)
+                {
+                    var associations = ResolverAssociacoesVariante(
+                        produto,
+                        input.Caracteristicas,
+                        references);
+                    produto.SubstituirValoresCaracteristica(varianteId, []);
+                    produto.SubstituirValoresCaracteristica(varianteId, associations);
+                }
+
+                if (input.AtualizarMedidas
+                    || input.PesoLiquidoGramas is not null
+                    || input.VolumeLiquidoMililitros is not null)
+                {
+                    variante.DefinirMedidasLiquidas(
+                        input.PesoLiquidoGramas,
+                        input.VolumeLiquidoMililitros);
+                }
+
+                AplicarEstadosVariantes(produto, [new VarianteAplicada(input, variante)]);
                 return ProdutoResult.Success(produto);
             }
             catch (InvalidOperationException exception)
@@ -342,44 +396,599 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
         }, cancellationToken).ConfigureAwait(false);
     }
 
-    private static ProdutoResult? CriarVariantes(
-        ProdutoCadastroInput input,
-        out List<ProdutoVariante> variantes)
+    private static Produto CriarProduto(ProdutoCadastroInput input, Categoria categoria)
     {
-        variantes = [];
-        if (input.VariantePadrao is null)
-        {
-            return Invalid("variantePadrao", "A variante padrão é obrigatória.");
-        }
+        var variantePadrao = input.VariantePadrao
+            ?? throw new ArgumentException("A variante padrão é obrigatória.", "variantePadrao");
 
-        try
+        if (input.Simples == true)
         {
-            variantes.Add(CriarVariante(input.VariantePadrao, padrao: true));
-            foreach (var varianteInput in input.Variantes ?? [])
+            if (input.Variantes is { Count: > 0 }
+                || input.Caracteristicas is { Count: > 0 })
             {
-                if (varianteInput is null)
-                {
-                    return Invalid("variantes", "As variantes não podem conter valores nulos.");
-                }
-
-                variantes.Add(CriarVariante(varianteInput, padrao: false));
+                throw new ArgumentException(
+                    "Um produto simples não aceita variantes adicionais nem características.",
+                    "simples");
             }
 
+            if (variantePadrao.Id is not null)
+            {
+                throw new ArgumentException(
+                    "IDs persistidos não podem ser informados no cadastro.",
+                    "variantes.id");
+            }
+
+            if (variantePadrao.Ativa == false)
+            {
+                throw new ArgumentException("A variante padrão deve estar ativa.", "ativa");
+            }
+
+            if (variantePadrao.PrecoVenda is null)
+            {
+                throw new ArgumentException("O preço de venda é obrigatório.", "precoVenda");
+            }
+
+            return Produto.CriarSimples(
+                input.Nome,
+                input.Descricao,
+                categoria,
+                variantePadrao.UnidadeVenda,
+                variantePadrao.PrecoVenda.Value,
+                variantePadrao.PesoLiquidoGramas,
+                variantePadrao.VolumeLiquidoMililitros);
+        }
+
+        var variantes = new List<ProdutoVariante>
+        {
+            CriarVariante(variantePadrao, padrao: true)
+        };
+        foreach (var varianteInput in input.Variantes ?? [])
+        {
+            if (varianteInput is null)
+            {
+                throw new ArgumentException("As variantes não podem conter valores nulos.", "variantes");
+            }
+
+            if (varianteInput.Padrao == true)
+            {
+                throw new ArgumentException(
+                    "A variante padrão deve ser informada somente em variantePadrao.",
+                    "variantes");
+            }
+
+            variantes.Add(CriarVariante(varianteInput, padrao: false));
+        }
+
+        return Produto.Criar(input.Nome, input.Descricao, categoria, variantes);
+    }
+
+    private static IReadOnlyList<ProdutoVarianteInput?> CriarVariantesInput(ProdutoCadastroInput input)
+    {
+        if (input.Simples == true)
+        {
+            return [input.VariantePadrao];
+        }
+
+        return [input.VariantePadrao, .. input.Variantes ?? []];
+    }
+
+    private static ProdutoVariante CriarVariante(ProdutoVarianteInput input, bool padrao)
+    {
+        if (input.Id is not null)
+        {
+            throw new ArgumentException(
+                "IDs de variantes existentes não podem ser informados no cadastro.",
+                "variantes.id");
+        }
+
+        if (input.PrecoVenda is null)
+        {
+            throw new ArgumentException("O preço de venda é obrigatório.", "precoVenda");
+        }
+
+        if (padrao && input.Ativa == false)
+        {
+            throw new ArgumentException("A variante padrão deve estar ativa.", "ativa");
+        }
+
+        return ProdutoVariante.Criar(
+            input.Identificacao,
+            input.UnidadeVenda,
+            input.PrecoVenda.Value,
+            ativa: padrao || (input.Ativa ?? true),
+            padrao,
+            input.PesoLiquidoGramas,
+            input.VolumeLiquidoMililitros);
+    }
+
+    private static ReferenciasCaracteristicas AplicarCaracteristicas(
+        Produto produto,
+        IReadOnlyList<ProdutoCaracteristicaInput?>? inputs,
+        bool creating)
+    {
+        var characteristicReferences = new Dictionary<string, ProdutoCaracteristica>(StringComparer.Ordinal);
+        var valueReferences = new Dictionary<string, ProdutoCaracteristicaValor>(StringComparer.Ordinal);
+        if (inputs is null)
+        {
+            return new ReferenciasCaracteristicas(characteristicReferences, valueReferences);
+        }
+
+        var seenIds = new HashSet<Guid>();
+        foreach (var input in inputs)
+        {
+            if (input is null)
+            {
+                throw new ArgumentException(
+                    "As características não podem conter valores nulos.",
+                    "caracteristicas");
+            }
+
+            ProdutoCaracteristica characteristic;
+            if (input.Id is { } id)
+            {
+                if (creating || id == Guid.Empty || !seenIds.Add(id))
+                {
+                    throw new ArgumentException(
+                        "A referência de característica é inválida ou duplicada.",
+                        "caracteristicas.id");
+                }
+
+                characteristic = produto.Caracteristicas.SingleOrDefault(item => item.Id == id)
+                    ?? throw new ArgumentException(
+                        "A característica informada não pertence a este produto.",
+                        "caracteristicas.id");
+
+                if (input.Remover)
+                {
+                    if (input.Valores is not null)
+                    {
+                        throw new ArgumentException(
+                            "Uma característica removida não pode incluir valores.",
+                            "caracteristicas.valores");
+                    }
+
+                    produto.RemoverCaracteristica(id);
+                    continue;
+                }
+
+                var name = input.Nome ?? characteristic.Nome;
+                var physicalType = ParseTipoMedidaFisica(input.TipoMedidaFisica)
+                    ?? characteristic.TipoMedidaFisica;
+                produto.AtualizarCaracteristica(id, name, physicalType);
+                characteristic = produto.Caracteristicas.Single(item => item.Id == id);
+            }
+            else
+            {
+                if (creating && input.Remover)
+                {
+                    throw new ArgumentException(
+                        "Não é possível remover uma característica durante o cadastro.",
+                        "caracteristicas");
+                }
+
+                if (input.Remover)
+                {
+                    throw new ArgumentException(
+                        "A remoção exige o ID persistido da característica.",
+                        "caracteristicas.id");
+                }
+
+                characteristic = produto.AdicionarCaracteristica(
+                    input.Nome,
+                    ParseTipoMedidaFisica(input.TipoMedidaFisica));
+            }
+
+            AddReference(characteristicReferences, input.Referencia, characteristic, "caracteristicas.referencia");
+            if (input.Valores is null)
+            {
+                continue;
+            }
+
+            var seenValueIds = new HashSet<Guid>();
+            foreach (var valueInput in input.Valores)
+            {
+                if (valueInput is null)
+                {
+                    throw new ArgumentException(
+                        "Os valores da característica não podem conter valores nulos.",
+                        "caracteristicas.valores");
+                }
+
+                ProdutoCaracteristicaValor value;
+                if (valueInput.Id is { } valueId)
+                {
+                    if (creating || valueId == Guid.Empty || !seenValueIds.Add(valueId))
+                    {
+                        throw new ArgumentException(
+                            "A referência de valor é inválida ou duplicada.",
+                            "caracteristicas.valores.id");
+                    }
+
+                    value = characteristic.Valores.SingleOrDefault(item => item.Id == valueId)
+                        ?? throw new ArgumentException(
+                            "O valor informado não pertence à característica.",
+                            "caracteristicas.valores.id");
+                    if (valueInput.Remover)
+                    {
+                        produto.RemoverValorCaracteristica(characteristic.Id, valueId);
+                        continue;
+                    }
+
+                    characteristic.AtualizarValor(
+                        valueId,
+                        valueInput.Nome,
+                        valueInput.ValorMedidaCanonico);
+                    value = characteristic.Valores.Single(item => item.Id == valueId);
+                }
+                else
+                {
+                    if (valueInput.Remover)
+                    {
+                        throw new ArgumentException(
+                            "A remoção exige o ID persistido do valor.",
+                            "caracteristicas.valores.id");
+                    }
+
+                    value = AdicionarValorCaracteristica(characteristic, valueInput);
+                }
+
+                AddReference(
+                    valueReferences,
+                    valueInput.Referencia,
+                    value,
+                    "caracteristicas.valores.referencia");
+            }
+        }
+
+        return new ReferenciasCaracteristicas(characteristicReferences, valueReferences);
+    }
+
+    private static ProdutoCaracteristicaValor AdicionarValorCaracteristica(
+        ProdutoCaracteristica characteristic,
+        ProdutoCaracteristicaValorInput input)
+    {
+        if (characteristic.TipoMedidaFisica is null)
+        {
+            if (input.ValorMedidaCanonico is not null)
+            {
+                throw new ArgumentException(
+                    "Uma característica genérica não aceita valor numérico físico.",
+                    "caracteristicas.valores.valorMedidaCanonico");
+            }
+
+            return characteristic.AdicionarValor(input.Nome);
+        }
+
+        if (input.Nome is not null || input.ValorMedidaCanonico is null)
+        {
+            throw new ArgumentException(
+                "Uma característica física exige somente valorMedidaCanonico.",
+                "caracteristicas.valores.valorMedidaCanonico");
+        }
+
+        var unit = characteristic.TipoMedidaFisica == TipoMedidaFisica.PesoLiquido ? "G" : "ML";
+        return characteristic.AdicionarValorMedida(input.ValorMedidaCanonico.Value, unit);
+    }
+
+    private static TipoMedidaFisica? ParseTipoMedidaFisica(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
             return null;
         }
-        catch (ArgumentException exception)
+
+        return value.Trim() switch
         {
-            return Invalid(exception);
+            nameof(TipoMedidaFisica.PesoLiquido) => TipoMedidaFisica.PesoLiquido,
+            nameof(TipoMedidaFisica.VolumeLiquido) => TipoMedidaFisica.VolumeLiquido,
+            _ => throw new ArgumentException(
+                "O tipo de medida física deve ser PesoLiquido ou VolumeLiquido.",
+                "caracteristicas.tipoMedidaFisica")
+        };
+    }
+
+    private static void AddReference<T>(
+        IDictionary<string, T> references,
+        string? reference,
+        T value,
+        string field)
+    {
+        if (reference is null)
+        {
+            return;
+        }
+
+        var normalized = reference.Trim();
+        if (normalized.Length == 0 || !references.TryAdd(normalized, value))
+        {
+            throw new ArgumentException(
+                "A referência temporária está vazia ou duplicada.",
+                field);
         }
     }
 
-    private static ProdutoVariante CriarVariante(ProdutoVarianteInput input, bool padrao) =>
-        ProdutoVariante.Criar(
-            input.Identificacao,
-            input.UnidadeVenda,
-            input.PrecoVenda,
-            ativa: true,
-            padrao);
+    private static void AplicarAssociacoesVariantes(
+        Produto produto,
+        IReadOnlyList<ProdutoVarianteInput?> variantInputs,
+        ReferenciasCaracteristicas references)
+    {
+        var variants = produto.Variantes.ToArray();
+        if (variants.Length != variantInputs.Count)
+        {
+            throw new InvalidOperationException("As variantes recebidas não correspondem ao produto criado.");
+        }
+
+        for (var index = 0; index < variantInputs.Count; index++)
+        {
+            var input = variantInputs[index];
+            if (input?.Caracteristicas is null)
+            {
+                continue;
+            }
+
+            AplicarAssociacoesVariante(
+                produto,
+                variants[index],
+                input.Caracteristicas,
+                references);
+        }
+    }
+
+    private static void AplicarAssociacoesVariante(
+        Produto produto,
+        ProdutoVariante variant,
+        IReadOnlyList<ProdutoVarianteCaracteristicaInput?>? inputs,
+        ReferenciasCaracteristicas references)
+    {
+        if (inputs is null)
+        {
+            return;
+        }
+
+        produto.SubstituirValoresCaracteristica(
+            variant.Id,
+            ResolverAssociacoesVariante(produto, inputs, references));
+    }
+
+    private static IReadOnlyList<(Guid CaracteristicaId, Guid ValorId)> ResolverAssociacoesVariante(
+        Produto produto,
+        IReadOnlyList<ProdutoVarianteCaracteristicaInput?> inputs,
+        ReferenciasCaracteristicas references)
+    {
+        var values = new List<(Guid CaracteristicaId, Guid ValorId)>();
+        var characteristicIds = new HashSet<Guid>();
+        foreach (var input in inputs)
+        {
+            if (input is null)
+            {
+                throw new ArgumentException(
+                    "As associações de características não podem conter valores nulos.",
+                    "variantes.caracteristicas");
+            }
+
+            var characteristic = ResolverCaracteristica(produto, input, references);
+            if (!characteristicIds.Add(characteristic.Id))
+            {
+                throw new ArgumentException(
+                    "Uma variante pode receber somente um valor por característica.",
+                    "variantes.caracteristicas.caracteristicaId");
+            }
+
+            var value = ResolverValor(characteristic, input, references);
+            values.Add((characteristic.Id, value.Id));
+        }
+
+        return values;
+    }
+
+    private static ProdutoCaracteristica ResolverCaracteristica(
+        Produto produto,
+        ProdutoVarianteCaracteristicaInput input,
+        ReferenciasCaracteristicas references)
+    {
+        if ((input.CaracteristicaId is null) == string.IsNullOrWhiteSpace(input.ReferenciaCaracteristica))
+        {
+            throw new ArgumentException(
+                "Informe exatamente um ID ou uma referência de característica.",
+                "variantes.caracteristicas.caracteristicaId");
+        }
+
+        if (input.CaracteristicaId is { } id)
+        {
+            if (id == Guid.Empty)
+            {
+                throw new ArgumentException("O ID da característica é inválido.", "variantes.caracteristicas");
+            }
+
+            return produto.Caracteristicas.SingleOrDefault(item => item.Id == id)
+                ?? throw new ArgumentException(
+                    "A característica não pertence a este produto.",
+                    "variantes.caracteristicas.caracteristicaId");
+        }
+
+        var reference = input.ReferenciaCaracteristica!.Trim();
+        return references.Caracteristicas.TryGetValue(reference, out var characteristic)
+            ? characteristic
+            : throw new ArgumentException(
+                "A referência de característica não foi definida nesta operação.",
+                "variantes.caracteristicas.referenciaCaracteristica");
+    }
+
+    private static ProdutoCaracteristicaValor ResolverValor(
+        ProdutoCaracteristica characteristic,
+        ProdutoVarianteCaracteristicaInput input,
+        ReferenciasCaracteristicas references)
+    {
+        if ((input.ValorId is null) == string.IsNullOrWhiteSpace(input.ReferenciaValor))
+        {
+            throw new ArgumentException(
+                "Informe exatamente um ID ou uma referência de valor.",
+                "variantes.caracteristicas.valorId");
+        }
+
+        if (input.ValorId is { } id)
+        {
+            if (id == Guid.Empty)
+            {
+                throw new ArgumentException("O ID do valor é inválido.", "variantes.caracteristicas.valorId");
+            }
+
+            return characteristic.Valores.SingleOrDefault(item => item.Id == id)
+                ?? throw new ArgumentException(
+                    "O valor não pertence à característica informada.",
+                    "variantes.caracteristicas.valorId");
+        }
+
+        var reference = input.ReferenciaValor!.Trim();
+        if (!references.Valores.TryGetValue(reference, out var value)
+            || value.ProdutoCaracteristicaId != characteristic.Id)
+        {
+            throw new ArgumentException(
+                "A referência do valor não pertence à característica informada.",
+                "variantes.caracteristicas.referenciaValor");
+        }
+
+        return value;
+    }
+
+    private static IReadOnlyList<VarianteAplicada> AplicarVariantesEdicao(
+        Produto produto,
+        IReadOnlyList<ProdutoVarianteInput?> inputs,
+        ReferenciasCaracteristicas references)
+    {
+        var result = new List<VarianteAplicada>();
+        var seenIds = new HashSet<Guid>();
+        foreach (var input in inputs)
+        {
+            if (input is null)
+            {
+                throw new ArgumentException("As variantes não podem conter valores nulos.", "variantes");
+            }
+
+            ProdutoVariante variant;
+            if (input.Id is null)
+            {
+                if (input.Padrao == true)
+                {
+                    throw new ArgumentException(
+                        "Uma variante nova não pode ser marcada como padrão neste campo.",
+                        "variantes.padrao");
+                }
+
+                variant = CriarVariante(input, padrao: false);
+                produto.AdicionarVariante(variant);
+            }
+            else
+            {
+                var id = input.Id.Value;
+                if (id == Guid.Empty || !seenIds.Add(id))
+                {
+                    throw new ArgumentException("O ID da variante é inválido ou duplicado.", "variantes.id");
+                }
+
+                variant = produto.Variantes.SingleOrDefault(item => item.Id == id)
+                    ?? throw new ArgumentException(
+                        "A variante não pertence a este produto.",
+                        "variantes.id");
+                produto.AtualizarVariante(
+                    id,
+                    input.Identificacao ?? variant.Identificacao,
+                    input.UnidadeVenda ?? variant.UnidadeVenda,
+                    input.PrecoVenda ?? variant.PrecoVenda);
+            }
+
+            result.Add(new VarianteAplicada(input, variant));
+        }
+
+        var resolvedAssociations = result
+            .Select(item => new
+            {
+                Item = item,
+                Values = item.Input.Caracteristicas is null
+                    ? null
+                    : ResolverAssociacoesVariante(produto, item.Input.Caracteristicas, references)
+            })
+            .ToArray();
+
+        foreach (var association in resolvedAssociations.Where(item => item.Values is not null))
+        {
+            produto.SubstituirValoresCaracteristica(association.Item.Variante.Id, []);
+        }
+
+        foreach (var association in resolvedAssociations)
+        {
+            if (association.Values is not null)
+            {
+                produto.SubstituirValoresCaracteristica(
+                    association.Item.Variante.Id,
+                    association.Values);
+            }
+
+            if (association.Item.Input.AtualizarMedidas
+                || association.Item.Input.PesoLiquidoGramas is not null
+                || association.Item.Input.VolumeLiquidoMililitros is not null)
+            {
+                association.Item.Variante.DefinirMedidasLiquidas(
+                    association.Item.Input.PesoLiquidoGramas,
+                    association.Item.Input.VolumeLiquidoMililitros);
+            }
+        }
+
+        return result;
+    }
+
+    private static void AplicarEstadosVariantes(
+        Produto produto,
+        IReadOnlyList<VarianteAplicada> appliedVariants)
+    {
+        var requestedDefaults = appliedVariants.Where(item => item.Input.Padrao == true).ToArray();
+        if (requestedDefaults.Length > 1)
+        {
+            throw new ArgumentException(
+                "Somente uma variante pode ser informada como padrão.",
+                "variantes.padrao");
+        }
+
+        foreach (var item in appliedVariants.Where(item => item.Input.Ativa == true))
+        {
+            produto.AtivarVariante(item.Variante.Id);
+        }
+
+        var newDefault = requestedDefaults.SingleOrDefault()?.Variante;
+        if (newDefault is null
+            && appliedVariants.Any(item => item.Input.Padrao == false && item.Variante.Padrao))
+        {
+            throw new ArgumentException(
+                "Informe outra variante como padrão na mesma edição.",
+                "variantes.padrao");
+        }
+
+        if (newDefault is not null)
+        {
+            produto.DefinirVariantePadrao(newDefault.Id);
+        }
+
+        foreach (var item in appliedVariants.Where(item => item.Input.Ativa == false))
+        {
+            if (!item.Variante.Ativa)
+            {
+                continue;
+            }
+
+            var replacementId = item.Variante.Padrao
+                ? item.Input.NovoPadraoId ?? newDefault?.Id
+                : item.Input.NovoPadraoId == newDefault?.Id
+                    ? null
+                    : item.Input.NovoPadraoId;
+            produto.DesativarVariante(item.Variante.Id, replacementId);
+        }
+    }
+
+    private sealed record ReferenciasCaracteristicas(
+        IReadOnlyDictionary<string, ProdutoCaracteristica> Caracteristicas,
+        IReadOnlyDictionary<string, ProdutoCaracteristicaValor> Valores);
+
+    private sealed record VarianteAplicada(ProdutoVarianteInput Input, ProdutoVariante Variante);
 
     private static ProdutoResult Invalid(string campo, string mensagem) =>
         ProdutoResult.ValidationFailed(new ProdutoValidationError(campo, mensagem));
@@ -394,9 +1003,24 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             "identificacao" => "identificacao",
             "unidadeVenda" => "unidadeVenda",
             "precoVenda" => "precoVenda",
+            "pesoLiquidoGramas" => "pesoLiquidoGramas",
+            "volumeLiquidoMililitros" => "volumeLiquidoMililitros",
+            "valorMedidaCanonico" => "valorMedidaCanonico",
             "variantes" or "variante" => "variantes",
             "ativa" => "ativa",
-            _ => "produto"
+            "caracteristicas" or "caracteristicas.id" or "caracteristicas.referencia"
+                or "caracteristicas.tipoMedidaFisica" => "caracteristicas",
+            "caracteristicas.valores" or "caracteristicas.valores.id"
+                or "caracteristicas.valores.referencia"
+                or "caracteristicas.valores.valorMedidaCanonico" => "caracteristicas.valores",
+            "variantes.id" => "variantes",
+            "variantes.padrao" => "variantes.padrao",
+            "variantes.caracteristicas" or "variantes.caracteristicas.caracteristicaId"
+                or "variantes.caracteristicas.valorId"
+                or "variantes.caracteristicas.referenciaCaracteristica"
+                or "variantes.caracteristicas.referenciaValor" => "variantes.caracteristicas",
+            "simples" => "simples",
+            _ => exception.ParamName ?? "produto"
         };
         return Invalid(campo, exception.Message);
     }

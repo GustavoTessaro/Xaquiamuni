@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 
 namespace Xaquiamuni.Dominio.Entidades;
@@ -9,6 +10,7 @@ public sealed class Produto
     public const string IdentificacaoVariantePadrao = "Padrão";
 
     private readonly List<ProdutoVariante> _variantes = [];
+    private readonly List<ProdutoCaracteristica> _caracteristicas = [];
 
     private Produto()
     {
@@ -30,6 +32,7 @@ public sealed class Produto
     public Categoria Categoria { get; private set; } = null!;
     public bool Publicado { get; private set; }
     public IReadOnlyCollection<ProdutoVariante> Variantes => _variantes.AsReadOnly();
+    public IReadOnlyCollection<ProdutoCaracteristica> Caracteristicas => _caracteristicas.AsReadOnly();
 
     public static Produto Criar(
         string? nome,
@@ -95,15 +98,154 @@ public sealed class Produto
         string? descricao,
         Categoria? categoria,
         string? unidadeVenda,
-        decimal precoVenda)
+        decimal precoVenda,
+        decimal? pesoLiquidoGramas = null,
+        decimal? volumeLiquidoMililitros = null)
     {
         var defaultVariant = ProdutoVariante.Criar(
             IdentificacaoVariantePadrao,
             unidadeVenda,
             precoVenda,
             ativa: true,
-            padrao: true);
+            padrao: true,
+            pesoLiquidoGramas,
+            volumeLiquidoMililitros);
         return Criar(nome, descricao, categoria, [defaultVariant]);
+    }
+
+    public ProdutoCaracteristica AdicionarCaracteristica(
+        string? nome,
+        TipoMedidaFisica? tipoMedidaFisica = null)
+    {
+        var normalizedName = ProdutoCaracteristica.NormalizarNome(nome);
+        var normalizedKey = normalizedName.ToUpperInvariant();
+        if (_caracteristicas.Any(item => string.Equals(
+                item.NomeNormalizado,
+                normalizedKey,
+                StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "Já existe uma característica equivalente neste produto.");
+        }
+
+        if (tipoMedidaFisica is not null
+            && _caracteristicas.Any(item => item.TipoMedidaFisica == tipoMedidaFisica))
+        {
+            throw new InvalidOperationException(
+                "O produto já possui uma característica vinculada a esta medida física.");
+        }
+
+        var caracteristica = ProdutoCaracteristica.Criar(this, normalizedName, tipoMedidaFisica);
+        _caracteristicas.Add(caracteristica);
+        return caracteristica;
+    }
+
+    public void AtualizarCaracteristica(
+        Guid caracteristicaId,
+        string? nome,
+        TipoMedidaFisica? tipoMedidaFisica)
+    {
+        var caracteristica = ObterCaracteristica(caracteristicaId);
+        var normalizedName = ProdutoCaracteristica.NormalizarNome(nome).ToUpperInvariant();
+        if (_caracteristicas.Any(item => item.Id != caracteristicaId
+            && string.Equals(item.NomeNormalizado, normalizedName, StringComparison.Ordinal)))
+        {
+            throw new InvalidOperationException(
+                "Já existe uma característica equivalente neste produto.");
+        }
+
+        caracteristica.AtualizarDados(nome, tipoMedidaFisica);
+    }
+
+    public void RemoverCaracteristica(Guid caracteristicaId)
+    {
+        var caracteristica = ObterCaracteristica(caracteristicaId);
+        if (_variantes.Any(variante => variante.CaracteristicaValores.Any(associacao =>
+                associacao.ProdutoCaracteristicaId == caracteristicaId)))
+        {
+            throw new InvalidOperationException(
+                "A característica não pode ser removida enquanto estiver associada a uma variante.");
+        }
+
+        caracteristica.LimparValores();
+        _caracteristicas.Remove(caracteristica);
+    }
+
+    public void AtualizarValorCaracteristica(
+        Guid caracteristicaId,
+        Guid valorId,
+        string? nome,
+        decimal? valorMedidaCanonico) =>
+        ObterCaracteristica(caracteristicaId).AtualizarValor(valorId, nome, valorMedidaCanonico);
+
+    public void RemoverValorCaracteristica(Guid caracteristicaId, Guid valorId)
+    {
+        _ = ObterCaracteristica(caracteristicaId).Valores.SingleOrDefault(item => item.Id == valorId)
+            ?? throw new ArgumentException(
+                "O valor não pertence a esta característica.",
+                nameof(valorId));
+        if (_variantes.Any(variante => variante.CaracteristicaValores.Any(associacao =>
+                associacao.ProdutoCaracteristicaValorId == valorId)))
+        {
+            throw new InvalidOperationException(
+                "O valor não pode ser removido enquanto estiver associado a uma variante.");
+        }
+
+        ObterCaracteristica(caracteristicaId).RemoverValor(valorId);
+    }
+
+    public void AssociarValorCaracteristica(
+        Guid varianteId,
+        Guid caracteristicaId,
+        Guid valorId)
+    {
+        var variante = ObterVariante(varianteId);
+        var caracteristica = _caracteristicas.SingleOrDefault(item => item.Id == caracteristicaId)
+            ?? throw new ArgumentException(
+                "A característica não pertence a este produto.",
+                nameof(caracteristicaId));
+        var valor = caracteristica.Valores.SingleOrDefault(item => item.Id == valorId)
+            ?? throw new ArgumentException(
+                "O valor não pertence a esta característica e produto.",
+                nameof(valorId));
+        var associacao = ProdutoVarianteCaracteristicaValor.Criar(variante, valor);
+        var combinacao = CalcularCombinacaoHash(variante.CaracteristicaValores.Append(associacao));
+
+        if (combinacao is not null && _variantes.Any(item =>
+                item.Id != varianteId && item.TemCombinacao(combinacao)))
+        {
+            throw new InvalidOperationException(
+                "Já existe uma variante deste produto com a mesma combinação de características.");
+        }
+
+        variante.AssociarCaracteristicaValor(associacao, combinacao);
+    }
+
+    public void SubstituirValoresCaracteristica(
+        Guid varianteId,
+        IEnumerable<(Guid CaracteristicaId, Guid ValorId)> valores)
+    {
+        ArgumentNullException.ThrowIfNull(valores);
+        var variante = ObterVariante(varianteId);
+        var associações = valores.Select(par =>
+        {
+            var caracteristica = ObterCaracteristica(par.CaracteristicaId);
+            var valor = caracteristica.Valores.SingleOrDefault(item => item.Id == par.ValorId)
+                ?? throw new ArgumentException(
+                    "O valor não pertence a esta característica e produto.",
+                    nameof(valores));
+            return ProdutoVarianteCaracteristicaValor.Criar(variante, valor);
+        }).ToArray();
+        var combinacao = CalcularCombinacaoHash(associações);
+
+        if (combinacao is not null && _variantes.Any(item =>
+                item.Id != varianteId && item.TemCombinacao(combinacao)))
+        {
+            throw new InvalidOperationException(
+                "Já existe uma variante deste produto com a mesma combinação de características.");
+        }
+
+        variante.SubstituirCaracteristicaValores(associações, combinacao);
     }
 
     public void AtualizarDados(string? nome, string? descricao)
@@ -265,10 +407,26 @@ public sealed class Produto
         _variantes.SingleOrDefault(variant => variant.Id == id)
         ?? throw new ArgumentException("A variante não pertence a este produto.", nameof(id));
 
+    private ProdutoCaracteristica ObterCaracteristica(Guid id) =>
+        _caracteristicas.SingleOrDefault(item => item.Id == id)
+        ?? throw new ArgumentException("A característica não pertence a este produto.", nameof(id));
+
     private void AssociarVariante(ProdutoVariante variante)
     {
         variante.AssociarA(this);
         _variantes.Add(variante);
+    }
+
+    private static byte[]? CalcularCombinacaoHash(
+        IEnumerable<ProdutoVarianteCaracteristicaValor> valores)
+    {
+        var canonicalValues = valores
+            .OrderBy(item => item.ProdutoCaracteristicaId)
+            .Select(item => $"{item.ProdutoCaracteristicaId:N}:{item.ProdutoCaracteristicaValorId:N}")
+            .ToArray();
+        return canonicalValues.Length == 0
+            ? null
+            : SHA256.HashData(Encoding.UTF8.GetBytes(string.Join('|', canonicalValues)));
     }
 
     private static void ValidarCategoria(Categoria? categoria)

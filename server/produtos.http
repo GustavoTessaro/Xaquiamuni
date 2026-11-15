@@ -6,6 +6,8 @@
 @varianteId = <guid-da-variante>
 @novaVarianteId = <guid-da-variante-ativa-para-promover>
 @categoriaId = <guid-da-categoria-ativa>
+@caracteristicaId = <guid-da-caracteristica>
+@valorId = <guid-do-valor>
 
 ### Obter token antifalsificação; repetir com o cookie administrativo e copiar requestToken + cookie XSRF-TOKEN
 GET {{baseUrl}}/api/auth/csrf
@@ -15,7 +17,7 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
 GET {{baseUrl}}/api/admin/produtos?busca=lavanda&categoriaId={{categoriaId}}&publicado=false
 Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
 
-### Consultar produto e variantes
+### Consultar produto, características, valores, medidas e variantes
 GET {{baseUrl}}/api/admin/produtos/{{produtoId}}
 Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
 
@@ -23,7 +25,7 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
 GET {{baseUrl}}/api/admin/produtos/00000000-0000-0000-0000-000000000000
 Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
 
-### Cadastrar produto não publicado com variante padrão
+### Cadastrar produto não publicado com variante padrão (contrato anterior compatível)
 POST {{baseUrl}}/api/admin/produtos
 Content-Type: application/json
 X-XSRF-TOKEN: {{xsrfRequestToken}}
@@ -35,19 +37,100 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
   "categoriaId": "{{categoriaId}}",
   "variantePadrao": {
     "identificacao": "100 g",
-    "unidadeVenda": "G",
+    "unidadeVenda": "UN",
     "precoVenda": 20.00
   },
   "variantes": [
     {
       "identificacao": "200 g",
-      "unidadeVenda": "G",
+      "unidadeVenda": "UN",
       "precoVenda": 35.00
     }
   ]
 }
 
-### Editar dados principais e categoria
+### Cadastrar produto simples com medidas opcionais; a identificação Padrão é gerada internamente
+POST {{baseUrl}}/api/admin/produtos
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Sabonete de argila",
+  "descricao": "Produzido artesanalmente",
+  "categoriaId": "{{categoriaId}}",
+  "simples": true,
+  "variantePadrao": {
+    "unidadeVenda": "UN",
+    "precoVenda": 24.50,
+    "pesoLiquidoGramas": 120.5,
+    "volumeLiquidoMililitros": 90
+  }
+}
+
+### Cadastrar variantes com características, valores e referências temporárias na mesma operação
+POST {{baseUrl}}/api/admin/produtos
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Vela artesanal",
+  "descricao": "Cera vegetal",
+  "categoriaId": "{{categoriaId}}",
+  "simples": false,
+  "variantePadrao": {
+    "identificacao": "100 g branca de lavanda",
+    "unidadeVenda": "UN",
+    "precoVenda": 35.00,
+    "caracteristicas": [
+      { "referenciaCaracteristica": "peso", "referenciaValor": "peso-100" },
+      { "referenciaCaracteristica": "cor", "referenciaValor": "branca" },
+      { "referenciaCaracteristica": "fragrancia", "referenciaValor": "lavanda" }
+    ]
+  },
+  "variantes": [
+    {
+      "identificacao": "200 g preta de baunilha",
+      "unidadeVenda": "KIT",
+      "precoVenda": 55.00,
+      "caracteristicas": [
+        { "referenciaCaracteristica": "peso", "referenciaValor": "peso-200" },
+        { "referenciaCaracteristica": "cor", "referenciaValor": "preta" },
+        { "referenciaCaracteristica": "fragrancia", "referenciaValor": "baunilha" }
+      ]
+    }
+  ],
+  "caracteristicas": [
+    {
+      "referencia": "peso",
+      "nome": "Peso",
+      "tipoMedidaFisica": "PesoLiquido",
+      "valores": [
+        { "referencia": "peso-100", "valorMedidaCanonico": 100 },
+        { "referencia": "peso-200", "valorMedidaCanonico": 200 }
+      ]
+    },
+    {
+      "referencia": "cor",
+      "nome": "Cor",
+      "valores": [
+        { "referencia": "branca", "nome": "Branca" },
+        { "referencia": "preta", "nome": "Preta" }
+      ]
+    },
+    {
+      "referencia": "fragrancia",
+      "nome": "Fragrância",
+      "valores": [
+        { "referencia": "lavanda", "nome": "Lavanda" },
+        { "referencia": "baunilha", "nome": "Baunilha" }
+      ]
+    }
+  ]
+}
+
+### Editar dados principais e categoria sem substituir características ou variantes omitidas
 PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}
 Content-Type: application/json
 X-XSRF-TOKEN: {{xsrfRequestToken}}
@@ -59,6 +142,47 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
   "categoriaId": "{{categoriaId}}"
 }
 
+### Editar característica e valor por IDs persistidos, preservando identidades
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "nome": "Vela artesanal atualizada",
+  "descricao": "Cera vegetal",
+  "categoriaId": "{{categoriaId}}",
+  "caracteristicas": [
+    {
+      "id": "{{caracteristicaId}}",
+      "nome": "Cor",
+      "valores": [
+        { "id": "{{valorId}}", "nome": "Branca" },
+        { "referencia": "cor-vermelha", "nome": "Vermelha" }
+      ]
+    }
+  ],
+  "variantes": [
+    {
+      "id": "{{varianteId}}",
+      "identificacao": "Branca",
+      "unidadeVenda": "UN",
+      "precoVenda": 38.00,
+      "caracteristicas": [
+        { "caracteristicaId": "{{caracteristicaId}}", "valorId": "{{valorId}}" }
+      ]
+    },
+    {
+      "identificacao": "Nova variante vermelha",
+      "unidadeVenda": "UN",
+      "precoVenda": 42.00,
+      "caracteristicas": [
+        { "caracteristicaId": "{{caracteristicaId}}", "referenciaValor": "cor-vermelha" }
+      ]
+    }
+  ]
+}
+
 ### Adicionar variante
 POST {{baseUrl}}/api/admin/produtos/{{produtoId}}/variantes
 Content-Type: application/json
@@ -67,7 +191,7 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
 
 {
   "identificacao": "250 g",
-  "unidadeVenda": "G",
+  "unidadeVenda": "UN",
   "precoVenda": 42.50
 }
 
@@ -79,7 +203,7 @@ Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
 
 {
   "identificacao": "300 g",
-  "unidadeVenda": "G",
+  "unidadeVenda": "UN",
   "precoVenda": 49.90
 }
 

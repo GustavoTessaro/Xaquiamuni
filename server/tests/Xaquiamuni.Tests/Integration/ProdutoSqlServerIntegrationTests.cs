@@ -14,6 +14,8 @@ namespace Xaquiamuni.Tests.Integration;
 public sealed class ProdutoSqlServerIntegrationTests
 {
     private const string AddProdutosEVariantesMigration = "20261115021210_AddProdutosEVariantes";
+    private const string AddProductCharacteristicsMigrationSuffix =
+        "_AddProdutoCaracteristicasEMedidasFisicas";
 
     [SqlServerIntegrationFact]
     public async Task Migration_PersistsProductsVariantsAndCategoryRelationship()
@@ -33,8 +35,8 @@ public sealed class ProdutoSqlServerIntegrationTests
             "Produzido à mão",
             categoria,
             [
-                ProdutoVariante.Criar("Padrão 100 g", "G", 18.50m, padrao: true),
-                ProdutoVariante.Criar("200 g", "G", 30m)
+                ProdutoVariante.Criar("Padrão 100 g", "UN", 18.50m, padrao: true),
+                ProdutoVariante.Criar("200 g", "UN", 30m)
             ]);
         context.Produtos.Add(produto);
         await context.SaveChangesAsync();
@@ -54,6 +56,241 @@ public sealed class ProdutoSqlServerIntegrationTests
         Assert.Equal(2, persisted.Variantes.Count);
         Assert.Single(persisted.Variantes, variant => variant.Padrao && variant.Ativa);
         Assert.Equal(18.50m, persisted.Variantes.Single(variant => variant.Padrao).PrecoVenda);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task Migration_PreservesExistingVariantsWithoutInventingCharacteristicsOrMeasurements()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync(
+            targetMigration: AddProdutosEVariantesMigration);
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Sabonetes", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var productId = Guid.NewGuid();
+        var defaultVariantId = Guid.NewGuid();
+        var otherVariantId = Guid.NewGuid();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [Produtos] ([Id], [Nome], [Descricao], [CategoriaId], [Publicado])
+            VALUES ({productId}, {"Sabonete para Descarrego"}, {"Cadastro legado"}, {category.Id}, {true});
+
+            INSERT INTO [ProdutoVariantes]
+                ([Id], [ProdutoId], [Identificacao], [IdentificacaoNormalizada], [UnidadeVenda],
+                 [PrecoVenda], [Ativa], [Padrao])
+            VALUES
+                ({defaultVariantId}, {productId}, {"Padrão 100 g"}, {"PADRÃO 100 G"}, {"G"},
+                 {15m}, {true}, {true}),
+                ({otherVariantId}, {productId}, {"200 g Editado"}, {"200 G EDITADO"}, {"KIT"},
+                 {55m}, {false}, {false});
+            """);
+
+        await context.Database.MigrateAsync();
+        var appliedMigrations = await context.Database.GetAppliedMigrationsAsync();
+        Assert.Contains(
+            appliedMigrations,
+            migration => migration.EndsWith(
+                AddProductCharacteristicsMigrationSuffix,
+                StringComparison.Ordinal));
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Categoria)
+            .Include(item => item.Variantes)
+                .ThenInclude(variant => variant.CaracteristicaValores)
+            .Include(item => item.Caracteristicas)
+            .SingleAsync(item => item.Id == productId);
+
+        Assert.Equal(productId, persisted.Id);
+        Assert.Equal("Sabonete para Descarrego", persisted.Nome);
+        Assert.Equal("Cadastro legado", persisted.Descricao);
+        Assert.Equal(category.Id, persisted.CategoriaId);
+        Assert.Equal("Sabonetes", persisted.Categoria.Nome);
+        Assert.True(persisted.Categoria.Ativa);
+        Assert.True(persisted.Publicado);
+        Assert.Empty(persisted.Caracteristicas);
+        Assert.Equal(2, persisted.Variantes.Count);
+        var defaultVariant = persisted.Variantes.Single(item => item.Id == defaultVariantId);
+        var otherVariant = persisted.Variantes.Single(item => item.Id == otherVariantId);
+        Assert.Equal("Padrão 100 g", defaultVariant.Identificacao);
+        Assert.Equal("G", defaultVariant.UnidadeVenda);
+        Assert.Equal(15m, defaultVariant.PrecoVenda);
+        Assert.True(defaultVariant.Ativa);
+        Assert.True(defaultVariant.Padrao);
+        Assert.Equal("200 g Editado", otherVariant.Identificacao);
+        Assert.Equal("KIT", otherVariant.UnidadeVenda);
+        Assert.Equal(55m, otherVariant.PrecoVenda);
+        Assert.False(otherVariant.Ativa);
+        Assert.False(otherVariant.Padrao);
+        Assert.Null(defaultVariant.PesoLiquidoGramas);
+        Assert.Null(defaultVariant.VolumeLiquidoMililitros);
+        Assert.Empty(defaultVariant.CaracteristicaValores);
+        Assert.Empty(otherVariant.CaracteristicaValores);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task SimpleProductMeasurements_PersistAndReloadAsCanonicalValues()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Sabonetes", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var product = Produto.CriarSimples(
+            "Sabonete com medidas",
+            null,
+            category,
+            "UN",
+            18m,
+            pesoLiquidoGramas: 123.456m,
+            volumeLiquidoMililitros: 78.9m);
+        context.Produtos.Add(product);
+        await context.SaveChangesAsync();
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Variantes)
+            .SingleAsync(item => item.Id == product.Id);
+        var variant = Assert.Single(persisted.Variantes);
+
+        Assert.Equal(123.456m, variant.PesoLiquidoGramas);
+        Assert.Equal(78.9m, variant.VolumeLiquidoMililitros);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task CharacteristicsAndMeasurements_PersistWithProductScopedReferentialIntegrity()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Velas", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var firstVariant = ProdutoVariante.Criar("100 g Lavanda", "UN", 35m, padrao: true);
+        var secondVariant = ProdutoVariante.Criar("200 g Baunilha", "KIT", 55m);
+        var product = Produto.Criar("Vela Aromática", null, category, [firstVariant, secondVariant]);
+        var weight = product.AdicionarCaracteristica("Peso", TipoMedidaFisica.PesoLiquido);
+        var fragrance = product.AdicionarCaracteristica("Fragrância");
+        var weight100 = weight.AdicionarValorMedida(100m, "g");
+        var weight200 = weight.AdicionarValorMedida(200m, "g");
+        var lavender = fragrance.AdicionarValor("Lavanda");
+        var vanilla = fragrance.AdicionarValor("Baunilha");
+        product.AssociarValorCaracteristica(firstVariant.Id, weight.Id, weight100.Id);
+        product.AssociarValorCaracteristica(firstVariant.Id, fragrance.Id, lavender.Id);
+        product.AssociarValorCaracteristica(secondVariant.Id, fragrance.Id, vanilla.Id);
+        product.AssociarValorCaracteristica(secondVariant.Id, weight.Id, weight200.Id);
+
+        var otherProduct = Produto.CriarSimples("Outro produto", null, category, "UN", 10m);
+        context.Produtos.AddRange(product, otherProduct);
+        await context.SaveChangesAsync();
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Caracteristicas)
+                .ThenInclude(characteristic => characteristic.Valores)
+            .Include(item => item.Variantes)
+                .ThenInclude(variant => variant.CaracteristicaValores)
+                    .ThenInclude(association => association.Caracteristica)
+            .Include(item => item.Variantes)
+                .ThenInclude(variant => variant.CaracteristicaValores)
+                    .ThenInclude(association => association.Valor)
+            .SingleAsync(item => item.Id == product.Id);
+        var persistedVariants = persisted.Variantes.ToDictionary(item => item.Id);
+        Assert.Equal(2, persisted.Caracteristicas.Count);
+        Assert.Equal(2, persisted.Caracteristicas.Single(item => item.Id == weight.Id).Valores.Count);
+        Assert.Equal(100m, persistedVariants[firstVariant.Id].PesoLiquidoGramas);
+        Assert.Equal(200m, persistedVariants[secondVariant.Id].PesoLiquidoGramas);
+        Assert.Equal(2, persistedVariants[firstVariant.Id].CaracteristicaValores.Count);
+        Assert.Equal(2, persistedVariants[secondVariant.Id].CaracteristicaValores.Count);
+        await using var constraintContext = database.CreateVerificationContext();
+        Assert.Equal(32, await constraintContext.Database
+            .SqlQueryRaw<int>(
+                "SELECT DATALENGTH([CombinacaoHash]) AS [Value] FROM [ProdutoVariantes] WHERE [Id] = {0}",
+                firstVariant.Id)
+            .SingleAsync());
+
+        var duplicateCharacteristic = constraintContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoCaracteristicas]
+                ([Id], [ProdutoId], [Nome], [NomeNormalizado], [TipoMedidaFisica])
+            VALUES
+                ({Guid.NewGuid()}, {product.Id}, {" peso "}, {"PESO"}, {null});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateCharacteristic);
+
+        var duplicateValue = constraintContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoCaracteristicaValores]
+                ([Id], [ProdutoId], [ProdutoCaracteristicaId], [Nome], [NomeNormalizado], [ValorMedidaCanonico])
+            VALUES
+                ({Guid.NewGuid()}, {product.Id}, {weight.Id}, {"100 G"}, {"100 G"}, {100m});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateValue);
+
+        var duplicateCharacteristicValue = constraintContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoVarianteCaracteristicaValores]
+                ([ProdutoId], [ProdutoVarianteId], [ProdutoCaracteristicaId], [ProdutoCaracteristicaValorId])
+            VALUES
+                ({product.Id}, {firstVariant.Id}, {weight.Id}, {weight200.Id});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateCharacteristicValue);
+
+        var crossProductValue = constraintContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [ProdutoVarianteCaracteristicaValores]
+                ([ProdutoId], [ProdutoVarianteId], [ProdutoCaracteristicaId], [ProdutoCaracteristicaValorId])
+            VALUES
+                ({otherProduct.Id},
+                 {Assert.Single(otherProduct.Variantes).Id},
+                 {weight.Id},
+                 {weight100.Id});
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => crossProductValue);
+
+        var duplicateCombination = constraintContext.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE [ProdutoVariantes]
+            SET [CombinacaoHash] = (
+                SELECT [CombinacaoHash] FROM [ProdutoVariantes] WHERE [Id] = {firstVariant.Id})
+            WHERE [Id] = {secondVariant.Id};
+            """);
+        await Assert.ThrowsAsync<SqlException>(() => duplicateCombination);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task CombinationHashIndex_RejectsConcurrentDuplicates()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Velas", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+        var product = Produto.CriarSimples("Vela concorrente", null, category, "UN", 25m);
+        context.Produtos.Add(product);
+        await context.SaveChangesAsync();
+
+        var duplicateHash = Enumerable.Repeat((byte)0xA5, 32).ToArray();
+        var start = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var firstInsert = InsertConcurrentCombinationAsync(
+            database,
+            start.Task,
+            product.Id,
+            Guid.NewGuid(),
+            "Combinação concorrente A",
+            "COMBINAÇÃO CONCORRENTE A",
+            duplicateHash);
+        var secondInsert = InsertConcurrentCombinationAsync(
+            database,
+            start.Task,
+            product.Id,
+            Guid.NewGuid(),
+            "Combinação concorrente B",
+            "COMBINAÇÃO CONCORRENTE B",
+            duplicateHash);
+        start.SetResult(true);
+
+        var outcomes = await Task.WhenAll(firstInsert, secondInsert);
+
+        Assert.Single(outcomes, outcome => outcome is null);
+        var conflict = Assert.IsType<SqlException>(Assert.Single(outcomes, outcome => outcome is not null));
+        Assert.True(conflict.Number is 2601 or 2627);
     }
 
     [SqlServerIntegrationFact]
@@ -115,6 +352,21 @@ public sealed class ProdutoSqlServerIntegrationTests
             isDefault: true);
         await Assert.ThrowsAsync<SqlException>(() => inactiveDefault);
 
+        var legacyVariantId = Guid.NewGuid();
+        await InsertVariantAsync(
+            constraintContext,
+            productId,
+            legacyVariantId,
+            "Unidade legada",
+            "UNIDADE LEGADA",
+            "G",
+            1m,
+            active: true,
+            isDefault: false);
+        var persistedLegacyUnit = await constraintContext.ProdutoVariantes
+            .SingleAsync(variant => variant.Id == legacyVariantId);
+        Assert.Equal("G", persistedLegacyUnit.UnidadeVenda);
+
         var secondDefault = InsertVariantAsync(
             constraintContext,
             productId,
@@ -155,8 +407,8 @@ public sealed class ProdutoSqlServerIntegrationTests
                 "Sabonete de Lavanda",
                 "Produção artesanal",
                 category.Id,
-                new ProdutoVarianteInput("100 g", "G", 20m),
-                [new ProdutoVarianteInput("200 g", "G", 35m)]));
+                new ProdutoVarianteInput("100 g", "UN", 20m),
+                [new ProdutoVarianteInput("200 g", "UN", 35m)]));
         Assert.Equal(ProdutoStatus.Success, created.Status);
         var product = Assert.IsType<Produto>(created.Produto);
         var originalDefault = Assert.Single(product.Variantes, variant => variant.Padrao);
@@ -168,7 +420,7 @@ public sealed class ProdutoSqlServerIntegrationTests
         var variantEdited = await manager.EditarVarianteAsync(
             product.Id,
             otherVariant.Id,
-            new ProdutoVarianteInput("250 g", "G", 39.90m));
+            new ProdutoVarianteInput("250 g", "UN", 39.90m));
         var switched = await manager.DefinirVariantePadraoAsync(product.Id, otherVariant.Id);
         var deactivated = await manager.AlterarStatusVarianteAsync(
             product.Id,
@@ -209,6 +461,242 @@ public sealed class ProdutoSqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task AdminProductCases_PersistAndReloadCharacteristicsAndRollbackInvalidEdits()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using (var context = database.CreateVerificationContext())
+        {
+            var category = Categoria.Criar("Velas", null, 0);
+            context.Categorias.Add(category);
+            await context.SaveChangesAsync();
+
+            var manager = database.Services.GetRequiredService<IGerenciarProdutos>();
+            var created = await manager.CadastrarAsync(new ProdutoCadastroInput(
+                "Vela de lavanda",
+                null,
+                category.Id,
+                new ProdutoVarianteInput(
+                    "100 g branca",
+                    "UN",
+                    35m,
+                    Caracteristicas:
+                    [
+                        new(null, "peso", null, "100g"),
+                        new(null, "cor", null, "branca")
+                    ]),
+                [
+                    new ProdutoVarianteInput(
+                        "200 g preta",
+                        "KIT",
+                        55m,
+                        Caracteristicas:
+                        [
+                            new(null, "peso", null, "200g"),
+                            new(null, "cor", null, "preta")
+                        ])
+                ],
+                Simples: false,
+                Caracteristicas:
+                [
+                    new(
+                        "peso",
+                        null,
+                        "Peso",
+                        nameof(TipoMedidaFisica.PesoLiquido),
+                        [
+                            new("100g", null, null, 100m),
+                            new("200g", null, null, 200m)
+                        ]),
+                    new(
+                        "cor",
+                        null,
+                        "Cor",
+                        null,
+                        [
+                            new("branca", null, "Branca", null),
+                            new("preta", null, "Preta", null)
+                        ])
+                ]));
+
+            Assert.Equal(ProdutoStatus.Success, created.Status);
+            var productId = Assert.IsType<Produto>(created.Produto).Id;
+            var persisted = await context.Produtos
+                .Include(item => item.Caracteristicas)
+                    .ThenInclude(characteristic => characteristic.Valores)
+                .Include(item => item.Variantes)
+                    .ThenInclude(variant => variant.CaracteristicaValores)
+                        .ThenInclude(association => association.Caracteristica)
+                .Include(item => item.Variantes)
+                    .ThenInclude(variant => variant.CaracteristicaValores)
+                        .ThenInclude(association => association.Valor)
+                .SingleAsync(item => item.Id == productId);
+            var originalCharacteristicIds = persisted.Caracteristicas.Select(item => item.Id).ToArray();
+            var originalVariantIds = persisted.Variantes.Select(item => item.Id).ToArray();
+            var originalValueIds = persisted.Caracteristicas
+                .SelectMany(item => item.Valores)
+                .Select(item => item.Id)
+                .ToArray();
+            Assert.Equal(2, persisted.Caracteristicas.Count);
+            Assert.Equal(2, persisted.Variantes.Count);
+            Assert.Equal(100m, persisted.Variantes.Single(item => item.Padrao).PesoLiquidoGramas);
+            Assert.Equal(200m, persisted.Variantes.Single(item => !item.Padrao).PesoLiquidoGramas);
+
+            var persistedWeight = persisted.Caracteristicas.Single(item =>
+                item.TipoMedidaFisica == TipoMedidaFisica.PesoLiquido);
+            var weight100 = persistedWeight.Valores.Single(item => item.ValorMedidaCanonico == 100m);
+            var weight200 = persistedWeight.Valores.Single(item => item.ValorMedidaCanonico == 200m);
+            var persistedColor = persisted.Caracteristicas.Single(item => item.Nome == "Cor");
+            var white = persistedColor.Valores.Single(item => item.Nome == "Branca");
+            var black = persistedColor.Valores.Single(item => item.Nome == "Preta");
+            var defaultVariant = persisted.Variantes.Single(item => item.Padrao);
+            var otherVariant = persisted.Variantes.Single(item => !item.Padrao);
+            var validEdit = await manager.EditarAsync(
+                productId,
+                new ProdutoEdicaoInput(
+                    "Vela de lavanda atualizada",
+                    null,
+                    category.Id,
+                    [
+                        new ProdutoCaracteristicaInput(
+                            "peso",
+                            persistedWeight.Id,
+                            persistedWeight.Nome,
+                            nameof(TipoMedidaFisica.PesoLiquido),
+                            [
+                                new("peso-100", weight100.Id, null, 100m),
+                                new("peso-200", weight200.Id, null, 200m)
+                            ]),
+                        new ProdutoCaracteristicaInput(
+                            "cor",
+                            persistedColor.Id,
+                            persistedColor.Nome,
+                            null,
+                            [
+                                new("branca", white.Id, white.Nome, null),
+                                new("preta", black.Id, black.Nome, null),
+                                new("amarela", null, "Amarela", null)
+                            ])
+                    ],
+                    [
+                        new ProdutoVarianteInput(
+                            defaultVariant.Identificacao,
+                            defaultVariant.UnidadeVenda,
+                            defaultVariant.PrecoVenda,
+                            defaultVariant.Id,
+                            Caracteristicas:
+                            [
+                                new(persistedWeight.Id, null, weight100.Id, null),
+                                new(persistedColor.Id, null, white.Id, null)
+                            ],
+                            Padrao: true),
+                        new ProdutoVarianteInput(
+                            otherVariant.Identificacao,
+                            otherVariant.UnidadeVenda,
+                            otherVariant.PrecoVenda,
+                            otherVariant.Id,
+                            Caracteristicas:
+                            [
+                                new(persistedWeight.Id, null, weight200.Id, null),
+                                new(persistedColor.Id, null, black.Id, null)
+                            ]),
+                        new ProdutoVarianteInput(
+                            "100 g amarela",
+                            "UN",
+                            39m,
+                            Caracteristicas:
+                            [
+                                new(null, "peso", null, "peso-100"),
+                                new(null, "cor", null, "amarela")
+                            ])
+                    ]));
+            Assert.Equal(ProdutoStatus.Success, validEdit.Status);
+            Assert.Equal(
+                originalCharacteristicIds.Order(),
+                validEdit.Produto!.Caracteristicas.Select(item => item.Id).Order());
+            Assert.Equal(
+                originalVariantIds.Order(),
+                originalVariantIds.Intersect(validEdit.Produto.Variantes.Select(item => item.Id)).Order());
+            Assert.Equal(3, validEdit.Produto.Variantes.Count);
+            var variantIdsAfterEdit = validEdit.Produto.Variantes.Select(item => item.Id).ToArray();
+            Assert.Contains(
+                validEdit.Produto.Caracteristicas.Single(item => item.Id == persistedColor.Id).Valores,
+                item => item.Id == white.Id);
+
+            var invalidEdit = await manager.EditarAsync(
+                productId,
+                new ProdutoEdicaoInput(
+                    "Não deve persistir",
+                    null,
+                    category.Id,
+                    [new ProdutoCaracteristicaInput(
+                        null,
+                        Guid.NewGuid(),
+                        "Característica inexistente",
+                        null)]));
+            Assert.Equal(ProdutoStatus.ValidationFailed, invalidEdit.Status);
+
+            await using var rollbackVerification = database.CreateVerificationContext();
+            var afterInvalidEdit = await rollbackVerification.Produtos
+                .Include(item => item.Caracteristicas)
+                    .ThenInclude(characteristic => characteristic.Valores)
+                .Include(item => item.Variantes)
+                .SingleAsync(item => item.Id == productId);
+            Assert.Equal("Vela de lavanda atualizada", afterInvalidEdit.Nome);
+            Assert.Equal(originalCharacteristicIds, afterInvalidEdit.Caracteristicas.Select(item => item.Id).ToArray());
+            Assert.Equal(variantIdsAfterEdit.Order(), afterInvalidEdit.Variantes.Select(item => item.Id).Order());
+            Assert.All(
+                originalValueIds,
+                id => Assert.Contains(
+                    afterInvalidEdit.Caracteristicas.SelectMany(item => item.Valores),
+                    value => value.Id == id));
+        }
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ExistingLegacyUnitG_IsPreservedDuringUnrelatedProductEdit()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync(
+            targetMigration: AddProdutosEVariantesMigration);
+        await using var context = database.CreateVerificationContext();
+        var category = Categoria.Criar("Sabonetes", null, 0);
+        context.Categorias.Add(category);
+        await context.SaveChangesAsync();
+
+        var productId = Guid.NewGuid();
+        var variantId = Guid.NewGuid();
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [Produtos] ([Id], [Nome], [Descricao], [CategoriaId], [Publicado])
+            VALUES ({productId}, {"Produto legado"}, {null}, {category.Id}, {false});
+
+            INSERT INTO [ProdutoVariantes]
+                ([Id], [ProdutoId], [Identificacao], [IdentificacaoNormalizada], [UnidadeVenda],
+                 [PrecoVenda], [Ativa], [Padrao])
+            VALUES
+                ({variantId}, {productId}, {"Padrão legado"}, {"PADRÃO LEGADO"}, {"G"},
+                 {19m}, {true}, {true});
+            """);
+        await context.Database.MigrateAsync();
+
+        var manager = database.Services.GetRequiredService<IGerenciarProdutos>();
+        var result = await manager.EditarAsync(
+            productId,
+            new ProdutoEdicaoInput("Produto legado atualizado", null, category.Id));
+        Assert.Equal(ProdutoStatus.Success, result.Status);
+
+        await using var verificationContext = database.CreateVerificationContext();
+        var persisted = await verificationContext.Produtos
+            .Include(item => item.Variantes)
+            .SingleAsync(item => item.Id == productId);
+        var variant = Assert.Single(persisted.Variantes);
+        Assert.Equal("Produto legado atualizado", persisted.Nome);
+        Assert.Equal(variantId, variant.Id);
+        Assert.Equal("G", variant.UnidadeVenda);
+        Assert.Equal(19m, variant.PrecoVenda);
+        Assert.True(variant.Ativa);
+        Assert.True(variant.Padrao);
+    }
+
+    [SqlServerIntegrationFact]
     public async Task DefaultVariantSwitch_SaveFailureRollsBackTheDemotionAndPromotion()
     {
         var saveInterceptor = new FailNextSaveInterceptor();
@@ -225,7 +713,7 @@ public sealed class ProdutoSqlServerIntegrationTests
                 null,
                 category.Id,
                 new ProdutoVarianteInput("Padrão", "UN", 25m),
-                [new ProdutoVarianteInput("200 g", "G", 38m)]));
+                [new ProdutoVarianteInput("200 g", "KIT", 38m)]));
         var product = Assert.IsType<Produto>(created.Produto);
         var originalDefault = Assert.Single(product.Variantes, variant => variant.Padrao);
         var replacement = Assert.Single(product.Variantes, variant => !variant.Padrao);
@@ -265,6 +753,35 @@ public sealed class ProdutoSqlServerIntegrationTests
                 ({id}, {productId}, {identification}, {normalizedIdentification}, {unit},
                  {price}, {active}, {isDefault});
             """);
+
+    private static async Task<Exception?> InsertConcurrentCombinationAsync(
+        SqlServerTestDatabase database,
+        Task start,
+        Guid productId,
+        Guid variantId,
+        string identification,
+        string normalizedIdentification,
+        byte[] combinationHash)
+    {
+        await start.ConfigureAwait(false);
+        await using var context = database.CreateVerificationContext();
+        try
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [ProdutoVariantes]
+                    ([Id], [ProdutoId], [Identificacao], [IdentificacaoNormalizada], [UnidadeVenda],
+                     [PrecoVenda], [Ativa], [Padrao], [CombinacaoHash])
+                VALUES
+                    ({variantId}, {productId}, {identification}, {normalizedIdentification}, {"UN"},
+                     {30m}, {false}, {false}, {combinationHash});
+                """);
+            return null;
+        }
+        catch (SqlException exception)
+        {
+            return exception;
+        }
+    }
 
     private sealed class FailNextSaveInterceptor : SaveChangesInterceptor
     {

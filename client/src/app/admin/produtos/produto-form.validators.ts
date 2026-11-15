@@ -1,6 +1,7 @@
 import { AbstractControl, ValidationErrors } from '@angular/forms';
 
 export const MAX_PRECO_VARIANTE = 9_999_999_999_999_998;
+export const UNIDADES_VENDA = ['UN', 'KIT', 'PAR', 'PCT', 'CX', 'CJ'] as const;
 
 export function nonWhitespace(control: AbstractControl<string>): ValidationErrors | null {
   return control.value.trim().length > 0 ? null : { whitespace: true };
@@ -14,4 +15,14 @@ export function currencyPrecision(
     return null;
   }
   return Number(value.toFixed(2)) === value ? null : { currencyPrecision: true };
+}
+
+export function validSaleUnit(
+  control: AbstractControl<string>,
+  preservedLegacyUnit?: string,
+): ValidationErrors | null {
+  const value = control.value.trim().toUpperCase();
+  return UNIDADES_VENDA.some((unit) => unit === value) || value === preservedLegacyUnit
+    ? null
+    : { invalidSaleUnit: true };
 }

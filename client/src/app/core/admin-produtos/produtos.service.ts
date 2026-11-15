@@ -10,6 +10,30 @@ export interface AdminProdutoVariante {
   precoVenda: number;
   ativa: boolean;
   padrao: boolean;
+  pesoLiquidoGramas: number | null;
+  volumeLiquidoMililitros: number | null;
+  caracteristicas: AdminProdutoVarianteCaracteristica[];
+}
+
+export interface AdminProdutoVarianteCaracteristica {
+  caracteristicaId: string;
+  caracteristicaNome: string;
+  valorId: string;
+  valorNome: string;
+  valorMedidaCanonico: number | null;
+}
+
+export interface AdminProdutoCaracteristicaValor {
+  id: string;
+  nome: string;
+  valorMedidaCanonico: number | null;
+}
+
+export interface AdminProdutoCaracteristica {
+  id: string;
+  nome: string;
+  tipoMedidaFisica: 'PesoLiquido' | 'VolumeLiquido' | null;
+  valores: AdminProdutoCaracteristicaValor[];
 }
 
 export interface AdminProduto {
@@ -21,6 +45,7 @@ export interface AdminProduto {
   categoriaAtiva: boolean;
   publicado: boolean;
   variantes: AdminProdutoVariante[];
+  caracteristicas: AdminProdutoCaracteristica[];
 }
 
 export interface AdminProdutoFiltro {
@@ -30,23 +55,58 @@ export interface AdminProdutoFiltro {
 }
 
 export interface AdminProdutoVarianteRequest {
-  identificacao: string;
-  unidadeVenda: string;
-  precoVenda: number;
+  id?: string;
+  identificacao?: string;
+  unidadeVenda?: string;
+  precoVenda?: number;
+  pesoLiquidoGramas?: number | null;
+  volumeLiquidoMililitros?: number | null;
+  caracteristicas?: AdminProdutoVarianteCaracteristicaRequest[];
+  ativa?: boolean;
+  padrao?: boolean;
+  atualizarMedidas?: boolean;
+}
+
+export interface AdminProdutoVarianteCaracteristicaRequest {
+  caracteristicaId?: string;
+  referenciaCaracteristica?: string;
+  valorId?: string;
+  referenciaValor?: string;
+}
+
+export interface AdminProdutoCaracteristicaValorRequest {
+  referencia?: string;
+  id?: string;
+  nome?: string | null;
+  valorMedidaCanonico?: number | null;
+  remover?: boolean;
+}
+
+export interface AdminProdutoCaracteristicaRequest {
+  referencia?: string;
+  id?: string;
+  nome?: string;
+  tipoMedidaFisica?: 'PesoLiquido' | 'VolumeLiquido' | null;
+  valores?: AdminProdutoCaracteristicaValorRequest[];
+  remover?: boolean;
 }
 
 export interface AdminProdutoCadastroRequest {
   nome: string;
   descricao: string | null;
   categoriaId: string;
+  simples: boolean;
   variantePadrao: AdminProdutoVarianteRequest;
   variantes: AdminProdutoVarianteRequest[];
+  caracteristicas?: AdminProdutoCaracteristicaRequest[];
 }
 
 export interface AdminProdutoEdicaoRequest {
   nome: string;
   descricao: string | null;
   categoriaId: string;
+  caracteristicas?: AdminProdutoCaracteristicaRequest[];
+  variantes?: AdminProdutoVarianteRequest[];
 }
 
 export interface AdminProdutoVarianteStatusRequest {

@@ -30,12 +30,16 @@ describe('ProdutosService', () => {
         precoVenda: 19.9,
         ativa: true,
         padrao: true,
+        pesoLiquidoGramas: null,
+        volumeLiquidoMililitros: null,
+        caracteristicas: [],
       },
     ],
+    caracteristicas: [],
   };
   const variantRequest: AdminProdutoVarianteRequest = {
     identificacao: '200 g',
-    unidadeVenda: 'G',
+    unidadeVenda: 'UN',
     precoVenda: 29.9,
   };
 
@@ -88,6 +92,7 @@ describe('ProdutosService', () => {
       nome: product.nome,
       descricao: product.descricao,
       categoriaId: product.categoriaId,
+      simples: false,
       variantePadrao: {
         identificacao: 'Padrão',
         unidadeVenda: 'UN',
@@ -97,6 +102,74 @@ describe('ProdutosService', () => {
     };
 
     expectWrite(service.criar(request), 'POST', '/api/admin/produtos', request, 201, 'Created');
+  });
+
+  it('sends temporary references and persisted IDs using the aggregate API contracts', () => {
+    const create: AdminProdutoCadastroRequest = {
+      nome: 'Vela artesanal',
+      descricao: null,
+      categoriaId: 'category-1',
+      simples: false,
+      variantePadrao: {
+        identificacao: '100 g · Branca · Lavanda',
+        unidadeVenda: 'UN',
+        precoVenda: 35,
+        caracteristicas: [
+          { referenciaCaracteristica: 'peso', referenciaValor: 'peso-100' },
+          { referenciaCaracteristica: 'cor', referenciaValor: 'cor-branca' },
+          { referenciaCaracteristica: 'fragrancia', referenciaValor: 'aroma-lavanda' },
+        ],
+      },
+      variantes: [],
+      caracteristicas: [
+        {
+          referencia: 'peso',
+          nome: 'Peso',
+          tipoMedidaFisica: 'PesoLiquido',
+          valores: [{ referencia: 'peso-100', valorMedidaCanonico: 100 }],
+        },
+        {
+          referencia: 'cor',
+          nome: 'Cor',
+          tipoMedidaFisica: null,
+          valores: [{ referencia: 'cor-branca', nome: 'Branca' }],
+        },
+        {
+          referencia: 'fragrancia',
+          nome: 'Fragrância',
+          tipoMedidaFisica: null,
+          valores: [{ referencia: 'aroma-lavanda', nome: 'Lavanda' }],
+        },
+      ],
+    };
+    expectWrite(service.criar(create), 'POST', '/api/admin/produtos', create, 201, 'Created');
+
+    const edit: AdminProdutoEdicaoRequest = {
+      nome: product.nome,
+      descricao: product.descricao,
+      categoriaId: product.categoriaId,
+      caracteristicas: [
+        {
+          id: 'feature-weight',
+          nome: 'Peso',
+          tipoMedidaFisica: 'PesoLiquido',
+          valores: [{ id: 'value-100', valorMedidaCanonico: 100 }],
+        },
+      ],
+      variantes: [
+        {
+          id: 'variant-1',
+          identificacao: '100 g',
+          unidadeVenda: 'UN',
+          precoVenda: 19.9,
+          caracteristicas: [{ caracteristicaId: 'feature-weight', valorId: 'value-100' }],
+          ativa: true,
+          padrao: true,
+          atualizarMedidas: true,
+        },
+      ],
+    };
+    expectWrite(service.editar(product.id, edit), 'PUT', `/api/admin/produtos/${product.id}`, edit);
   });
 
   it('uses the real edit, variant, default, status, and publication contracts with antiforgery', () => {
