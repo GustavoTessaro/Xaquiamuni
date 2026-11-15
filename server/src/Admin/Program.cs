@@ -3,7 +3,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Xaquiamuni.Admin;
-using Xaquiamuni.Infraestrutura;
 using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Admin;
@@ -47,9 +46,7 @@ internal static class Program
 
             var services = new ServiceCollection();
             services.AddLogging(builder => builder.AddConsole());
-            services.AddInfrastructureServices(configuration);
-            services.AddScoped<IRoleProvisioningPreflight, SqlServerRoleProvisioningPreflight>();
-            services.AddScoped<IAdminAccountProvisioner, AdminAccountProvisioner>();
+            services.AddAdminProvisioningServices(configuration);
 
             await using var serviceProvider = services.BuildServiceProvider(validateScopes: true);
             await using var scope = serviceProvider.CreateAsyncScope();
