@@ -93,7 +93,7 @@ public sealed class AuthResetPasswordEndpointTests
         Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
         AssertNoStore(firstResponse);
         AssertNoStore(secondResponse);
-        Assert.Equal(firstBody, secondBody);
+        AssertEquivalentProblemDetails(firstBody, secondBody);
         Assert.Contains(GenericFailure, firstBody, StringComparison.Ordinal);
         Assert.DoesNotContain(TestEmail, firstBody, StringComparison.Ordinal);
         Assert.DoesNotContain("invalid-token", firstBody, StringComparison.Ordinal);
@@ -361,10 +361,14 @@ public sealed class AuthResetPasswordEndpointTests
         var requestToken = await GetRequestToken(client);
 
         using var request = CreateRequest(ValidRequest(), requestToken);
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => client.SendAsync(request));
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
 
-        Assert.Same(expectedException, exception);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        AssertNoStore(response);
+        Assert.Contains("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("Não foi possível concluir a solicitação.", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(expectedException.Message, body, StringComparison.Ordinal);
         Assert.Equal(1, service.ResetCalls);
     }
 
@@ -467,6 +471,28 @@ public sealed class AuthResetPasswordEndpointTests
 
     private static void AssertNoStore(HttpResponseMessage response) =>
         Assert.Contains("no-store", response.Headers.CacheControl?.ToString(), StringComparison.OrdinalIgnoreCase);
+
+    private static void AssertEquivalentProblemDetails(string expectedBody, string actualBody)
+    {
+        using var expectedDocument = JsonDocument.Parse(expectedBody);
+        using var actualDocument = JsonDocument.Parse(actualBody);
+        var expectedProperties = expectedDocument.RootElement
+            .EnumerateObject()
+            .Where(property => !string.Equals(property.Name, "traceId", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(property => property.Name, property => property.Value.GetRawText());
+        var actualProperties = actualDocument.RootElement
+            .EnumerateObject()
+            .Where(property => !string.Equals(property.Name, "traceId", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(property => property.Name, property => property.Value.GetRawText());
+
+        Assert.Equal(
+            expectedProperties.Keys.OrderBy(name => name, StringComparer.Ordinal),
+            actualProperties.Keys.OrderBy(name => name, StringComparer.Ordinal));
+        foreach (var (name, value) in expectedProperties)
+        {
+            Assert.Equal(value, actualProperties[name]);
+        }
+    }
 
     private sealed class FakePasswordResetService : IPasswordResetService
     {

@@ -241,7 +241,7 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
         Assert.Equal(HttpStatusCode.Unauthorized, missingAccount.StatusCode);
         Assert.Null(wrongPendingPassword.AuthCookie);
         Assert.Null(missingAccount.AuthCookie);
-        AssertSafeEqual(wrongPendingPassword.Body, missingAccount.Body);
+        AssertEquivalentProblemDetails(wrongPendingPassword.Body, missingAccount.Body);
         AssertTextNotPresent(wrongPendingPassword.Body, account.Email, StringComparison.Ordinal);
         AssertTextNotPresent(wrongPendingPassword.Body, incorrectPassword, StringComparison.Ordinal);
 
@@ -301,7 +301,7 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
             incorrectPassword);
         Assert.Equal(HttpStatusCode.Unauthorized, wrongConfirmedPassword.StatusCode);
         Assert.Null(wrongConfirmedPassword.AuthCookie);
-        AssertSafeEqual(wrongPendingPassword.Body, wrongConfirmedPassword.Body);
+        AssertEquivalentProblemDetails(wrongPendingPassword.Body, wrongConfirmedPassword.Body);
 
         for (var attempt = 0; attempt < 5; attempt++)
         {
@@ -312,7 +312,7 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
                 incorrectPassword);
             Assert.Equal(HttpStatusCode.Unauthorized, failedAttempt.StatusCode);
             Assert.Null(failedAttempt.AuthCookie);
-            AssertSafeEqual(wrongPendingPassword.Body, failedAttempt.Body);
+            AssertEquivalentProblemDetails(wrongPendingPassword.Body, failedAttempt.Body);
         }
 
         var lockedAccount = await LoginAsync(
@@ -322,7 +322,7 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
             OriginalPassword);
         Assert.Equal(HttpStatusCode.Unauthorized, lockedAccount.StatusCode);
         Assert.Null(lockedAccount.AuthCookie);
-        AssertSafeEqual(wrongPendingPassword.Body, lockedAccount.Body);
+        AssertEquivalentProblemDetails(wrongPendingPassword.Body, lockedAccount.Body);
     }
 
     [SqlServerIntegrationFact]
@@ -516,7 +516,8 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
                 password));
         }
 
-        Assert.All(genericBodies.Skip(1), body => AssertSafeEqual(genericBodies[0], body));
+        Assert.All(genericBodies.Skip(1), body =>
+            AssertEquivalentProblemDetails(genericBodies[0], body));
         Assert.True(await CheckPasswordAsync(environment.Database, eligible.Id, OriginalPassword));
         Assert.True(await VerifyResetTokenAsync(environment.Database, eligible.Id, eligibleToken));
         Assert.True(await CheckPasswordAsync(environment.Database, other.Id, OriginalPassword));
@@ -854,8 +855,14 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
             account.Email,
             token,
             NewPassword);
-        await Assert.ThrowsAsync<InjectedResetCommitFailureException>(
-            async () => await client.SendAsync(request));
+        using var response = await client.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        AssertNoStore(response);
+        Assert.Contains("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("Não foi possível concluir a solicitação.", responseBody, StringComparison.Ordinal);
+        Assert.DoesNotContain(nameof(InjectedResetCommitFailureException), responseBody, StringComparison.Ordinal);
 
         Assert.True(interceptor.IdentityAndOutboxUpdatesVisibleBeforeCommit);
         AssertSameCredentialState(userBefore, await ReadUserStateAsync(environment.Database, account.Id));
@@ -1653,6 +1660,28 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
         if (!string.Equals(expected, actual, StringComparison.Ordinal))
         {
             throw new Xunit.Sdk.XunitException("A sensitive integration-test value did not match.");
+        }
+    }
+
+    private static void AssertEquivalentProblemDetails(string expectedBody, string actualBody)
+    {
+        using var expectedDocument = JsonDocument.Parse(expectedBody);
+        using var actualDocument = JsonDocument.Parse(actualBody);
+        var expectedProperties = expectedDocument.RootElement
+            .EnumerateObject()
+            .Where(property => !string.Equals(property.Name, "traceId", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(property => property.Name, property => property.Value.GetRawText());
+        var actualProperties = actualDocument.RootElement
+            .EnumerateObject()
+            .Where(property => !string.Equals(property.Name, "traceId", StringComparison.OrdinalIgnoreCase))
+            .ToDictionary(property => property.Name, property => property.Value.GetRawText());
+
+        Assert.Equal(
+            expectedProperties.Keys.OrderBy(name => name, StringComparer.Ordinal),
+            actualProperties.Keys.OrderBy(name => name, StringComparer.Ordinal));
+        foreach (var (name, value) in expectedProperties)
+        {
+            AssertSafeEqual(value, actualProperties[name]);
         }
     }
 

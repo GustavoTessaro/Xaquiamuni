@@ -31,10 +31,12 @@ public sealed class CategoriaSqlServerIntegrationTests
         Assert.True(await repository.AdicionarAsync(third));
 
         var categorias = await repository.ListarAsync();
-        var expectedIds = new[] { first, second, third }
+        var expectedIds = await context.Categorias
+            .AsNoTracking()
             .OrderBy(categoria => categoria.OrdemExibicao)
             .ThenBy(categoria => categoria.Id)
-            .Select(categoria => categoria.Id);
+            .Select(categoria => categoria.Id)
+            .ToArrayAsync();
 
         Assert.Equal(expectedIds, categorias.Select(categoria => categoria.Id));
         Assert.Contains(categorias, categoria => !categoria.Ativa);

@@ -199,10 +199,14 @@ public sealed class AuthForgotPasswordEndpointTests
         var requestToken = await GetRequestToken(client);
 
         using var request = CreateRequest(TestEmail, requestToken);
-        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
-            () => client.SendAsync(request));
+        using var response = await client.SendAsync(request);
+        var body = await response.Content.ReadAsStringAsync();
 
-        Assert.Same(expectedException, exception);
+        Assert.Equal(HttpStatusCode.InternalServerError, response.StatusCode);
+        AssertNoStore(response);
+        Assert.Contains("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Contains("Não foi possível concluir a solicitação.", body, StringComparison.Ordinal);
+        Assert.DoesNotContain(expectedException.Message, body, StringComparison.Ordinal);
         Assert.Equal(1, useCase.Calls);
     }
 
