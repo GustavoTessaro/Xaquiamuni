@@ -38,6 +38,8 @@ public sealed class XaquiamuniDbContext
     public DbSet<LoteInsumo> LotesInsumo => Set<LoteInsumo>();
     public DbSet<SaldoInsumo> SaldosInsumo => Set<SaldoInsumo>();
     public DbSet<MovimentoInsumo> MovimentosInsumo => Set<MovimentoInsumo>();
+    public DbSet<AjusteSemDiferencaInsumo> AjustesSemDiferencaInsumo =>
+        Set<AjusteSemDiferencaInsumo>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -412,19 +414,23 @@ public sealed class XaquiamuniDbContext
             {
                 table.HasCheckConstraint(
                     "CK_MovimentosInsumo_Tipo_Valid",
-                    "[Tipo] IN (1, 2)");
+                    "[Tipo] IN (1, 2, 3, 4, 5, 6, 7)");
                 table.HasCheckConstraint(
-                    "CK_MovimentosInsumo_Entrada_Valid",
-                    "[QuantidadeOriginal] > 0 AND [QuantidadeBase_ValorBase] > 0 AND "
+                    "CK_MovimentosInsumo_Direcao_Saldo_Valid",
+                    "[Direcao] IN (-1, 1) AND [QuantidadeBase_ValorBase] > 0 AND "
                     + "[SaldoAnterior_ValorBase] >= 0 AND "
-                    + "[SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase] AND "
+                    + "(([Direcao] = 1 AND "
+                    + "[SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase]) OR "
+                    + "([Direcao] = -1 AND [SaldoPosterior_ValorBase] = "
+                    + "[SaldoAnterior_ValorBase] - [QuantidadeBase_ValorBase] "
+                    + "AND [SaldoPosterior_ValorBase] >= 0)) AND "
                     + "[SaldoAnterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND "
                     + "[SaldoPosterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND "
                     + "[SaldoAnterior_Dimensao] = [QuantidadeBase_Dimensao] AND "
                     + "[SaldoPosterior_Dimensao] = [QuantidadeBase_Dimensao]");
                 table.HasCheckConstraint(
                     "CK_MovimentosInsumo_Origem_Valid",
-                    "(([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL "
+                    "(([Tipo] IN (1, 2) AND (([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL "
                     + "AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL "
                     + "AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL "
                     + "AND [QuantidadeOriginal] > 0) OR "
@@ -436,7 +442,13 @@ public sealed class XaquiamuniDbContext
                     + "AND [FatorCompra_Dimensao] = [QuantidadeBase_Dimensao] "
                     + "AND (([FatorCompra_UnidadeBase] = 1 AND [FatorCompra_Dimensao] = 1) OR "
                     + "([FatorCompra_UnidadeBase] = 3 AND [FatorCompra_Dimensao] = 2) OR "
-                    + "([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3)))) "
+                    + "([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3))))) OR "
+                    + "([Tipo] IN (3, 4, 5, 6, 7) AND [FormaCompraId] IS NULL "
+                    + "AND [FormaCompraNome] IS NULL AND [FatorCompra_ValorBase] IS NULL "
+                    + "AND [FatorCompra_UnidadeBase] IS NULL AND [FatorCompra_Dimensao] IS NULL "
+                    + "AND [UnidadeOriginal] IS NOT NULL "
+                    + "AND (([Tipo] = 6 AND [QuantidadeOriginal] >= 0) OR "
+                    + "([Tipo] <> 6 AND [QuantidadeOriginal] > 0)))) "
                     + "AND (([UnidadeOriginal] IS NULL) OR ([UnidadeOriginal] = 1 "
                     + "AND [QuantidadeBase_UnidadeBase] = 1) OR "
                     + "([UnidadeOriginal] = 2 AND [QuantidadeBase_UnidadeBase] = 1 "
@@ -445,8 +457,41 @@ public sealed class XaquiamuniDbContext
                 table.HasCheckConstraint(
                     "CK_MovimentosInsumo_Custo_Valid",
                     "([CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR "
-                    + "([CustoTotal] IS NOT NULL AND [CustoPorUnidadeBase] IS NOT NULL "
+                    + "([Tipo] IN (1, 2) AND [CustoTotal] IS NOT NULL "
+                    + "AND [CustoPorUnidadeBase] IS NOT NULL "
                     + "AND [CustoTotal] >= 0 AND [CustoPorUnidadeBase] >= 0)");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Tipo_Direcao_Valid",
+                    "([Tipo] IN (1, 2) AND [Direcao] = 1) OR "
+                    + "([Tipo] IN (3, 4, 5) AND [Direcao] = -1) OR "
+                    + "([Tipo] IN (6, 7) AND [Direcao] IN (-1, 1))");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Contagem_Valid",
+                    "(([Tipo] = 6 AND [QuantidadeContada_ValorBase] IS NOT NULL "
+                    + "AND [QuantidadeContada_UnidadeBase] IS NOT NULL "
+                    + "AND [QuantidadeContada_Dimensao] IS NOT NULL "
+                    + "AND [QuantidadeContada_ValorBase] >= 0 "
+                    + "AND [QuantidadeContada_UnidadeBase] = [QuantidadeBase_UnidadeBase] "
+                    + "AND [QuantidadeContada_Dimensao] = [QuantidadeBase_Dimensao] "
+                    + "AND (([UnidadeOriginal] = 1 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]) "
+                    + "OR ([UnidadeOriginal] = 2 AND [QuantidadeOriginal] * 1000 = [QuantidadeContada_ValorBase]) "
+                    + "OR ([UnidadeOriginal] = 3 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]) "
+                    + "OR ([UnidadeOriginal] = 4 AND [QuantidadeOriginal] * 1000 = [QuantidadeContada_ValorBase]) "
+                    + "OR ([UnidadeOriginal] = 5 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]))) "
+                    + "OR ([Tipo] <> 6 AND [QuantidadeContada_ValorBase] IS NULL "
+                    + "AND [QuantidadeContada_UnidadeBase] IS NULL "
+                    + "AND [QuantidadeContada_Dimensao] IS NULL))");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Contagem_Conciliada",
+                    "[Tipo] <> 6 OR ([QuantidadeContada_ValorBase] = [SaldoPosterior_ValorBase] "
+                    + "AND [QuantidadeBase_ValorBase] = "
+                    + "ABS([QuantidadeContada_ValorBase] - [SaldoAnterior_ValorBase]))");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Estorno_Valid",
+                    "([Tipo] = 7 AND [MovimentoOriginalId] IS NOT NULL AND "
+                    + "[MovimentoOriginalId] <> [Id] AND [CustoTotal] IS NULL "
+                    + "AND [CustoPorUnidadeBase] IS NULL) OR "
+                    + "([Tipo] <> 7 AND [MovimentoOriginalId] IS NULL)");
                 table.HasCheckConstraint(
                     "CK_MovimentosInsumo_Timestamps_Utc",
                     "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
@@ -466,6 +511,11 @@ public sealed class XaquiamuniDbContext
                 .HasConversion<short>()
                 .HasColumnType("smallint")
                 .IsRequired();
+            movimento.Property(entity => entity.Direcao)
+                .HasConversion<short>()
+                .HasColumnType("smallint")
+                .HasDefaultValue(DirecaoMovimentoInsumo.Entrada)
+                .IsRequired();
             movimento.Property(entity => entity.QuantidadeOriginal)
                 .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale)
                 .IsRequired();
@@ -473,6 +523,7 @@ public sealed class XaquiamuniDbContext
                 .HasConversion<short?>()
                 .HasColumnType("smallint");
             movimento.Property(entity => entity.FormaCompraId);
+            movimento.Property(entity => entity.MovimentoOriginalId);
             movimento.Property(entity => entity.FormaCompraNome)
                 .HasMaxLength(FormaCompraInsumo.NomeMaxLength);
             movimento.Property(entity => entity.CustoTotal)
@@ -517,6 +568,11 @@ public sealed class XaquiamuniDbContext
                 entity => entity.FatorCompra,
                 "FatorCompra",
                 required: false);
+            ConfigurarQuantidadeMovimento(
+                movimento,
+                entity => entity.QuantidadeContada,
+                "QuantidadeContada",
+                required: false);
 
             movimento.HasOne<InsumoEstoque>()
                 .WithMany()
@@ -530,11 +586,50 @@ public sealed class XaquiamuniDbContext
                 .HasPrincipalKey(entity => new { entity.InsumoId, entity.Id })
                 .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("FK_MovimentosInsumo_LotesInsumo_InsumoId_LoteId");
+            movimento.HasOne<MovimentoInsumo>()
+                .WithMany()
+                .HasForeignKey(entity => entity.MovimentoOriginalId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_MovimentosInsumo_MovimentosInsumo_MovimentoOriginalId");
             movimento.HasIndex(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia })
                 .IsUnique()
                 .HasDatabaseName("UX_MovimentosInsumo_ResponsavelId_ChaveIdempotencia");
             movimento.HasIndex(entity => new { entity.InsumoId, entity.LoteId, entity.RegistradoEmUtc })
                 .HasDatabaseName("IX_MovimentosInsumo_InsumoId_LoteId_RegistradoEmUtc");
+            movimento.HasIndex(entity => entity.MovimentoOriginalId)
+                .IsUnique()
+                .HasDatabaseName("UX_MovimentosInsumo_MovimentoOriginalId")
+                .HasFilter("[MovimentoOriginalId] IS NOT NULL");
+        });
+
+        builder.Entity<AjusteSemDiferencaInsumo>(operacao =>
+        {
+            operacao.ToTable("AjustesSemDiferencaInsumo", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_AjustesSemDiferencaInsumo_Responsavel_NotEmpty",
+                    "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+                table.HasCheckConstraint(
+                    "CK_AjustesSemDiferencaInsumo_Chave_NotBlank",
+                    "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_AjustesSemDiferencaInsumo_Timestamp_Utc",
+                    "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+            });
+            operacao.HasKey(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia });
+            operacao.Property(entity => entity.ResponsavelId)
+                .ValueGeneratedNever()
+                .IsRequired();
+            operacao.Property(entity => entity.ChaveIdempotencia)
+                .HasMaxLength(MovimentoInsumo.ChaveIdempotenciaMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            operacao.Property(entity => entity.FingerprintRequisicao)
+                .HasColumnType("binary(32)")
+                .IsRequired();
+            operacao.Property(entity => entity.RegistradoEmUtc)
+                .HasColumnType("datetimeoffset(7)")
+                .IsRequired();
         });
 
         builder.Entity<Categoria>(categoria =>
@@ -1104,6 +1199,12 @@ public sealed class XaquiamuniDbContext
             throw new InvalidOperationException("Movimentos de insumo são append-only.");
         }
 
+        if (ChangeTracker.Entries<AjusteSemDiferencaInsumo>()
+            .Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Registros de idempotência também são imutáveis.");
+        }
+
         var movimentosAdicionados = ChangeTracker.Entries<MovimentoInsumo>()
             .Where(entry => entry.State == EntityState.Added)
             .Select(entry => entry.Entity)
@@ -1157,12 +1258,17 @@ public sealed class XaquiamuniDbContext
         MovimentoInsumo movement)
     {
         var quantity = balance.Entity.QuantidadeFisica;
+        var delta = movement.Direcao == DirecaoMovimentoInsumo.Entrada
+            ? movement.QuantidadeBase.ValorBase
+            : -movement.QuantidadeBase.ValorBase;
 
         return (balance.State != EntityState.Added || movement.SaldoAnterior.ValorBase == 0m)
             && movement.SaldoAnterior.ValorBase >= 0m
             && movement.SaldoPosterior == quantity
             && movement.SaldoPosterior.ValorBase - movement.SaldoAnterior.ValorBase
-                == movement.QuantidadeBase.ValorBase
+                == delta
+            && (movement.Tipo != TipoMovimentoInsumo.AjusteInventario
+                || movement.QuantidadeContada == movement.SaldoPosterior)
             && movement.SaldoAnterior.UnidadeBase == movement.QuantidadeBase.UnidadeBase
             && quantity.UnidadeBase == movement.QuantidadeBase.UnidadeBase;
     }

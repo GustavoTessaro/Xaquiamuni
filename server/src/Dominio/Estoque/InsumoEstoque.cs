@@ -186,11 +186,11 @@ public sealed class InsumoEstoque
         return forma;
     }
 
-    internal void AplicarEntrada(SaldoInsumo saldo, MovimentoInsumo movimento)
+    internal void AplicarMovimento(SaldoInsumo saldo, MovimentoInsumo movimento)
     {
         ArgumentNullException.ThrowIfNull(saldo);
         ArgumentNullException.ThrowIfNull(movimento);
-        saldo.AplicarEntrada(movimento);
+        saldo.AplicarMovimento(movimento);
     }
 
     public void AtualizarFormaCompra(

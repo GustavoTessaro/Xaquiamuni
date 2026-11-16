@@ -57,7 +57,7 @@ public sealed class SaldoInsumo
             QuantidadeEstoque.Criar(0m, insumo.UnidadeBase));
     }
 
-    internal void AplicarEntrada(MovimentoInsumo movimento)
+    internal void AplicarMovimento(MovimentoInsumo movimento)
     {
         ArgumentNullException.ThrowIfNull(movimento);
         if (movimento.InsumoId != InsumoId

@@ -50,6 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IGerenciarImagensProduto, GerenciarImagensProduto>();
         services.AddScoped<IEstoqueInsumoRepository, EfEstoqueInsumoRepository>();
         services.AddScoped<IRegistrarEntradaInsumo, RegistrarEntradaInsumo>();
+        services.AddScoped<IRegistrarSaidaInsumo, RegistrarSaidaInsumo>();
+        services.AddScoped<IAjustarContagemInsumo, AjustarContagemInsumo>();
+        services.AddScoped<IEstornarMovimentoInsumo, EstornarMovimentoInsumo>();
         services.AddScoped<IAtualizarPoliticaLoteInsumo, AtualizarPoliticaLoteInsumo>();
         services.AddOptions<ArmazenamentoLocalImagemProdutoOptions>()
             .Bind(configuration.GetSection(ArmazenamentoLocalImagemProdutoOptions.SectionName))

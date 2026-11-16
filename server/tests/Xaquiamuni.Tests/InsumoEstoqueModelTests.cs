@@ -140,12 +140,29 @@ public sealed class InsumoEstoqueModelTests
             "CK_MovimentosInsumo_Origem_Valid",
             movement.GetCheckConstraints().Select(constraint => constraint.Name));
         Assert.Contains(
-            "CK_MovimentosInsumo_Entrada_Valid",
+            "CK_MovimentosInsumo_Direcao_Saldo_Valid",
+            movement.GetCheckConstraints().Select(constraint => constraint.Name));
+        Assert.Contains(
+            "CK_MovimentosInsumo_Contagem_Valid",
+            movement.GetCheckConstraints().Select(constraint => constraint.Name));
+        Assert.Contains(
+            "CK_MovimentosInsumo_Contagem_Conciliada",
+            movement.GetCheckConstraints().Select(constraint => constraint.Name));
+        Assert.Contains(
+            "CK_MovimentosInsumo_Estorno_Valid",
             movement.GetCheckConstraints().Select(constraint => constraint.Name));
         Assert.Contains(foreignKeys, foreignKey =>
             foreignKey.Properties.Select(property => property.Name)
                 .SequenceEqual([nameof(MovimentoInsumo.InsumoId)])
             && foreignKey.DeleteBehavior == DeleteBehavior.Restrict);
+        Assert.Contains(foreignKeys, foreignKey =>
+            foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual([nameof(MovimentoInsumo.MovimentoOriginalId)])
+            && foreignKey.DeleteBehavior == DeleteBehavior.Restrict);
+
+        var noDifference = model.FindEntityType(typeof(AjusteSemDiferencaInsumo))!;
+        Assert.Equal("AjustesSemDiferencaInsumo", noDifference.GetTableName());
+        Assert.Equal(2, noDifference.FindPrimaryKey()!.Properties.Count);
     }
 
     [Fact]

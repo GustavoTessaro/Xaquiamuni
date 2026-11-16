@@ -77,6 +77,19 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                 return RegistrarEntradaInsumoResult.Success(existente);
             }
 
+            if (await _dbContext.AjustesSemDiferencaInsumo.AnyAsync(
+                    item => item.ResponsavelId == input.ResponsavelId
+                        && item.ChaveIdempotencia == chaveIdempotencia,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    RegistrarEntradaInsumoStatus.ConflitoIdempotencia,
+                    "A chave de idempotência já foi usada por outra operação.")
+                    .ConfigureAwait(false);
+            }
+
             await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
                 .ConfigureAwait(false);
             var insumo = await _dbContext.InsumosEstoque
@@ -251,7 +264,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                 _timeProvider.GetUtcNow(),
                 chaveIdempotencia,
                 fingerprint);
-            insumo.AplicarEntrada(saldo, movement);
+            insumo.AplicarMovimento(saldo, movement);
             _dbContext.MovimentosInsumo.Add(movement);
 
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
@@ -293,6 +306,578 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
             return await ReverterComFalhaAsync(
                 transaction,
                 RegistrarEntradaInsumoStatus.EntradaInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<OperacaoEstoqueInsumoResult> RegistrarSaidaAsync(
+        RegistrarSaidaInsumoInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var chave = NormalizarChaveIdempotencia(input.ChaveIdempotencia);
+        var validacao = ValidarCabecalhoOperacao(
+            input.InsumoId,
+            input.ResponsavelId,
+            chave,
+            input.Motivo,
+            input.Observacao);
+        if (validacao is not null)
+        {
+            return OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                validacao);
+        }
+
+        if (input.Tipo is not (TipoMovimentoInsumo.SaidaManual
+            or TipoMovimentoInsumo.Perda
+            or TipoMovimentoInsumo.Descarte)
+            || input.QuantidadeOriginal <= 0m
+            || !Enum.IsDefined(input.UnidadeOriginal))
+        {
+            return OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                "Tipo, unidade e quantidade de saída são inválidos.");
+        }
+
+        var fingerprint = CalcularFingerprint(input);
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync(
+                $"stock-entry:{input.ResponsavelId:D}:{chave}",
+                cancellationToken).ConfigureAwait(false);
+            var replay = await BuscarResultadoRepetidoAsync(
+                input.ResponsavelId,
+                chave!,
+                fingerprint,
+                cancellationToken).ConfigureAwait(false);
+            if (replay is not null)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                _dbContext.ChangeTracker.Clear();
+                return replay;
+            }
+
+            await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            var (lote, erroLote) = await ResolverLoteAsync(
+                insumo,
+                input.LoteId,
+                cancellationToken).ConfigureAwait(false);
+            if (erroLote is not null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    erroLote.Value,
+                    "Informe um lote válido que pertença ao insumo.").ConfigureAwait(false);
+            }
+
+            QuantidadeEstoque quantidade;
+            try
+            {
+                quantidade = QuantidadeEstoque.Criar(input.QuantidadeOriginal, input.UnidadeOriginal)
+                    .ExigirPositiva(nameof(input.QuantidadeOriginal));
+            }
+            catch (ArgumentException exception)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                    exception.Message).ConfigureAwait(false);
+            }
+
+            if (quantidade.UnidadeBase != insumo.UnidadeBase)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                    "A quantidade informada não é compatível com a unidade-base do insumo.")
+                    .ConfigureAwait(false);
+            }
+
+            if (input.Tipo == TipoMovimentoInsumo.SaidaManual
+                && lote is not null
+                && !lote.EstaElegivelEm(DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime)))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.LoteInelegivel,
+                    "Uma saída operacional exige lote elegível; perda ou descarte registra lote inelegível.")
+                    .ConfigureAwait(false);
+            }
+
+            var saldo = await ObterSaldoAsync(insumo.Id, lote?.Id, cancellationToken)
+                .ConfigureAwait(false);
+            var anterior = saldo?.QuantidadeFisica ?? QuantidadeEstoque.Criar(0m, insumo.UnidadeBase);
+            if (quantidade.ValorBase > anterior.ValorBase)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
+                    "A saída excede o saldo físico da posição informada.").ConfigureAwait(false);
+            }
+
+            var movimento = MovimentoInsumo.CriarSaida(
+                insumo,
+                lote,
+                input.ResponsavelId,
+                input.Tipo,
+                input.QuantidadeOriginal,
+                input.UnidadeOriginal,
+                quantidade,
+                anterior,
+                input.Motivo,
+                input.Observacao,
+                _timeProvider.GetUtcNow(),
+                chave!,
+                fingerprint);
+            AplicarMovimento(insumo, lote, saldo, movimento);
+            _dbContext.MovimentosInsumo.Add(movimento);
+
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return OperacaoEstoqueInsumoResult.Success(movimento);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "O estoque foi alterado concorrentemente; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (SqlException exception) when (exception.Number is 1205 or 1222 or 51000 or 2601 or 2627)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException
+            { Number: 2601 or 2627 })
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<OperacaoEstoqueInsumoResult> AjustarContagemAsync(
+        AjustarContagemInsumoInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var chave = NormalizarChaveIdempotencia(input.ChaveIdempotencia);
+        var validacao = ValidarCabecalhoOperacao(
+            input.InsumoId,
+            input.ResponsavelId,
+            chave,
+            input.Motivo,
+            input.Observacao);
+        if (validacao is not null)
+        {
+            return OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                validacao);
+        }
+
+        if (input.QuantidadeEncontrada < 0m
+            || !Enum.IsDefined(input.UnidadeOriginal)
+            || input.VersaoSaldoEsperada is { Length: not 8 })
+        {
+            return OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                "A contagem física deve ser não negativa, usar unidade válida e informar uma versão SQL válida.");
+        }
+
+        var fingerprint = CalcularFingerprint(input);
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync(
+                $"stock-entry:{input.ResponsavelId:D}:{chave}",
+                cancellationToken).ConfigureAwait(false);
+            var replay = await BuscarResultadoRepetidoAsync(
+                input.ResponsavelId,
+                chave!,
+                fingerprint,
+                cancellationToken).ConfigureAwait(false);
+            if (replay is not null)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                _dbContext.ChangeTracker.Clear();
+                return replay;
+            }
+
+            await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            var (lote, erroLote) = await ResolverLoteAsync(
+                insumo,
+                input.LoteId,
+                cancellationToken).ConfigureAwait(false);
+            if (erroLote is not null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    erroLote.Value,
+                    "Informe um lote válido que pertença ao insumo.").ConfigureAwait(false);
+            }
+
+            QuantidadeEstoque contada;
+            try
+            {
+                contada = QuantidadeEstoque.Criar(input.QuantidadeEncontrada, input.UnidadeOriginal);
+            }
+            catch (ArgumentException exception)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                    exception.Message).ConfigureAwait(false);
+            }
+
+            if (contada.UnidadeBase != insumo.UnidadeBase)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                    "A contagem não é compatível com a unidade-base do insumo.")
+                    .ConfigureAwait(false);
+            }
+
+            var saldo = await ObterSaldoAsync(insumo.Id, lote?.Id, cancellationToken)
+                .ConfigureAwait(false);
+            if (!VersaoSaldoCorresponde(saldo, input.VersaoSaldoEsperada))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                    "A posição mudou desde a leitura da contagem; atualize o saldo e refaça a contagem.")
+                    .ConfigureAwait(false);
+            }
+
+            var anterior = saldo?.QuantidadeFisica ?? QuantidadeEstoque.Criar(0m, insumo.UnidadeBase);
+            if (contada.ValorBase == anterior.ValorBase)
+            {
+                _dbContext.AjustesSemDiferencaInsumo.Add(AjusteSemDiferencaInsumo.Criar(
+                    input.ResponsavelId,
+                    chave!,
+                    fingerprint,
+                    _timeProvider.GetUtcNow()));
+                await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                _dbContext.ChangeTracker.Clear();
+                return OperacaoEstoqueInsumoResult.NoDifference();
+            }
+
+            var diferenca = Math.Abs(contada.ValorBase - anterior.ValorBase);
+            var movimento = MovimentoInsumo.CriarAjuste(
+                insumo,
+                lote,
+                input.ResponsavelId,
+                input.QuantidadeEncontrada,
+                input.UnidadeOriginal,
+                contada,
+                QuantidadeEstoque.Criar(diferenca, insumo.UnidadeBase),
+                anterior,
+                input.Motivo,
+                input.Observacao,
+                _timeProvider.GetUtcNow(),
+                chave!,
+                fingerprint);
+            AplicarMovimento(insumo, lote, saldo, movimento);
+            _dbContext.MovimentosInsumo.Add(movimento);
+
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return OperacaoEstoqueInsumoResult.Success(movimento);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A posição foi alterada concorrentemente; refaça a contagem com nova chave.")
+                .ConfigureAwait(false);
+        }
+        catch (SqlException exception) when (exception.Number is 1205 or 1222 or 51000 or 2601 or 2627)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException
+            { Number: 2601 or 2627 })
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<OperacaoEstoqueInsumoResult> EstornarMovimentoAsync(
+        EstornarMovimentoInsumoInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        var chave = NormalizarChaveIdempotencia(input.ChaveIdempotencia);
+        var validacao = ValidarCabecalhoOperacao(
+            null,
+            input.ResponsavelId,
+            chave,
+            input.Motivo,
+            input.Observacao);
+        if (input.MovimentoOriginalId == Guid.Empty || validacao is not null)
+        {
+            return OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                validacao ?? "O movimento original é obrigatório.");
+        }
+
+        var fingerprint = CalcularFingerprint(input);
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync(
+                $"stock-entry:{input.ResponsavelId:D}:{chave}",
+                cancellationToken).ConfigureAwait(false);
+            var replay = await BuscarResultadoRepetidoAsync(
+                input.ResponsavelId,
+                chave!,
+                fingerprint,
+                cancellationToken).ConfigureAwait(false);
+            if (replay is not null)
+            {
+                await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                _dbContext.ChangeTracker.Clear();
+                return replay;
+            }
+
+            var original = await _dbContext.MovimentosInsumo
+                .SingleOrDefaultAsync(
+                    movimento => movimento.Id == input.MovimentoOriginalId,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            if (original is null || original.Tipo == TipoMovimentoInsumo.Estorno)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.MovimentoNaoEncontrado,
+                    "O movimento não existe ou não é elegível para estorno.")
+                    .ConfigureAwait(false);
+            }
+
+            await AdquirirLockAsync($"stock-supply:{original.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .SingleOrDefaultAsync(item => item.Id == original.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.InsumoNaoEncontrado,
+                    "O insumo proprietário não existe.").ConfigureAwait(false);
+            }
+
+            var (lote, erroLote) = await ResolverLoteAsync(
+                insumo,
+                original.LoteId,
+                cancellationToken).ConfigureAwait(false);
+            if (erroLote is not null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    erroLote.Value,
+                    "O lote original não está disponível para estorno.").ConfigureAwait(false);
+            }
+
+            if (await _dbContext.MovimentosInsumo.AnyAsync(
+                    movimento => movimento.MovimentoOriginalId == original.Id,
+                    cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.MovimentoJaEstornado,
+                    "O movimento original já possui estorno.")
+                    .ConfigureAwait(false);
+            }
+
+            var saldo = await ObterSaldoAsync(insumo.Id, lote?.Id, cancellationToken)
+                .ConfigureAwait(false);
+            var anterior = saldo?.QuantidadeFisica ?? QuantidadeEstoque.Criar(0m, insumo.UnidadeBase);
+            var direcaoEstorno = original.Direcao == DirecaoMovimentoInsumo.Entrada
+                ? DirecaoMovimentoInsumo.Saida
+                : DirecaoMovimentoInsumo.Entrada;
+            if (direcaoEstorno == DirecaoMovimentoInsumo.Saida
+                && original.QuantidadeBase.ValorBase > anterior.ValorBase)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
+                    "O saldo atual não permite estornar esta movimentação.")
+                    .ConfigureAwait(false);
+            }
+
+            var movimento = MovimentoInsumo.CriarEstorno(
+                insumo,
+                lote,
+                input.ResponsavelId,
+                original,
+                anterior,
+                input.Motivo,
+                input.Observacao,
+                _timeProvider.GetUtcNow(),
+                chave!,
+                fingerprint);
+            AplicarMovimento(insumo, lote, saldo, movimento);
+            _dbContext.MovimentosInsumo.Add(movimento);
+
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return OperacaoEstoqueInsumoResult.Success(movimento);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "O estoque foi alterado concorrentemente; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (SqlException exception) when (exception.Number is 1205 or 1222 or 51000 or 2601 or 2627)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException
+            { Number: 2601 or 2627 })
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.ConflitoConcorrencia,
+                "A operação conflitou com outra alteração de estoque; repita com a mesma chave.")
+                .ConfigureAwait(false);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                OperacaoEstoqueInsumoStatus.OperacaoInvalida,
                 exception.Message).ConfigureAwait(false);
         }
         catch
@@ -393,10 +978,151 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         return RegistrarEntradaInsumoResult.Failure(status, erro);
     }
 
+    private async Task<OperacaoEstoqueInsumoResult> ReverterComFalhaAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        OperacaoEstoqueInsumoStatus status,
+        string erro)
+    {
+        await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        _dbContext.ChangeTracker.Clear();
+        return OperacaoEstoqueInsumoResult.Failure(status, erro);
+    }
+
     private static async Task ReverterSePossivelAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
     {
         await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private async Task<OperacaoEstoqueInsumoResult?> BuscarResultadoRepetidoAsync(
+        Guid responsavelId,
+        string chave,
+        byte[] fingerprint,
+        CancellationToken cancellationToken)
+    {
+        var movement = await _dbContext.MovimentosInsumo.SingleOrDefaultAsync(
+                item => item.ResponsavelId == responsavelId && item.ChaveIdempotencia == chave,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (movement is not null)
+        {
+            return CryptographicOperations.FixedTimeEquals(movement.FingerprintRequisicao, fingerprint)
+                ? OperacaoEstoqueInsumoResult.Success(movement)
+                : OperacaoEstoqueInsumoResult.Failure(
+                    OperacaoEstoqueInsumoStatus.ConflitoIdempotencia,
+                    "A chave de idempotência já foi usada com outros dados.");
+        }
+
+        var noDifference = await _dbContext.AjustesSemDiferencaInsumo.SingleOrDefaultAsync(
+                item => item.ResponsavelId == responsavelId && item.ChaveIdempotencia == chave,
+                cancellationToken)
+            .ConfigureAwait(false);
+        if (noDifference is null)
+        {
+            return null;
+        }
+
+        return CryptographicOperations.FixedTimeEquals(noDifference.FingerprintRequisicao, fingerprint)
+            ? OperacaoEstoqueInsumoResult.NoDifference()
+            : OperacaoEstoqueInsumoResult.Failure(
+                OperacaoEstoqueInsumoStatus.ConflitoIdempotencia,
+                "A chave de idempotência já foi usada com outros dados.");
+    }
+
+    private async Task<(LoteInsumo? Lote, OperacaoEstoqueInsumoStatus? Erro)> ResolverLoteAsync(
+        InsumoEstoque insumo,
+        Guid? loteId,
+        CancellationToken cancellationToken)
+    {
+        if (insumo.ControlaLote != loteId.HasValue)
+        {
+            return (null, OperacaoEstoqueInsumoStatus.OperacaoInvalida);
+        }
+
+        if (loteId is null)
+        {
+            return (null, null);
+        }
+
+        var lote = await _dbContext.LotesInsumo.SingleOrDefaultAsync(
+                item => item.Id == loteId.Value && item.InsumoId == insumo.Id,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return lote is null
+            ? (null, OperacaoEstoqueInsumoStatus.LoteNaoEncontrado)
+            : (lote, null);
+    }
+
+    private Task<SaldoInsumo?> ObterSaldoAsync(
+        Guid insumoId,
+        Guid? loteId,
+        CancellationToken cancellationToken) =>
+        _dbContext.SaldosInsumo.SingleOrDefaultAsync(
+            item => item.InsumoId == insumoId && item.LoteId == loteId,
+            cancellationToken);
+
+    private bool VersaoSaldoCorresponde(SaldoInsumo? saldo, byte[]? versaoEsperada)
+    {
+        if (saldo is null)
+        {
+            return versaoEsperada is null;
+        }
+
+        if (versaoEsperada is null)
+        {
+            return false;
+        }
+
+        var versaoAtual = _dbContext.Entry(saldo).Property<byte[]>("Versao").CurrentValue;
+        return versaoAtual is not null
+            && CryptographicOperations.FixedTimeEquals(versaoAtual, versaoEsperada);
+    }
+
+    private SaldoInsumo AplicarMovimento(
+        InsumoEstoque insumo,
+        LoteInsumo? lote,
+        SaldoInsumo? saldo,
+        MovimentoInsumo movimento)
+    {
+        if (saldo is null)
+        {
+            saldo = SaldoInsumo.CriarZero(insumo, lote);
+            _dbContext.SaldosInsumo.Add(saldo);
+        }
+
+        insumo.AplicarMovimento(saldo, movimento);
+        return saldo;
+    }
+
+    private static string? ValidarCabecalhoOperacao(
+        Guid? insumoId,
+        Guid responsavelId,
+        string? chave,
+        string? motivo,
+        string? observacao)
+    {
+        if (insumoId == Guid.Empty || responsavelId == Guid.Empty)
+        {
+            return "Insumo e responsável devem ter identificadores válidos.";
+        }
+
+        if (chave is null)
+        {
+            return "A chave de idempotência é obrigatória e deve ter até 128 caracteres.";
+        }
+
+        if (string.IsNullOrWhiteSpace(motivo)
+            || motivo.Length > MovimentoInsumo.MotivoMaxLength)
+        {
+            return $"O motivo é obrigatório e deve ter até {MovimentoInsumo.MotivoMaxLength} caracteres.";
+        }
+
+        if (observacao?.Length > MovimentoInsumo.ObservacaoMaxLength)
+        {
+            return $"A observação não pode exceder {MovimentoInsumo.ObservacaoMaxLength} caracteres.";
+        }
+
+        return null;
     }
 
     private static string? NormalizarChaveIdempotencia(string? chave)
@@ -414,9 +1140,9 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
     private static string? ValidarTipoQuantidadeEObservacao(RegistrarEntradaInsumoInput input)
     {
-        if (!Enum.IsDefined(input.Tipo))
+        if (input.Tipo is not (TipoMovimentoInsumo.EstoqueInicial or TipoMovimentoInsumo.Aquisicao))
         {
-            return "Tipo de entrada inválido.";
+            return "Tipo de movimento não permitido no registro de entrada.";
         }
 
         if (input.ResponsavelId == Guid.Empty)
@@ -513,6 +1239,58 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         return SHA256.HashData(stream.ToArray());
     }
 
+    private static byte[] CalcularFingerprint(RegistrarSaidaInsumoInput input)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            Escrever(writer, input.InsumoId);
+            Escrever(writer, input.ResponsavelId);
+            Escrever(writer, (short)input.Tipo);
+            Escrever(writer, input.QuantidadeOriginal);
+            Escrever(writer, (short)input.UnidadeOriginal);
+            Escrever(writer, input.LoteId);
+            Escrever(writer, input.Motivo);
+            Escrever(writer, input.Observacao);
+        }
+
+        return SHA256.HashData(stream.ToArray());
+    }
+
+    private static byte[] CalcularFingerprint(AjustarContagemInsumoInput input)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            Escrever(writer, input.InsumoId);
+            Escrever(writer, input.ResponsavelId);
+            Escrever(writer, (short)TipoMovimentoInsumo.AjusteInventario);
+            Escrever(writer, input.QuantidadeEncontrada);
+            Escrever(writer, (short)input.UnidadeOriginal);
+            Escrever(writer, input.LoteId);
+            Escrever(writer, input.VersaoSaldoEsperada);
+            Escrever(writer, input.Motivo);
+            Escrever(writer, input.Observacao);
+        }
+
+        return SHA256.HashData(stream.ToArray());
+    }
+
+    private static byte[] CalcularFingerprint(EstornarMovimentoInsumoInput input)
+    {
+        using var stream = new MemoryStream();
+        using (var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true))
+        {
+            Escrever(writer, (short)TipoMovimentoInsumo.Estorno);
+            Escrever(writer, input.MovimentoOriginalId);
+            Escrever(writer, input.ResponsavelId);
+            Escrever(writer, input.Motivo);
+            Escrever(writer, input.Observacao);
+        }
+
+        return SHA256.HashData(stream.ToArray());
+    }
+
     private static void Escrever(BinaryWriter writer, Guid value) => writer.Write(value.ToByteArray());
     private static void Escrever(BinaryWriter writer, Guid? value)
     {
@@ -549,6 +1327,16 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         writer.Write(value is not null);
         if (value is not null)
         {
+            writer.Write(value);
+        }
+    }
+
+    private static void Escrever(BinaryWriter writer, byte[]? value)
+    {
+        writer.Write(value is not null);
+        if (value is not null)
+        {
+            writer.Write(value.Length);
             writer.Write(value);
         }
     }

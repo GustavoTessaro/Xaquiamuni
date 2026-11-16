@@ -12,8 +12,8 @@ namespace Xaquiamuni.Tests.Integration;
 [Trait("Category", "SqlServerIntegration")]
 public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
 {
-    private const string MigrationId = "20261116173714_RegistrarEntradasInsumos";
-    private const string PreviousMigrationId = "20261116171157_PersistirLotesESaldosInsumo";
+    private const string MigrationId = "20261116182802_ImplementarSaidasAjustesEEstornosInsumo";
+    private const string PreviousMigrationId = "20261116173714_RegistrarEntradasInsumos";
 
     [SqlServerIntegrationFact]
     public async Task Migration_AddsLedgerAndAppendOnlyTriggerAndSupportsUpDownUp()
@@ -23,10 +23,15 @@ public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
         var migrator = context.GetService<IMigrator>();
 
         await migrator.MigrateAsync(PreviousMigrationId);
-        Assert.DoesNotContain(
+        Assert.Contains(
             "MovimentosInsumo",
             await context.Database.SqlQuery<string>(
                 $"SELECT [name] AS [Value] FROM [sys].[tables] WHERE [name] = N'MovimentosInsumo'")
+                .ToListAsync());
+        Assert.DoesNotContain(
+            "AjustesSemDiferencaInsumo",
+            await context.Database.SqlQuery<string>(
+                $"SELECT [name] AS [Value] FROM [sys].[tables] WHERE [name] = N'AjustesSemDiferencaInsumo'")
                 .ToListAsync());
 
         await migrator.MigrateAsync(MigrationId);
@@ -41,13 +46,43 @@ public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
             await context.Database.SqlQuery<int>(
                     $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_MovimentosInsumo_AppendOnly'")
                 .SingleAsync());
+        Assert.Equal(
+            1,
+            await context.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_MovimentosInsumo_Estorno_Valid'")
+                .SingleAsync());
+        Assert.Equal(
+            1,
+            await context.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_AjustesSemDiferencaInsumo_AppendOnly'")
+                .SingleAsync());
+        Assert.Contains(
+            "AjustesSemDiferencaInsumo",
+            await context.Database.SqlQuery<string>(
+                $"SELECT [name] AS [Value] FROM [sys].[tables] WHERE [name] = N'AjustesSemDiferencaInsumo'")
+                .ToListAsync());
 
         await migrator.MigrateAsync(PreviousMigrationId);
         Assert.Equal(
-            0,
+            1,
             await context.Database.SqlQuery<int>(
                     $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_MovimentosInsumo_AppendOnly'")
                 .SingleAsync());
+        Assert.Equal(
+            0,
+            await context.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_MovimentosInsumo_Estorno_Valid'")
+                .SingleAsync());
+        Assert.Equal(
+            0,
+            await context.Database.SqlQuery<int>(
+                    $"SELECT COUNT(*) AS [Value] FROM [sys].[triggers] WHERE [name] = N'TR_AjustesSemDiferencaInsumo_AppendOnly'")
+                .SingleAsync());
+        Assert.DoesNotContain(
+            "AjustesSemDiferencaInsumo",
+            await context.Database.SqlQuery<string>(
+                $"SELECT [name] AS [Value] FROM [sys].[tables] WHERE [name] = N'AjustesSemDiferencaInsumo'")
+                .ToListAsync());
         await migrator.MigrateAsync(MigrationId);
         Assert.Contains(MigrationId, await context.Database.GetAppliedMigrationsAsync());
     }
@@ -494,6 +529,376 @@ public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task ManualExitIsAtomicIdempotentAndCannotMakeBalanceNegative()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar("Cera", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.Add(supply);
+        await context.SaveChangesAsync();
+        Assert.True((await RegistrarAsync(database, CriarEntrada(
+            supply.Id, TipoMovimentoInsumo.EstoqueInicial, 10m, UnidadeFisicaEstoque.Grama, "exit-opening")))
+            .Sucesso);
+
+        var input = CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            3m,
+            UnidadeFisicaEstoque.Grama,
+            "exit-manual",
+            "Consumo operacional autorizado");
+        var first = await RegistrarSaidaAsync(database, input);
+        var replay = await RegistrarSaidaAsync(database, input);
+        Assert.True(first.Sucesso, first.Erro);
+        Assert.True(replay.Sucesso, replay.Erro);
+        Assert.Equal(first.Movimento!.Id, replay.Movimento!.Id);
+        Assert.Equal(DirecaoMovimentoInsumo.Saida, first.Movimento.Direcao);
+        Assert.Equal(10m, first.Movimento.SaldoAnterior.ValorBase);
+        Assert.Equal(7m, first.Movimento.SaldoPosterior.ValorBase);
+
+        var insufficient = await RegistrarSaidaAsync(database, CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            8m,
+            UnidadeFisicaEstoque.Grama,
+            "exit-insufficient",
+            "Saída maior que saldo"));
+        Assert.Equal(OperacaoEstoqueInsumoStatus.SaldoInsuficiente, insufficient.Status);
+        Assert.Equal(7m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id))
+            .QuantidadeFisica.ValorBase);
+        Assert.Equal(2, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == supply.Id));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task LossAndDisposalCanRemoveExpiredBlockedLotButOperationalExitCannot()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar(
+            "Óleo",
+            TipoInsumoEstoque.MateriaPrima,
+            UnidadeFisicaEstoque.Mililitro,
+            controlaLote: true);
+        context.InsumosEstoque.Add(supply);
+        await context.SaveChangesAsync();
+        var opening = await RegistrarAsync(database, CriarEntrada(
+            supply.Id,
+            TipoMovimentoInsumo.EstoqueInicial,
+            3m,
+            UnidadeFisicaEstoque.Mililitro,
+            "blocked-lot-opening",
+            identificacaoLote: "OLEO-VENCIDO",
+            dataEntradaLote: new DateOnly(2020, 1, 1),
+            validadeLote: new DateOnly(2020, 1, 2),
+            loteBloqueado: true));
+        Assert.True(opening.Sucesso, opening.Erro);
+        var lotId = opening.Movimento!.LoteId!.Value;
+
+        var operational = await RegistrarSaidaAsync(database, CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            1m,
+            UnidadeFisicaEstoque.Mililitro,
+            "blocked-operational",
+            "Consumo",
+            lotId));
+        Assert.Equal(OperacaoEstoqueInsumoStatus.LoteInelegivel, operational.Status);
+
+        var loss = await RegistrarSaidaAsync(database, CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.Perda,
+            1m,
+            UnidadeFisicaEstoque.Mililitro,
+            "expired-loss",
+            "Perda por vencimento",
+            lotId));
+        var disposal = await RegistrarSaidaAsync(database, CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.Descarte,
+            1m,
+            UnidadeFisicaEstoque.Mililitro,
+            "blocked-disposal",
+            "Descarte autorizado",
+            lotId));
+
+        Assert.True(loss.Sucesso, loss.Erro);
+        Assert.True(disposal.Sucesso, disposal.Erro);
+        Assert.Equal(TipoMovimentoInsumo.Perda, loss.Movimento!.Tipo);
+        Assert.Equal(TipoMovimentoInsumo.Descarte, disposal.Movimento!.Tipo);
+        Assert.Equal(lotId, loss.Movimento.LoteId);
+        Assert.Equal(1m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id))
+            .QuantidadeFisica.ValorBase);
+        Assert.Equal(3, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == supply.Id));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task InventoryCountAppliesSignedDifferenceAndStoresNoDifferenceIdempotently()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar("Pigmento", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.Add(supply);
+        await context.SaveChangesAsync();
+        var actor = Guid.NewGuid();
+
+        var firstCount = CriarContagem(
+            supply.Id, 5m, UnidadeFisicaEstoque.Grama, null, null, "count-positive", actor);
+        var increase = await AjustarAsync(database, firstCount);
+        Assert.True(increase.Sucesso, increase.Erro);
+        Assert.Equal(TipoMovimentoInsumo.AjusteInventario, increase.Movimento!.Tipo);
+        Assert.Equal(DirecaoMovimentoInsumo.Entrada, increase.Movimento.Direcao);
+        Assert.Equal(5m, increase.Movimento.QuantidadeBase.ValorBase);
+        Assert.Equal(5m, increase.Movimento.QuantidadeContada!.ValorBase);
+        Assert.Equal(increase.Movimento.Id, (await AjustarAsync(database, firstCount)).Movimento!.Id);
+
+        context.ChangeTracker.Clear();
+        var balance = await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id);
+        var version = context.Entry(balance).Property<byte[]>("Versao").CurrentValue!;
+        var lowerCount = CriarContagem(
+            supply.Id, 3m, UnidadeFisicaEstoque.Grama, null, version, "count-negative", actor);
+        var decrease = await AjustarAsync(database, lowerCount);
+        Assert.True(decrease.Sucesso, decrease.Erro);
+        Assert.Equal(DirecaoMovimentoInsumo.Saida, decrease.Movimento!.Direcao);
+        Assert.Equal(2m, decrease.Movimento.QuantidadeBase.ValorBase);
+        Assert.Equal(3m, decrease.Movimento.SaldoPosterior.ValorBase);
+        Assert.Equal(3m, decrease.Movimento.QuantidadeContada!.ValorBase);
+
+        context.ChangeTracker.Clear();
+        balance = await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id);
+        version = context.Entry(balance).Property<byte[]>("Versao").CurrentValue!;
+        var unchangedCount = CriarContagem(
+            supply.Id, 3m, UnidadeFisicaEstoque.Grama, null, version, "count-no-difference", actor);
+        var noDifference = await AjustarAsync(database, unchangedCount);
+        Assert.Equal(OperacaoEstoqueInsumoStatus.SemDiferenca, noDifference.Status);
+        Assert.Null(noDifference.Movimento);
+        Assert.Equal(2, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == supply.Id));
+        Assert.Equal(1, await context.AjustesSemDiferencaInsumo.CountAsync());
+        await Assert.ThrowsAsync<SqlException>(() => context.Database.ExecuteSqlInterpolatedAsync($"""
+            DELETE FROM [AjustesSemDiferencaInsumo]
+            WHERE [ResponsavelId] = {actor} AND [ChaveIdempotencia] = {"count-no-difference"};
+            """));
+
+        var replay = await AjustarAsync(database, unchangedCount);
+        Assert.Equal(OperacaoEstoqueInsumoStatus.SemDiferenca, replay.Status);
+        var changedPayload = await AjustarAsync(database, unchangedCount with { QuantidadeEncontrada = 2m });
+        Assert.Equal(OperacaoEstoqueInsumoStatus.ConflitoIdempotencia, changedPayload.Status);
+
+        var crossOperationKey = await RegistrarAsync(database, CriarEntrada(
+            supply.Id,
+            TipoMovimentoInsumo.Aquisicao,
+            1m,
+            UnidadeFisicaEstoque.Grama,
+            "count-no-difference") with { ResponsavelId = actor });
+        Assert.Equal(RegistrarEntradaInsumoStatus.ConflitoIdempotencia, crossOperationKey.Status);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task InventoryCountRequiresExactLotAndRejectsStaleRowVersion()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var tracked = InsumoEstoque.Criar(
+            "Essência",
+            TipoInsumoEstoque.MateriaPrima,
+            UnidadeFisicaEstoque.Mililitro,
+            controlaLote: true);
+        var aggregate = InsumoEstoque.Criar(
+            "Cera",
+            TipoInsumoEstoque.MateriaPrima,
+            UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.AddRange(tracked, aggregate);
+        await context.SaveChangesAsync();
+        var opening = await RegistrarAsync(database, CriarEntrada(
+            tracked.Id,
+            TipoMovimentoInsumo.EstoqueInicial,
+            5m,
+            UnidadeFisicaEstoque.Mililitro,
+            "count-lot-opening",
+            identificacaoLote: "ESSENCIA-1",
+            dataEntradaLote: new DateOnly(2026, 11, 16)));
+        Assert.True(opening.Sucesso, opening.Erro);
+        var lotId = opening.Movimento!.LoteId!.Value;
+        var lotBalance = await context.SaldosInsumo.SingleAsync(item => item.InsumoId == tracked.Id);
+        var lotVersion = context.Entry(lotBalance).Property<byte[]>("Versao").CurrentValue!;
+
+        var missingLot = await AjustarAsync(database, CriarContagem(
+            tracked.Id, 4m, UnidadeFisicaEstoque.Mililitro, null, lotVersion, "count-lot-missing"));
+        Assert.Equal(OperacaoEstoqueInsumoStatus.OperacaoInvalida, missingLot.Status);
+        var lotCount = await AjustarAsync(database, CriarContagem(
+            tracked.Id, 4m, UnidadeFisicaEstoque.Mililitro, lotId, lotVersion, "count-lot-specific"));
+        Assert.True(lotCount.Sucesso, lotCount.Erro);
+        Assert.Equal(lotId, lotCount.Movimento!.LoteId);
+        Assert.Equal(4m, lotCount.Movimento.SaldoPosterior.ValorBase);
+
+        var aggregateOpening = await RegistrarAsync(database, CriarEntrada(
+            aggregate.Id, TipoMovimentoInsumo.EstoqueInicial, 5m, UnidadeFisicaEstoque.Grama, "count-aggregate-opening"));
+        Assert.True(aggregateOpening.Sucesso, aggregateOpening.Erro);
+        context.ChangeTracker.Clear();
+        var aggregateBalance = await context.SaldosInsumo.SingleAsync(item => item.InsumoId == aggregate.Id);
+        var staleVersion = context.Entry(aggregateBalance).Property<byte[]>("Versao").CurrentValue!;
+        Assert.True((await RegistrarSaidaAsync(database, CriarSaida(
+            aggregate.Id, TipoMovimentoInsumo.SaidaManual, 1m, UnidadeFisicaEstoque.Grama,
+            "count-concurrent-exit", "Saída concorrente"))).Sucesso);
+
+        var staleCount = await AjustarAsync(database, CriarContagem(
+            aggregate.Id, 4m, UnidadeFisicaEstoque.Grama, null, staleVersion, "count-stale"));
+        Assert.Equal(OperacaoEstoqueInsumoStatus.ConflitoConcorrencia, staleCount.Status);
+        context.ChangeTracker.Clear();
+        Assert.Equal(4m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == aggregate.Id))
+            .QuantidadeFisica.ValorBase);
+        Assert.Equal(2, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == aggregate.Id));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ReversalLinksOriginalPreservesCostAndRejectsDuplicateOrInsufficientCompensation()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar("Base", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        var impossibleSupply = InsumoEstoque.Criar(
+            "Pigmento",
+            TipoInsumoEstoque.MateriaPrima,
+            UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.AddRange(supply, impossibleSupply);
+        await context.SaveChangesAsync();
+
+        var original = await RegistrarAsync(database, CriarEntrada(
+            supply.Id,
+            TipoMovimentoInsumo.Aquisicao,
+            5m,
+            UnidadeFisicaEstoque.Grama,
+            "reversal-original",
+            custoTotal: 7.25m));
+        Assert.True(original.Sucesso, original.Erro);
+        var reversalInput = new EstornarMovimentoInsumoInput(
+            original.Movimento!.Id,
+            Guid.NewGuid(),
+            "Correção da entrada",
+            "reversal-valid");
+        var reversal = await EstornarAsync(database, reversalInput);
+        Assert.True(reversal.Sucesso, reversal.Erro);
+        Assert.Equal(TipoMovimentoInsumo.Estorno, reversal.Movimento!.Tipo);
+        Assert.Equal(original.Movimento.Id, reversal.Movimento.MovimentoOriginalId);
+        Assert.Equal(DirecaoMovimentoInsumo.Saida, reversal.Movimento.Direcao);
+        Assert.Null(reversal.Movimento.CustoTotal);
+        Assert.Null(reversal.Movimento.CustoPorUnidadeBase);
+        Assert.Null(reversal.Movimento.FormaCompraId);
+        Assert.Null(reversal.Movimento.FatorCompra);
+        Assert.Equal(7.25m, (await context.MovimentosInsumo
+            .SingleAsync(item => item.Id == original.Movimento.Id)).CustoTotal);
+        Assert.Equal(0m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id))
+            .QuantidadeFisica.ValorBase);
+
+        var duplicate = await EstornarAsync(database, reversalInput with
+        {
+            ChaveIdempotencia = "reversal-second-key"
+        });
+        Assert.Equal(OperacaoEstoqueInsumoStatus.MovimentoJaEstornado, duplicate.Status);
+        var replay = await EstornarAsync(database, reversalInput);
+        Assert.Equal(reversal.Movimento.Id, replay.Movimento!.Id);
+        Assert.Equal(2, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == supply.Id));
+
+        var impossibleEntry = await RegistrarAsync(database, CriarEntrada(
+            impossibleSupply.Id,
+            TipoMovimentoInsumo.EstoqueInicial,
+            5m,
+            UnidadeFisicaEstoque.Grama,
+            "reversal-insufficient-opening"));
+        Assert.True(impossibleEntry.Sucesso, impossibleEntry.Erro);
+        Assert.True((await RegistrarSaidaAsync(database, CriarSaida(
+            impossibleSupply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            4m,
+            UnidadeFisicaEstoque.Grama,
+            "reversal-insufficient-exit",
+            "Consumo"))).Sucesso);
+        var insufficient = await EstornarAsync(database, new EstornarMovimentoInsumoInput(
+            impossibleEntry.Movimento!.Id,
+            Guid.NewGuid(),
+            "Estorno não disponível",
+            "reversal-insufficient"));
+        Assert.Equal(OperacaoEstoqueInsumoStatus.SaldoInsuficiente, insufficient.Status);
+        Assert.Equal(1m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == impossibleSupply.Id))
+            .QuantidadeFisica.ValorBase);
+        Assert.Equal(2, await context.MovimentosInsumo.CountAsync(item => item.InsumoId == impossibleSupply.Id));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task ConcurrentExitsAndPhysicalCountsAreSerializedAndIdempotent()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar("Cera", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.Add(supply);
+        await context.SaveChangesAsync();
+        Assert.True((await RegistrarAsync(database, CriarEntrada(
+            supply.Id, TipoMovimentoInsumo.EstoqueInicial, 10m, UnidadeFisicaEstoque.Grama, "concurrent-opening")))
+            .Sucesso);
+
+        var sameExit = CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            2m,
+            UnidadeFisicaEstoque.Grama,
+            "concurrent-exit-same",
+            "Consumo");
+        var retries = await Task.WhenAll(
+            RegistrarSaidaAsync(database, sameExit),
+            RegistrarSaidaAsync(database, sameExit));
+        Assert.All(retries, result => Assert.True(result.Sucesso, result.Erro));
+        Assert.Equal(retries[0].Movimento!.Id, retries[1].Movimento!.Id);
+
+        context.ChangeTracker.Clear();
+        var balance = await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id);
+        var version = context.Entry(balance).Property<byte[]>("Versao").CurrentValue!;
+        var counts = await Task.WhenAll(
+            AjustarAsync(database, CriarContagem(
+                supply.Id, 7m, UnidadeFisicaEstoque.Grama, null, version, "concurrent-count-a")),
+            AjustarAsync(database, CriarContagem(
+                supply.Id, 6m, UnidadeFisicaEstoque.Grama, null, version, "concurrent-count-b")));
+        Assert.Single(counts, result => result.Status == OperacaoEstoqueInsumoStatus.Sucesso);
+        Assert.Single(counts, result => result.Status == OperacaoEstoqueInsumoStatus.ConflitoConcorrencia);
+        Assert.Equal(1, await context.MovimentosInsumo.CountAsync(item =>
+            item.Tipo == TipoMovimentoInsumo.AjusteInventario));
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task FailedOutboundLedgerInsertRollsBackBalanceChange()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var supply = InsumoEstoque.Criar("Cera", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        context.InsumosEstoque.Add(supply);
+        await context.SaveChangesAsync();
+        Assert.True((await RegistrarAsync(database, CriarEntrada(
+            supply.Id, TipoMovimentoInsumo.EstoqueInicial, 10m, UnidadeFisicaEstoque.Grama, "outbound-rollback-opening")))
+            .Sucesso);
+        await context.Database.ExecuteSqlRawAsync("""
+            CREATE TRIGGER [dbo].[TR_Test_RejectOutboundMovement]
+            ON [dbo].[MovimentosInsumo]
+            AFTER INSERT
+            AS
+            BEGIN
+                IF EXISTS (SELECT 1 FROM inserted WHERE [Tipo] = 3)
+                    THROW 51007, 'Injected outbound movement failure.', 1;
+            END;
+            """);
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(() => RegistrarSaidaAsync(database, CriarSaida(
+            supply.Id,
+            TipoMovimentoInsumo.SaidaManual,
+            3m,
+            UnidadeFisicaEstoque.Grama,
+            "outbound-rollback",
+            "Teste de rollback")));
+        Assert.IsType<SqlException>(exception.InnerException);
+        context.ChangeTracker.Clear();
+        Assert.Equal(10m, (await context.SaldosInsumo.SingleAsync(item => item.InsumoId == supply.Id))
+            .QuantidadeFisica.ValorBase);
+        Assert.Single(await context.MovimentosInsumo.Where(item => item.InsumoId == supply.Id).ToListAsync());
+    }
+
     private static async Task<RegistrarEntradaInsumoResult> RegistrarAsync(
         SqlServerTestDatabase database,
         RegistrarEntradaInsumoInput input)
@@ -501,6 +906,33 @@ public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
         await using var scope = database.Services.CreateAsyncScope();
         return await scope.ServiceProvider.GetRequiredService<IRegistrarEntradaInsumo>()
             .ExecuteAsync(input);
+    }
+
+    private static async Task<OperacaoEstoqueInsumoResult> RegistrarSaidaAsync(
+        SqlServerTestDatabase database,
+        RegistrarSaidaInsumoInput input)
+    {
+        await using var scope = database.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IRegistrarSaidaInsumo>()
+            .ExecutarAsync(input);
+    }
+
+    private static async Task<OperacaoEstoqueInsumoResult> AjustarAsync(
+        SqlServerTestDatabase database,
+        AjustarContagemInsumoInput input)
+    {
+        await using var scope = database.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IAjustarContagemInsumo>()
+            .ExecutarAsync(input);
+    }
+
+    private static async Task<OperacaoEstoqueInsumoResult> EstornarAsync(
+        SqlServerTestDatabase database,
+        EstornarMovimentoInsumoInput input)
+    {
+        await using var scope = database.Services.CreateAsyncScope();
+        return await scope.ServiceProvider.GetRequiredService<IEstornarMovimentoInsumo>()
+            .ExecutarAsync(input);
     }
 
     private static async Task<AtualizarPoliticaLoteInsumoStatus> AtualizarPoliticaAsync(
@@ -541,5 +973,41 @@ public sealed class RegistroEntradaInsumoSqlServerIntegrationTests
             null,
             loteBloqueado,
             custoTotal,
+            chave);
+
+    private static RegistrarSaidaInsumoInput CriarSaida(
+        Guid insumoId,
+        TipoMovimentoInsumo tipo,
+        decimal quantidade,
+        UnidadeFisicaEstoque unidade,
+        string chave,
+        string motivo,
+        Guid? loteId = null) =>
+        new(
+            insumoId,
+            Guid.NewGuid(),
+            tipo,
+            quantidade,
+            unidade,
+            loteId,
+            motivo,
+            chave);
+
+    private static AjustarContagemInsumoInput CriarContagem(
+        Guid insumoId,
+        decimal quantidadeEncontrada,
+        UnidadeFisicaEstoque unidade,
+        Guid? loteId,
+        byte[]? versaoSaldoEsperada,
+        string chave,
+        Guid? responsavelId = null) =>
+        new(
+            insumoId,
+            responsavelId ?? Guid.NewGuid(),
+            quantidadeEncontrada,
+            unidade,
+            loteId,
+            versaoSaldoEsperada,
+            "Contagem física",
             chave);
 }

@@ -599,6 +599,35 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ProdutoVarianteCaracteristicaValores", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.AjusteSemDiferencaInsumo", b =>
+                {
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChaveIdempotencia")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<byte[]>("FingerprintRequisicao")
+                        .IsRequired()
+                        .HasColumnType("binary(32)");
+
+                    b.Property<DateTimeOffset>("RegistradoEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.HasKey("ResponsavelId", "ChaveIdempotencia");
+
+                    b.ToTable("AjustesSemDiferencaInsumo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_AjustesSemDiferencaInsumo_Chave_NotBlank", "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+
+                            t.HasCheckConstraint("CK_AjustesSemDiferencaInsumo_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_AjustesSemDiferencaInsumo_Timestamp_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -767,6 +796,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("decimal(18,2)");
 
+                    b.Property<short>("Direcao")
+                        .HasDefaultValue((short)1)
+                        .HasColumnType("smallint");
+
                     b.Property<byte[]>("FingerprintRequisicao")
                         .IsRequired()
                         .HasColumnType("binary(32)");
@@ -788,6 +821,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid?>("MovimentoOriginalId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Observacao")
                         .HasMaxLength(500)
@@ -811,6 +847,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("MovimentoOriginalId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MovimentosInsumo_MovimentoOriginalId")
+                        .HasFilter("[MovimentoOriginalId] IS NOT NULL");
+
                     b.HasIndex("ResponsavelId", "ChaveIdempotencia")
                         .IsUnique()
                         .HasDatabaseName("UX_MovimentosInsumo_ResponsavelId_ChaveIdempotencia");
@@ -820,17 +861,25 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.ToTable("MovimentosInsumo", null, t =>
                         {
-                            t.HasCheckConstraint("CK_MovimentosInsumo_Custo_Valid", "([CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR ([CustoTotal] IS NOT NULL AND [CustoPorUnidadeBase] IS NOT NULL AND [CustoTotal] >= 0 AND [CustoPorUnidadeBase] >= 0)");
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Contagem_Conciliada", "[Tipo] <> 6 OR ([QuantidadeContada_ValorBase] = [SaldoPosterior_ValorBase] AND [QuantidadeBase_ValorBase] = ABS([QuantidadeContada_ValorBase] - [SaldoAnterior_ValorBase]))");
 
-                            t.HasCheckConstraint("CK_MovimentosInsumo_Entrada_Valid", "[QuantidadeOriginal] > 0 AND [QuantidadeBase_ValorBase] > 0 AND [SaldoAnterior_ValorBase] >= 0 AND [SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase] AND [SaldoAnterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoPosterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoAnterior_Dimensao] = [QuantidadeBase_Dimensao] AND [SaldoPosterior_Dimensao] = [QuantidadeBase_Dimensao]");
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Contagem_Valid", "(([Tipo] = 6 AND [QuantidadeContada_ValorBase] IS NOT NULL AND [QuantidadeContada_UnidadeBase] IS NOT NULL AND [QuantidadeContada_Dimensao] IS NOT NULL AND [QuantidadeContada_ValorBase] >= 0 AND [QuantidadeContada_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [QuantidadeContada_Dimensao] = [QuantidadeBase_Dimensao] AND (([UnidadeOriginal] = 1 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]) OR ([UnidadeOriginal] = 2 AND [QuantidadeOriginal] * 1000 = [QuantidadeContada_ValorBase]) OR ([UnidadeOriginal] = 3 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]) OR ([UnidadeOriginal] = 4 AND [QuantidadeOriginal] * 1000 = [QuantidadeContada_ValorBase]) OR ([UnidadeOriginal] = 5 AND [QuantidadeOriginal] = [QuantidadeContada_ValorBase]))) OR ([Tipo] <> 6 AND [QuantidadeContada_ValorBase] IS NULL AND [QuantidadeContada_UnidadeBase] IS NULL AND [QuantidadeContada_Dimensao] IS NULL))");
 
-                            t.HasCheckConstraint("CK_MovimentosInsumo_Origem_Valid", "(([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL AND [QuantidadeOriginal] > 0) OR ([FormaCompraId] IS NOT NULL AND [FormaCompraNome] IS NOT NULL AND LEN(LTRIM(RTRIM([FormaCompraNome]))) > 0 AND [FatorCompra_ValorBase] > 0 AND [FatorCompra_UnidadeBase] IS NOT NULL AND [FatorCompra_Dimensao] IS NOT NULL AND [UnidadeOriginal] IS NULL AND [QuantidadeOriginal] = FLOOR([QuantidadeOriginal]) AND [FatorCompra_Dimensao] = [QuantidadeBase_Dimensao] AND (([FatorCompra_UnidadeBase] = 1 AND [FatorCompra_Dimensao] = 1) OR ([FatorCompra_UnidadeBase] = 3 AND [FatorCompra_Dimensao] = 2) OR ([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3)))) AND (([UnidadeOriginal] IS NULL) OR ([UnidadeOriginal] = 1 AND [QuantidadeBase_UnidadeBase] = 1) OR ([UnidadeOriginal] = 2 AND [QuantidadeBase_UnidadeBase] = 1 OR [UnidadeOriginal] IN (3, 4) AND [QuantidadeBase_UnidadeBase] = 3 OR [UnidadeOriginal] = 5 AND [QuantidadeBase_UnidadeBase] = 5))");
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Custo_Valid", "([CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR ([Tipo] IN (1, 2) AND [CustoTotal] IS NOT NULL AND [CustoPorUnidadeBase] IS NOT NULL AND [CustoTotal] >= 0 AND [CustoPorUnidadeBase] >= 0)");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Direcao_Saldo_Valid", "[Direcao] IN (-1, 1) AND [QuantidadeBase_ValorBase] > 0 AND [SaldoAnterior_ValorBase] >= 0 AND (([Direcao] = 1 AND [SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase]) OR ([Direcao] = -1 AND [SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] - [QuantidadeBase_ValorBase] AND [SaldoPosterior_ValorBase] >= 0)) AND [SaldoAnterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoPosterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoAnterior_Dimensao] = [QuantidadeBase_Dimensao] AND [SaldoPosterior_Dimensao] = [QuantidadeBase_Dimensao]");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Estorno_Valid", "([Tipo] = 7 AND [MovimentoOriginalId] IS NOT NULL AND [MovimentoOriginalId] <> [Id] AND [CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR ([Tipo] <> 7 AND [MovimentoOriginalId] IS NULL)");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Origem_Valid", "(([Tipo] IN (1, 2) AND (([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL AND [QuantidadeOriginal] > 0) OR ([FormaCompraId] IS NOT NULL AND [FormaCompraNome] IS NOT NULL AND LEN(LTRIM(RTRIM([FormaCompraNome]))) > 0 AND [FatorCompra_ValorBase] > 0 AND [FatorCompra_UnidadeBase] IS NOT NULL AND [FatorCompra_Dimensao] IS NOT NULL AND [UnidadeOriginal] IS NULL AND [QuantidadeOriginal] = FLOOR([QuantidadeOriginal]) AND [FatorCompra_Dimensao] = [QuantidadeBase_Dimensao] AND (([FatorCompra_UnidadeBase] = 1 AND [FatorCompra_Dimensao] = 1) OR ([FatorCompra_UnidadeBase] = 3 AND [FatorCompra_Dimensao] = 2) OR ([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3))))) OR ([Tipo] IN (3, 4, 5, 6, 7) AND [FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL AND (([Tipo] = 6 AND [QuantidadeOriginal] >= 0) OR ([Tipo] <> 6 AND [QuantidadeOriginal] > 0)))) AND (([UnidadeOriginal] IS NULL) OR ([UnidadeOriginal] = 1 AND [QuantidadeBase_UnidadeBase] = 1) OR ([UnidadeOriginal] = 2 AND [QuantidadeBase_UnidadeBase] = 1 OR [UnidadeOriginal] IN (3, 4) AND [QuantidadeBase_UnidadeBase] = 3 OR [UnidadeOriginal] = 5 AND [QuantidadeBase_UnidadeBase] = 5))");
 
                             t.HasCheckConstraint("CK_MovimentosInsumo_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
 
                             t.HasCheckConstraint("CK_MovimentosInsumo_Timestamps_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
 
-                            t.HasCheckConstraint("CK_MovimentosInsumo_Tipo_Valid", "[Tipo] IN (1, 2)");
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Tipo_Direcao_Valid", "([Tipo] IN (1, 2) AND [Direcao] = 1) OR ([Tipo] IN (3, 4, 5) AND [Direcao] = -1) OR ([Tipo] IN (6, 7) AND [Direcao] IN (-1, 1))");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Tipo_Valid", "[Tipo] IN (1, 2, 3, 4, 5, 6, 7)");
                         });
                 });
 
@@ -1333,6 +1382,12 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired()
                         .HasConstraintName("FK_MovimentosInsumo_InsumosEstoque_InsumoId");
 
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoOriginalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_MovimentosInsumo_MovimentosInsumo_MovimentoOriginalId");
+
                     b.HasOne("Xaquiamuni.Dominio.Estoque.LoteInsumo", null)
                         .WithMany()
                         .HasForeignKey("InsumoId", "LoteId")
@@ -1383,6 +1438,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                                 .HasPrecision(18, 6)
                                 .HasColumnType("decimal(18,6)")
                                 .HasColumnName("QuantidadeBase_ValorBase");
+
+                            b1.HasKey("MovimentoInsumoId");
+
+                            b1.ToTable("MovimentosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoInsumoId");
+                        });
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "QuantidadeContada", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("QuantidadeContada_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("QuantidadeContada_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("QuantidadeContada_ValorBase");
 
                             b1.HasKey("MovimentoInsumoId");
 
@@ -1448,6 +1529,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.Navigation("QuantidadeBase")
                         .IsRequired();
+
+                    b.Navigation("QuantidadeContada");
 
                     b.Navigation("SaldoAnterior")
                         .IsRequired();
