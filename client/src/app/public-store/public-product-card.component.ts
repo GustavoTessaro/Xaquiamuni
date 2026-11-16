@@ -1,23 +1,18 @@
 import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
-import { ProdutoCatalogoResumo } from './catalogo-publico.service';
-
-const saleUnitLabels: Record<string, string> = {
-  UN: 'Unidade',
-  KIT: 'Kit',
-  PAR: 'Par',
-  PCT: 'Pacote',
-  CX: 'Caixa',
-  CJ: 'Conjunto',
-};
+import { RouterLink } from '@angular/router';
+import { CatalogoPublicoRetorno, ProdutoCatalogoResumo } from './catalogo-publico.service';
+import { formatarUnidadeVenda } from './catalogo-formatacao';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [RouterLink],
   selector: 'app-public-product-card',
   styleUrl: './public-product-card.component.css',
   templateUrl: './public-product-card.component.html',
 })
 export class PublicProductCardComponent {
   readonly product = input.required<ProdutoCatalogoResumo>();
+  readonly catalogReturn = input<CatalogoPublicoRetorno | null>(null);
   protected readonly imageUnavailable = signal(false);
 
   private readonly resetImageFallback = effect(() => {
@@ -46,9 +41,11 @@ export class PublicProductCardComponent {
   }
 
   protected get units(): string {
-    return [...new Set(this.product().unidadesVenda)]
-      .map((unit) => saleUnitLabels[unit.trim().toUpperCase()] ?? unit)
-      .join(' · ');
+    return [...new Set(this.product().unidadesVenda)].map(formatarUnidadeVenda).join(' · ');
+  }
+
+  protected get returnQueryParams(): CatalogoPublicoRetorno | null {
+    return this.catalogReturn();
   }
 
   protected get measures(): string[] {

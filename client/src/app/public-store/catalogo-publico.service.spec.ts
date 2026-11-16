@@ -1,10 +1,7 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import {
-  CategoriaCatalogoPublico,
-  CatalogoPublicoService,
-} from './catalogo-publico.service';
+import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-publico.service';
 
 describe('CatalogoPublicoService', () => {
   let service: CatalogoPublicoService;
@@ -40,20 +37,22 @@ describe('CatalogoPublicoService', () => {
   });
 
   it('sends search, category and pagination using the public contract', () => {
-    service.listarProdutos({
-      busca: '  lavanda  ',
-      categoriaId: 'category-1',
-      pagina: 2,
-      itensPorPagina: 8,
-    }).subscribe();
+    service
+      .listarProdutos({
+        busca: '  lavanda  ',
+        categoriaId: 'category-1',
+        pagina: 2,
+        itensPorPagina: 8,
+      })
+      .subscribe();
 
     const request = http.expectOne(
       (candidate) =>
-        candidate.url === '/api/catalogo/produtos'
-        && candidate.params.get('busca') === 'lavanda'
-        && candidate.params.get('categoriaId') === 'category-1'
-        && candidate.params.get('pagina') === '2'
-        && candidate.params.get('itensPorPagina') === '8',
+        candidate.url === '/api/catalogo/produtos' &&
+        candidate.params.get('busca') === 'lavanda' &&
+        candidate.params.get('categoriaId') === 'category-1' &&
+        candidate.params.get('pagina') === '2' &&
+        candidate.params.get('itensPorPagina') === '8',
     );
     expect(request.request.method).toBe('GET');
     request.flush({
@@ -63,5 +62,16 @@ describe('CatalogoPublicoService', () => {
       totalItens: 0,
       totalPaginas: 0,
     });
+  });
+
+  it('loads public product details by ID', () => {
+    let result: unknown;
+    service.consultarProduto('product-1').subscribe((product) => (result = product));
+
+    const request = http.expectOne('/api/catalogo/produtos/product-1');
+    expect(request.request.method).toBe('GET');
+    request.flush({ id: 'product-1' });
+
+    expect(result).toEqual({ id: 'product-1' });
   });
 });

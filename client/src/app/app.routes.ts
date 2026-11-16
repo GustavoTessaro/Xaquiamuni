@@ -46,6 +46,13 @@ export const routes: Routes = [
         pathMatch: 'full',
       },
       {
+        path: 'produtos/:id',
+        loadComponent: () =>
+          import('./public-store/produto-detalhe.component').then(
+            (module) => module.ProdutoDetalheComponent,
+          ),
+      },
+      {
         path: 'produtos',
         loadComponent: () =>
           import('./public-store/catalogo-publico.component').then(

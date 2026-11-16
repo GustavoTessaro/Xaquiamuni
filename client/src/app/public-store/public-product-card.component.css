@@ -4,15 +4,23 @@
 }
 
 .product-card {
+  display: block;
   height: 100%;
   overflow: hidden;
   border: 1px solid #e8e4d7;
   border-radius: 1rem;
   background: #fff;
+  color: inherit;
   box-shadow: 0 8px 22px rgb(34 54 39 / 5%);
+  text-decoration: none;
   transition:
     transform 180ms ease,
     box-shadow 180ms ease;
+}
+
+.product-card:focus-visible {
+  outline: 3px solid #9a8450;
+  outline-offset: 3px;
 }
 
 .product-card:hover {

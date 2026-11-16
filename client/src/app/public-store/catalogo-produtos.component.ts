@@ -1,10 +1,19 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, OnInit, inject, input, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  OnInit,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subject, catchError, distinctUntilChanged, map, of, switchMap } from 'rxjs';
 import {
   CatalogoPublicoFiltro,
   CatalogoPublicoPagina,
+  CatalogoPublicoRetorno,
   CatalogoPublicoService,
   CategoriaCatalogoPublico,
   ProdutoCatalogoResumo,
@@ -84,8 +93,7 @@ export class CatalogoProdutosComponent implements OnInit {
         })),
         distinctUntilChanged(
           (previous, current) =>
-            previous.busca === current.busca
-            && previous.categoriaId === current.categoriaId,
+            previous.busca === current.busca && previous.categoriaId === current.categoriaId,
         ),
         takeUntilDestroyed(this.destroyRef),
       )
@@ -151,6 +159,15 @@ export class CatalogoProdutosComponent implements OnInit {
     return this.homePage() && this.totalItems() > 0;
   }
 
+  protected get catalogReturn(): CatalogoPublicoRetorno | null {
+    return this.homePage()
+      ? null
+      : {
+          busca: this.currentFilter.busca,
+          categoriaId: this.currentFilter.categoriaId,
+        };
+  }
+
   private requestPage(page: number, append: boolean): void {
     const request: ProductRequest = {
       generation: ++this.generation,
@@ -195,9 +212,7 @@ export class CatalogoProdutosComponent implements OnInit {
 
     const response = result.response;
     this.products.set(
-      result.request.append
-        ? [...this.products(), ...response.itens]
-        : response.itens,
+      result.request.append ? [...this.products(), ...response.itens] : response.itens,
     );
     this.page.set(response.pagina);
     this.totalPages.set(response.totalPaginas);

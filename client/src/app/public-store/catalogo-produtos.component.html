@@ -6,8 +6,14 @@
       <p class="catalog-section__subtitle">{{ subtitle }}</p>
     </div>
     @if (showCatalogLink) {
-      <a class="catalog-section__all" routerLink="/produtos"
-        [queryParams]="{ busca: currentSearch() || null, categoriaId: selectedCategoryId() || null }">
+      <a
+        class="catalog-section__all"
+        routerLink="/produtos"
+        [queryParams]="{
+          busca: currentSearch() || null,
+          categoriaId: selectedCategoryId() || null,
+        }"
+      >
         Ver catálogo completo
         <span aria-hidden="true">→</span>
       </a>
@@ -16,12 +22,19 @@
 
   @if (!homePage()) {
     <div class="catalog-filters" aria-label="Filtrar por categoria">
-      <button type="button" [class.is-selected]="!selectedCategoryId()" (click)="selectCategory('')">
+      <button
+        type="button"
+        [class.is-selected]="!selectedCategoryId()"
+        (click)="selectCategory('')"
+      >
         Todas
       </button>
       @for (category of categories(); track category.id) {
-        <button type="button" [class.is-selected]="selectedCategoryId() === category.id"
-          (click)="selectCategory(category.id)">
+        <button
+          type="button"
+          [class.is-selected]="selectedCategoryId() === category.id"
+          (click)="selectCategory(category.id)"
+        >
           {{ category.nome }}
         </button>
       }
@@ -53,7 +66,7 @@
   } @else {
     <div class="catalog-grid">
       @for (product of products(); track product.id) {
-        <app-public-product-card [product]="product" />
+        <app-public-product-card [product]="product" [catalogReturn]="catalogReturn" />
       }
     </div>
 

@@ -1,4 +1,8 @@
-<article class="product-card">
+<a
+  class="product-card"
+  [routerLink]="['/produtos', product().id]"
+  [queryParams]="returnQueryParams"
+>
   <div class="product-card__image">
     @if (!imageUnavailable()) {
       <img
@@ -6,11 +10,21 @@
         [alt]="'Foto de ' + product().nome"
         loading="lazy"
         (error)="onImageError()"
-      >
+      />
     } @else {
-      <div class="product-card__placeholder" role="img" [attr.aria-label]="'Imagem indisponível para ' + product().nome">
+      <div
+        class="product-card__placeholder"
+        role="img"
+        [attr.aria-label]="'Imagem indisponível para ' + product().nome"
+      >
         <svg viewBox="0 0 64 64" fill="none" aria-hidden="true">
-          <path d="M32 54V30m0 12c-12 0-19-7-19-19 12 0 19 7 19 19Zm0-10c0-12 7-19 19-19 0 12-7 19-19 19Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path
+            d="M32 54V30m0 12c-12 0-19-7-19-19 12 0 19 7 19 19Zm0-10c0-12 7-19 19-19 0 12-7 19-19 19Z"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
         </svg>
         <span>Imagem não disponível</span>
       </div>
@@ -41,4 +55,4 @@
       }
     </div>
   </div>
-</article>
+</a>

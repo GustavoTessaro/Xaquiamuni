@@ -1,4 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { ProdutoCatalogoResumo } from './catalogo-publico.service';
 import { PublicProductCardComponent } from './public-product-card.component';
 
@@ -22,6 +23,7 @@ describe('PublicProductCardComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [PublicProductCardComponent],
+      providers: [provideRouter([])],
     }).compileComponents();
     fixture = TestBed.createComponent(PublicProductCardComponent);
     fixture.componentRef.setInput('product', product);
@@ -37,7 +39,8 @@ describe('PublicProductCardComponent', () => {
     expect(element.textContent?.replace(/\u00a0/g, ' ')).toContain('R$ 18,00');
     expect(element.textContent).toContain('Unidade');
     expect(element.textContent).toContain('100 g');
-    expect(element.querySelector('button, a')).toBeNull();
+    expect(element.querySelector('button')).toBeNull();
+    expect(element.querySelector('a')?.getAttribute('href')).toBe('/produtos/product-1');
     expect(element.textContent?.toLowerCase()).not.toContain('estoque');
   });
 
@@ -76,5 +79,17 @@ describe('PublicProductCardComponent', () => {
     expect(text).toContain('Caixa');
     expect(text).toContain('Conjunto');
     expect(text).toContain('LEG');
+  });
+
+  it('preserves catalog filters in the product link when provided', () => {
+    fixture.componentRef.setInput('catalogReturn', {
+      busca: 'lavanda',
+      categoriaId: 'category-1',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('a')?.getAttribute('href')).toBe(
+      '/produtos/product-1?busca=lavanda&categoriaId=category-1',
+    );
   });
 });

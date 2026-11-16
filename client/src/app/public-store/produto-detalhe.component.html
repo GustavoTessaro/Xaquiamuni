@@ -1,0 +1,161 @@
+<div class="product-detail">
+  @if (loading()) {
+    <div class="product-detail__state" role="status" aria-live="polite">
+      <span class="product-detail__spinner" aria-hidden="true"></span>
+      <p>Carregando produto...</p>
+    </div>
+  } @else if (notFound()) {
+    <section class="product-detail__state" aria-labelledby="product-not-found">
+      <h1 id="product-not-found">Produto não encontrado</h1>
+      <p>Este produto não está disponível no catálogo público.</p>
+      <a routerLink="/produtos" [queryParams]="returnFilters()">Voltar ao catálogo</a>
+    </section>
+  } @else if (requestError()) {
+    <section class="product-detail__state" aria-labelledby="product-load-error">
+      <h1 id="product-load-error">Não foi possível carregar o produto</h1>
+      <p>Verifique sua conexão e tente novamente.</p>
+      <button type="button" (click)="retry()">Tentar novamente</button>
+    </section>
+  } @else if (product(); as item) {
+    <nav class="product-detail__breadcrumb" aria-label="Navegação estrutural">
+      <a routerLink="/">Início</a>
+      <span aria-hidden="true">/</span>
+      <a routerLink="/produtos" [queryParams]="{ categoriaId: item.categoriaId }">
+        {{ item.categoriaNome }}
+      </a>
+      <span aria-hidden="true">/</span>
+      <span aria-current="page">{{ item.nome }}</span>
+    </nav>
+
+    <a class="product-detail__back" routerLink="/produtos" [queryParams]="returnFilters()">
+      <span aria-hidden="true">←</span> Voltar ao catálogo
+    </a>
+
+    <div class="product-detail__layout">
+      <section class="product-detail__gallery" aria-label="Galeria de imagens do produto">
+        <div class="product-detail__main-image">
+          @if (selectedImage(); as image) {
+            @if (!imageUnavailable()) {
+              <img [src]="image.conteudoUrl" [alt]="item.nome" (error)="onImageError()" />
+            } @else {
+              <div
+                class="product-detail__placeholder"
+                role="img"
+                [attr.aria-label]="'Imagem indisponível: ' + item.nome"
+              >
+                <span aria-hidden="true">✦</span>
+                <p>Imagem indisponível</p>
+              </div>
+            }
+          } @else {
+            <div
+              class="product-detail__placeholder"
+              role="img"
+              [attr.aria-label]="'Sem imagens para ' + item.nome"
+            >
+              <span aria-hidden="true">✦</span>
+              <p>Imagem não disponível</p>
+            </div>
+          }
+        </div>
+
+        @if (gallery().length > 1) {
+          <div class="product-detail__thumbnails" aria-label="Escolher imagem">
+            @for (image of gallery(); track image.id; let index = $index) {
+              @if (!unavailableThumbnailIds().has(image.id)) {
+                <button
+                  type="button"
+                  [class.is-selected]="selectedImageId() === image.id"
+                  [attr.aria-label]="thumbnailLabel(index)"
+                  [attr.aria-pressed]="selectedImageId() === image.id"
+                  (click)="selectImage(image)"
+                >
+                  <img
+                    [src]="image.conteudoUrl"
+                    [alt]="''"
+                    loading="lazy"
+                    (error)="onThumbnailError(image.id)"
+                  />
+                </button>
+              }
+            }
+          </div>
+        }
+      </section>
+
+      <section class="product-detail__information" aria-labelledby="product-name">
+        <p class="product-detail__category">{{ item.categoriaNome }}</p>
+        <h1 id="product-name">{{ item.nome }}</h1>
+        @if (item.descricao) {
+          <p class="product-detail__description">{{ item.descricao }}</p>
+        }
+
+        @if (item.requerSelecaoDeOpcao) {
+          <div class="product-detail__selectors">
+            @if (item.caracteristicas.length) {
+              <h2>Escolha uma opção</h2>
+              @for (characteristic of item.caracteristicas; track characteristic.id) {
+                @if (availableValues(characteristic.id).length > 1) {
+                  <label [attr.for]="'characteristic-' + characteristic.id">
+                    {{ characteristic.nome }}
+                    <select
+                      [id]="'characteristic-' + characteristic.id"
+                      [attr.data-characteristic-id]="characteristic.id"
+                      [value]="selectedValues()[characteristic.id] ?? ''"
+                      (change)="selectCharacteristic(characteristic.id, $event)"
+                    >
+                      @for (value of availableValues(characteristic.id); track value.id) {
+                        <option [value]="value.id">{{ value.nome }}</option>
+                      }
+                    </select>
+                  </label>
+                } @else if (selectedValueName(characteristic); as valueName) {
+                  <p class="product-detail__fixed-value">
+                    <span>{{ characteristic.nome }}</span>
+                    <strong>{{ valueName }}</strong>
+                  </p>
+                }
+              }
+              @if (selectionNotice()) {
+                <p class="product-detail__selection-notice" role="status" aria-live="polite">
+                  {{ selectionNotice() }}
+                </p>
+              }
+            } @else {
+              <label for="legacy-option">
+                Opção
+                <select
+                  id="legacy-option"
+                  (change)="selectLegacyOption($event)"
+                  [value]="selectedOptionId() ?? ''"
+                >
+                  @for (option of item.opcoes; track option.id; let index = $index) {
+                    <option [value]="option.id">{{ optionLabel(option, index) }}</option>
+                  }
+                </select>
+              </label>
+            }
+          </div>
+        }
+
+        @if (selectedOption(); as option) {
+          <div class="product-detail__price" aria-live="polite">
+            <strong>{{ formatPrice(option.precoVenda) }}</strong>
+            <span>{{ formatUnit(option.unidadeVenda) }}</span>
+          </div>
+          @if (measures(option).length) {
+            <p class="product-detail__measures">
+              @for (measure of measures(option); track $index) {
+                <span>{{ measure }}</span>
+              }
+            </p>
+          }
+        } @else if (item.requerSelecaoDeOpcao) {
+          <p class="product-detail__choose-option" role="status">
+            Escolha uma opção para ver o preço e as medidas.
+          </p>
+        }
+      </section>
+    </div>
+  }
+</div>

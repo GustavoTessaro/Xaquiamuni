@@ -44,6 +44,62 @@ export interface CatalogoPublicoFiltro {
   itensPorPagina?: number;
 }
 
+export type CatalogoPublicoRetorno = Pick<CatalogoPublicoFiltro, 'busca' | 'categoriaId'>;
+
+export interface ProdutoCatalogoImagem {
+  id: string;
+  conteudoUrl: string;
+  ordemExibicao: number;
+  principal: boolean;
+  opcaoIds: string[];
+}
+
+export interface ProdutoCatalogoValor {
+  id: string;
+  nome: string;
+  valorMedidaCanonico: number | null;
+}
+
+export interface ProdutoCatalogoCaracteristica {
+  id: string;
+  nome: string;
+  tipoMedidaFisica: string | null;
+  valores: ProdutoCatalogoValor[];
+}
+
+export interface ProdutoCatalogoCaracteristicaSelecao {
+  caracteristicaId: string;
+  caracteristicaNome: string;
+  valorId: string;
+  valorNome: string;
+  valorMedidaCanonico: number | null;
+}
+
+export interface ProdutoCatalogoOpcao {
+  id: string;
+  identificacao: string | null;
+  unidadeVenda: string;
+  precoVenda: number;
+  principal: boolean;
+  pesoLiquidoGramas: number | null;
+  volumeLiquidoMililitros: number | null;
+  caracteristicas: ProdutoCatalogoCaracteristicaSelecao[];
+}
+
+export interface ProdutoCatalogoDetalhe {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  categoriaId: string;
+  categoriaNome: string;
+  requerSelecaoDeOpcao: boolean;
+  opcaoPrincipalId: string;
+  fotoPrincipal: ProdutoCatalogoImagem;
+  galeria: ProdutoCatalogoImagem[];
+  caracteristicas: ProdutoCatalogoCaracteristica[];
+  opcoes: ProdutoCatalogoOpcao[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CatalogoPublicoService {
   private readonly http = inject(HttpClient);
@@ -73,5 +129,11 @@ export class CatalogoPublicoService {
     }
 
     return this.http.get<CatalogoPublicoPagina>('/api/catalogo/produtos', { params });
+  }
+
+  consultarProduto(produtoId: string): Observable<ProdutoCatalogoDetalhe> {
+    return this.http.get<ProdutoCatalogoDetalhe>(
+      `/api/catalogo/produtos/${encodeURIComponent(produtoId)}`,
+    );
   }
 }

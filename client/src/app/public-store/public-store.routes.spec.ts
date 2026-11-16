@@ -5,7 +5,12 @@ import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { routes } from '../app.routes';
 import { AuthService } from '../core/auth/auth.service';
-import { CatalogoPublicoService, CategoriaCatalogoPublico } from './catalogo-publico.service';
+import {
+  CatalogoPublicoService,
+  CategoriaCatalogoPublico,
+  ProdutoCatalogoDetalhe,
+  ProdutoCatalogoResumo,
+} from './catalogo-publico.service';
 import { StoreLayoutComponent } from './store-layout.component';
 
 describe('public store routes', () => {
@@ -96,6 +101,120 @@ describe('public store routes', () => {
     expect(TestBed.inject(Router).url).toBe('/produtos');
     expect(harness.fixture.nativeElement.textContent).toContain('Produtos artesanais');
     expect(listarCategorias).toHaveBeenCalled();
+  });
+
+  it('navigates from a filtered catalog to a public product and back with filters preserved', async () => {
+    const product: ProdutoCatalogoResumo = {
+      id: 'product-1',
+      nome: 'Sabonete artesanal',
+      categoriaId: 'category-1',
+      categoriaNome: 'Sabonetes Artesanais',
+      fotoPrincipal: { id: 'image-1', conteudoUrl: '/public-images/image-1' },
+      precoMinimo: 18,
+      precoMaximo: 18,
+      unidadesVenda: ['UN'],
+      medidas: [{ opcaoId: 'option-1', pesoLiquidoGramas: 100, volumeLiquidoMililitros: null }],
+    };
+    const details: ProdutoCatalogoDetalhe = {
+      id: product.id,
+      nome: product.nome,
+      descricao: null,
+      categoriaId: product.categoriaId,
+      categoriaNome: product.categoriaNome,
+      requerSelecaoDeOpcao: false,
+      opcaoPrincipalId: 'option-1',
+      fotoPrincipal: {
+        ...product.fotoPrincipal,
+        ordemExibicao: 1,
+        principal: true,
+        opcaoIds: [],
+      },
+      galeria: [
+        {
+          ...product.fotoPrincipal,
+          ordemExibicao: 1,
+          principal: true,
+          opcaoIds: [],
+        },
+      ],
+      caracteristicas: [],
+      opcoes: [
+        {
+          id: 'option-1',
+          identificacao: null,
+          unidadeVenda: 'UN',
+          precoVenda: 18,
+          principal: true,
+          pesoLiquidoGramas: 100,
+          volumeLiquidoMililitros: null,
+          caracteristicas: [],
+        },
+      ],
+    };
+    const listarProdutos = vi.fn(() =>
+      of({
+        itens: [product],
+        pagina: 1,
+        itensPorPagina: 12,
+        totalItens: 1,
+        totalPaginas: 1,
+      }),
+    );
+    const consultarProduto = vi.fn(() => of(details));
+    await TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        {
+          provide: AuthService,
+          useValue: {
+            obterSessao: vi.fn(() => of(null)),
+            logout: vi.fn(() => of(undefined)),
+          },
+        },
+        {
+          provide: CatalogoPublicoService,
+          useValue: {
+            listarCategorias: vi.fn(() => of([])),
+            listarProdutos,
+            consultarProduto,
+          },
+        },
+      ],
+    }).compileComponents();
+
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(
+      '/produtos?busca=sabonete&categoriaId=category-1',
+      StoreLayoutComponent,
+    );
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+
+    const card = harness.fixture.nativeElement.querySelector('.product-card') as HTMLAnchorElement;
+    card.click();
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+
+    expect(TestBed.inject(Router).url).toBe(
+      '/produtos/product-1?busca=sabonete&categoriaId=category-1',
+    );
+    expect(harness.fixture.nativeElement.textContent).toContain('Sabonete artesanal');
+    expect(harness.fixture.nativeElement.querySelectorAll('main')).toHaveLength(1);
+    expect(consultarProduto).toHaveBeenCalledWith('product-1');
+
+    (
+      harness.fixture.nativeElement.querySelector('.product-detail__back') as HTMLAnchorElement
+    ).click();
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+
+    expect(TestBed.inject(Router).url).toBe('/produtos?busca=sabonete&categoriaId=category-1');
+    expect(listarProdutos).toHaveBeenLastCalledWith({
+      busca: 'sabonete',
+      categoriaId: 'category-1',
+      pagina: 1,
+      itensPorPagina: 12,
+    });
   });
 
   it('closes the categories menu after selecting an API category', async () => {
