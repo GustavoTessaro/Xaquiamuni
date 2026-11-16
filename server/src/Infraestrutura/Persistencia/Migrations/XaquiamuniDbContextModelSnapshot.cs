@@ -599,6 +599,191 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ProdutoVarianteCaracteristicaValores", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeNormalizado")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("Versao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InsumoId", "NomeNormalizado")
+                        .IsUnique()
+                        .HasDatabaseName("UX_FormasCompraInsumo_InsumoId_NomeNormalizado");
+
+                    b.ToTable("FormasCompraInsumo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_FormasCompraInsumo_Fator_Valid", "[Fator_ValorBase] > 0 AND ([Fator_UnidadeBase] = 1 AND [Fator_Dimensao] = 1 OR [Fator_UnidadeBase] = 3 AND [Fator_Dimensao] = 2 OR [Fator_UnidadeBase] = 5 AND [Fator_Dimensao] = 3) AND ([Fator_UnidadeBase] <> 5 OR [Fator_ValorBase] = FLOOR([Fator_ValorBase]))");
+
+                            t.HasCheckConstraint("CK_FormasCompraInsumo_Nome_NotBlank", "LEN(LTRIM(RTRIM([Nome]))) > 0 AND LEN(LTRIM(RTRIM([NomeNormalizado]))) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.InsumoEstoque", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativo")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("ControlaLote")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NomeNormalizado")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<short>("Tipo")
+                        .HasColumnType("smallint");
+
+                    b.Property<short>("UnidadeBase")
+                        .HasColumnType("smallint");
+
+                    b.Property<bool>("ValidadeObrigatoria")
+                        .HasColumnType("bit");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("Versao");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("InsumosEstoque", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_InsumosEstoque_EstoqueMinimo_Valid", "([EstoqueMinimo_ValorBase] IS NULL AND [EstoqueMinimo_UnidadeBase] IS NULL AND [EstoqueMinimo_Dimensao] IS NULL) OR ([EstoqueMinimo_ValorBase] IS NOT NULL AND [EstoqueMinimo_UnidadeBase] IS NOT NULL AND [EstoqueMinimo_Dimensao] IS NOT NULL AND [EstoqueMinimo_UnidadeBase] = [UnidadeBase] AND ([EstoqueMinimo_UnidadeBase] = 1 AND [EstoqueMinimo_Dimensao] = 1 OR [EstoqueMinimo_UnidadeBase] = 3 AND [EstoqueMinimo_Dimensao] = 2 OR [EstoqueMinimo_UnidadeBase] = 5 AND [EstoqueMinimo_Dimensao] = 3) AND [EstoqueMinimo_ValorBase] >= 0 AND ([UnidadeBase] <> 5 OR [EstoqueMinimo_ValorBase] = FLOOR([EstoqueMinimo_ValorBase])))");
+
+                            t.HasCheckConstraint("CK_InsumosEstoque_Nome_NotBlank", "LEN(LTRIM(RTRIM([Nome]))) > 0 AND LEN(LTRIM(RTRIM([NomeNormalizado]))) > 0");
+
+                            t.HasCheckConstraint("CK_InsumosEstoque_Tipo_Valid", "[Tipo] IN (1, 2, 3)");
+
+                            t.HasCheckConstraint("CK_InsumosEstoque_UnidadeBase_Valid", "[UnidadeBase] IN (1, 3, 5)");
+
+                            t.HasCheckConstraint("CK_InsumosEstoque_ValidadeRequerLote", "[ValidadeObrigatoria] = 0 OR [ControlaLote] = 1");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteInsumo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Bloqueado")
+                        .HasColumnType("bit");
+
+                    b.Property<DateOnly>("DataEntrada")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DataValidade")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Fornecedor")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Identificacao")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("Versao");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("InsumoId", "Id")
+                        .HasName("AK_LotesInsumo_InsumoId_Id");
+
+                    b.HasIndex("InsumoId", "DataValidade")
+                        .HasDatabaseName("IX_LotesInsumo_InsumoId_DataValidade");
+
+                    b.HasIndex("InsumoId", "Identificacao")
+                        .HasDatabaseName("IX_LotesInsumo_InsumoId_Identificacao");
+
+                    b.ToTable("LotesInsumo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_LotesInsumo_Fornecedor_NotBlank", "[Fornecedor] IS NULL OR LEN(LTRIM(RTRIM([Fornecedor]))) > 0");
+
+                            t.HasCheckConstraint("CK_LotesInsumo_Identificacao_NotBlank", "LEN(LTRIM(RTRIM([Identificacao]))) > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("Versao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InsumoId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SaldosInsumo_InsumoId_Agregado")
+                        .HasFilter("[LoteId] IS NULL");
+
+                    b.HasIndex("InsumoId", "LoteId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SaldosInsumo_InsumoId_LoteId")
+                        .HasFilter("[LoteId] IS NOT NULL");
+
+                    b.ToTable("SaldosInsumo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SaldosInsumo_Quantidade_Valid", "[Quantidade_ValorBase] >= 0 AND ([Quantidade_UnidadeBase] = 1 AND [Quantidade_Dimensao] = 1 OR [Quantidade_UnidadeBase] = 3 AND [Quantidade_Dimensao] = 2 OR [Quantidade_UnidadeBase] = 5 AND [Quantidade_Dimensao] = 3) AND ([Quantidade_UnidadeBase] <> 5 OR [Quantidade_ValorBase] = FLOOR([Quantidade_ValorBase]))");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -973,6 +1158,132 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("Variante");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany("FormasCompra")
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_FormasCompraInsumo_InsumosEstoque_InsumoId");
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "QuantidadeEquivalentePorEmbalagem", b1 =>
+                        {
+                            b1.Property<Guid>("FormaCompraInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("Fator_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("Fator_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("Fator_ValorBase");
+
+                            b1.HasKey("FormaCompraInsumoId");
+
+                            b1.ToTable("FormasCompraInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("FormaCompraInsumoId");
+                        });
+
+                    b.Navigation("QuantidadeEquivalentePorEmbalagem")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.InsumoEstoque", b =>
+                {
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "EstoqueMinimo", b1 =>
+                        {
+                            b1.Property<Guid>("InsumoEstoqueId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("EstoqueMinimo_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("EstoqueMinimo_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("EstoqueMinimo_ValorBase");
+
+                            b1.HasKey("InsumoEstoqueId");
+
+                            b1.ToTable("InsumosEstoque");
+
+                            b1.WithOwner()
+                                .HasForeignKey("InsumoEstoqueId");
+                        });
+
+                    b.Navigation("EstoqueMinimo");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteInsumo", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_LotesInsumo_InsumosEstoque_InsumoId");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SaldosInsumo_InsumosEstoque_InsumoId");
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId", "LoteId")
+                        .HasPrincipalKey("InsumoId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_SaldosInsumo_LotesInsumo_InsumoId_LoteId");
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "QuantidadeFisica", b1 =>
+                        {
+                            b1.Property<Guid>("SaldoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("Quantidade_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("Quantidade_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("Quantidade_ValorBase");
+
+                            b1.HasKey("SaldoInsumoId");
+
+                            b1.ToTable("SaldosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("SaldoInsumoId");
+                        });
+
+                    b.Navigation("QuantidadeFisica")
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
                 {
                     b.HasOne("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", null)
@@ -1004,6 +1315,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ProdutoVariante", b =>
                 {
                     b.Navigation("CaracteristicaValores");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.InsumoEstoque", b =>
+                {
+                    b.Navigation("FormasCompra");
                 });
 #pragma warning restore 612, 618
         }

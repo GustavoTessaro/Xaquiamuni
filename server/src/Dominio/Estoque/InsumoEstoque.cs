@@ -94,6 +94,55 @@ public sealed class InsumoEstoque
         Ativo = ativo;
     }
 
+    public QuantidadeEstoque CalcularSaldoFisico(IEnumerable<SaldoInsumo> saldos)
+    {
+        ArgumentNullException.ThrowIfNull(saldos);
+
+        var identidades = new HashSet<Guid?>();
+        decimal total;
+        try
+        {
+            total = 0m;
+            foreach (var saldo in saldos)
+            {
+                if (saldo.InsumoId != Id)
+                {
+                    throw new ArgumentException(
+                        "Todos os saldos devem pertencer ao insumo.",
+                        nameof(saldos));
+                }
+
+                if (saldo.QuantidadeFisica.UnidadeBase != UnidadeBase)
+                {
+                    throw new InvalidOperationException(
+                        "A unidade do saldo deve corresponder à unidade-base do insumo.");
+                }
+
+                if (ControlaLote != saldo.LoteId.HasValue)
+                {
+                    throw new InvalidOperationException(
+                        "O tipo de saldo deve corresponder à configuração de controle por lote.");
+                }
+
+                if (!identidades.Add(saldo.LoteId))
+                {
+                    throw new InvalidOperationException(
+                        "Há mais de um saldo para a mesma identidade de estoque.");
+                }
+
+                total = checked(total + saldo.QuantidadeFisica.ValorBase);
+            }
+        }
+        catch (OverflowException)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(saldos),
+                "O saldo físico total excede o limite suportado.");
+        }
+
+        return QuantidadeEstoque.Criar(total, UnidadeBase);
+    }
+
     public FormaCompraInsumo AdicionarFormaCompra(
         string? nome,
         decimal quantidadeEquivalente,

@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Catalogo;
+using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Valores;
 using Xaquiamuni.Infraestrutura.Identidade;
@@ -30,6 +31,10 @@ public sealed class XaquiamuniDbContext
     public DbSet<ProdutoVarianteCaracteristicaValor> ProdutoVarianteCaracteristicaValores =>
         Set<ProdutoVarianteCaracteristicaValor>();
     public DbSet<EmailOutboxMessage> EmailOutboxMessages => Set<EmailOutboxMessage>();
+    public DbSet<InsumoEstoque> InsumosEstoque => Set<InsumoEstoque>();
+    public DbSet<FormaCompraInsumo> FormasCompraInsumo => Set<FormaCompraInsumo>();
+    public DbSet<LoteInsumo> LotesInsumo => Set<LoteInsumo>();
+    public DbSet<SaldoInsumo> SaldosInsumo => Set<SaldoInsumo>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -121,6 +126,267 @@ public sealed class XaquiamuniDbContext
                 .HasFilter("[ActiveDeduplicationKey] IS NOT NULL");
             outbox.HasIndex(message => message.UserId)
                 .HasDatabaseName("IX_EmailOutbox_UserId");
+        });
+
+        builder.Entity<InsumoEstoque>(insumo =>
+        {
+            insumo.ToTable("InsumosEstoque", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_InsumosEstoque_Nome_NotBlank",
+                    "LEN(LTRIM(RTRIM([Nome]))) > 0 AND "
+                    + "LEN(LTRIM(RTRIM([NomeNormalizado]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_InsumosEstoque_Tipo_Valid",
+                    "[Tipo] IN (1, 2, 3)");
+                table.HasCheckConstraint(
+                    "CK_InsumosEstoque_UnidadeBase_Valid",
+                    "[UnidadeBase] IN (1, 3, 5)");
+                table.HasCheckConstraint(
+                    "CK_InsumosEstoque_ValidadeRequerLote",
+                    "[ValidadeObrigatoria] = 0 OR [ControlaLote] = 1");
+                table.HasCheckConstraint(
+                    "CK_InsumosEstoque_EstoqueMinimo_Valid",
+                    "([EstoqueMinimo_ValorBase] IS NULL AND "
+                    + "[EstoqueMinimo_UnidadeBase] IS NULL AND "
+                    + "[EstoqueMinimo_Dimensao] IS NULL) OR "
+                    + "([EstoqueMinimo_ValorBase] IS NOT NULL AND "
+                    + "[EstoqueMinimo_UnidadeBase] IS NOT NULL AND "
+                    + "[EstoqueMinimo_Dimensao] IS NOT NULL AND "
+                    + "[EstoqueMinimo_UnidadeBase] = [UnidadeBase] AND "
+                    + "([EstoqueMinimo_UnidadeBase] = 1 AND [EstoqueMinimo_Dimensao] = 1 OR "
+                    + "[EstoqueMinimo_UnidadeBase] = 3 AND [EstoqueMinimo_Dimensao] = 2 OR "
+                    + "[EstoqueMinimo_UnidadeBase] = 5 AND [EstoqueMinimo_Dimensao] = 3) AND "
+                    + "[EstoqueMinimo_ValorBase] >= 0 AND "
+                    + "([UnidadeBase] <> 5 OR "
+                    + "[EstoqueMinimo_ValorBase] = FLOOR([EstoqueMinimo_ValorBase])))");
+            });
+            insumo.HasKey(entity => entity.Id);
+            insumo.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            insumo.Property(entity => entity.Nome)
+                .HasMaxLength(InsumoEstoque.NomeMaxLength)
+                .IsRequired();
+            insumo.Property(entity => entity.NomeNormalizado)
+                .HasMaxLength(InsumoEstoque.NomeMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            insumo.Property(entity => entity.Tipo)
+                .HasConversion<short>()
+                .HasColumnType("smallint")
+                .IsRequired();
+            insumo.Property(entity => entity.UnidadeBase)
+                .HasConversion<short>()
+                .HasColumnType("smallint")
+                .IsRequired();
+            insumo.Property(entity => entity.ControlaLote)
+                .IsRequired();
+            insumo.Property(entity => entity.ValidadeObrigatoria)
+                .IsRequired();
+            insumo.Property(entity => entity.Ativo)
+                .IsRequired();
+            insumo.Property<byte[]>("Versao")
+                .HasColumnName("Versao")
+                .IsRowVersion()
+                .IsRequired();
+
+            insumo.OwnsOne(entity => entity.EstoqueMinimo, quantidade =>
+            {
+                quantidade.Property(value => value.ValorBase)
+                    .HasColumnName("EstoqueMinimo_ValorBase")
+                    .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale);
+                quantidade.Property(value => value.UnidadeBase)
+                    .HasColumnName("EstoqueMinimo_UnidadeBase")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint");
+                quantidade.Property(value => value.Dimensao)
+                    .HasColumnName("EstoqueMinimo_Dimensao")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint");
+            });
+            insumo.Navigation(entity => entity.EstoqueMinimo)
+                .IsRequired(false);
+            insumo.HasMany(entity => entity.FormasCompra)
+                .WithOne()
+                .HasForeignKey(forma => forma.InsumoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_FormasCompraInsumo_InsumosEstoque_InsumoId")
+                .IsRequired();
+            insumo.Navigation(entity => entity.FormasCompra)
+                .HasField("_formasCompra")
+                .UsePropertyAccessMode(PropertyAccessMode.Field);
+        });
+
+        builder.Entity<FormaCompraInsumo>(forma =>
+        {
+            forma.ToTable("FormasCompraInsumo", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_FormasCompraInsumo_Nome_NotBlank",
+                    "LEN(LTRIM(RTRIM([Nome]))) > 0 AND "
+                    + "LEN(LTRIM(RTRIM([NomeNormalizado]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_FormasCompraInsumo_Fator_Valid",
+                    "[Fator_ValorBase] > 0 AND "
+                    + "([Fator_UnidadeBase] = 1 AND [Fator_Dimensao] = 1 OR "
+                    + "[Fator_UnidadeBase] = 3 AND [Fator_Dimensao] = 2 OR "
+                    + "[Fator_UnidadeBase] = 5 AND [Fator_Dimensao] = 3) AND "
+                    + "([Fator_UnidadeBase] <> 5 OR "
+                    + "[Fator_ValorBase] = FLOOR([Fator_ValorBase]))");
+            });
+            forma.HasKey(entity => entity.Id);
+            forma.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            forma.Property(entity => entity.InsumoId)
+                .IsRequired();
+            forma.Property(entity => entity.Nome)
+                .HasMaxLength(FormaCompraInsumo.NomeMaxLength)
+                .IsRequired();
+            forma.Property(entity => entity.NomeNormalizado)
+                .HasMaxLength(FormaCompraInsumo.NomeMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            forma.Property(entity => entity.Ativa)
+                .IsRequired();
+            forma.Property<byte[]>("Versao")
+                .HasColumnName("Versao")
+                .IsRowVersion()
+                .IsRequired();
+
+            forma.OwnsOne(entity => entity.QuantidadeEquivalentePorEmbalagem, quantidade =>
+            {
+                quantidade.Property(value => value.ValorBase)
+                    .HasColumnName("Fator_ValorBase")
+                    .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale)
+                    .IsRequired();
+                quantidade.Property(value => value.UnidadeBase)
+                    .HasColumnName("Fator_UnidadeBase")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+                quantidade.Property(value => value.Dimensao)
+                    .HasColumnName("Fator_Dimensao")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+            });
+
+            forma.HasIndex(entity => new { entity.InsumoId, entity.NomeNormalizado })
+                .IsUnique()
+                .HasDatabaseName("UX_FormasCompraInsumo_InsumoId_NomeNormalizado");
+        });
+
+        builder.Entity<LoteInsumo>(lote =>
+        {
+            lote.ToTable("LotesInsumo", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_LotesInsumo_Identificacao_NotBlank",
+                    "LEN(LTRIM(RTRIM([Identificacao]))) > 0");
+                table.HasCheckConstraint(
+                    "CK_LotesInsumo_Fornecedor_NotBlank",
+                    "[Fornecedor] IS NULL OR LEN(LTRIM(RTRIM([Fornecedor]))) > 0");
+            });
+            lote.HasKey(entity => entity.Id);
+            lote.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            lote.Property(entity => entity.InsumoId)
+                .IsRequired();
+            lote.Property(entity => entity.Identificacao)
+                .HasMaxLength(LoteInsumo.IdentificacaoMaxLength)
+                .IsRequired();
+            lote.Property(entity => entity.DataEntrada)
+                .HasColumnType("date")
+                .IsRequired();
+            lote.Property(entity => entity.DataValidade)
+                .HasColumnType("date");
+            lote.Property(entity => entity.Fornecedor)
+                .HasMaxLength(LoteInsumo.FornecedorMaxLength);
+            lote.Property(entity => entity.Bloqueado)
+                .IsRequired();
+            lote.Property<byte[]>("Versao")
+                .HasColumnName("Versao")
+                .IsRowVersion()
+                .IsRequired();
+
+            lote.HasOne<InsumoEstoque>()
+                .WithMany()
+                .HasForeignKey(entity => entity.InsumoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_LotesInsumo_InsumosEstoque_InsumoId")
+                .IsRequired();
+            lote.HasAlternateKey(entity => new { entity.InsumoId, entity.Id })
+                .HasName("AK_LotesInsumo_InsumoId_Id");
+            lote.HasIndex(entity => new { entity.InsumoId, entity.Identificacao })
+                .HasDatabaseName("IX_LotesInsumo_InsumoId_Identificacao");
+            lote.HasIndex(entity => new { entity.InsumoId, entity.DataValidade })
+                .HasDatabaseName("IX_LotesInsumo_InsumoId_DataValidade");
+        });
+
+        builder.Entity<SaldoInsumo>(saldo =>
+        {
+            saldo.ToTable("SaldosInsumo", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_SaldosInsumo_Quantidade_Valid",
+                    "[Quantidade_ValorBase] >= 0 AND "
+                    + "([Quantidade_UnidadeBase] = 1 AND [Quantidade_Dimensao] = 1 OR "
+                    + "[Quantidade_UnidadeBase] = 3 AND [Quantidade_Dimensao] = 2 OR "
+                    + "[Quantidade_UnidadeBase] = 5 AND [Quantidade_Dimensao] = 3) AND "
+                    + "([Quantidade_UnidadeBase] <> 5 OR "
+                    + "[Quantidade_ValorBase] = FLOOR([Quantidade_ValorBase]))");
+            });
+            saldo.HasKey(entity => entity.Id);
+            saldo.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            saldo.Property(entity => entity.InsumoId)
+                .IsRequired();
+            saldo.Property(entity => entity.LoteId);
+            saldo.Property<byte[]>("Versao")
+                .HasColumnName("Versao")
+                .IsRowVersion()
+                .IsRequired();
+
+            saldo.OwnsOne(entity => entity.QuantidadeFisica, quantidade =>
+            {
+                quantidade.Property(value => value.ValorBase)
+                    .HasColumnName("Quantidade_ValorBase")
+                    .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale)
+                    .IsRequired();
+                quantidade.Property(value => value.UnidadeBase)
+                    .HasColumnName("Quantidade_UnidadeBase")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+                quantidade.Property(value => value.Dimensao)
+                    .HasColumnName("Quantidade_Dimensao")
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+            });
+            saldo.Navigation(entity => entity.QuantidadeFisica)
+                .IsRequired();
+
+            saldo.HasOne<InsumoEstoque>()
+                .WithMany()
+                .HasForeignKey(entity => entity.InsumoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_SaldosInsumo_InsumosEstoque_InsumoId")
+                .IsRequired();
+            saldo.HasOne<LoteInsumo>()
+                .WithMany()
+                .HasForeignKey(entity => new { entity.InsumoId, entity.LoteId })
+                .HasPrincipalKey(entity => new { entity.InsumoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_SaldosInsumo_LotesInsumo_InsumoId_LoteId");
+            saldo.HasIndex(entity => entity.InsumoId)
+                .IsUnique()
+                .HasDatabaseName("UX_SaldosInsumo_InsumoId_Agregado")
+                .HasFilter("[LoteId] IS NULL");
+            saldo.HasIndex(entity => new { entity.InsumoId, entity.LoteId })
+                .IsUnique()
+                .HasDatabaseName("UX_SaldosInsumo_InsumoId_LoteId")
+                .HasFilter("[LoteId] IS NOT NULL");
         });
 
         builder.Entity<Categoria>(categoria =>
