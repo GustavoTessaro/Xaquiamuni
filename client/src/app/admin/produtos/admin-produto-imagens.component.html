@@ -1,0 +1,454 @@
+<app-admin-workspace activePage="products">
+  <main class="mx-auto max-w-6xl space-y-6">
+    <a
+      routerLink="/admin/produtos"
+      class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline underline-offset-4"
+    >
+      Voltar aos produtos
+    </a>
+
+    @if (carregando()) {
+      <p
+        class="rounded-xl bg-white px-4 py-6 text-sm text-slate-600"
+        role="status"
+        aria-live="polite"
+      >
+        Carregando produto e fotos…
+      </p>
+    }
+
+    @if (erroCarregamento()) {
+      <div
+        class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+        role="alert"
+      >
+        <p class="text-sm text-red-800">{{ erroCarregamento() }}</p>
+        <button
+          type="button"
+          (click)="carregarDados()"
+          class="min-h-10 rounded-lg border border-red-300 px-4 text-sm font-semibold text-red-900 hover:bg-red-100"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    }
+
+    @if (produto(); as produtoAtual) {
+      <header class="space-y-2">
+        <p class="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-800">
+          Gerenciamento do catálogo
+        </p>
+        <h1 id="product-images-title" class="text-3xl font-semibold text-emerald-950">
+          Fotos do produto
+        </h1>
+        <p class="text-lg text-slate-700">{{ produtoAtual.nome }}</p>
+      </header>
+
+      <section
+        class="space-y-5 rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm sm:p-7"
+        aria-labelledby="gallery-overview-title"
+      >
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 id="gallery-overview-title" class="text-lg font-semibold text-emerald-950">
+              Galeria do produto
+            </h2>
+            <p class="mt-1 text-sm text-slate-600">{{ imagens().length }} de 5 fotos cadastradas</p>
+          </div>
+          <button
+            type="button"
+            (click)="conferirGaleria()"
+            [disabled]="ocupado()"
+            class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Atualizar galeria
+          </button>
+        </div>
+
+        @if (erroOperacao()) {
+          <div
+            class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+            role="alert"
+            aria-live="assertive"
+          >
+            {{ erroOperacao() }}
+          </div>
+        }
+
+        @if (mensagem()) {
+          <p
+            class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+            role="status"
+            aria-live="polite"
+          >
+            {{ mensagem() }}
+          </p>
+        }
+
+        @if (imagemEmDestaque(); as destaque) {
+          <figure
+            class="grid gap-4 rounded-2xl bg-emerald-50 p-4 sm:grid-cols-[minmax(0,1.3fr)_minmax(14rem,0.7fr)] sm:items-center"
+          >
+            @if (imagemIndisponivel(destaque.id)) {
+              <div
+                role="img"
+                [attr.aria-label]="'Foto em destaque indisponível: ' + destaque.nomeOriginal"
+                class="flex min-h-56 items-center justify-center rounded-xl border border-dashed border-emerald-900/20 bg-white px-6 text-center text-sm text-slate-600"
+              >
+                Não foi possível carregar esta foto.
+              </div>
+            } @else {
+              <img
+                [src]="destaque.conteudoUrl"
+                [alt]="'Foto em destaque do produto: ' + destaque.nomeOriginal"
+                (error)="marcarImagemIndisponivel(destaque.id)"
+                class="max-h-[28rem] min-h-56 w-full rounded-xl bg-white object-contain"
+              />
+            }
+            <figcaption class="space-y-2">
+              <span
+                class="inline-flex rounded-full border border-emerald-800 bg-white px-3 py-1 text-sm font-bold text-emerald-900"
+              >
+                {{ destaque.principal ? 'Foto principal' : 'Visualização em destaque' }}
+              </span>
+              <p class="break-words font-semibold text-emerald-950">{{ destaque.nomeOriginal }}</p>
+              <p class="text-sm text-slate-600">
+                {{ destaque.larguraPixels }} × {{ destaque.alturaPixels }} px ·
+                {{ formatarTamanho(destaque.tamanhoBytes) }}
+              </p>
+              @if (imagemIndisponivel(destaque.id)) {
+                <p class="text-sm text-amber-800" role="status">
+                  A galeria continua disponível; esta foto não pôde ser carregada.
+                </p>
+              }
+            </figcaption>
+          </figure>
+        } @else if (imagens().length === 0) {
+          <div
+            class="rounded-2xl border border-dashed border-emerald-900/25 bg-emerald-50/60 px-6 py-10 text-center"
+          >
+            <h3 class="font-semibold text-emerald-950">Sua galeria está vazia</h3>
+            <p class="mx-auto mt-2 max-w-xl text-sm text-slate-600">
+              Adicione fotos para apresentar o produto. Você pode salvar rascunhos sem fotos; uma
+              foto principal será necessária para publicar.
+            </p>
+          </div>
+        }
+
+        @if (naoPodeRemoverUltima()) {
+          <p
+            class="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          >
+            Este produto está publicado e tem apenas uma foto. Para removê-la, despublique o produto
+            ou adicione outra foto primeiro.
+          </p>
+        }
+
+        @if (imagens().length > 0) {
+          <section aria-labelledby="all-images-title" class="space-y-3">
+            <h3 id="all-images-title" class="font-semibold text-emerald-950">Fotos cadastradas</h3>
+            <ul class="grid list-none gap-4 p-0 sm:grid-cols-2 lg:grid-cols-3">
+              @for (imagem of imagens(); track imagem.id; let indice = $index) {
+                <li
+                  draggable="true"
+                  (dragstart)="iniciarArrasteImagem($event, imagem.id)"
+                  (dragover)="permitirSoltarImagem($event)"
+                  (drop)="soltarImagem($event, imagem)"
+                  class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
+                  [class.opacity-60]="imagemArrastadaId() === imagem.id"
+                >
+                  <div class="flex items-start gap-3">
+                    @if (imagemIndisponivel(imagem.id)) {
+                      <div
+                        role="img"
+                        [attr.aria-label]="'Imagem indisponível: ' + imagem.nomeOriginal"
+                        class="flex h-24 w-24 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 p-2 text-center text-xs text-slate-600"
+                      >
+                        Foto indisponível
+                      </div>
+                    } @else {
+                      <img
+                        [src]="imagem.conteudoUrl"
+                        [alt]="'Miniatura: ' + imagem.nomeOriginal"
+                        (error)="marcarImagemIndisponivel(imagem.id)"
+                        class="h-24 w-24 shrink-0 rounded-lg bg-slate-50 object-cover"
+                      />
+                    }
+                    <div class="min-w-0 flex-1">
+                      @if (imagem.principal) {
+                        <span
+                          class="inline-flex rounded-full border border-emerald-800 px-2 py-1 text-xs font-bold text-emerald-900"
+                        >
+                          Foto principal
+                        </span>
+                      }
+                      <p class="mt-1 break-words text-sm font-semibold text-slate-900">
+                        {{ imagem.nomeOriginal }}
+                      </p>
+                      <p class="mt-1 text-xs text-slate-600">
+                        {{ imagem.larguraPixels }} × {{ imagem.alturaPixels }} px ·
+                        {{ formatarTamanho(imagem.tamanhoBytes) }}
+                      </p>
+                      @if (imagemIndisponivel(imagem.id)) {
+                        <p class="mt-1 text-xs text-amber-800" role="status">
+                          Não foi possível carregar este arquivo.
+                        </p>
+                      }
+                    </div>
+                  </div>
+
+                  <div class="mt-4 flex flex-wrap gap-2">
+                    @if (imagemEmDestaque()?.id !== imagem.id) {
+                      <button
+                        type="button"
+                        (click)="visualizarImagem(imagem)"
+                        [attr.aria-label]="'Visualizar ' + imagem.nomeOriginal + ' em destaque'"
+                        class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                      >
+                        Visualizar em destaque
+                      </button>
+                    }
+                    @if (!imagem.principal) {
+                      <button
+                        type="button"
+                        (click)="definirPrincipal(imagem)"
+                        [disabled]="ocupado()"
+                        [attr.aria-label]="
+                          'Definir ' + imagem.nomeOriginal + ' como foto principal'
+                        "
+                        class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+                      >
+                        Definir como principal
+                      </button>
+                    }
+                    <button
+                      type="button"
+                      (click)="mover(imagem, -1)"
+                      [disabled]="ocupado() || indice === 0"
+                      [attr.aria-label]="'Mover ' + imagem.nomeOriginal + ' para cima'"
+                      class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mover para cima
+                    </button>
+                    <button
+                      type="button"
+                      (click)="mover(imagem, 1)"
+                      [disabled]="ocupado() || indice === imagens().length - 1"
+                      [attr.aria-label]="'Mover ' + imagem.nomeOriginal + ' para baixo'"
+                      class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Mover para baixo
+                    </button>
+                    <button
+                      type="button"
+                      (click)="removerImagem(imagem)"
+                      [disabled]="ocupado() || naoPodeRemoverUltima()"
+                      [attr.aria-label]="'Remover ' + imagem.nomeOriginal"
+                      class="min-h-10 rounded-lg border border-red-300 px-3 text-sm font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50"
+                    >
+                      Remover
+                    </button>
+                  </div>
+
+                  @if (!produtoSimples() && produtoAtual.variantes.length > 1) {
+                    <fieldset class="mt-4 space-y-2 border-t border-slate-100 pt-3">
+                      <legend class="text-sm font-semibold text-slate-800">
+                        Opções do produto
+                      </legend>
+                      <p class="text-xs text-slate-600">
+                        Sem vínculos, a foto continua na galeria geral do produto.
+                      </p>
+                      @for (variante of produtoAtual.variantes; track variante.id) {
+                        <label class="flex min-h-10 items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            [checked]="temVinculo(imagem, variante.id)"
+                            [disabled]="ocupado()"
+                            (change)="alterarVinculo(imagem, variante, $event)"
+                            class="h-4 w-4 accent-emerald-800"
+                          />
+                          <span>{{ variante.identificacao || 'Opção do produto' }}</span>
+                        </label>
+                      }
+                    </fieldset>
+                  }
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (imagens().length > 0 && espacosDisponiveis().length > 0) {
+          <div
+            class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
+            aria-label="Espaços disponíveis para adicionar fotos"
+          >
+            @for (slot of espacosDisponiveis(); track $index) {
+              <div
+                class="flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-slate-300 text-center text-sm text-slate-500"
+              >
+                <span class="text-xl text-emerald-800" aria-hidden="true">+</span>
+                <span>Espaço disponível</span>
+              </div>
+            }
+          </div>
+        }
+
+        @if (espacosDisponiveis().length > 0) {
+          <section
+            aria-labelledby="add-images-title"
+            class="space-y-4 border-t border-slate-100 pt-5"
+          >
+            <div class="space-y-1">
+              <h3 id="add-images-title" class="font-semibold text-emerald-950">Adicionar fotos</h3>
+              <p class="text-sm text-slate-600">
+                JPEG, PNG ou WebP; até 5 MiB por foto. Você poderá revisar a seleção antes do envio.
+              </p>
+            </div>
+
+            <div
+              (dragover)="iniciarArrasteArquivos($event)"
+              (dragleave)="sairArrasteArquivos($event)"
+              (drop)="soltarArquivos($event)"
+              [class.border-emerald-700]="arrastandoArquivos()"
+              [class.bg-emerald-50]="arrastandoArquivos()"
+              class="rounded-xl border-2 border-dashed border-slate-300 px-5 py-7 text-center"
+            >
+              <p class="text-sm text-slate-700">Arraste imagens até aqui ou selecione arquivos.</p>
+              <label
+                for="selecionar-imagens"
+                class="mt-3 inline-flex min-h-11 cursor-pointer items-center rounded-lg bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900"
+              >
+                Selecionar fotos
+              </label>
+              <input
+                id="selecionar-imagens"
+                type="file"
+                accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                multiple
+                [disabled]="!podeSelecionar()"
+                (change)="selecionarArquivos($event)"
+                aria-label="Selecionar fotos JPEG, PNG ou WebP"
+                class="sr-only"
+              />
+              <p class="mt-2 text-xs text-slate-600">
+                {{ espacosDisponiveis().length }} espaço(s) disponível(is).
+              </p>
+            </div>
+          </section>
+        }
+
+        @if (selecao().length > 0) {
+          <section
+            aria-labelledby="selected-images-title"
+            class="space-y-4 border-t border-slate-100 pt-5"
+          >
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 id="selected-images-title" class="font-semibold text-emerald-950">
+                  Fotos selecionadas
+                </h3>
+                <p class="text-sm text-slate-600">
+                  Os arquivos só serão enviados ao escolher a ação abaixo.
+                </p>
+              </div>
+              <button
+                type="button"
+                (click)="enviarFotos()"
+                [disabled]="ocupado() || !temEnvioPendente()"
+                class="min-h-11 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {{ enviando() ? 'Enviando fotos…' : 'Enviar fotos' }}
+              </button>
+            </div>
+
+            <ul class="grid list-none gap-3 p-0 sm:grid-cols-2">
+              @for (selecionada of selecao(); track selecionada.id) {
+                <li class="flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 p-3">
+                  <img
+                    [src]="selecionada.previewUrl"
+                    [alt]="'Prévia de ' + selecionada.file.name"
+                    class="h-16 w-16 shrink-0 rounded-lg bg-slate-100 object-cover"
+                  />
+                  <div class="min-w-0 flex-1">
+                    <p class="break-words text-sm font-semibold text-slate-900">
+                      {{ selecionada.file.name }}
+                    </p>
+                    <p class="text-xs text-slate-600">
+                      {{ formatarTamanho(selecionada.file.size) }}
+                      @if (selecionada.status === 'uploading') {
+                        · Enviando, aguarde…
+                      } @else if (selecionada.status === 'failed') {
+                        · Envio não concluído
+                      } @else if (selecionada.status === 'uncertain') {
+                        · Envio não confirmado
+                      } @else {
+                        · Aguardando envio
+                      }
+                    </p>
+                    @if (selecionada.message) {
+                      <p
+                        class="mt-1 text-xs"
+                        [class.text-amber-800]="selecionada.status === 'uncertain'"
+                        [class.text-red-700]="selecionada.status === 'failed'"
+                        [class.text-slate-600]="selecionada.status === 'uploading'"
+                        role="status"
+                      >
+                        {{ selecionada.message }}
+                      </p>
+                    }
+                  </div>
+                  <div class="flex shrink-0 flex-col gap-1">
+                    @if (selecionada.status === 'failed') {
+                      <button
+                        type="button"
+                        (click)="tentarNovamente(selecionada.id)"
+                        [disabled]="ocupado()"
+                        [attr.aria-label]="'Tentar novamente o envio de ' + selecionada.file.name"
+                        class="min-h-9 rounded-lg border border-emerald-800 px-2 text-xs font-semibold text-emerald-800 disabled:opacity-50"
+                      >
+                        Tentar novamente
+                      </button>
+                    }
+                    @if (selecionada.status === 'uncertain') {
+                      <button
+                        type="button"
+                        (click)="conferirGaleria()"
+                        [disabled]="ocupado()"
+                        class="min-h-9 rounded-lg border border-amber-500 px-2 text-xs font-semibold text-amber-900 disabled:opacity-50"
+                      >
+                        Conferir galeria
+                      </button>
+                    }
+                    @if (selecionada.status !== 'uploading') {
+                      <button
+                        type="button"
+                        (click)="removerSelecao(selecionada.id)"
+                        [attr.aria-label]="'Remover ' + selecionada.file.name + ' da seleção'"
+                        class="min-h-9 rounded-lg px-2 text-xs font-semibold text-slate-700 underline underline-offset-2"
+                      >
+                        Remover
+                      </button>
+                    }
+                  </div>
+                </li>
+              }
+            </ul>
+          </section>
+        }
+
+        @if (imagens().length === 0 && selecao().length === 0) {
+          <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" aria-hidden="true">
+            @for (slot of espacosDisponiveis(); track $index) {
+              <div
+                class="flex min-h-24 items-center justify-center rounded-xl border border-dashed border-slate-300 text-2xl text-slate-300"
+              >
+                +
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+  </main>
+</app-admin-workspace>

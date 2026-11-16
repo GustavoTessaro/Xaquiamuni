@@ -12,9 +12,19 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
   {
+    path: 'admin/produtos/:produtoId/fotos',
+    loadComponent: () =>
+      import('./admin/produtos/admin-produto-imagens.component').then(
+        (module) => module.AdminProdutoImagensComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/produtos',
-    loadComponent: () => import('./admin/produtos/admin-produtos.component')
-      .then((module) => module.AdminProdutosComponent),
+    loadComponent: () =>
+      import('./admin/produtos/admin-produtos.component').then(
+        (module) => module.AdminProdutosComponent,
+      ),
     canActivate: [adminAuthGuard],
   },
   { path: 'admin/categorias', component: AdminCategoriasComponent, canActivate: [adminAuthGuard] },

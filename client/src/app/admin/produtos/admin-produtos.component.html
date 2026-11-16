@@ -64,8 +64,7 @@
 
         <div class="flex flex-wrap items-center justify-between gap-3">
           <p class="text-sm text-slate-600">
-            {{ quantidadeVariantesAtivas(produto) }} ativas de
-            {{ produto.variantes.length }} opções
+            {{ quantidadeVariantesAtivas(produto) }} ativas de {{ produto.variantes.length }} opções
           </p>
           @if (produto.caracteristicas.length > 0) {
             <p class="text-sm text-slate-600">
@@ -279,7 +278,23 @@
         </div>
       </section>
 
-      @if (mensagem()) {
+      @if (produtoCriadoId(); as produtoId) {
+        <div
+          class="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+          role="status"
+          aria-live="polite"
+        >
+          <p class="text-sm text-emerald-900">{{ mensagem() }}</p>
+          <button
+            type="button"
+            (click)="abrirGaleriaFotos(produtoId)"
+            aria-label="Gerenciar fotos do produto recém-cadastrado"
+            class="min-h-10 rounded-lg border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+          >
+            Gerenciar fotos
+          </button>
+        </div>
+      } @else if (mensagem()) {
         <p
           class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
           role="status"
@@ -290,13 +305,23 @@
       }
 
       @if (erroOperacao()) {
-        <p
+        <div
           class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
           role="alert"
           aria-live="assertive"
         >
-          {{ erroOperacao() }}
-        </p>
+          <p>{{ erroOperacao() }}</p>
+          @if (produtoSemFotoParaPublicar(); as produtoId) {
+            <button
+              type="button"
+              (click)="abrirGaleriaFotos(produtoId)"
+              aria-label="Gerenciar fotos para concluir a publicação"
+              class="mt-2 min-h-10 rounded-lg border border-red-300 px-4 font-semibold text-red-900 hover:bg-red-100"
+            >
+              Gerenciar fotos
+            </button>
+          }
+        </div>
       }
 
       @if (erroCarregamento()) {
@@ -556,6 +581,14 @@
                     class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-60"
                   >
                     Gerenciar opções
+                  </button>
+                  <button
+                    type="button"
+                    (click)="abrirGaleriaFotos(produto.id)"
+                    [attr.aria-label]="'Gerenciar fotos de ' + produto.nome"
+                    class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                  >
+                    Gerenciar fotos
                   </button>
                   <button
                     type="button"

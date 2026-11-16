@@ -47,6 +47,8 @@ export class AdminProdutosComponent {
   protected readonly erroCarregamento = signal('');
   protected readonly erroOperacao = signal('');
   protected readonly mensagem = signal('');
+  protected readonly produtoCriadoId = signal('');
+  protected readonly produtoSemFotoParaPublicar = signal('');
   protected readonly busca = signal('');
   protected readonly categoriaFiltro = signal('');
   protected readonly publicacaoFiltro = signal<PublicacaoFilter>('all');
@@ -134,6 +136,8 @@ export class AdminProdutosComponent {
     }
     this.mensagem.set('');
     this.erroOperacao.set('');
+    this.produtoCriadoId.set('');
+    this.produtoSemFotoParaPublicar.set('');
     this.produtoEditando.set(null);
     this.formularioProdutoVisivel.set(true);
   }
@@ -144,6 +148,8 @@ export class AdminProdutosComponent {
     }
     this.mensagem.set('');
     this.erroOperacao.set('');
+    this.produtoCriadoId.set('');
+    this.produtoSemFotoParaPublicar.set('');
     this.carregandoDetalheId.set(produto.id);
     this.produtosService
       .obter(produto.id)
@@ -192,6 +198,8 @@ export class AdminProdutosComponent {
     this.salvandoProduto.set(true);
     this.erroOperacao.set('');
     this.mensagem.set('');
+    this.produtoCriadoId.set('');
+    this.produtoSemFotoParaPublicar.set('');
     operation
       .pipe(
         takeUntilDestroyed(this.destroyRef),
@@ -202,6 +210,7 @@ export class AdminProdutosComponent {
           this.atualizarProduto(produto);
           this.formularioProdutoVisivel.set(false);
           this.produtoEditando.set(null);
+          this.produtoCriadoId.set(submission.mode === 'create' ? produto.id : '');
           this.mensagem.set(
             submission.mode === 'create'
               ? 'Produto cadastrado com sucesso. Ele começa não publicado.'
@@ -326,9 +335,7 @@ export class AdminProdutosComponent {
           this.varianteFormMode.set(null);
           this.varianteEditando.set(null);
           this.mensagemVariantes.set(
-            mode === 'create'
-              ? 'Opção adicionada com sucesso.'
-              : 'Opção atualizada com sucesso.',
+            mode === 'create' ? 'Opção adicionada com sucesso.' : 'Opção atualizada com sucesso.',
           );
         },
         error: (error: unknown) => {
@@ -431,6 +438,7 @@ export class AdminProdutosComponent {
     this.definirProdutoPendente(produto.id, true);
     this.erroOperacao.set('');
     this.mensagem.set('');
+    this.produtoSemFotoParaPublicar.set('');
     this.produtosService
       .alterarPublicacao(produto.id, { publicado: atualizado })
       .pipe(
@@ -445,20 +453,29 @@ export class AdminProdutosComponent {
               ? 'Produto publicado. A disponibilidade para compra depende do estoque.'
               : 'Produto despublicado com sucesso.',
           );
+          this.produtoSemFotoParaPublicar.set('');
         },
         error: (error: unknown) => {
           if (!this.redirecionarSessaoExpirada(error)) {
+            const precisaDeImagem = atualizado && this.publicacaoExigeImagem(error);
+            this.produtoSemFotoParaPublicar.set(precisaDeImagem ? produto.id : '');
             this.erroOperacao.set(
-              this.mensagemErroHttp(
-                error,
-                atualizado
-                  ? 'Não foi possível publicar o produto.'
-                  : 'Não foi possível despublicar o produto.',
-              ),
+              precisaDeImagem
+                ? 'Adicione ao menos uma foto principal antes de publicar o produto.'
+                : this.mensagemErroHttp(
+                    error,
+                    atualizado
+                      ? 'Não foi possível publicar o produto.'
+                      : 'Não foi possível despublicar o produto.',
+                  ),
             );
           }
         },
       });
+  }
+
+  protected abrirGaleriaFotos(produtoId: string): void {
+    void this.router.navigateByUrl(`/admin/produtos/${encodeURIComponent(produtoId)}/fotos`);
   }
 
   protected definirBusca(event: Event): void {
@@ -619,9 +636,7 @@ export class AdminProdutosComponent {
             this.erroVariantes.set(
               this.mensagemErroHttp(
                 error,
-                ativa
-                  ? 'Não foi possível ativar a opção.'
-                  : 'Não foi possível desativar a opção.',
+                ativa ? 'Não foi possível ativar a opção.' : 'Não foi possível desativar a opção.',
               ),
             );
           }
@@ -685,6 +700,18 @@ export class AdminProdutosComponent {
       return true;
     }
     return false;
+  }
+
+  private publicacaoExigeImagem(error: unknown): boolean {
+    if (!(error instanceof HttpErrorResponse) || error.status !== 409) {
+      return false;
+    }
+    const body = error.error as { title?: unknown; detail?: unknown } | null;
+    return (
+      body?.title === 'Conflito no produto' &&
+      typeof body.detail === 'string' &&
+      body.detail.includes('imagem principal')
+    );
   }
 
   private definirProdutoPendente(id: string, pending: boolean): void {

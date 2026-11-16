@@ -341,6 +341,15 @@ describe('AdminProdutosComponent', () => {
     expect(text()).toContain('Produto cadastrado com sucesso.');
     expect(text()).toContain('Ele começa não publicado.');
     expect(productNames()).toContain(newProduct.nome);
+    clickButton('Gerenciar fotos do produto recém-cadastrado');
+    expect(navigateByUrl).toHaveBeenCalledWith('/admin/produtos/new-product/fotos');
+  });
+
+  it('opens the gallery from the product list without loading galleries for every product', () => {
+    clickButton('Gerenciar fotos de Sabonete de Lavanda');
+
+    expect(navigateByUrl).toHaveBeenCalledWith('/admin/produtos/soap/fotos');
+    expect(listarProdutos).toHaveBeenCalledOnce();
   });
 
   it('keeps form data and shows a safe combination conflict after a failed save', () => {
@@ -437,6 +446,28 @@ describe('AdminProdutosComponent', () => {
     clickButton('Publicar Vela de Lavanda');
     expect(text()).toContain('A categoria está inativa');
     expect(publicationStatus('Vela de Lavanda')).toBe('Não publicado');
+  });
+
+  it('links to the gallery when publication is blocked because the product has no image', () => {
+    alterarPublicacao.mockReturnValue(
+      throwError(
+        () =>
+          new HttpErrorResponse({
+            status: 409,
+            error: {
+              title: 'Conflito no produto',
+              detail:
+                'Um produto só pode ser publicado com ao menos uma imagem e exatamente uma imagem principal.',
+            },
+          }),
+      ),
+    );
+
+    clickButton('Publicar Vela de Lavanda');
+
+    expect(text()).toContain('Adicione ao menos uma foto principal antes de publicar o produto.');
+    clickButton('Gerenciar fotos para concluir a publicação');
+    expect(navigateByUrl).toHaveBeenCalledWith('/admin/produtos/candle/fotos');
   });
 
   it('promotes an active replacement and deactivates the old default atomically', () => {
