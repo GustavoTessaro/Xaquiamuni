@@ -290,7 +290,9 @@ describe('ProdutoDetalheComponent', () => {
         '[data-characteristic-id="characteristic-fragrance"]',
       ).value,
     ).toBe('value-lavender');
-    expect(text(harness)).toContain('As outras escolhas foram ajustadas');
+    expect(text(harness)).toContain(
+      'As outras escolhas foram ajustadas para uma combinação cadastrada.',
+    );
   });
 
   it('selects thumbnails and provides a fallback when the selected image fails', async () => {

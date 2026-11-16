@@ -225,7 +225,7 @@ export class ProdutoDetalheComponent implements OnInit {
     this.applyOption(nextOption);
     this.selectionNotice.set(
       selectionWasAdjusted
-        ? 'As outras escolhas foram ajustadas para uma combinação disponível.'
+        ? 'As outras escolhas foram ajustadas para uma combinação cadastrada.'
         : '',
     );
   }

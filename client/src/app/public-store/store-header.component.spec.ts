@@ -1,5 +1,5 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { provideRouter, Router } from '@angular/router';
 import { of } from 'rxjs';
 import { vi } from 'vitest';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
@@ -42,6 +42,44 @@ describe('StoreHeaderComponent', () => {
     expect(element.querySelector('.store-account__logout')?.textContent).toContain('Sair');
     expect(element.querySelector('.store-account__register')).toBeNull();
     expect(logout).not.toHaveBeenCalled();
+  });
+
+  it('clears the authenticated header after logout and returns to the public homepage', async () => {
+    const logout = vi.fn(() => of(undefined));
+    await TestBed.configureTestingModule({
+      imports: [StoreHeaderComponent],
+      providers: [
+        provideRouter([]),
+        {
+          provide: AuthService,
+          useValue: {
+            obterSessao: vi.fn(() => of({ userId: 'customer-1' })),
+            logout,
+          },
+        },
+        {
+          provide: CatalogoPublicoService,
+          useValue: { listarCategorias: vi.fn(() => of([])) },
+        },
+      ],
+    }).compileComponents();
+
+    fixture = TestBed.createComponent(StoreHeaderComponent);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const navigateByUrl = vi.spyOn(TestBed.inject(Router), 'navigateByUrl').mockResolvedValue(true);
+    (fixture.nativeElement.querySelector('.store-account__logout') as HTMLButtonElement).click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(logout).toHaveBeenCalledOnce();
+    expect(navigateByUrl).toHaveBeenCalledWith('/');
+    expect(fixture.nativeElement.textContent).toContain('Entrar');
+    expect(fixture.nativeElement.textContent).toContain('Criar conta');
+    expect(fixture.nativeElement.querySelector('.store-account__logout')).toBeNull();
+    expect(fixture.nativeElement.querySelector('.store-nav a[href="/produtos"]')).not.toBeNull();
   });
 
   it('uses one accessible categories disclosure and closes on Escape or an outside click', async () => {
