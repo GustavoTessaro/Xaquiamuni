@@ -1,6 +1,7 @@
 import { HttpErrorResponse, HttpResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, Router, provideRouter } from '@angular/router';
+import { By } from '@angular/platform-browser';
+import { ActivatedRoute, Router, RouterLink, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
@@ -35,6 +36,8 @@ describe('AdminProdutoImagensComponent', () => {
     categoriaNome: 'Sabonetes',
     categoriaAtiva: true,
     publicado: false,
+    quantidadeImagens: 0,
+    fotoPrincipalUrl: null,
     variantes: [
       {
         id: 'variant-1',
@@ -160,6 +163,14 @@ describe('AdminProdutoImagensComponent', () => {
     expect(text()).toContain('rascunhos sem fotos');
     expect(text()).not.toContain('Opções do produto');
     expect(listarImagens).toHaveBeenCalledWith(simpleProduct.id);
+  });
+
+  it('preserves product-list query parameters when returning from the gallery', () => {
+    const backLink = fixture.debugElement
+      .queryAll(By.directive(RouterLink))
+      .find((element) => element.nativeElement.textContent?.trim() === 'Voltar aos produtos');
+
+    expect(backLink?.injector.get(RouterLink).queryParamsHandling).toBe('preserve');
   });
 
   it('limits selection by remaining gallery slots and rejects files over 5 MiB', () => {

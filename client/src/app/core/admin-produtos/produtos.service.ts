@@ -44,6 +44,8 @@ export interface AdminProduto {
   categoriaNome: string;
   categoriaAtiva: boolean;
   publicado: boolean;
+  quantidadeImagens: number;
+  fotoPrincipalUrl: string | null;
   variantes: AdminProdutoVariante[];
   caracteristicas: AdminProdutoCaracteristica[];
 }

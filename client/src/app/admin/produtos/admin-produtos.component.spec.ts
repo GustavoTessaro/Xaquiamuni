@@ -39,6 +39,8 @@ describe('AdminProdutosComponent', () => {
     categoriaNome: 'Sabonetes',
     categoriaAtiva: true,
     publicado: true,
+    quantidadeImagens: 2,
+    fotoPrincipalUrl: '/api/admin/produtos/soap/imagens/soap-main/conteudo',
     variantes: [
       {
         id: 'soap-default',
@@ -73,6 +75,8 @@ describe('AdminProdutosComponent', () => {
     categoriaNome: 'Velas',
     categoriaAtiva: true,
     publicado: false,
+    quantidadeImagens: 0,
+    fotoPrincipalUrl: null,
     variantes: [
       {
         id: 'candle-default',
@@ -159,6 +163,54 @@ describe('AdminProdutosComponent', () => {
     expect(root().querySelector('[aria-label="Produtos não publicados"]')?.textContent).toContain(
       '1',
     );
+  });
+
+  it('renders the primary photo, photo count, and an accessible no-photo placeholder', () => {
+    const principal = root().querySelector<HTMLImageElement>(
+      'img[alt="Foto principal de Sabonete de Lavanda"]',
+    );
+
+    expect(principal?.getAttribute('src')).toBe(
+      '/api/admin/produtos/soap/imagens/soap-main/conteudo',
+    );
+    expect(text()).toContain('2 fotos cadastradas');
+    expect(text()).toContain('0 fotos cadastradas');
+    expect(
+      root().querySelector('[aria-label="Sem foto principal para Vela de Lavanda"]'),
+    ).not.toBeNull();
+    expect(listarProdutos).toHaveBeenCalledOnce();
+  });
+
+  it('shows a neutral fallback when the principal image cannot be loaded', () => {
+    const principal = root().querySelector<HTMLImageElement>(
+      'img[alt="Foto principal de Sabonete de Lavanda"]',
+    );
+
+    principal?.dispatchEvent(new Event('error'));
+    fixture.detectChanges();
+
+    expect(
+      root().querySelector('[aria-label="Foto principal indisponível para Sabonete de Lavanda"]'),
+    ).not.toBeNull();
+    expect(text()).toContain('Foto indisponível');
+    expect(text()).toContain('2 fotos cadastradas');
+  });
+
+  it('shows actionable publication requirements without implying stock availability', () => {
+    const blocked = {
+      ...candle,
+      categoriaAtiva: false,
+      variantes: candle.variantes.map((variante) => ({ ...variante, padrao: false })),
+    };
+    listarProdutos.mockReturnValueOnce(of([blocked]));
+    fixture.destroy();
+    fixture = TestBed.createComponent(AdminProdutosComponent);
+    fixture.detectChanges();
+
+    expect(text()).toContain('Ative a categoria em Gerenciar categorias.');
+    expect(text()).toContain('Defina uma opção ativa como principal em Gerenciar opções.');
+    expect(text()).toContain('Adicione uma foto principal em Gerenciar fotos.');
+    expect(text()).toContain('Publicação não indica disponibilidade em estoque.');
   });
 
   it('shows simple-product measures and sale units without zero placeholders or legacy conversion', () => {
@@ -350,6 +402,40 @@ describe('AdminProdutosComponent', () => {
 
     expect(navigateByUrl).toHaveBeenCalledWith('/admin/produtos/soap/fotos');
     expect(listarProdutos).toHaveBeenCalledOnce();
+  });
+
+  it('preserves search and filters when opening the gallery', () => {
+    setField('product-search', 'Sabonete');
+    setField('category-filter', 'soaps');
+    clickButton('Publicados');
+    clickButton('Gerenciar fotos de Sabonete de Lavanda');
+
+    expect(navigateByUrl).toHaveBeenCalledWith(
+      '/admin/produtos/soap/fotos?busca=Sabonete&categoriaId=soaps&publicacao=published',
+    );
+  });
+
+  it('reloads the product list and photo summary after returning from the gallery', () => {
+    const updated = {
+      ...soap,
+      publicado: true,
+      quantidadeImagens: 3,
+      fotoPrincipalUrl: '/api/admin/produtos/soap/imagens/soap-main-updated/conteudo',
+    };
+    listarProdutos.mockReturnValueOnce(of([updated, candle]));
+    clickButton('Gerenciar fotos de Sabonete de Lavanda');
+    fixture.destroy();
+    fixture = TestBed.createComponent(AdminProdutosComponent);
+    fixture.detectChanges();
+
+    expect(listarProdutos).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('3 fotos cadastradas');
+    expect(publicationStatus('Sabonete de Lavanda')).toBe('Publicado');
+    expect(
+      root().querySelector(
+        'img[src="/api/admin/produtos/soap/imagens/soap-main-updated/conteudo"]',
+      ),
+    ).not.toBeNull();
   });
 
   it('keeps form data and shows a safe combination conflict after a failed save', () => {
@@ -631,7 +717,13 @@ describe('AdminProdutosComponent', () => {
     const article = Array.from(root().querySelectorAll('article')).find(
       (element) => element.querySelector('h2')?.textContent?.trim() === name,
     );
-    return article?.querySelector('span')?.textContent?.trim() ?? null;
+    return (
+      Array.from(article?.querySelectorAll('span') ?? [])
+        .find((element) =>
+          ['Publicado', 'Não publicado'].includes(element.textContent?.trim() ?? ''),
+        )
+        ?.textContent?.trim() ?? null
+    );
   }
 
   function clickButton(label: string): void {

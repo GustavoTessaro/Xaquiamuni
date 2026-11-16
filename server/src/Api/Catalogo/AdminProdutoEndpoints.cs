@@ -537,11 +537,15 @@ public sealed record ProdutoResponse(
     string CategoriaNome,
     bool CategoriaAtiva,
     bool Publicado,
+    int QuantidadeImagens,
+    string? FotoPrincipalUrl,
     IReadOnlyList<ProdutoVarianteResponse> Variantes,
     IReadOnlyList<ProdutoCaracteristicaResponse> Caracteristicas)
 {
-    public static ProdutoResponse From(Produto produto) =>
-        new(
+    public static ProdutoResponse From(Produto produto)
+    {
+        var imagemPrincipal = produto.Imagens.FirstOrDefault(imagem => imagem.Principal);
+        return new(
             produto.Id,
             produto.Nome,
             produto.Descricao,
@@ -549,6 +553,10 @@ public sealed record ProdutoResponse(
             produto.Categoria.Nome,
             produto.Categoria.Ativa,
             produto.Publicado,
+            produto.Imagens.Count,
+            imagemPrincipal is null
+                ? null
+                : ProdutoImagemResponse.CriarUrlConteudo(produto.Id, imagemPrincipal.Id),
             produto.Variantes
                 .OrderByDescending(variant => variant.Padrao)
                 .ThenBy(variant => variant.IdentificacaoNormalizada, StringComparer.Ordinal)
@@ -558,4 +566,5 @@ public sealed record ProdutoResponse(
                 .OrderBy(characteristic => characteristic.NomeNormalizado, StringComparer.Ordinal)
                 .Select(ProdutoCaracteristicaResponse.From)
                 .ToArray());
+    }
 }

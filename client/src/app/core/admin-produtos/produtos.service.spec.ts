@@ -22,6 +22,8 @@ describe('ProdutosService', () => {
     categoriaNome: 'Sabonetes',
     categoriaAtiva: true,
     publicado: false,
+    quantidadeImagens: 0,
+    fotoPrincipalUrl: null,
     variantes: [
       {
         id: 'variant-1',

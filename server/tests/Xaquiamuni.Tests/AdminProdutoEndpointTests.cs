@@ -219,6 +219,59 @@ public sealed class AdminProdutoEndpointTests
     }
 
     [Fact]
+    public async Task ListProducts_ReturnsImageCountAndRelativePrimaryImageUrl()
+    {
+        var category = Categoria.Criar("Velas", null, 0);
+        var withImages = Produto.CriarSimples("Vela de Lavanda", null, category, "UN", 25m);
+        var primary = withImages.AdicionarImagem(
+            "internal-storage-key-1",
+            "principal.webp",
+            "image/webp",
+            1024,
+            800,
+            600);
+        withImages.AdicionarImagem(
+            "internal-storage-key-2",
+            "detalhe.webp",
+            "image/webp",
+            2048,
+            800,
+            600);
+        var withoutImages = Produto.CriarSimples("Sabonete", null, category, "UN", 20m);
+        var manager = new FakeGerenciarProdutos
+        {
+            ProductsToReturn = [withImages, withoutImages]
+        };
+        using var factory = CreateFactory(manager);
+        using var client = CreateClient(factory);
+        using var request = new HttpRequestMessage(HttpMethod.Get, AdminProdutoEndpoints.BasePath);
+        request.Headers.Add(TestAuthenticationHandler.RoleHeader, XaquiamuniRoles.Administrador);
+
+        using var response = await client.SendAsync(request);
+        var json = await response.Content.ReadAsStringAsync();
+        var products = JsonSerializer.Deserialize<ProdutoResponse[]>(
+            json,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Collection(
+            products!,
+            product =>
+            {
+                Assert.Equal(2, product.QuantidadeImagens);
+                Assert.Equal(
+                    ProdutoImagemResponse.CriarUrlConteudo(withImages.Id, primary.Id),
+                    product.FotoPrincipalUrl);
+            },
+            product =>
+            {
+                Assert.Equal(0, product.QuantidadeImagens);
+                Assert.Null(product.FotoPrincipalUrl);
+            });
+        Assert.DoesNotContain("internal-storage-key", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task UnexpectedFailures_ReturnGenericProblemDetailsWithoutExceptionText()
     {
         var manager = new FakeGerenciarProdutos
@@ -342,6 +395,7 @@ public sealed class AdminProdutoEndpointTests
         public int MutationCalls { get; private set; }
         public Produto? CreatedProduct { get; private set; }
         public Produto? ProductToReturn { get; init; }
+        public IReadOnlyList<Produto> ProductsToReturn { get; init; } = [];
         public ProdutoCadastroInput? LastCadastroInput { get; private set; }
         public ProdutoFiltro? LastFilter { get; private set; }
         public Exception? ListFailure { get; init; }
@@ -356,7 +410,7 @@ public sealed class AdminProdutoEndpointTests
                 throw ListFailure;
             }
 
-            return Task.FromResult<IReadOnlyList<Produto>>([]);
+            return Task.FromResult(ProductsToReturn);
         }
 
         public Task<Produto?> ConsultarAsync(

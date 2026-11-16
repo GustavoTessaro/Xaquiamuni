@@ -18,6 +18,8 @@ describe('AdminProdutoFormComponent', () => {
     categoriaNome: 'Velas',
     categoriaAtiva: false,
     publicado: false,
+    quantidadeImagens: 0,
+    fotoPrincipalUrl: null,
     variantes: [
       {
         id: 'variant-1',

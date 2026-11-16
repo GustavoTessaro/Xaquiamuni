@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { finalize, forkJoin } from 'rxjs';
 import { AdminCategoria, CategoriasService } from '../../core/admin-categorias/categorias.service';
 import {
@@ -42,6 +42,7 @@ const UNIDADE_VENDA_LABEL: Readonly<Record<string, string>> = {
 })
 export class AdminProdutosComponent {
   protected readonly produtos = signal<AdminProduto[]>([]);
+  protected readonly imagensPrincipaisIndisponiveis = signal<ReadonlySet<string>>(new Set());
   protected readonly categorias = signal<AdminCategoria[]>([]);
   protected readonly carregando = signal(false);
   protected readonly erroCarregamento = signal('');
@@ -90,9 +91,17 @@ export class AdminProdutosComponent {
   private readonly categoriasService = inject(CategoriasService);
   private readonly produtosService = inject(ProdutosService);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
   constructor() {
+    const parametros = this.route.snapshot.queryParamMap;
+    this.busca.set(parametros.get('busca') ?? '');
+    this.categoriaFiltro.set(parametros.get('categoriaId') ?? '');
+    const publicacao = parametros.get('publicacao');
+    if (publicacao === 'published' || publicacao === 'unpublished') {
+      this.publicacaoFiltro.set(publicacao);
+    }
     this.carregarProdutos();
   }
 
@@ -115,6 +124,7 @@ export class AdminProdutosComponent {
         next: ({ produtos, categorias }) => {
           this.produtos.set(produtos);
           this.categorias.set(categorias);
+          this.imagensPrincipaisIndisponiveis.set(new Set());
           this.erroOperacao.set('');
         },
         error: (error: unknown) => {
@@ -475,7 +485,21 @@ export class AdminProdutosComponent {
   }
 
   protected abrirGaleriaFotos(produtoId: string): void {
-    void this.router.navigateByUrl(`/admin/produtos/${encodeURIComponent(produtoId)}/fotos`);
+    const parametros = new URLSearchParams();
+    const busca = this.busca().trim();
+    if (busca) {
+      parametros.set('busca', busca);
+    }
+    if (this.categoriaFiltro()) {
+      parametros.set('categoriaId', this.categoriaFiltro());
+    }
+    if (this.publicacaoFiltro() !== 'all') {
+      parametros.set('publicacao', this.publicacaoFiltro());
+    }
+    const query = parametros.toString();
+    void this.router.navigateByUrl(
+      `/admin/produtos/${encodeURIComponent(produtoId)}/fotos${query ? `?${query}` : ''}`,
+    );
   }
 
   protected definirBusca(event: Event): void {
@@ -601,6 +625,42 @@ export class AdminProdutosComponent {
 
   protected quantidadeVariantesAtivas(produto: AdminProduto): number {
     return produto.variantes.filter((variante) => variante.ativa).length;
+  }
+
+  protected urlFotoPrincipal(produto: AdminProduto): string | null {
+    const url = produto.fotoPrincipalUrl;
+    return url && !this.imagensPrincipaisIndisponiveis().has(url) ? url : null;
+  }
+
+  protected marcarFotoPrincipalIndisponivel(url: string): void {
+    this.imagensPrincipaisIndisponiveis.update((indisponiveis) => {
+      const atualizadas = new Set(indisponiveis);
+      atualizadas.add(url);
+      return atualizadas;
+    });
+  }
+
+  protected resumoQuantidadeFotos(produto: AdminProduto): string {
+    const quantidade = produto.quantidadeImagens;
+    return `${quantidade} ${quantidade === 1 ? 'foto cadastrada' : 'fotos cadastradas'}`;
+  }
+
+  protected pendenciasPublicacao(produto: AdminProduto): string[] {
+    if (produto.publicado) {
+      return [];
+    }
+
+    const pendencias: string[] = [];
+    if (!produto.categoriaAtiva) {
+      pendencias.push('Ative a categoria em Gerenciar categorias.');
+    }
+    if (!produto.variantes.some((variante) => variante.padrao && variante.ativa)) {
+      pendencias.push('Defina uma opção ativa como principal em Gerenciar opções.');
+    }
+    if (!produto.fotoPrincipalUrl) {
+      pendencias.push('Adicione uma foto principal em Gerenciar fotos.');
+    }
+    return pendencias;
   }
 
   private enviarStatusVariante(

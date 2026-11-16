@@ -503,7 +503,10 @@ public sealed record ProdutoImagemResponse(
             imagem.Principal,
             imagem.VarianteIds,
             imagem.CriadoEmUtc,
-            $"{AdminProdutoEndpoints.BasePath}/{imagem.ProdutoId:D}/imagens/{imagem.Id:D}/conteudo");
+            CriarUrlConteudo(imagem.ProdutoId, imagem.Id));
+
+    public static string CriarUrlConteudo(Guid produtoId, Guid imagemId) =>
+        $"{AdminProdutoEndpoints.BasePath}/{produtoId:D}/imagens/{imagemId:D}/conteudo";
 }
 
 /// <summary>Confirma a remoção lógica da imagem e informa eventual limpeza física pendente.</summary>
