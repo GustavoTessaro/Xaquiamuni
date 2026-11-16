@@ -98,6 +98,7 @@ app.MapXaquiamuniAuthEndpoints();
 app.MapXaquiamuniAdminAuthEndpoints();
 app.MapAdminCategoriaEndpoints();
 app.MapAdminProdutoEndpoints();
+app.MapAdminProdutoImagemEndpoints();
 
 app.Run();
 

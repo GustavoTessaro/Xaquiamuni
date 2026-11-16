@@ -1,0 +1,79 @@
+@baseUrl = https://localhost:7231
+@adminCookie = <cookie-de-sessao-ADMIN>
+@xsrfCookieValue = <cookie-XSRF-TOKEN>
+@xsrfRequestToken = <requestToken-obtido-em-api-auth-csrf>
+@produtoId = <guid-do-produto>
+@imagemId = <guid-da-imagem>
+@varianteId = <guid-da-variante>
+@segundaVarianteId = <guid-da-segunda-variante>
+@imagemSecundariaId = <guid-da-outra-imagem>
+
+### Obter token antifalsificação; repetir com a sessão ADMIN e copiar requestToken + cookie XSRF-TOKEN
+GET {{baseUrl}}/api/auth/csrf
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Listar imagens ordenadas do produto
+GET {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Consultar metadados da imagem
+GET {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Ler conteúdo WebP; resposta administrativa privada e sem cache
+GET {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}/conteudo
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}
+
+### Enviar exatamente um arquivo; opcionalmente repetir varianteIds para cada vínculo
+POST {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens
+Content-Type: multipart/form-data; boundary=----XaquiamuniImageBoundary
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+------XaquiamuniImageBoundary
+Content-Disposition: form-data; name="arquivo"; filename="imagem-sintetica.png"
+Content-Type: application/octet-stream
+
+< ./imagem-sintetica.png
+------XaquiamuniImageBoundary
+Content-Disposition: form-data; name="varianteIds"
+
+{{varianteId}}
+------XaquiamuniImageBoundary
+Content-Disposition: form-data; name="varianteIds"
+
+{{segundaVarianteId}}
+------XaquiamuniImageBoundary--
+
+### Definir imagem principal
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}/principal
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+### Reordenar enviando a lista completa na ordem desejada
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/ordem
+Content-Type: application/json
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+{
+  "imagemIds": [
+    "{{imagemSecundariaId}}",
+    "{{imagemId}}"
+  ]
+}
+
+### Vincular uma imagem a uma variante em uma mutação atômica
+PUT {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}/variantes/{{varianteId}}
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+### Desvincular uma imagem de uma variante em uma mutação atômica
+DELETE {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}/variantes/{{varianteId}}
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
+
+### Remover imagem; conflito se for a última imagem de um produto publicado
+DELETE {{baseUrl}}/api/admin/produtos/{{produtoId}}/imagens/{{imagemId}}
+X-XSRF-TOKEN: {{xsrfRequestToken}}
+Cookie: __Host-Xaquiamuni.Auth={{adminCookie}}; XSRF-TOKEN={{xsrfCookieValue}}
