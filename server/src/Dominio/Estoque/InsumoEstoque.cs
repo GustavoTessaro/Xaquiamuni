@@ -76,6 +76,32 @@ public sealed class InsumoEstoque
         bool controlaLote,
         bool validadeObrigatoria)
     {
+        ValidarConfiguracaoLote(controlaLote, validadeObrigatoria);
+        if (ControlaLote != controlaLote || ValidadeObrigatoria != validadeObrigatoria)
+        {
+            throw new InvalidOperationException(
+                "A política de lotes e validade só pode ser alterada pela operação transacional protegida.");
+        }
+
+        AtualizarDadosValidandoDominio(nome, tipo, estoqueMinimo, controlaLote, validadeObrigatoria);
+    }
+
+    internal void AtualizarPoliticaLoteProtegida(
+        bool controlaLote,
+        bool validadeObrigatoria)
+    {
+        ValidarConfiguracaoLote(controlaLote, validadeObrigatoria);
+        ControlaLote = controlaLote;
+        ValidadeObrigatoria = validadeObrigatoria;
+    }
+
+    private void AtualizarDadosValidandoDominio(
+        string? nome,
+        TipoInsumoEstoque tipo,
+        QuantidadeEstoque? estoqueMinimo,
+        bool controlaLote,
+        bool validadeObrigatoria)
+    {
         var normalizedName = NormalizarNome(nome);
         ValidarTipo(tipo);
         ValidarEstoqueMinimo(estoqueMinimo, UnidadeBase);
@@ -158,6 +184,13 @@ public sealed class InsumoEstoque
 
         _formasCompra.Add(forma);
         return forma;
+    }
+
+    internal void AplicarEntrada(SaldoInsumo saldo, MovimentoInsumo movimento)
+    {
+        ArgumentNullException.ThrowIfNull(saldo);
+        ArgumentNullException.ThrowIfNull(movimento);
+        saldo.AplicarEntrada(movimento);
     }
 
     public void AtualizarFormaCompra(

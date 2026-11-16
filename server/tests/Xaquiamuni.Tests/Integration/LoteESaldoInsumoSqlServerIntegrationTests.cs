@@ -19,6 +19,7 @@ public sealed class LoteESaldoInsumoSqlServerIntegrationTests
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         await using var context = database.CreateVerificationContext();
+        await context.GetService<IMigrator>().MigrateAsync(MigrationId);
         var appliedMigrations = await context.Database.GetAppliedMigrationsAsync();
         var tables = await ReadTableNamesAsync(context);
 

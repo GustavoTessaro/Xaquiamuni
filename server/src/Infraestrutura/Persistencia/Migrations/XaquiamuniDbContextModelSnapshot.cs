@@ -748,6 +748,92 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChaveIdempotencia")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<decimal?>("CustoPorUnidadeBase")
+                        .HasPrecision(38, 14)
+                        .HasColumnType("decimal(38,14)");
+
+                    b.Property<decimal?>("CustoTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<byte[]>("FingerprintRequisicao")
+                        .IsRequired()
+                        .HasColumnType("binary(32)");
+
+                    b.Property<Guid?>("FormaCompraId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FormaCompraNome")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Observacao")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<decimal>("QuantidadeOriginal")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<DateTimeOffset>("RegistradoEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("Tipo")
+                        .HasColumnType("smallint");
+
+                    b.Property<short?>("UnidadeOriginal")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ResponsavelId", "ChaveIdempotencia")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MovimentosInsumo_ResponsavelId_ChaveIdempotencia");
+
+                    b.HasIndex("InsumoId", "LoteId", "RegistradoEmUtc")
+                        .HasDatabaseName("IX_MovimentosInsumo_InsumoId_LoteId_RegistradoEmUtc");
+
+                    b.ToTable("MovimentosInsumo", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Custo_Valid", "([CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR ([CustoTotal] IS NOT NULL AND [CustoPorUnidadeBase] IS NOT NULL AND [CustoTotal] >= 0 AND [CustoPorUnidadeBase] >= 0)");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Entrada_Valid", "[QuantidadeOriginal] > 0 AND [QuantidadeBase_ValorBase] > 0 AND [SaldoAnterior_ValorBase] >= 0 AND [SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase] AND [SaldoAnterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoPosterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND [SaldoAnterior_Dimensao] = [QuantidadeBase_Dimensao] AND [SaldoPosterior_Dimensao] = [QuantidadeBase_Dimensao]");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Origem_Valid", "(([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL AND [QuantidadeOriginal] > 0) OR ([FormaCompraId] IS NOT NULL AND [FormaCompraNome] IS NOT NULL AND LEN(LTRIM(RTRIM([FormaCompraNome]))) > 0 AND [FatorCompra_ValorBase] > 0 AND [FatorCompra_UnidadeBase] IS NOT NULL AND [FatorCompra_Dimensao] IS NOT NULL AND [UnidadeOriginal] IS NULL AND [QuantidadeOriginal] = FLOOR([QuantidadeOriginal]) AND [FatorCompra_Dimensao] = [QuantidadeBase_Dimensao] AND (([FatorCompra_UnidadeBase] = 1 AND [FatorCompra_Dimensao] = 1) OR ([FatorCompra_UnidadeBase] = 3 AND [FatorCompra_Dimensao] = 2) OR ([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3)))) AND (([UnidadeOriginal] IS NULL) OR ([UnidadeOriginal] = 1 AND [QuantidadeBase_UnidadeBase] = 1) OR ([UnidadeOriginal] = 2 AND [QuantidadeBase_UnidadeBase] = 1 OR [UnidadeOriginal] IN (3, 4) AND [QuantidadeBase_UnidadeBase] = 3 OR [UnidadeOriginal] = 5 AND [QuantidadeBase_UnidadeBase] = 5))");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Timestamps_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+
+                            t.HasCheckConstraint("CK_MovimentosInsumo_Tipo_Valid", "[Tipo] IN (1, 2)");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1236,6 +1322,138 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_LotesInsumo_InsumosEstoque_InsumoId");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_MovimentosInsumo_InsumosEstoque_InsumoId");
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId", "LoteId")
+                        .HasPrincipalKey("InsumoId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_MovimentosInsumo_LotesInsumo_InsumoId_LoteId");
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "FatorCompra", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("FatorCompra_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("FatorCompra_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("FatorCompra_ValorBase");
+
+                            b1.HasKey("MovimentoInsumoId");
+
+                            b1.ToTable("MovimentosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoInsumoId");
+                        });
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "QuantidadeBase", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("QuantidadeBase_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("QuantidadeBase_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("QuantidadeBase_ValorBase");
+
+                            b1.HasKey("MovimentoInsumoId");
+
+                            b1.ToTable("MovimentosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoInsumoId");
+                        });
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "SaldoAnterior", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("SaldoAnterior_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("SaldoAnterior_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("SaldoAnterior_ValorBase");
+
+                            b1.HasKey("MovimentoInsumoId");
+
+                            b1.ToTable("MovimentosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoInsumoId");
+                        });
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.QuantidadeEstoque", "SaldoPosterior", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoInsumoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<short>("Dimensao")
+                                .HasColumnType("smallint")
+                                .HasColumnName("SaldoPosterior_Dimensao");
+
+                            b1.Property<short>("UnidadeBase")
+                                .HasColumnType("smallint")
+                                .HasColumnName("SaldoPosterior_UnidadeBase");
+
+                            b1.Property<decimal>("ValorBase")
+                                .HasPrecision(18, 6)
+                                .HasColumnType("decimal(18,6)")
+                                .HasColumnName("SaldoPosterior_ValorBase");
+
+                            b1.HasKey("MovimentoInsumoId");
+
+                            b1.ToTable("MovimentosInsumo");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoInsumoId");
+                        });
+
+                    b.Navigation("FatorCompra");
+
+                    b.Navigation("QuantidadeBase")
+                        .IsRequired();
+
+                    b.Navigation("SaldoAnterior")
+                        .IsRequired();
+
+                    b.Navigation("SaldoPosterior")
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>

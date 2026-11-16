@@ -13,7 +13,8 @@ public sealed class LoteInsumo
         string identificacao,
         DateOnly dataEntrada,
         DateOnly? dataValidade,
-        string? fornecedor)
+        string? fornecedor,
+        bool bloqueado)
     {
         Id = id;
         InsumoId = insumoId;
@@ -21,6 +22,7 @@ public sealed class LoteInsumo
         DataEntrada = dataEntrada;
         DataValidade = dataValidade;
         Fornecedor = fornecedor;
+        Bloqueado = bloqueado;
     }
 
     private LoteInsumo()
@@ -40,7 +42,8 @@ public sealed class LoteInsumo
         string? identificacao,
         DateOnly dataEntrada,
         DateOnly? dataValidade = null,
-        string? fornecedor = null)
+        string? fornecedor = null,
+        bool bloqueado = false)
     {
         ArgumentNullException.ThrowIfNull(insumo);
 
@@ -73,7 +76,8 @@ public sealed class LoteInsumo
             identificacaoNormalizada,
             dataEntrada,
             dataValidade,
-            fornecedorNormalizado);
+            fornecedorNormalizado,
+            bloqueado);
     }
 
     public void DefinirBloqueado(bool bloqueado)

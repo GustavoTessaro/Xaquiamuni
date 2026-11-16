@@ -18,6 +18,7 @@ public sealed class InsumoEstoqueSqlServerIntegrationTests
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         await using var context = database.CreateVerificationContext();
+        await context.GetService<IMigrator>().MigrateAsync(MigrationId);
         var appliedMigrations = await context.Database.GetAppliedMigrationsAsync();
         var tables = await context.Database.SqlQuery<string>(
                 $"SELECT [name] AS [Value] FROM [sys].[tables] WHERE [schema_id] = SCHEMA_ID(N'dbo')")
@@ -122,8 +123,8 @@ public sealed class InsumoEstoqueSqlServerIntegrationTests
             "Base vegetal",
             TipoInsumoEstoque.MateriaPrima,
             QuantidadeEstoque.Criar(2m, UnidadeFisicaEstoque.Grama),
-            controlaLote: false,
-            validadeObrigatoria: false);
+            controlaLote: true,
+            validadeObrigatoria: true);
         persistedMass.DefinirAtivo(false);
         persistedMass.DefinirFormaCompraAtiva(massSmallPack.Id, false);
         await context.SaveChangesAsync();
@@ -135,8 +136,8 @@ public sealed class InsumoEstoqueSqlServerIntegrationTests
         Assert.Equal("Base vegetal", updated.Nome);
         Assert.Equal(2m, updated.EstoqueMinimo?.ValorBase);
         Assert.False(updated.Ativo);
-        Assert.False(updated.ControlaLote);
-        Assert.False(updated.ValidadeObrigatoria);
+        Assert.True(updated.ControlaLote);
+        Assert.True(updated.ValidadeObrigatoria);
         Assert.False(updated.FormasCompra.Single(item => item.Id == massSmallPack.Id).Ativa);
         Assert.True(updated.FormasCompra.Single(item => item.Id == massLargePack.Id).Ativa);
     }

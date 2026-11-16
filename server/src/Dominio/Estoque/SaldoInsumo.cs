@@ -56,4 +56,18 @@ public sealed class SaldoInsumo
             lote?.Id,
             QuantidadeEstoque.Criar(0m, insumo.UnidadeBase));
     }
+
+    internal void AplicarEntrada(MovimentoInsumo movimento)
+    {
+        ArgumentNullException.ThrowIfNull(movimento);
+        if (movimento.InsumoId != InsumoId
+            || movimento.LoteId != LoteId
+            || movimento.SaldoAnterior != QuantidadeFisica)
+        {
+            throw new InvalidOperationException(
+                "O movimento não corresponde ao saldo físico atual desta posição.");
+        }
+
+        QuantidadeFisica = movimento.SaldoPosterior;
+    }
 }

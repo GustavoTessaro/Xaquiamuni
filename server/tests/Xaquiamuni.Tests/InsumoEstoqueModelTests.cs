@@ -109,6 +109,46 @@ public sealed class InsumoEstoqueModelTests
     }
 
     [Fact]
+    public void Model_MapsAppendOnlyMovementSnapshotsCostsAndIdempotency()
+    {
+        using var context = CreateContext();
+        var model = context.GetService<IDesignTimeModel>().Model;
+        var movement = model.FindEntityType(typeof(MovimentoInsumo))!;
+        var idempotencyIndex = Assert.Single(movement.GetIndexes(), index =>
+            index.GetDatabaseName() == "UX_MovimentosInsumo_ResponsavelId_ChaveIdempotencia");
+        var table = movement.GetTableName()!;
+        var foreignKeys = movement.GetForeignKeys().ToArray();
+
+        Assert.Equal("MovimentosInsumo", table);
+        Assert.True(idempotencyIndex.IsUnique);
+        Assert.Equal(
+            "Latin1_General_100_BIN2",
+            movement.FindProperty(nameof(MovimentoInsumo.ChaveIdempotencia))!.GetCollation());
+        Assert.Equal(
+            "decimal(18,2)",
+            movement.FindProperty(nameof(MovimentoInsumo.CustoTotal))!.GetColumnType());
+        Assert.Equal(
+            "decimal(38,14)",
+            movement.FindProperty(nameof(MovimentoInsumo.CustoPorUnidadeBase))!.GetColumnType());
+        Assert.Equal(
+            "datetimeoffset(7)",
+            movement.FindProperty(nameof(MovimentoInsumo.RegistradoEmUtc))!.GetColumnType());
+        Assert.Equal(
+            "binary(32)",
+            movement.FindProperty(nameof(MovimentoInsumo.FingerprintRequisicao))!.GetColumnType());
+        Assert.Contains(
+            "CK_MovimentosInsumo_Origem_Valid",
+            movement.GetCheckConstraints().Select(constraint => constraint.Name));
+        Assert.Contains(
+            "CK_MovimentosInsumo_Entrada_Valid",
+            movement.GetCheckConstraints().Select(constraint => constraint.Name));
+        Assert.Contains(foreignKeys, foreignKey =>
+            foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual([nameof(MovimentoInsumo.InsumoId)])
+            && foreignKey.DeleteBehavior == DeleteBehavior.Restrict);
+    }
+
+    [Fact]
     public void ModelSnapshot_HasNoPendingChanges()
     {
         using var context = CreateContext();

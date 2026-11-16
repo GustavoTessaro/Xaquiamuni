@@ -10,6 +10,7 @@ using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Aplicacao.Catalogo.Imagens;
 using Xaquiamuni.Aplicacao.Catalogo.Publico;
+using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
@@ -47,6 +48,9 @@ public static class DependencyInjection
         services.AddScoped<ICatalogoPublicoRepository, EfCatalogoPublicoRepository>();
         services.AddScoped<IConsultarCatalogoPublico, ConsultarCatalogoPublico>();
         services.AddScoped<IGerenciarImagensProduto, GerenciarImagensProduto>();
+        services.AddScoped<IEstoqueInsumoRepository, EfEstoqueInsumoRepository>();
+        services.AddScoped<IRegistrarEntradaInsumo, RegistrarEntradaInsumo>();
+        services.AddScoped<IAtualizarPoliticaLoteInsumo, AtualizarPoliticaLoteInsumo>();
         services.AddOptions<ArmazenamentoLocalImagemProdutoOptions>()
             .Bind(configuration.GetSection(ArmazenamentoLocalImagemProdutoOptions.SectionName))
             .Validate(

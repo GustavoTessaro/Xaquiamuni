@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
+using System.Linq.Expressions;
 using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Dominio.Entidades;
@@ -35,6 +37,21 @@ public sealed class XaquiamuniDbContext
     public DbSet<FormaCompraInsumo> FormasCompraInsumo => Set<FormaCompraInsumo>();
     public DbSet<LoteInsumo> LotesInsumo => Set<LoteInsumo>();
     public DbSet<SaldoInsumo> SaldosInsumo => Set<SaldoInsumo>();
+    public DbSet<MovimentoInsumo> MovimentosInsumo => Set<MovimentoInsumo>();
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        ValidarMovimentosESaldos();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(
+        bool acceptAllChangesOnSuccess,
+        CancellationToken cancellationToken = default)
+    {
+        ValidarMovimentosESaldos();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -387,6 +404,137 @@ public sealed class XaquiamuniDbContext
                 .IsUnique()
                 .HasDatabaseName("UX_SaldosInsumo_InsumoId_LoteId")
                 .HasFilter("[LoteId] IS NOT NULL");
+        });
+
+        builder.Entity<MovimentoInsumo>(movimento =>
+        {
+            movimento.ToTable("MovimentosInsumo", table =>
+            {
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Tipo_Valid",
+                    "[Tipo] IN (1, 2)");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Entrada_Valid",
+                    "[QuantidadeOriginal] > 0 AND [QuantidadeBase_ValorBase] > 0 AND "
+                    + "[SaldoAnterior_ValorBase] >= 0 AND "
+                    + "[SaldoPosterior_ValorBase] = [SaldoAnterior_ValorBase] + [QuantidadeBase_ValorBase] AND "
+                    + "[SaldoAnterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND "
+                    + "[SaldoPosterior_UnidadeBase] = [QuantidadeBase_UnidadeBase] AND "
+                    + "[SaldoAnterior_Dimensao] = [QuantidadeBase_Dimensao] AND "
+                    + "[SaldoPosterior_Dimensao] = [QuantidadeBase_Dimensao]");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Origem_Valid",
+                    "(([FormaCompraId] IS NULL AND [FormaCompraNome] IS NULL "
+                    + "AND [FatorCompra_ValorBase] IS NULL AND [FatorCompra_UnidadeBase] IS NULL "
+                    + "AND [FatorCompra_Dimensao] IS NULL AND [UnidadeOriginal] IS NOT NULL "
+                    + "AND [QuantidadeOriginal] > 0) OR "
+                    + "([FormaCompraId] IS NOT NULL AND [FormaCompraNome] IS NOT NULL "
+                    + "AND LEN(LTRIM(RTRIM([FormaCompraNome]))) > 0 "
+                    + "AND [FatorCompra_ValorBase] > 0 AND [FatorCompra_UnidadeBase] IS NOT NULL "
+                    + "AND [FatorCompra_Dimensao] IS NOT NULL AND [UnidadeOriginal] IS NULL "
+                    + "AND [QuantidadeOriginal] = FLOOR([QuantidadeOriginal]) "
+                    + "AND [FatorCompra_Dimensao] = [QuantidadeBase_Dimensao] "
+                    + "AND (([FatorCompra_UnidadeBase] = 1 AND [FatorCompra_Dimensao] = 1) OR "
+                    + "([FatorCompra_UnidadeBase] = 3 AND [FatorCompra_Dimensao] = 2) OR "
+                    + "([FatorCompra_UnidadeBase] = 5 AND [FatorCompra_Dimensao] = 3)))) "
+                    + "AND (([UnidadeOriginal] IS NULL) OR ([UnidadeOriginal] = 1 "
+                    + "AND [QuantidadeBase_UnidadeBase] = 1) OR "
+                    + "([UnidadeOriginal] = 2 AND [QuantidadeBase_UnidadeBase] = 1 "
+                    + "OR [UnidadeOriginal] IN (3, 4) AND [QuantidadeBase_UnidadeBase] = 3 "
+                    + "OR [UnidadeOriginal] = 5 AND [QuantidadeBase_UnidadeBase] = 5))");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Custo_Valid",
+                    "([CustoTotal] IS NULL AND [CustoPorUnidadeBase] IS NULL) OR "
+                    + "([CustoTotal] IS NOT NULL AND [CustoPorUnidadeBase] IS NOT NULL "
+                    + "AND [CustoTotal] >= 0 AND [CustoPorUnidadeBase] >= 0)");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Timestamps_Utc",
+                    "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+                table.HasCheckConstraint(
+                    "CK_MovimentosInsumo_Responsavel_NotEmpty",
+                    "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+            });
+            movimento.HasKey(entity => entity.Id);
+            movimento.Property(entity => entity.Id)
+                .ValueGeneratedNever();
+            movimento.Property(entity => entity.InsumoId)
+                .IsRequired();
+            movimento.Property(entity => entity.LoteId);
+            movimento.Property(entity => entity.ResponsavelId)
+                .IsRequired();
+            movimento.Property(entity => entity.Tipo)
+                .HasConversion<short>()
+                .HasColumnType("smallint")
+                .IsRequired();
+            movimento.Property(entity => entity.QuantidadeOriginal)
+                .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale)
+                .IsRequired();
+            movimento.Property(entity => entity.UnidadeOriginal)
+                .HasConversion<short?>()
+                .HasColumnType("smallint");
+            movimento.Property(entity => entity.FormaCompraId);
+            movimento.Property(entity => entity.FormaCompraNome)
+                .HasMaxLength(FormaCompraInsumo.NomeMaxLength);
+            movimento.Property(entity => entity.CustoTotal)
+                .HasPrecision(CustoAquisicaoInsumo.CustoTotalPrecision, CustoAquisicaoInsumo.CustoTotalScale);
+            movimento.Property(entity => entity.CustoPorUnidadeBase)
+                .HasPrecision(
+                    CustoAquisicaoInsumo.CustoUnitarioPrecision,
+                    CustoAquisicaoInsumo.CustoUnitarioScale);
+            movimento.Property(entity => entity.Motivo)
+                .HasMaxLength(MovimentoInsumo.MotivoMaxLength)
+                .IsRequired();
+            movimento.Property(entity => entity.Observacao)
+                .HasMaxLength(MovimentoInsumo.ObservacaoMaxLength);
+            movimento.Property(entity => entity.RegistradoEmUtc)
+                .HasColumnType("datetimeoffset(7)")
+                .IsRequired();
+            movimento.Property(entity => entity.ChaveIdempotencia)
+                .HasMaxLength(MovimentoInsumo.ChaveIdempotenciaMaxLength)
+                .UseCollation("Latin1_General_100_BIN2")
+                .IsRequired();
+            movimento.Property(entity => entity.FingerprintRequisicao)
+                .HasColumnType("binary(32)")
+                .IsRequired();
+
+            ConfigurarQuantidadeMovimento(
+                movimento,
+                entity => entity.QuantidadeBase,
+                "QuantidadeBase",
+                required: true);
+            ConfigurarQuantidadeMovimento(
+                movimento,
+                entity => entity.SaldoAnterior,
+                "SaldoAnterior",
+                required: true);
+            ConfigurarQuantidadeMovimento(
+                movimento,
+                entity => entity.SaldoPosterior,
+                "SaldoPosterior",
+                required: true);
+            ConfigurarQuantidadeMovimento(
+                movimento,
+                entity => entity.FatorCompra,
+                "FatorCompra",
+                required: false);
+
+            movimento.HasOne<InsumoEstoque>()
+                .WithMany()
+                .HasForeignKey(entity => entity.InsumoId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_MovimentosInsumo_InsumosEstoque_InsumoId")
+                .IsRequired();
+            movimento.HasOne<LoteInsumo>()
+                .WithMany()
+                .HasForeignKey(entity => new { entity.InsumoId, entity.LoteId })
+                .HasPrincipalKey(entity => new { entity.InsumoId, entity.Id })
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FK_MovimentosInsumo_LotesInsumo_InsumoId_LoteId");
+            movimento.HasIndex(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia })
+                .IsUnique()
+                .HasDatabaseName("UX_MovimentosInsumo_ResponsavelId_ChaveIdempotencia");
+            movimento.HasIndex(entity => new { entity.InsumoId, entity.LoteId, entity.RegistradoEmUtc })
+                .HasDatabaseName("IX_MovimentosInsumo_InsumoId_LoteId_RegistradoEmUtc");
         });
 
         builder.Entity<Categoria>(categoria =>
@@ -914,5 +1062,108 @@ public sealed class XaquiamuniDbContext
                 .IsUnique()
                 .HasFilter("[IsDefault] = 1");
         });
+    }
+
+    private static void ConfigurarQuantidadeMovimento(
+        EntityTypeBuilder<MovimentoInsumo> movimento,
+        Expression<Func<MovimentoInsumo, QuantidadeEstoque?>> propriedade,
+        string prefixo,
+        bool required)
+    {
+        movimento.OwnsOne(propriedade, quantidade =>
+        {
+            quantidade.Property(value => value.ValorBase)
+                .HasColumnName($"{prefixo}_ValorBase")
+                .HasPrecision(QuantidadeEstoque.Precision, QuantidadeEstoque.Scale);
+            quantidade.Property(value => value.UnidadeBase)
+                .HasColumnName($"{prefixo}_UnidadeBase")
+                .HasConversion<short>()
+                .HasColumnType("smallint");
+            quantidade.Property(value => value.Dimensao)
+                .HasColumnName($"{prefixo}_Dimensao")
+                .HasConversion<short>()
+                .HasColumnType("smallint");
+            if (required)
+            {
+                quantidade.Property(value => value.ValorBase).IsRequired();
+                quantidade.Property(value => value.UnidadeBase).IsRequired();
+                quantidade.Property(value => value.Dimensao).IsRequired();
+            }
+        });
+        movimento.Navigation(propriedade)
+            .IsRequired(required);
+    }
+
+    private void ValidarMovimentosESaldos()
+    {
+        ChangeTracker.DetectChanges();
+
+        if (ChangeTracker.Entries<MovimentoInsumo>()
+            .Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Movimentos de insumo são append-only.");
+        }
+
+        var movimentosAdicionados = ChangeTracker.Entries<MovimentoInsumo>()
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity)
+            .ToArray();
+        var saldosAlterados = ChangeTracker.Entries<SaldoInsumo>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified
+                || entry.Reference(saldo => saldo.QuantidadeFisica).TargetEntry?.State
+                    is EntityState.Added or EntityState.Modified)
+            .ToArray();
+
+        foreach (var movement in movimentosAdicionados)
+        {
+            var balance = saldosAlterados.SingleOrDefault(entry =>
+                entry.Entity.InsumoId == movement.InsumoId
+                && entry.Entity.LoteId == movement.LoteId);
+            if (balance is null)
+            {
+                throw new InvalidOperationException(
+                    "Um movimento de entrada deve atualizar exatamente a posição de saldo correspondente.");
+            }
+
+            if (!SaldoCorrespondeAoMovimento(balance, movement))
+            {
+                throw new InvalidOperationException(
+                    "O movimento não corresponde ao saldo físico posterior da posição.");
+            }
+        }
+
+        foreach (var balance in saldosAlterados)
+        {
+            var movement = movimentosAdicionados.SingleOrDefault(item =>
+                item.InsumoId == balance.Entity.InsumoId
+                && item.LoteId == balance.Entity.LoteId);
+            if (movement is null
+                && balance.State == EntityState.Added
+                && balance.Entity.QuantidadeFisica.ValorBase == 0m)
+            {
+                continue;
+            }
+
+            if (movement is null || !SaldoCorrespondeAoMovimento(balance, movement))
+            {
+                throw new InvalidOperationException(
+                    "O saldo físico só pode ser alterado junto com o movimento correspondente.");
+            }
+        }
+    }
+
+    private static bool SaldoCorrespondeAoMovimento(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<SaldoInsumo> balance,
+        MovimentoInsumo movement)
+    {
+        var quantity = balance.Entity.QuantidadeFisica;
+
+        return (balance.State != EntityState.Added || movement.SaldoAnterior.ValorBase == 0m)
+            && movement.SaldoAnterior.ValorBase >= 0m
+            && movement.SaldoPosterior == quantity
+            && movement.SaldoPosterior.ValorBase - movement.SaldoAnterior.ValorBase
+                == movement.QuantidadeBase.ValorBase
+            && movement.SaldoAnterior.UnidadeBase == movement.QuantidadeBase.UnidadeBase
+            && quantity.UnidadeBase == movement.QuantidadeBase.UnidadeBase;
     }
 }

@@ -141,23 +141,22 @@ public sealed class InsumoEstoqueTests
     }
 
     [Fact]
-    public void AtualizarDados_ChangesConfigurationButNeverChangesBaseUnit()
+    public void AtualizarDados_CannotChangeLotPolicyOutsideProtectedOperation()
     {
         var insumo = CriarInsumo(UnidadeFisicaEstoque.Grama);
 
-        insumo.AtualizarDados(
+        Assert.Throws<InvalidOperationException>(() => insumo.AtualizarDados(
             "Cera de abelha",
             TipoInsumoEstoque.MateriaPrima,
             QuantidadeEstoque.Criar(100m, UnidadeFisicaEstoque.Grama),
             controlaLote: true,
-            validadeObrigatoria: true);
+            validadeObrigatoria: true));
 
-        Assert.Equal("Cera de abelha", insumo.Nome);
-        Assert.Equal(TipoInsumoEstoque.MateriaPrima, insumo.Tipo);
+        Assert.Equal("Cera", insumo.Nome);
         Assert.Equal(UnidadeFisicaEstoque.Grama, insumo.UnidadeBase);
-        Assert.Equal(100m, insumo.EstoqueMinimo?.ValorBase);
-        Assert.True(insumo.ControlaLote);
-        Assert.True(insumo.ValidadeObrigatoria);
+        Assert.Null(insumo.EstoqueMinimo);
+        Assert.False(insumo.ControlaLote);
+        Assert.False(insumo.ValidadeObrigatoria);
     }
 
     [Fact]
