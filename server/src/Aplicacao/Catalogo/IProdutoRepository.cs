@@ -15,4 +15,8 @@ public interface IProdutoRepository
     Task<ProdutoResult> ExecutarMutacaoAsync(
         Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
         CancellationToken cancellationToken = default);
+
+    Task<ProdutoMutationExecutionResult> ExecutarMutacaoComResultadoAsync(
+        Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
+        CancellationToken cancellationToken = default);
 }

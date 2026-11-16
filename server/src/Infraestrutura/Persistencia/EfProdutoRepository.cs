@@ -1,4 +1,5 @@
 using System.Data;
+using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
@@ -103,46 +104,143 @@ public sealed class EfProdutoRepository : IProdutoRepository
         Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
         CancellationToken cancellationToken = default)
     {
+        var execution = await ExecutarMutacaoComResultadoAsync(operacao, cancellationToken)
+            .ConfigureAwait(false);
+        if (execution.Failure is not null)
+        {
+            ExceptionDispatchInfo.Capture(execution.Failure).Throw();
+        }
+
+        return execution.Result
+            ?? throw new InvalidOperationException("The product mutation did not return an operation result.");
+    }
+
+    public async Task<ProdutoMutationExecutionResult> ExecutarMutacaoComResultadoAsync(
+        Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
+        CancellationToken cancellationToken = default)
+    {
         ArgumentNullException.ThrowIfNull(operacao);
 
-        await using var transaction = await _dbContext.Database
-            .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            .ConfigureAwait(false);
-        var committed = false;
-
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction;
         try
         {
-            var session = new ProdutoMutationSession(_dbContext);
-            var result = await operacao(session, cancellationToken).ConfigureAwait(false);
-            if (result.Status != ProdutoStatus.Success)
-            {
-                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
-                return result;
-            }
+            transaction = await _dbContext.Database
+                .BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                .ConfigureAwait(false);
+        }
+        catch (Exception exception)
+        {
+            return ProdutoMutationExecutionResult.Failed(
+                ProdutoMutationPersistenceState.Unknown,
+                exception);
+        }
 
-            await SaveChangesWithUniqueSwitchesAsync(cancellationToken).ConfigureAwait(false);
-            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-            committed = true;
-            return result;
-        }
-        catch (DbUpdateConcurrencyException)
+        await using (transaction.ConfigureAwait(false))
         {
-            return PersistenceConflict();
-        }
-        catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
-        {
-            return PersistenceConflict();
-        }
-        catch (SqlException exception) when (IsPersistenceConflict(exception))
-        {
-            return PersistenceConflict();
-        }
-        finally
-        {
-            if (!committed)
+            var committed = false;
+            try
             {
-                _dbContext.ChangeTracker.Clear();
+                ProdutoResult result;
+                try
+                {
+                    var session = new ProdutoMutationSession(_dbContext);
+                    result = await operacao(session, cancellationToken).ConfigureAwait(false);
+                    if (result.Status == ProdutoStatus.Success)
+                    {
+                        await SaveChangesWithUniqueSwitchesAsync(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    return await RollbackWithResultAsync(PersistenceConflict(), transaction)
+                        .ConfigureAwait(false);
+                }
+                catch (DbUpdateException exception) when (IsPersistenceConflict(exception))
+                {
+                    return await RollbackWithResultAsync(PersistenceConflict(), transaction)
+                        .ConfigureAwait(false);
+                }
+                catch (InvalidOperationException exception) when (IsPersistenceConflict(exception))
+                {
+                    return await RollbackWithResultAsync(PersistenceConflict(), transaction)
+                        .ConfigureAwait(false);
+                }
+                catch (SqlException exception) when (IsPersistenceConflict(exception))
+                {
+                    return await RollbackWithResultAsync(PersistenceConflict(), transaction)
+                        .ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    return await RollbackWithFailureAsync(exception, transaction)
+                        .ConfigureAwait(false);
+                }
+
+                if (result.Status != ProdutoStatus.Success)
+                {
+                    return await RollbackWithResultAsync(result, transaction)
+                        .ConfigureAwait(false);
+                }
+
+                try
+                {
+                    await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+                    committed = true;
+                    return ProdutoMutationExecutionResult.Committed(result);
+                }
+                catch (Exception exception)
+                {
+                    return ProdutoMutationExecutionResult.Failed(
+                        ProdutoMutationPersistenceState.Unknown,
+                        exception);
+                }
             }
+            finally
+            {
+                if (!committed)
+                {
+                    _dbContext.ChangeTracker.Clear();
+                }
+            }
+        }
+    }
+
+    private static async Task<ProdutoMutationExecutionResult> RollbackWithResultAsync(
+        ProdutoResult result,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            return ProdutoMutationExecutionResult.RolledBack(result);
+        }
+        catch (Exception rollbackException)
+        {
+            return ProdutoMutationExecutionResult.Failed(
+                ProdutoMutationPersistenceState.Unknown,
+                rollbackException);
+        }
+    }
+
+    private static async Task<ProdutoMutationExecutionResult> RollbackWithFailureAsync(
+        Exception failure,
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction)
+    {
+        try
+        {
+            await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+            return ProdutoMutationExecutionResult.Failed(
+                ProdutoMutationPersistenceState.RolledBack,
+                failure);
+        }
+        catch (Exception rollbackException)
+        {
+            return ProdutoMutationExecutionResult.Failed(
+                ProdutoMutationPersistenceState.Unknown,
+                new AggregateException(
+                    "The product mutation failed and its transaction rollback could not be confirmed.",
+                    failure,
+                    rollbackException));
         }
     }
 

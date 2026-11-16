@@ -110,7 +110,7 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
                 caminho,
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.Read,
+                FileShare.Read | FileShare.Delete,
                 TamanhoBuffer,
                 FileOptions.Asynchronous | FileOptions.SequentialScan);
             return Task.FromResult<Stream?>(stream);

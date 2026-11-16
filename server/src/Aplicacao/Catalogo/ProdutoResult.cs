@@ -30,6 +30,9 @@ public sealed class ProdutoResult
     public static ProdutoResult ProductNotFound() =>
         new(ProdutoStatus.ProductNotFound, null, Array.Empty<ProdutoValidationError>(), null);
 
+    public static ProdutoResult ImageNotFound() =>
+        new(ProdutoStatus.ImageNotFound, null, Array.Empty<ProdutoValidationError>(), null);
+
     public static ProdutoResult CategoryNotFound() =>
         new(ProdutoStatus.CategoryNotFound, null, Array.Empty<ProdutoValidationError>(), null);
 

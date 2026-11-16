@@ -202,7 +202,7 @@ public sealed class ProdutoImagem
         return normalized;
     }
 
-    private static string ValidarNomeOriginal(string? value)
+    public static string ValidarNomeOriginal(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

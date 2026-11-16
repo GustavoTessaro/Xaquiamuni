@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Catalogo;
+using Xaquiamuni.Aplicacao.Catalogo.Imagens;
 using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Seguranca;
@@ -42,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
         services.AddScoped<IProdutoRepository, EfProdutoRepository>();
         services.AddScoped<IGerenciarProdutos, GerenciarProdutos>();
+        services.AddScoped<IGerenciarImagensProduto, GerenciarImagensProduto>();
         services.AddOptions<ArmazenamentoLocalImagemProdutoOptions>()
             .Bind(configuration.GetSection(ArmazenamentoLocalImagemProdutoOptions.SectionName))
             .Validate(
@@ -51,6 +53,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<IArmazenamentoImagemProduto, ArmazenamentoLocalImagemProduto>();
         services.AddSingleton<IProcessadorImagemProduto, ProcessadorImagemProduto>();
+        services.AddSingleton<IProdutoImagemOperacaoLogger, ProdutoImagemOperacaoLogger>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();
         services.AddScoped<IEmailConfirmationOutbox, EmailConfirmationOutbox>();
         services.AddScoped<IEmailConfirmationResendOutbox, SqlServerEmailConfirmationResendOutbox>();

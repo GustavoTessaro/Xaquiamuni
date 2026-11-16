@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
 using Xaquiamuni.Aplicacao.Catalogo;
+using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -603,6 +604,24 @@ public sealed class ProdutoSqlServerIntegrationTests
             originalDefault.Id,
             false,
             null);
+        var imageMetadata = await database.Services.GetRequiredService<IProdutoRepository>()
+            .ExecutarMutacaoAsync(async (session, token) =>
+            {
+                var productWithImage = await session.BuscarProdutoAsync(product.Id, token);
+                if (productWithImage is null)
+                {
+                    return ProdutoResult.ProductNotFound();
+                }
+
+                productWithImage.AdicionarImagem(
+                    ChaveArmazenamentoImagemProduto.Gerar(),
+                    "integration-test.webp",
+                    "image/webp",
+                    128,
+                    32,
+                    24);
+                return ProdutoResult.Success(productWithImage);
+            });
         var published = await manager.AlterarPublicacaoAsync(product.Id, true);
         var publishedList = await manager.ListarAsync(
             new ProdutoFiltro("NATURAL", otherCategory.Id, Publicado: true));
@@ -611,6 +630,7 @@ public sealed class ProdutoSqlServerIntegrationTests
         Assert.Equal(ProdutoStatus.Success, variantEdited.Status);
         Assert.Equal(ProdutoStatus.Success, switched.Status);
         Assert.Equal(ProdutoStatus.Success, deactivated.Status);
+        Assert.Equal(ProdutoStatus.Success, imageMetadata.Status);
         Assert.Equal(ProdutoStatus.Success, published.Status);
         Assert.Single(publishedList);
         Assert.Equal(product.Id, publishedList[0].Id);

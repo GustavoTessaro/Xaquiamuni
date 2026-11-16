@@ -574,6 +574,18 @@ public sealed class GerenciarProdutosTests
             Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
             CancellationToken cancellationToken = default) =>
             operacao(new MemoryMutationSession(_categories, Produtos), cancellationToken);
+
+        public async Task<ProdutoMutationExecutionResult> ExecutarMutacaoComResultadoAsync(
+            Func<IProdutoMutationSession, CancellationToken, Task<ProdutoResult>> operacao,
+            CancellationToken cancellationToken = default)
+        {
+            var result = await operacao(
+                new MemoryMutationSession(_categories, Produtos),
+                cancellationToken);
+            return result.Status == ProdutoStatus.Success
+                ? ProdutoMutationExecutionResult.Committed(result)
+                : ProdutoMutationExecutionResult.RolledBack(result);
+        }
     }
 
     private sealed class MemoryMutationSession(
