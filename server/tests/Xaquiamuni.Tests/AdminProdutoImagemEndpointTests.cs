@@ -669,6 +669,12 @@ public sealed class AdminProdutoImagemEndpointTests
             CancellationToken cancellationToken = default) =>
             Task.FromResult(ContentResult);
 
+        public Task<ProdutoImagemConteudoResult> AbrirConteudoPublicoAsync(
+            Guid produtoId,
+            Guid imagemId,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(ContentResult);
+
         public Task<ProdutoImagemOperacaoResult> DefinirPrincipalAsync(
             Guid produtoId,
             Guid imagemId,

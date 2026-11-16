@@ -21,6 +21,11 @@ public interface IGerenciarImagensProduto
         Guid imagemId,
         CancellationToken cancellationToken = default);
 
+    Task<ProdutoImagemConteudoResult> AbrirConteudoPublicoAsync(
+        Guid produtoId,
+        Guid imagemId,
+        CancellationToken cancellationToken = default);
+
     Task<ProdutoImagemOperacaoResult> DefinirPrincipalAsync(
         Guid produtoId,
         Guid imagemId,

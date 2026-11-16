@@ -99,6 +99,7 @@ app.MapXaquiamuniAdminAuthEndpoints();
 app.MapAdminCategoriaEndpoints();
 app.MapAdminProdutoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
+app.MapCatalogoPublicoEndpoints();
 
 app.Run();
 

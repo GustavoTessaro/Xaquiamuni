@@ -1,0 +1,135 @@
+<header class="store-header">
+  <div class="store-header__inner">
+    <a class="store-brand" routerLink="/" aria-label="Xaquiamuni Produtos Naturais, início">
+      <span class="store-brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <path
+            d="M12 21v-9m0 4c-4.5 0-7-2.5-7-7 4.5 0 7 2.5 7 7Zm0-4c0-4.5 2.5-7 7-7 0 4.5-2.5 7-7 7Z"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </span>
+      <span class="store-brand__copy">
+        <strong>Xaquiamuni</strong>
+        <small>PRODUTOS NATURAIS</small>
+      </span>
+    </a>
+
+    <form class="store-search" role="search" (ngSubmit)="search()">
+      <label class="sr-only" for="store-search">Buscar produtos</label>
+      <input
+        id="store-search"
+        name="busca"
+        type="search"
+        placeholder="O que você procura?"
+        [ngModel]="searchTerm()"
+        (ngModelChange)="searchTerm.set($event)"
+      />
+      <button type="submit" aria-label="Buscar produtos">
+        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.7" />
+          <path d="m16 16 4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" />
+        </svg>
+      </button>
+    </form>
+
+    <div class="store-account">
+      @if (sessionLoading()) {
+        <span class="store-account__status" role="status">Verificando conta...</span>
+      } @else if (session()) {
+        <a class="store-account__link" routerLink="/login">Minha conta</a>
+        <button
+          type="button"
+          class="store-account__logout"
+          (click)="logout()"
+          [disabled]="signingOut()"
+        >
+          {{ signingOut() ? 'Saindo...' : 'Sair' }}
+        </button>
+      } @else {
+        <a class="store-account__link" routerLink="/login">Entrar</a>
+        <a class="store-account__register" routerLink="/cadastro">Criar conta</a>
+      }
+    </div>
+  </div>
+
+  @if (sessionError()) {
+    <p class="store-header__notice" role="status">{{ sessionError() }}</p>
+  }
+  @if (categoryError()) {
+    <p class="store-header__notice" role="status">{{ categoryError() }}</p>
+  }
+  @if (accountError()) {
+    <p class="store-header__notice" role="alert">{{ accountError() }}</p>
+  }
+
+  <nav class="store-nav" aria-label="Navegação da loja">
+    <div class="store-nav__inner">
+      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"
+        >Início</a
+      >
+      <a routerLink="/produtos" routerLinkActive="is-active">Produtos</a>
+      <details #categoryMenu class="store-nav__categories">
+        <summary>Categorias</summary>
+        <div class="store-nav__dropdown">
+          <a routerLink="/" fragment="categorias" (click)="closeNavigation()"
+            >Todas as categorias</a
+          >
+          @for (category of categories(); track category.id) {
+            <a
+              [routerLink]="['/produtos']"
+              [queryParams]="{ categoriaId: category.id }"
+              queryParamsHandling="merge"
+              (click)="closeNavigation()"
+            >
+              {{ category.nome }}
+            </a>
+          }
+          @if (!categories().length) {
+            <span>As categorias serão exibidas aqui.</span>
+          }
+        </div>
+      </details>
+      <a routerLink="/" fragment="sobre-nos">Sobre nós</a>
+    </div>
+  </nav>
+
+  <details #mobileNav class="store-mobile-nav">
+    <summary>Menu da loja</summary>
+    <nav aria-label="Navegação móvel da loja">
+      <a routerLink="/" (click)="closeNavigation()">Início</a>
+      <a routerLink="/produtos" (click)="closeNavigation()">Produtos</a>
+      <details #mobileCategories class="store-mobile-nav__categories">
+        <summary>Categorias</summary>
+        <nav aria-label="Categorias da loja">
+          <a routerLink="/" fragment="categorias" (click)="closeNavigation()"
+            >Todas as categorias</a
+          >
+          @for (category of categories(); track category.id) {
+            <a
+              [routerLink]="['/produtos']"
+              [queryParams]="{ categoriaId: category.id }"
+              queryParamsHandling="merge"
+              (click)="closeNavigation()"
+            >
+              {{ category.nome }}
+            </a>
+          }
+          @if (!categories().length) {
+            <span>As categorias serão exibidas aqui.</span>
+          }
+        </nav>
+      </details>
+      <a routerLink="/" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
+      <a routerLink="/login" (click)="closeNavigation()">{{
+        session() ? 'Minha conta' : 'Entrar'
+      }}</a>
+      @if (!session()) {
+        <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
+      }
+    </nav>
+  </details>
+</header>

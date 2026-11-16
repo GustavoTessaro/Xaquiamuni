@@ -1,0 +1,26 @@
+@baseUrl = https://localhost:7231
+@categoriaAtivaId = <guid-de-categoria-ativa>
+@produtoPublicadoId = <guid-de-produto-publicado>
+@imagemId = <guid-de-imagem-da-galeria>
+@produtoNaoPublicadoId = <guid-de-produto-nao-publicado>
+
+### Listar categorias ativas
+GET {{baseUrl}}/api/catalogo/categorias
+
+### Listar produtos publicados com paginação
+GET {{baseUrl}}/api/catalogo/produtos?pagina=1&itensPorPagina=20
+
+### Pesquisar produtos por nome e categoria
+GET {{baseUrl}}/api/catalogo/produtos?busca=lavanda&categoriaId={{categoriaAtivaId}}&pagina=1&itensPorPagina=10
+
+### Consultar detalhes e opções reais de um produto publicado
+GET {{baseUrl}}/api/catalogo/produtos/{{produtoPublicadoId}}
+
+### Ler imagem pública autorizada
+GET {{baseUrl}}/api/catalogo/produtos/{{produtoPublicadoId}}/imagens/{{imagemId}}/conteudo
+
+### Consulta de produto não publicado (esperado: 404)
+GET {{baseUrl}}/api/catalogo/produtos/{{produtoNaoPublicadoId}}
+
+### Rejeitar tamanho de página inválido (esperado: 400)
+GET {{baseUrl}}/api/catalogo/produtos?pagina=0

@@ -293,6 +293,27 @@ public sealed class GerenciarImagensProduto : IGerenciarImagensProduto
         Guid produtoId,
         Guid imagemId,
         CancellationToken cancellationToken = default)
+        => await AbrirConteudoInternoAsync(
+            produtoId,
+            imagemId,
+            exigirVisibilidadePublica: false,
+            cancellationToken).ConfigureAwait(false);
+
+    public async Task<ProdutoImagemConteudoResult> AbrirConteudoPublicoAsync(
+        Guid produtoId,
+        Guid imagemId,
+        CancellationToken cancellationToken = default)
+        => await AbrirConteudoInternoAsync(
+            produtoId,
+            imagemId,
+            exigirVisibilidadePublica: true,
+            cancellationToken).ConfigureAwait(false);
+
+    private async Task<ProdutoImagemConteudoResult> AbrirConteudoInternoAsync(
+        Guid produtoId,
+        Guid imagemId,
+        bool exigirVisibilidadePublica,
+        CancellationToken cancellationToken)
     {
         if (produtoId == Guid.Empty || imagemId == Guid.Empty)
         {
@@ -303,6 +324,11 @@ public sealed class GerenciarImagensProduto : IGerenciarImagensProduto
         var produto = await _repository.ConsultarAsync(produtoId, cancellationToken)
             .ConfigureAwait(false);
         if (produto is null)
+        {
+            return ProdutoImagemConteudoResult.ProductNotFound();
+        }
+
+        if (exigirVisibilidadePublica && (!produto.Publicado || !produto.Categoria.Ativa))
         {
             return ProdutoImagemConteudoResult.ProductNotFound();
         }

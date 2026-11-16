@@ -34,6 +34,25 @@ export const routes: Routes = [
   { path: 'login', component: LoginComponent },
   { path: 'reset-password', component: ResetPasswordComponent },
   { path: 'cadastro', component: CadastroComponent },
-  { path: '', pathMatch: 'full', redirectTo: 'cadastro' },
+  {
+    path: '',
+    loadComponent: () =>
+      import('./public-store/store-layout.component').then((module) => module.StoreLayoutComponent),
+    children: [
+      {
+        path: '',
+        loadComponent: () =>
+          import('./public-store/store-home.component').then((module) => module.StoreHomeComponent),
+        pathMatch: 'full',
+      },
+      {
+        path: 'produtos',
+        loadComponent: () =>
+          import('./public-store/catalogo-publico.component').then(
+            (module) => module.CatalogoPublicoComponent,
+          ),
+      },
+    ],
+  },
   { path: '**', redirectTo: 'cadastro' },
 ];

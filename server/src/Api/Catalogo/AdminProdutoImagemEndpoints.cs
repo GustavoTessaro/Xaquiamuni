@@ -184,7 +184,7 @@ public static class AdminProdutoImagemEndpoints
             return MapFailure(result.Status, [], result.Mensagem);
         }
 
-        return new ProdutoImagemConteudoHttpResult(result);
+        return new ProdutoImagemConteudoHttpResult(result, publicContent: false);
     }
 
     private static async Task<IResult> AdicionarAsync(
@@ -434,28 +434,6 @@ public static class AdminProdutoImagemEndpoints
         $"{AdminProdutoEndpoints.BasePath}/{produtoId.ToString("D", CultureInfo.InvariantCulture)}"
         + $"/imagens/{imagemId.ToString("D", CultureInfo.InvariantCulture)}";
 
-    private sealed class ProdutoImagemConteudoHttpResult(ProdutoImagemConteudoResult result) : IResult
-    {
-        public async Task ExecuteAsync(HttpContext httpContext)
-        {
-            using (result)
-            {
-                var response = httpContext.Response;
-                response.StatusCode = StatusCodes.Status200OK;
-                response.ContentType = "image/webp";
-                response.ContentLength = result.Imagem!.TamanhoBytes;
-                response.Headers.CacheControl = "private, no-store";
-                response.Headers.XContentTypeOptions = "nosniff";
-                response.Headers.ContentDisposition = "inline";
-
-                await result.Conteudo!.CopyToAsync(
-                        response.Body,
-                        81920,
-                        httpContext.RequestAborted)
-                    .ConfigureAwait(false);
-            }
-        }
-    }
 }
 
 /// <summary>Multipart de inclusão: campo 'arquivo' único e valores repetidos 'varianteIds' opcionais.</summary>

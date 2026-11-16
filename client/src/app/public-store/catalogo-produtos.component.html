@@ -1,0 +1,79 @@
+<section class="catalog-section" id="produtos" aria-labelledby="catalog-title">
+  <div class="catalog-section__heading">
+    <div>
+      <p class="catalog-section__eyebrow">Da nossa produção para você</p>
+      <h2 id="catalog-title">{{ title }}</h2>
+      <p class="catalog-section__subtitle">{{ subtitle }}</p>
+    </div>
+    @if (showCatalogLink) {
+      <a class="catalog-section__all" routerLink="/produtos"
+        [queryParams]="{ busca: currentSearch() || null, categoriaId: selectedCategoryId() || null }">
+        Ver catálogo completo
+        <span aria-hidden="true">→</span>
+      </a>
+    }
+  </div>
+
+  @if (!homePage()) {
+    <div class="catalog-filters" aria-label="Filtrar por categoria">
+      <button type="button" [class.is-selected]="!selectedCategoryId()" (click)="selectCategory('')">
+        Todas
+      </button>
+      @for (category of categories(); track category.id) {
+        <button type="button" [class.is-selected]="selectedCategoryId() === category.id"
+          (click)="selectCategory(category.id)">
+          {{ category.nome }}
+        </button>
+      }
+    </div>
+    @if (categoryError()) {
+      <p class="catalog-section__category-error" role="status">
+        {{ categoryError() }}
+        <button type="button" (click)="retryCategories()">Tentar novamente</button>
+      </p>
+    }
+  }
+
+  @if (loading() && !products().length) {
+    <div class="catalog-state" role="status" aria-live="polite">
+      <span class="catalog-state__spinner" aria-hidden="true"></span>
+      <p>Carregando produtos...</p>
+    </div>
+  } @else if (errorMessage() && !products().length) {
+    <div class="catalog-state catalog-state--error">
+      <p role="alert">{{ errorMessage() }}</p>
+      <button type="button" (click)="retry()">Tentar novamente</button>
+    </div>
+  } @else if (!hasProducts()) {
+    <div class="catalog-state">
+      <span class="catalog-state__leaf" aria-hidden="true">✦</span>
+      <h3>Nenhum produto encontrado</h3>
+      <p>Tente outra busca ou escolha uma categoria diferente.</p>
+    </div>
+  } @else {
+    <div class="catalog-grid">
+      @for (product of products(); track product.id) {
+        <app-public-product-card [product]="product" />
+      }
+    </div>
+
+    @if (errorMessage()) {
+      <div class="catalog-section__inline-error" role="alert">
+        <span>{{ errorMessage() }}</span>
+        <button type="button" (click)="retry()">Tentar novamente</button>
+      </div>
+    }
+
+    @if (page() < totalPages()) {
+      <div class="catalog-load-more">
+        <button type="button" (click)="loadMore()" [disabled]="loadingMore()">
+          @if (loadingMore()) {
+            Carregando...
+          } @else {
+            Carregar mais produtos
+          }
+        </button>
+      </div>
+    }
+  }
+</section>

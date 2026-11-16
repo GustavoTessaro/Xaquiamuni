@@ -1,0 +1,373 @@
+:host {
+  display: block;
+}
+
+.store-header {
+  position: relative;
+  z-index: 5;
+  background: #fffdf8;
+  border-bottom: 1px solid #e8e4d7;
+}
+
+.store-header__inner,
+.store-nav__inner {
+  width: min(1200px, calc(100% - 3rem));
+  margin-inline: auto;
+}
+
+.store-header__inner {
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: auto minmax(240px, 1fr) auto;
+  align-items: center;
+  gap: clamp(1.25rem, 4vw, 4rem);
+}
+
+.store-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #173c2c;
+  text-decoration: none;
+}
+
+.store-brand__mark {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: 50%;
+  background: #1d4b35;
+  color: #fff9e9;
+}
+
+.store-brand__mark svg {
+  width: 26px;
+  height: 26px;
+}
+
+.store-brand__copy {
+  display: grid;
+  gap: 0.12rem;
+}
+
+.store-brand__copy strong {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 1.25rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.store-brand__copy small {
+  color: #777a68;
+  font-size: 0.61rem;
+  letter-spacing: 0.16em;
+}
+
+.store-search {
+  display: flex;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid #dedccf;
+  border-radius: 999px;
+  background: #fff;
+}
+
+.store-search:focus-within {
+  border-color: #376348;
+  box-shadow: 0 0 0 3px rgb(55 99 72 / 12%);
+}
+
+.store-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  padding: 0.65rem 0.95rem 0.65rem 1.15rem;
+  color: #25352a;
+  font: inherit;
+}
+
+.store-search input::placeholder {
+  color: #939487;
+}
+
+.store-search button {
+  display: grid;
+  width: 46px;
+  flex: 0 0 46px;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: #315a3e;
+  cursor: pointer;
+}
+
+.store-search button svg {
+  width: 21px;
+  height: 21px;
+}
+
+.store-account {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.9rem;
+  white-space: nowrap;
+}
+
+.store-account a,
+.store-account button {
+  color: #254834;
+  font: inherit;
+  font-size: 0.9rem;
+  text-decoration: none;
+}
+
+.store-account__link {
+  font-weight: 600;
+}
+
+.store-account__register {
+  padding: 0.58rem 0.9rem;
+  border: 1px solid #9a8450;
+  border-radius: 999px;
+}
+
+.store-account__logout {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.store-account__logout:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.store-account__status {
+  color: #697267;
+  font-size: 0.8rem;
+}
+
+.store-header__notice {
+  width: min(1200px, calc(100% - 3rem));
+  margin: 0 auto 0.5rem;
+  color: #7a4c24;
+  font-size: 0.78rem;
+}
+
+.store-nav {
+  border-top: 1px solid #f0ede4;
+}
+
+.store-nav__inner {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.5rem, 5vw, 4.5rem);
+}
+
+.store-nav a,
+.store-nav__categories summary {
+  color: #425347;
+  font-size: 0.86rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.store-nav a:hover,
+.store-nav__categories summary:hover,
+.store-nav a.is-active {
+  color: #1d4b35;
+  text-decoration: underline;
+  text-underline-offset: 0.35rem;
+}
+
+.store-nav__categories {
+  position: relative;
+}
+
+.store-nav__categories summary {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  list-style: none;
+}
+
+.store-nav__categories summary::-webkit-details-marker {
+  display: none;
+}
+
+.store-nav__categories summary::after {
+  content: '⌄';
+  transition: transform 160ms ease;
+}
+
+.store-nav__categories[open] summary::after {
+  transform: rotate(180deg);
+}
+
+.store-nav__categories summary:focus-visible,
+.store-mobile-nav summary:focus-visible,
+.store-nav__dropdown a:focus-visible {
+  outline: 2px solid #9a8450;
+  outline-offset: 4px;
+}
+
+.store-nav__dropdown {
+  position: absolute;
+  top: calc(100% + 0.8rem);
+  left: -1rem;
+  display: grid;
+  min-width: 220px;
+  gap: 0.15rem;
+  padding: 0.55rem;
+  border: 1px solid #e6e2d5;
+  border-radius: 0.8rem;
+  background: #fffdf8;
+  box-shadow: 0 16px 35px rgb(35 48 36 / 12%);
+}
+
+.store-nav__dropdown a,
+.store-nav__dropdown span {
+  padding: 0.6rem 0.7rem;
+  border-radius: 0.45rem;
+  font-size: 0.82rem;
+}
+
+.store-nav__dropdown a:hover {
+  background: #f1f3eb;
+  text-decoration: none;
+}
+
+.store-nav__dropdown a:first-child {
+  border-bottom: 1px solid #ece8da;
+  border-radius: 0.45rem 0.45rem 0 0;
+  color: #315a3e;
+  font-weight: 650;
+}
+
+.store-nav__dropdown span {
+  color: #777a68;
+}
+
+.store-mobile-nav {
+  display: none;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  clip-path: inset(50%);
+}
+
+@media (max-width: 760px) {
+  .store-header__inner,
+  .store-nav__inner,
+  .store-header__notice {
+    width: min(100% - 2rem, 600px);
+  }
+
+  .store-header__inner {
+    min-height: auto;
+    grid-template-columns: 1fr auto;
+    gap: 0.9rem 1rem;
+    padding-block: 0.8rem;
+  }
+
+  .store-brand__mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .store-brand__copy strong {
+    font-size: 1.1rem;
+  }
+
+  .store-search {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .store-account {
+    gap: 0.55rem;
+  }
+
+  .store-account a,
+  .store-account button {
+    font-size: 0.8rem;
+  }
+
+  .store-account__register {
+    padding: 0.48rem 0.7rem;
+  }
+
+  .store-nav {
+    display: none;
+  }
+
+  .store-mobile-nav {
+    display: block;
+    border-top: 1px solid #f0ede4;
+  }
+
+  .store-mobile-nav summary {
+    width: min(100% - 2rem, 600px);
+    margin-inline: auto;
+    padding: 0.7rem 0;
+    color: #315a3e;
+    font-size: 0.86rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .store-mobile-nav nav {
+    display: grid;
+    gap: 0.1rem;
+    padding: 0.25rem 1rem 0.8rem;
+    background: #f8f6ef;
+  }
+
+  .store-mobile-nav a {
+    width: min(100%, 600px);
+    margin-inline: auto;
+    padding: 0.55rem 0.25rem;
+    color: #425347;
+    font-size: 0.88rem;
+    text-decoration: none;
+  }
+
+  .store-mobile-nav__categories summary {
+    width: min(100%, 600px);
+    margin-inline: auto;
+    padding: 0.55rem 0.25rem;
+    color: #425347;
+    font-size: 0.88rem;
+    cursor: pointer;
+    list-style-position: inside;
+  }
+
+  .store-mobile-nav__categories nav {
+    padding: 0.1rem 0 0.35rem 1rem;
+    background: transparent;
+  }
+
+  .store-mobile-nav__categories span {
+    padding: 0.55rem 0.25rem;
+    color: #777a68;
+    font-size: 0.84rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .store-nav__categories summary::after {
+    transition: none;
+  }
+}
