@@ -13,13 +13,423 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 {
     private readonly XaquiamuniDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
+    private readonly ICalendarioOperacionalEstoque _calendario;
 
     public EfEstoqueInsumoRepository(
         XaquiamuniDbContext dbContext,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        ICalendarioOperacionalEstoque calendario)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _calendario = calendario;
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> CadastrarInsumoAsync(
+        CadastrarInsumoEstoqueInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        try
+        {
+            var minimo = input.EstoqueMinimo is null
+                ? null
+                : QuantidadeEstoque.Criar(input.EstoqueMinimo.Value, input.UnidadeBase);
+            var insumo = InsumoEstoque.Criar(
+                input.Nome,
+                input.Tipo,
+                input.UnidadeBase,
+                minimo,
+                input.ControlaLote,
+                input.ValidadeObrigatoria);
+            _dbContext.InsumosEstoque.Add(insumo);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            return AdministrarInsumoEstoqueResult.Success(insumo);
+        }
+        catch (ArgumentException exception)
+        {
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                exception.Message);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        {
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "Já existe um insumo com esse nome.");
+        }
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> AtualizarInsumoAsync(
+        AtualizarInsumoEstoqueInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.InsumoId == Guid.Empty)
+        {
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                "O identificador do insumo é obrigatório.");
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            var minimo = input.EstoqueMinimo is null
+                ? null
+                : QuantidadeEstoque.Criar(input.EstoqueMinimo.Value, insumo.UnidadeBase);
+            if (insumo.ControlaLote != input.ControlaLote
+                || insumo.ValidadeObrigatoria != input.ValidadeObrigatoria)
+            {
+                if (await _dbContext.LotesInsumo.AnyAsync(
+                        lote => lote.InsumoId == insumo.Id,
+                        cancellationToken).ConfigureAwait(false)
+                    || await _dbContext.SaldosInsumo.AnyAsync(
+                        saldo => saldo.InsumoId == insumo.Id,
+                        cancellationToken).ConfigureAwait(false)
+                    || await _dbContext.MovimentosInsumo.AnyAsync(
+                        movimento => movimento.InsumoId == insumo.Id,
+                        cancellationToken).ConfigureAwait(false))
+                {
+                    return await ReverterComFalhaAsync(
+                        transaction,
+                        AdministrarInsumoEstoqueStatus.HistoricoImpedeAlteracao,
+                        "A política de lotes e validade não pode ser alterada após existir histórico ou saldo.")
+                        .ConfigureAwait(false);
+                }
+
+                insumo.AtualizarPoliticaLoteProtegida(
+                    input.ControlaLote,
+                    input.ValidadeObrigatoria);
+            }
+
+            insumo.AtualizarDados(
+                input.Nome,
+                input.Tipo,
+                minimo,
+                input.ControlaLote,
+                input.ValidadeObrigatoria);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Success(insumo);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "Já existe um insumo com esse nome.").ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "O cadastro foi alterado concorrentemente; recarregue e tente novamente.")
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> AlterarStatusInsumoAsync(
+        Guid insumoId,
+        bool ativo,
+        CancellationToken cancellationToken = default)
+    {
+        if (insumoId == Guid.Empty)
+        {
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                "O identificador do insumo é obrigatório.");
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync($"stock-supply:{insumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .SingleOrDefaultAsync(item => item.Id == insumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            insumo.DefinirAtivo(ativo);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Success(insumo);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "O cadastro foi alterado concorrentemente; recarregue e tente novamente.")
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> CadastrarFormaCompraAsync(
+        CadastrarFormaCompraInsumoInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.InsumoId == Guid.Empty)
+        {
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                "O identificador do insumo é obrigatório.");
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .Include(item => item.FormasCompra)
+                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            var forma = insumo.AdicionarFormaCompra(
+                input.Nome,
+                input.QuantidadeEquivalentePorEmbalagem,
+                input.Unidade);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Success(insumo, forma);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "Já existe uma forma de compra com esse nome para o insumo.").ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> AtualizarFormaCompraAsync(
+        AtualizarFormaCompraInsumoInput input,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        if (input.InsumoId == Guid.Empty || input.FormaCompraId == Guid.Empty)
+        {
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                "Os identificadores do insumo e da forma de compra são obrigatórios.");
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .Include(item => item.FormasCompra)
+                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            if (!insumo.FormasCompra.Any(forma => forma.Id == input.FormaCompraId))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.FormaCompraNaoEncontrada,
+                    "A forma de compra não existe para este insumo.").ConfigureAwait(false);
+            }
+
+            insumo.AtualizarFormaCompra(
+                input.FormaCompraId,
+                input.Nome,
+                input.QuantidadeEquivalentePorEmbalagem,
+                input.Unidade);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var formaCompra = insumo.FormasCompra.Single(forma => forma.Id == input.FormaCompraId);
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Success(insumo, formaCompra);
+        }
+        catch (ArgumentException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                exception.Message).ConfigureAwait(false);
+        }
+        catch (DbUpdateException exception) when (IsUniqueViolation(exception))
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "Já existe uma forma de compra com esse nome para o insumo.").ConfigureAwait(false);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "A forma de compra foi alterada concorrentemente; recarregue e tente novamente.")
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
+    }
+
+    public async Task<AdministrarInsumoEstoqueResult> AlterarStatusFormaCompraAsync(
+        Guid insumoId,
+        Guid formaCompraId,
+        bool ativa,
+        CancellationToken cancellationToken = default)
+    {
+        if (insumoId == Guid.Empty || formaCompraId == Guid.Empty)
+        {
+            return AdministrarInsumoEstoqueResult.Failure(
+                AdministrarInsumoEstoqueStatus.DadosInvalidos,
+                "Os identificadores do insumo e da forma de compra são obrigatórios.");
+        }
+
+        await using var transaction = await _dbContext.Database
+            .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
+            .ConfigureAwait(false);
+        try
+        {
+            await AdquirirLockAsync($"stock-supply:{insumoId:D}", cancellationToken)
+                .ConfigureAwait(false);
+            var insumo = await _dbContext.InsumosEstoque
+                .Include(item => item.FormasCompra)
+                .SingleOrDefaultAsync(item => item.Id == insumoId, cancellationToken)
+                .ConfigureAwait(false);
+            if (insumo is null)
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.InsumoNaoEncontrado,
+                    "O insumo informado não existe.").ConfigureAwait(false);
+            }
+
+            if (!insumo.FormasCompra.Any(forma => forma.Id == formaCompraId))
+            {
+                return await ReverterComFalhaAsync(
+                    transaction,
+                    AdministrarInsumoEstoqueStatus.FormaCompraNaoEncontrada,
+                    "A forma de compra não existe para este insumo.").ConfigureAwait(false);
+            }
+
+            insumo.DefinirFormaCompraAtiva(formaCompraId, ativa);
+            await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
+            var formaCompra = insumo.FormasCompra.Single(forma => forma.Id == formaCompraId);
+            _dbContext.ChangeTracker.Clear();
+            return AdministrarInsumoEstoqueResult.Success(insumo, formaCompra);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return await ReverterComFalhaAsync(
+                transaction,
+                AdministrarInsumoEstoqueStatus.Conflito,
+                "A forma de compra foi alterada concorrentemente; recarregue e tente novamente.")
+                .ConfigureAwait(false);
+        }
+        catch
+        {
+            await ReverterSePossivelAsync(transaction).ConfigureAwait(false);
+            _dbContext.ChangeTracker.Clear();
+            throw;
+        }
     }
 
     public async Task<RegistrarEntradaInsumoResult> RegistrarEntradaAsync(
@@ -74,7 +484,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                 _dbContext.ChangeTracker.Clear();
-                return RegistrarEntradaInsumoResult.Success(existente);
+                return RegistrarEntradaInsumoResult.Success(existente, repetida: true);
             }
 
             if (await _dbContext.AjustesSemDiferencaInsumo.AnyAsync(
@@ -207,8 +617,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
             if (input.Tipo == TipoMovimentoInsumo.Aquisicao
                 && lote is not null
-                && !lote.EstaElegivelEm(DateOnly.FromDateTime(
-                    _timeProvider.GetUtcNow().UtcDateTime)))
+                && !lote.EstaElegivelEm(_calendario.ObterDataAtual()))
             {
                 return await ReverterComFalhaAsync(
                     transaction,
@@ -417,7 +826,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
             if (input.Tipo == TipoMovimentoInsumo.SaidaManual
                 && lote is not null
-                && !lote.EstaElegivelEm(DateOnly.FromDateTime(_timeProvider.GetUtcNow().UtcDateTime)))
+                && !lote.EstaElegivelEm(_calendario.ObterDataAtual()))
             {
                 return await ReverterComFalhaAsync(
                     transaction,
@@ -968,6 +1377,9 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         _ = result;
     }
 
+    private static bool IsUniqueViolation(DbUpdateException exception) =>
+        exception.InnerException is SqlException { Number: 2601 or 2627 };
+
     private async Task<RegistrarEntradaInsumoResult> ReverterComFalhaAsync(
         Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
         RegistrarEntradaInsumoStatus status,
@@ -986,6 +1398,16 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
         _dbContext.ChangeTracker.Clear();
         return OperacaoEstoqueInsumoResult.Failure(status, erro);
+    }
+
+    private async Task<AdministrarInsumoEstoqueResult> ReverterComFalhaAsync(
+        Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction transaction,
+        AdministrarInsumoEstoqueStatus status,
+        string erro)
+    {
+        await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
+        _dbContext.ChangeTracker.Clear();
+        return AdministrarInsumoEstoqueResult.Failure(status, erro);
     }
 
     private static async Task ReverterSePossivelAsync(
@@ -1007,7 +1429,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         if (movement is not null)
         {
             return CryptographicOperations.FixedTimeEquals(movement.FingerprintRequisicao, fingerprint)
-                ? OperacaoEstoqueInsumoResult.Success(movement)
+                ? OperacaoEstoqueInsumoResult.Success(movement, repetida: true)
                 : OperacaoEstoqueInsumoResult.Failure(
                     OperacaoEstoqueInsumoStatus.ConflitoIdempotencia,
                     "A chave de idempotência já foi usada com outros dados.");
@@ -1023,7 +1445,7 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
         }
 
         return CryptographicOperations.FixedTimeEquals(noDifference.FingerprintRequisicao, fingerprint)
-            ? OperacaoEstoqueInsumoResult.NoDifference()
+            ? OperacaoEstoqueInsumoResult.NoDifference(repetida: true)
             : OperacaoEstoqueInsumoResult.Failure(
                 OperacaoEstoqueInsumoStatus.ConflitoIdempotencia,
                 "A chave de idempotência já foi usada com outros dados.");

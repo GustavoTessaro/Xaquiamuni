@@ -40,6 +40,13 @@ public static class DependencyInjection
             }
         });
         services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddOptions<CalendarioOperacionalEstoqueOptions>()
+            .Bind(configuration.GetSection(CalendarioOperacionalEstoque.SectionName))
+            .Validate(
+                options => CalendarioOperacionalEstoque.ZonaValida(options.TimeZoneId),
+                "The stock operational time zone must be a valid time zone identifier.")
+            .ValidateOnStart();
+        services.AddSingleton<ICalendarioOperacionalEstoque, CalendarioOperacionalEstoque>();
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<ICategoriaRepository, EfCategoriaRepository>();
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
@@ -49,6 +56,9 @@ public static class DependencyInjection
         services.AddScoped<IConsultarCatalogoPublico, ConsultarCatalogoPublico>();
         services.AddScoped<IGerenciarImagensProduto, GerenciarImagensProduto>();
         services.AddScoped<IEstoqueInsumoRepository, EfEstoqueInsumoRepository>();
+        services.AddScoped<IAdministrarInsumoEstoque, AdministrarInsumoEstoque>();
+        services.AddScoped<IEstoqueInsumoConsultaRepository, EfEstoqueInsumoConsultaRepository>();
+        services.AddScoped<IConsultarEstoqueInsumo, ConsultarEstoqueInsumo>();
         services.AddScoped<IRegistrarEntradaInsumo, RegistrarEntradaInsumo>();
         services.AddScoped<IRegistrarSaidaInsumo, RegistrarSaidaInsumo>();
         services.AddScoped<IAjustarContagemInsumo, AjustarContagemInsumo>();

@@ -1,0 +1,171 @@
+@baseUrl = https://localhost:5001
+@adminCookie = <ADMIN_AUTH_COOKIE_NAME>=<ADMIN_AUTH_COOKIE_VALUE>
+@csrfCookie = XSRF-TOKEN=<CSRF_COOKIE_VALUE>
+@csrf = <ANTIFORGERY_REQUEST_TOKEN>
+@insumoId = 00000000-0000-0000-0000-000000000001
+@formaCompraId = 00000000-0000-0000-0000-000000000002
+@loteId = 00000000-0000-0000-0000-000000000003
+@movimentoId = 00000000-0000-0000-0000-000000000004
+@rowVersion = <BASE64_ROWVERSION_FROM_POSITION>
+@idempotencyKey = <UNIQUE_KEY_PER_OPERATION>
+
+### Obter token antiforgery; copie o requestToken e o cookie da resposta
+GET {{baseUrl}}/api/auth/csrf
+
+### Listar e filtrar insumos
+GET {{baseUrl}}/api/admin/insumos?nome=cera&ativo=true&situacao=Normal&pagina=1&itensPorPagina=20
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar cadastro, formas e posições
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar saldos e versões de posição
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}/posicao
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar lotes e elegibilidade
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}/lotes
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar formas de compra
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}/formas-compra
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar histórico paginado
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}/movimentacoes?tipo=Aquisicao&loteId={{loteId}}&pagina=1&itensPorPagina=20
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Consultar um movimento do histórico
+GET {{baseUrl}}/api/admin/insumos/{{insumoId}}/movimentacoes/{{movimentoId}}
+Cookie: {{adminCookie}}; {{csrfCookie}}
+
+### Cadastrar insumo sem abrir saldo inicial
+POST {{baseUrl}}/api/admin/insumos
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "nome": "Base glicerinada",
+  "tipo": "MateriaPrima",
+  "unidadeBase": "Grama",
+  "estoqueMinimo": 500,
+  "controlaLote": true,
+  "validadeObrigatoria": true
+}
+
+### Atualizar dados cadastrais
+PUT {{baseUrl}}/api/admin/insumos/{{insumoId}}
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "nome": "Base glicerinada vegetal",
+  "tipo": "MateriaPrima",
+  "estoqueMinimo": 500,
+  "controlaLote": true,
+  "validadeObrigatoria": true
+}
+
+### Ativar ou inativar insumo
+PATCH {{baseUrl}}/api/admin/insumos/{{insumoId}}/status
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "ativo": true
+}
+
+### Cadastrar forma de compra
+POST {{baseUrl}}/api/admin/insumos/{{insumoId}}/formas-compra
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "nome": "Pacote de 1 kg",
+  "quantidadeEquivalentePorEmbalagem": 1,
+  "unidade": "Quilograma"
+}
+
+### Editar forma de compra
+PUT {{baseUrl}}/api/admin/insumos/{{insumoId}}/formas-compra/{{formaCompraId}}
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "nome": "Pacote de 500 g",
+  "quantidadeEquivalentePorEmbalagem": 500,
+  "unidade": "Grama"
+}
+
+### Ativar ou inativar forma de compra
+PATCH {{baseUrl}}/api/admin/insumos/{{insumoId}}/formas-compra/{{formaCompraId}}/status
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Content-Type: application/json
+
+{
+  "ativa": true
+}
+
+### Registrar estoque inicial ou aquisição; responsável vem da sessão ADMIN
+POST {{baseUrl}}/api/admin/insumos/{{insumoId}}/entradas
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "tipo": "Aquisicao",
+  "quantidadeOriginal": 2,
+  "formaCompraId": "{{formaCompraId}}",
+  "loteId": "{{loteId}}",
+  "custoTotal": 20.00,
+  "observacao": "Compra recebida"
+}
+
+### Registrar saída manual, perda ou descarte
+POST {{baseUrl}}/api/admin/insumos/{{insumoId}}/saidas
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "tipo": "SaidaManual",
+  "quantidadeOriginal": 250,
+  "unidadeOriginal": "Grama",
+  "loteId": "{{loteId}}",
+  "motivo": "Uso manual autorizado"
+}
+
+### Ajustar contagem usando a versão devolvida pela consulta de posição
+POST {{baseUrl}}/api/admin/insumos/{{insumoId}}/contagens
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "quantidadeEncontrada": 1750,
+  "unidadeOriginal": "Grama",
+  "loteId": "{{loteId}}",
+  "versaoSaldoEsperada": "{{rowVersion}}",
+  "motivo": "Contagem física"
+}
+
+### Estornar movimento elegível sem editar o histórico
+POST {{baseUrl}}/api/admin/insumos/{{insumoId}}/movimentacoes/{{movimentoId}}/estorno
+Cookie: {{adminCookie}}; {{csrfCookie}}
+X-XSRF-TOKEN: {{csrf}}
+Idempotency-Key: {{idempotencyKey}}
+Content-Type: application/json
+
+{
+  "motivo": "Correção auditável"
+}
