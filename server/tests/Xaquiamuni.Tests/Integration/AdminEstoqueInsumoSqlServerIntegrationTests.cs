@@ -97,7 +97,9 @@ public sealed class AdminEstoqueInsumoSqlServerIntegrationTests
     public async Task AdminStockWrites_UseAuthenticatedActor_PreserveSnapshotsAndRejectStaleCounts()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
-        using var factory = CreateFactory(database);
+        using var factory = CreateFactory(
+            database,
+            new AdjustableTimeProvider(new DateTimeOffset(2026, 11, 16, 15, 0, 0, TimeSpan.Zero)));
         using var admin = CreateClient(factory, XaquiamuniRoles.Administrador);
         var csrf = await GetCsrfAsync(admin);
         var basePath = AdminEstoqueInsumoEndpoints.BasePath;
@@ -435,6 +437,85 @@ public sealed class AdminEstoqueInsumoSqlServerIntegrationTests
                 && item.Tipo == TipoMovimentoInsumo.Aquisicao));
         Assert.Equal(1800m, await verification.SaldosInsumo
             .Where(item => item.InsumoId == supplyId && item.LoteId == lotId)
+            .Select(item => item.QuantidadeFisica.ValorBase)
+            .SingleAsync());
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task AdminAcquisitionWithoutCost_PreservesUnknownCostAndIsIdempotent()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        using var factory = CreateFactory(database);
+        using var admin = CreateClient(factory, XaquiamuniRoles.Administrador);
+        var csrf = await GetCsrfAsync(admin);
+        var basePath = AdminEstoqueInsumoEndpoints.BasePath;
+        var supply = await CreateSupplyAsync(
+            admin,
+            csrf,
+            "Pigmento sem custo conhecido",
+            TipoInsumoEstoque.MateriaPrima,
+            UnidadeFisicaEstoque.Grama);
+        var supplyId = supply.Resumo.InsumoId;
+        var requestBody = new
+        {
+            tipo = "Aquisicao",
+            quantidadeOriginal = 2.123456m,
+            unidadeOriginal = "Grama"
+        };
+
+        using var request = CreateEntryRequest(
+            $"{basePath}/{supplyId:D}/entradas",
+            requestBody,
+            csrf,
+            "http-acquisition-unknown-cost");
+        using var response = await admin.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var movement = Assert.IsType<MovimentoAdminResponse>(
+            await response.Content.ReadFromJsonAsync<MovimentoAdminResponse>());
+        Assert.Equal(2.123456m, movement.QuantidadeBase);
+        Assert.Null(movement.CustoTotal);
+        Assert.Null(movement.CustoPorUnidadeBase);
+
+        using var positionResponse = await admin.GetAsync($"{basePath}/{supplyId:D}/posicao");
+        Assert.Equal(HttpStatusCode.OK, positionResponse.StatusCode);
+        var position = Assert.IsType<PosicaoInsumoAdminResponse>(
+            await positionResponse.Content.ReadFromJsonAsync<PosicaoInsumoAdminResponse>());
+        Assert.Equal(2.123456m, position.Resumo.SaldoFisico);
+        Assert.Equal(2.123456m, position.Resumo.SaldoUtilizavel);
+        Assert.Equal(2.123456m, position.Resumo.SaldoDisponivel);
+
+        using var historyResponse = await admin.GetAsync(
+            $"{basePath}/{supplyId:D}/movimentacoes?tipo=Aquisicao&pagina=1&itensPorPagina=10");
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = Assert.IsType<PaginaAdminResponse<MovimentoAdminResponse>>(
+            await historyResponse.Content.ReadFromJsonAsync<
+                PaginaAdminResponse<MovimentoAdminResponse>>());
+        var historicalMovement = Assert.Single(history.Itens);
+        Assert.Equal(movement.Id, historicalMovement.Id);
+        Assert.Null(historicalMovement.CustoTotal);
+        Assert.Null(historicalMovement.CustoPorUnidadeBase);
+
+        using var replayRequest = CreateEntryRequest(
+            $"{basePath}/{supplyId:D}/entradas",
+            requestBody,
+            csrf,
+            "http-acquisition-unknown-cost");
+        using var replayResponse = await admin.SendAsync(replayRequest);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        var replay = Assert.IsType<MovimentoAdminResponse>(
+            await replayResponse.Content.ReadFromJsonAsync<MovimentoAdminResponse>());
+        Assert.Equal(movement.Id, replay.Id);
+        Assert.Null(replay.CustoTotal);
+
+        using var verification = database.CreateVerificationContext();
+        Assert.Equal(1, await verification.MovimentosInsumo.CountAsync(
+            item => item.InsumoId == supplyId && item.Tipo == TipoMovimentoInsumo.Aquisicao));
+        var storedMovement = await verification.MovimentosInsumo.SingleAsync(
+            item => item.InsumoId == supplyId && item.Tipo == TipoMovimentoInsumo.Aquisicao);
+        Assert.Null(storedMovement.CustoTotal);
+        Assert.Null(storedMovement.CustoPorUnidadeBase);
+        Assert.Equal(2.123456m, await verification.SaldosInsumo
+            .Where(item => item.InsumoId == supplyId)
             .Select(item => item.QuantidadeFisica.ValorBase)
             .SingleAsync());
     }
