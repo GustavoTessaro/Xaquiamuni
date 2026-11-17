@@ -628,6 +628,36 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ContagemSemDiferencaProdutoAcabado", b =>
+                {
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChaveIdempotencia")
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<byte[]>("FingerprintRequisicao")
+                        .IsRequired()
+                        .HasColumnType("binary(32)")
+                        .HasColumnName("FingerprintRequisicao");
+
+                    b.Property<DateTimeOffset>("RegistradoEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.HasKey("ResponsavelId", "ChaveIdempotencia");
+
+                    b.ToTable("ContagensSemDiferencaProdutoAcabado", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ContagensSemDiferencaProdutoAcabado_Chave_NotBlank", "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+
+                            t.HasCheckConstraint("CK_ContagensSemDiferencaProdutoAcabado_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_ContagensSemDiferencaProdutoAcabado_Timestamp_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -777,6 +807,54 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Codigo")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<DateOnly>("DataFabricacao")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("DataValidade")
+                        .HasColumnType("date");
+
+                    b.Property<short>("OrigemValidade")
+                        .HasColumnType("smallint");
+
+                    b.Property<int?>("PrazoValidadeAplicadoDias")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("ProdutoVarianteId", "Id")
+                        .HasName("AK_LotesProdutoAcabado_ProdutoVarianteId_Id");
+
+                    b.HasIndex("Codigo")
+                        .IsUnique()
+                        .HasDatabaseName("UX_LotesProdutoAcabado_Codigo");
+
+                    b.HasIndex("ProdutoVarianteId", "DataValidade")
+                        .HasDatabaseName("IX_LotesProdutoAcabado_ProdutoVarianteId_DataValidade");
+
+                    b.ToTable("LotesProdutoAcabado", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_LotesProdutoAcabado_Codigo_NotBlank", "LEN(LTRIM(RTRIM([Codigo]))) > 0");
+
+                            t.HasCheckConstraint("CK_LotesProdutoAcabado_ValidadeOrigem_Valid", "([OrigemValidade] = 1 AND [PrazoValidadeAplicadoDias] IS NOT NULL AND [PrazoValidadeAplicadoDias] >= 0) OR ([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL)");
+
+                            t.HasCheckConstraint("CK_LotesProdutoAcabado_Validade_NotBeforeFabricacao", "[DataValidade] >= [DataFabricacao]");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -797,8 +875,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("decimal(18,2)");
 
                     b.Property<short>("Direcao")
-                        .HasDefaultValue((short)1)
-                        .HasColumnType("smallint");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1);
 
                     b.Property<byte[]>("FingerprintRequisicao")
                         .IsRequired()
@@ -883,6 +962,129 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ChaveIdempotencia")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("nvarchar(128)")
+                        .UseCollation("Latin1_General_100_BIN2");
+
+                    b.Property<short?>("CondicaoDestino")
+                        .HasColumnType("smallint");
+
+                    b.Property<short?>("CondicaoOrigem")
+                        .HasColumnType("smallint");
+
+                    b.Property<byte[]>("FingerprintRequisicao")
+                        .IsRequired()
+                        .HasColumnType("binary(32)")
+                        .HasColumnName("FingerprintRequisicao");
+
+                    b.Property<Guid>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Motivo")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid?>("MovimentoOriginalId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Observacao")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("QuantidadeContada")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("RegistradoEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("Tipo")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MovimentoOriginalId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MovimentosProdutoAcabado_MovimentoOriginalId")
+                        .HasFilter("[MovimentoOriginalId] IS NOT NULL");
+
+                    b.HasIndex("ProdutoVarianteId", "RegistradoEmUtc")
+                        .HasDatabaseName("IX_MovimentosProdutoAcabado_ProdutoVarianteId_RegistradoEmUtc");
+
+                    b.HasIndex("ResponsavelId", "ChaveIdempotencia")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MovimentosProdutoAcabado_ResponsavelId_ChaveIdempotencia");
+
+                    b.HasIndex("ProdutoVarianteId", "LoteId", "RegistradoEmUtc")
+                        .HasDatabaseName("IX_MovimentosProdutoAcabado_ProdutoVarianteId_LoteId_RegistradoEmUtc");
+
+                    b.ToTable("MovimentosProdutoAcabado", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Chave_NotBlank", "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Condicoes_Valid", "([CondicaoOrigem] IS NULL OR [CondicaoOrigem] IN (1, 2, 3)) AND ([CondicaoDestino] IS NULL OR [CondicaoDestino] IN (1, 2, 3)) AND (([CondicaoOrigem] IS NULL AND [CondicaoDestino] IS NOT NULL) OR ([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NULL) OR ([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NOT NULL AND [CondicaoOrigem] <> [CondicaoDestino]))");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Contagem_Conciliada", "[Tipo] <> 6 OR ([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 1 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeVendavel] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeVendavel])) OR ([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 2 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeDanificada] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeDanificada])) OR ([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 3 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeQuarentena] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeQuarentena])) OR ([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 1 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeVendavel] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeVendavel])) OR ([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 2 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeDanificada] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeDanificada])) OR ([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 3 AND [QuantidadeContada] = [SaldoPosterior_QuantidadeQuarentena] AND CONVERT(bigint, [Quantidade]) = ABS(CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeQuarentena]))");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Contagem_NotNull", "[Tipo] <> 6 OR [QuantidadeContada] IS NOT NULL");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Estorno_NotSelf", "[MovimentoOriginalId] IS NULL OR [MovimentoOriginalId] <> [Id]");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Motivo_NotBlank", "LEN(LTRIM(RTRIM([Motivo]))) > 0");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Quantidade_Positive", "[Quantidade] > 0");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Saldos_NonNegativeAndIntRange", "[SaldoAnterior_QuantidadeVendavel] >= 0 AND [SaldoAnterior_QuantidadeDanificada] >= 0 AND [SaldoAnterior_QuantidadeQuarentena] >= 0 AND CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) + CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) + CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) <= 2147483647 AND [SaldoPosterior_QuantidadeVendavel] >= 0 AND [SaldoPosterior_QuantidadeDanificada] >= 0 AND [SaldoPosterior_QuantidadeQuarentena] >= 0 AND CONVERT(bigint, [SaldoPosterior_QuantidadeVendavel]) + CONVERT(bigint, [SaldoPosterior_QuantidadeDanificada]) + CONVERT(bigint, [SaldoPosterior_QuantidadeQuarentena]) <= 2147483647");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Saldos_TransitionValid", "CONVERT(bigint, [SaldoPosterior_QuantidadeVendavel]) = CASE WHEN [CondicaoOrigem] = 1 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) - [Quantidade] WHEN [CondicaoDestino] = 1 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) + [Quantidade] ELSE [SaldoAnterior_QuantidadeVendavel] END AND CONVERT(bigint, [SaldoPosterior_QuantidadeDanificada]) = CASE WHEN [CondicaoOrigem] = 2 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) - [Quantidade] WHEN [CondicaoDestino] = 2 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) + [Quantidade] ELSE [SaldoAnterior_QuantidadeDanificada] END AND CONVERT(bigint, [SaldoPosterior_QuantidadeQuarentena]) = CASE WHEN [CondicaoOrigem] = 3 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) - [Quantidade] WHEN [CondicaoDestino] = 3 THEN CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) + [Quantidade] ELSE [SaldoAnterior_QuantidadeQuarentena] END");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Timestamps_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Tipo_DadosValid", "(([Tipo] IN (1, 2) AND [CondicaoOrigem] IS NULL AND [CondicaoDestino] IS NOT NULL AND [QuantidadeContada] IS NULL AND [MovimentoOriginalId] IS NULL) OR ([Tipo] IN (3, 4, 5) AND [CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NULL AND [QuantidadeContada] IS NULL AND [MovimentoOriginalId] IS NULL) OR ([Tipo] = 6 AND (([CondicaoOrigem] IS NULL AND [CondicaoDestino] IS NOT NULL) OR ([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NULL)) AND [QuantidadeContada] >= 0 AND [MovimentoOriginalId] IS NULL) OR ([Tipo] = 7 AND [CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NOT NULL AND [QuantidadeContada] IS NULL AND [MovimentoOriginalId] IS NULL) OR ([Tipo] = 8 AND [MovimentoOriginalId] IS NOT NULL AND [QuantidadeContada] IS NULL))");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Tipo_Valid", "[Tipo] IN (1, 2, 3, 4, 5, 6, 7, 8)");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.PoliticaEstoqueProdutoVariante", b =>
+                {
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int?>("EstoqueMinimo")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("PrazoValidadePadraoDias")
+                        .HasColumnType("int");
+
+                    b.HasKey("ProdutoVarianteId");
+
+                    b.ToTable("PoliticasEstoqueProdutoVariante", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PoliticasEstoqueProdutoVariante_EstoqueMinimo_NonNegative", "[EstoqueMinimo] IS NULL OR [EstoqueMinimo] >= 0");
+
+                            t.HasCheckConstraint("CK_PoliticasEstoqueProdutoVariante_PrazoValidade_NonNegative", "[PrazoValidadePadraoDias] IS NULL OR [PrazoValidadePadraoDias] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -916,6 +1118,47 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("SaldosInsumo", null, t =>
                         {
                             t.HasCheckConstraint("CK_SaldosInsumo_Quantidade_Valid", "[Quantidade_ValorBase] >= 0 AND ([Quantidade_UnidadeBase] = 1 AND [Quantidade_Dimensao] = 1 OR [Quantidade_UnidadeBase] = 3 AND [Quantidade_Dimensao] = 2 OR [Quantidade_UnidadeBase] = 5 AND [Quantidade_Dimensao] = 3) AND ([Quantidade_UnidadeBase] <> 5 OR [Quantidade_ValorBase] = FLOOR([Quantidade_ValorBase]))");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoLoteProdutoAcabado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("QuantidadeDanificada")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantidadeQuarentena")
+                        .HasColumnType("int");
+
+                    b.Property<int>("QuantidadeVendavel")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion")
+                        .HasColumnName("Versao");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoVarianteId", "LoteId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_SaldosProdutoAcabado_ProdutoVarianteId_LoteId");
+
+                    b.ToTable("SaldosProdutoAcabado", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SaldosProdutoAcabado_QuantidadeFisica_IntRange", "CONVERT(bigint, [QuantidadeVendavel]) + CONVERT(bigint, [QuantidadeDanificada]) + CONVERT(bigint, [QuantidadeQuarentena]) <= 2147483647");
+
+                            t.HasCheckConstraint("CK_SaldosProdutoAcabado_Quantidades_NonNegative", "[QuantidadeVendavel] >= 0 AND [QuantidadeDanificada] >= 0 AND [QuantidadeQuarentena] >= 0");
                         });
                 });
 
@@ -1373,6 +1616,16 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasConstraintName("FK_LotesInsumo_InsumosEstoque_InsumoId");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoVarianteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_LotesProdutoAcabado_ProdutoVariantes_ProdutoVarianteId");
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
@@ -1539,6 +1792,89 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoOriginalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_MovimentosProdutoAcabado_MovimentosProdutoAcabado_MovimentoOriginalId");
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoVarianteId", "LoteId")
+                        .HasPrincipalKey("ProdutoVarianteId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_MovimentosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId");
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.SaldoProdutoAcabadoSnapshot", "SaldoAnterior", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoProdutoAcabadoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<int>("QuantidadeDanificada")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoAnterior_QuantidadeDanificada");
+
+                            b1.Property<int>("QuantidadeQuarentena")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoAnterior_QuantidadeQuarentena");
+
+                            b1.Property<int>("QuantidadeVendavel")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoAnterior_QuantidadeVendavel");
+
+                            b1.HasKey("MovimentoProdutoAcabadoId");
+
+                            b1.ToTable("MovimentosProdutoAcabado");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoProdutoAcabadoId");
+                        });
+
+                    b.OwnsOne("Xaquiamuni.Dominio.Estoque.SaldoProdutoAcabadoSnapshot", "SaldoPosterior", b1 =>
+                        {
+                            b1.Property<Guid>("MovimentoProdutoAcabadoId")
+                                .HasColumnType("uniqueidentifier");
+
+                            b1.Property<int>("QuantidadeDanificada")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoPosterior_QuantidadeDanificada");
+
+                            b1.Property<int>("QuantidadeQuarentena")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoPosterior_QuantidadeQuarentena");
+
+                            b1.Property<int>("QuantidadeVendavel")
+                                .HasColumnType("int")
+                                .HasColumnName("SaldoPosterior_QuantidadeVendavel");
+
+                            b1.HasKey("MovimentoProdutoAcabadoId");
+
+                            b1.ToTable("MovimentosProdutoAcabado");
+
+                            b1.WithOwner()
+                                .HasForeignKey("MovimentoProdutoAcabadoId");
+                        });
+
+                    b.Navigation("SaldoAnterior")
+                        .IsRequired();
+
+                    b.Navigation("SaldoPosterior")
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.PoliticaEstoqueProdutoVariante", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
+                        .WithOne()
+                        .HasForeignKey("Xaquiamuni.Dominio.Estoque.PoliticaEstoqueProdutoVariante", "ProdutoVarianteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_PoliticasEstoqueProdutoVariante_ProdutoVariantes_ProdutoVarianteId");
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
@@ -1583,6 +1919,17 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.Navigation("QuantidadeFisica")
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoLoteProdutoAcabado", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoVarianteId", "LoteId")
+                        .HasPrincipalKey("ProdutoVarianteId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_SaldosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId");
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>

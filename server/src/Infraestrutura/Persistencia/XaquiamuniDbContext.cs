@@ -40,6 +40,15 @@ public sealed class XaquiamuniDbContext
     public DbSet<MovimentoInsumo> MovimentosInsumo => Set<MovimentoInsumo>();
     public DbSet<AjusteSemDiferencaInsumo> AjustesSemDiferencaInsumo =>
         Set<AjusteSemDiferencaInsumo>();
+    public DbSet<PoliticaEstoqueProdutoVariante> PoliticasEstoqueProdutoVariante =>
+        Set<PoliticaEstoqueProdutoVariante>();
+    public DbSet<LoteProdutoAcabado> LotesProdutoAcabado => Set<LoteProdutoAcabado>();
+    public DbSet<SaldoLoteProdutoAcabado> SaldosProdutoAcabado =>
+        Set<SaldoLoteProdutoAcabado>();
+    public DbSet<MovimentoProdutoAcabado> MovimentosProdutoAcabado =>
+        Set<MovimentoProdutoAcabado>();
+    public DbSet<ContagemSemDiferencaProdutoAcabado> ContagensSemDiferencaProdutoAcabado =>
+        Set<ContagemSemDiferencaProdutoAcabado>();
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
@@ -287,6 +296,377 @@ public sealed class XaquiamuniDbContext
                     .HasColumnName("Fator_Dimensao")
                     .HasConversion<short>()
                     .HasColumnType("smallint")
+                    .IsRequired();
+            });
+
+            builder.Entity<PoliticaEstoqueProdutoVariante>(politica =>
+            {
+                politica.ToTable("PoliticasEstoqueProdutoVariante", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_PoliticasEstoqueProdutoVariante_EstoqueMinimo_NonNegative",
+                        "[EstoqueMinimo] IS NULL OR [EstoqueMinimo] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_PoliticasEstoqueProdutoVariante_PrazoValidade_NonNegative",
+                        "[PrazoValidadePadraoDias] IS NULL OR [PrazoValidadePadraoDias] >= 0");
+                });
+                politica.HasKey(entity => entity.ProdutoVarianteId);
+                politica.Property(entity => entity.ProdutoVarianteId)
+                    .ValueGeneratedNever();
+                politica.Property(entity => entity.EstoqueMinimo);
+                politica.Property(entity => entity.PrazoValidadePadraoDias);
+                politica.HasOne<ProdutoVariante>()
+                    .WithOne()
+                    .HasForeignKey<PoliticaEstoqueProdutoVariante>(entity => entity.ProdutoVarianteId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_PoliticasEstoqueProdutoVariante_ProdutoVariantes_ProdutoVarianteId")
+                    .IsRequired();
+            });
+
+            builder.Entity<LoteProdutoAcabado>(lote =>
+            {
+                lote.ToTable("LotesProdutoAcabado", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_LotesProdutoAcabado_Codigo_NotBlank",
+                        "LEN(LTRIM(RTRIM([Codigo]))) > 0");
+                    table.HasCheckConstraint(
+                        "CK_LotesProdutoAcabado_Validade_NotBeforeFabricacao",
+                        "[DataValidade] >= [DataFabricacao]");
+                    table.HasCheckConstraint(
+                        "CK_LotesProdutoAcabado_ValidadeOrigem_Valid",
+                        "([OrigemValidade] = 1 AND [PrazoValidadeAplicadoDias] IS NOT NULL "
+                        + "AND [PrazoValidadeAplicadoDias] >= 0) OR "
+                        + "([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL)");
+                });
+                lote.HasKey(entity => entity.Id);
+                lote.Property(entity => entity.Id)
+                    .ValueGeneratedNever();
+                lote.Property(entity => entity.ProdutoVarianteId)
+                    .IsRequired();
+                lote.Property(entity => entity.Codigo)
+                    .HasMaxLength(LoteProdutoAcabado.CodigoMaxLength)
+                    .UseCollation("Latin1_General_100_BIN2")
+                    .IsRequired();
+                lote.Property(entity => entity.DataFabricacao)
+                    .HasColumnType("date")
+                    .IsRequired();
+                lote.Property(entity => entity.DataValidade)
+                    .HasColumnType("date")
+                    .IsRequired();
+                lote.Property(entity => entity.OrigemValidade)
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+                lote.Property(entity => entity.PrazoValidadeAplicadoDias);
+                lote.HasOne<ProdutoVariante>()
+                    .WithMany()
+                    .HasForeignKey(entity => entity.ProdutoVarianteId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_LotesProdutoAcabado_ProdutoVariantes_ProdutoVarianteId")
+                    .IsRequired();
+                lote.HasAlternateKey(entity => new { entity.ProdutoVarianteId, entity.Id })
+                    .HasName("AK_LotesProdutoAcabado_ProdutoVarianteId_Id");
+                lote.HasIndex(entity => entity.Codigo)
+                    .IsUnique()
+                    .HasDatabaseName("UX_LotesProdutoAcabado_Codigo");
+                lote.HasIndex(entity => new { entity.ProdutoVarianteId, entity.DataValidade })
+                    .HasDatabaseName("IX_LotesProdutoAcabado_ProdutoVarianteId_DataValidade");
+            });
+
+            builder.Entity<SaldoLoteProdutoAcabado>(saldo =>
+            {
+                saldo.ToTable("SaldosProdutoAcabado", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_SaldosProdutoAcabado_Quantidades_NonNegative",
+                        "[QuantidadeVendavel] >= 0 AND [QuantidadeDanificada] >= 0 "
+                        + "AND [QuantidadeQuarentena] >= 0");
+                    table.HasCheckConstraint(
+                        "CK_SaldosProdutoAcabado_QuantidadeFisica_IntRange",
+                        "CONVERT(bigint, [QuantidadeVendavel]) + "
+                        + "CONVERT(bigint, [QuantidadeDanificada]) + "
+                        + "CONVERT(bigint, [QuantidadeQuarentena]) <= 2147483647");
+                });
+                saldo.HasKey(entity => entity.Id);
+                saldo.Property(entity => entity.Id)
+                    .ValueGeneratedNever();
+                saldo.Property(entity => entity.ProdutoVarianteId)
+                    .IsRequired();
+                saldo.Property(entity => entity.LoteId)
+                    .IsRequired();
+                saldo.Property(entity => entity.QuantidadeVendavel)
+                    .HasField("_quantidadeVendavel")
+                    .UsePropertyAccessMode(PropertyAccessMode.Field)
+                    .IsRequired();
+                saldo.Property(entity => entity.QuantidadeDanificada)
+                    .HasField("_quantidadeDanificada")
+                    .UsePropertyAccessMode(PropertyAccessMode.Field)
+                    .IsRequired();
+                saldo.Property(entity => entity.QuantidadeQuarentena)
+                    .HasField("_quantidadeQuarentena")
+                    .UsePropertyAccessMode(PropertyAccessMode.Field)
+                    .IsRequired();
+                saldo.Property<byte[]>("Versao")
+                    .HasColumnName("Versao")
+                    .IsRowVersion()
+                    .IsRequired();
+                saldo.HasOne<LoteProdutoAcabado>()
+                    .WithMany()
+                    .HasForeignKey(entity => new { entity.ProdutoVarianteId, entity.LoteId })
+                    .HasPrincipalKey(entity => new { entity.ProdutoVarianteId, entity.Id })
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_SaldosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId")
+                    .IsRequired();
+                saldo.HasIndex(entity => new { entity.ProdutoVarianteId, entity.LoteId })
+                    .IsUnique()
+                    .HasDatabaseName("UX_SaldosProdutoAcabado_ProdutoVarianteId_LoteId");
+            });
+
+            builder.Entity<MovimentoProdutoAcabado>(movimento =>
+            {
+                movimento.ToTable("MovimentosProdutoAcabado", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Tipo_Valid",
+                        "[Tipo] IN (1, 2, 3, 4, 5, 6, 7, 8)");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Contagem_NotNull",
+                        "[Tipo] <> 6 OR [QuantidadeContada] IS NOT NULL");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Quantidade_Positive",
+                        "[Quantidade] > 0");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Condicoes_Valid",
+                        "([CondicaoOrigem] IS NULL OR [CondicaoOrigem] IN (1, 2, 3)) AND "
+                        + "([CondicaoDestino] IS NULL OR [CondicaoDestino] IN (1, 2, 3)) AND "
+                        + "(([CondicaoOrigem] IS NULL AND [CondicaoDestino] IS NOT NULL) OR "
+                        + "([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NULL) OR "
+                        + "([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NOT NULL "
+                        + "AND [CondicaoOrigem] <> [CondicaoDestino]))");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Saldos_NonNegativeAndIntRange",
+                        "[SaldoAnterior_QuantidadeVendavel] >= 0 AND "
+                        + "[SaldoAnterior_QuantidadeDanificada] >= 0 AND "
+                        + "[SaldoAnterior_QuantidadeQuarentena] >= 0 AND "
+                        + "CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) + "
+                        + "CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) + "
+                        + "CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) <= 2147483647 AND "
+                        + "[SaldoPosterior_QuantidadeVendavel] >= 0 AND "
+                        + "[SaldoPosterior_QuantidadeDanificada] >= 0 AND "
+                        + "[SaldoPosterior_QuantidadeQuarentena] >= 0 AND "
+                        + "CONVERT(bigint, [SaldoPosterior_QuantidadeVendavel]) + "
+                        + "CONVERT(bigint, [SaldoPosterior_QuantidadeDanificada]) + "
+                        + "CONVERT(bigint, [SaldoPosterior_QuantidadeQuarentena]) <= 2147483647");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Saldos_TransitionValid",
+                        "CONVERT(bigint, [SaldoPosterior_QuantidadeVendavel]) = "
+                        + "CASE WHEN [CondicaoOrigem] = 1 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) - [Quantidade] "
+                        + "WHEN [CondicaoDestino] = 1 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeVendavel]) + [Quantidade] "
+                        + "ELSE [SaldoAnterior_QuantidadeVendavel] END AND "
+                        + "CONVERT(bigint, [SaldoPosterior_QuantidadeDanificada]) = "
+                        + "CASE WHEN [CondicaoOrigem] = 2 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) - [Quantidade] "
+                        + "WHEN [CondicaoDestino] = 2 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeDanificada]) + [Quantidade] "
+                        + "ELSE [SaldoAnterior_QuantidadeDanificada] END AND "
+                        + "CONVERT(bigint, [SaldoPosterior_QuantidadeQuarentena]) = "
+                        + "CASE WHEN [CondicaoOrigem] = 3 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) - [Quantidade] "
+                        + "WHEN [CondicaoDestino] = 3 "
+                        + "THEN CONVERT(bigint, [SaldoAnterior_QuantidadeQuarentena]) + [Quantidade] "
+                        + "ELSE [SaldoAnterior_QuantidadeQuarentena] END");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Tipo_DadosValid",
+                        "(([Tipo] IN (1, 2) AND [CondicaoOrigem] IS NULL "
+                        + "AND [CondicaoDestino] IS NOT NULL AND [QuantidadeContada] IS NULL "
+                        + "AND [MovimentoOriginalId] IS NULL) OR "
+                        + "([Tipo] IN (3, 4, 5) AND [CondicaoOrigem] IS NOT NULL "
+                        + "AND [CondicaoDestino] IS NULL AND [QuantidadeContada] IS NULL "
+                        + "AND [MovimentoOriginalId] IS NULL) OR "
+                        + "([Tipo] = 6 AND (([CondicaoOrigem] IS NULL AND [CondicaoDestino] IS NOT NULL) "
+                        + "OR ([CondicaoOrigem] IS NOT NULL AND [CondicaoDestino] IS NULL)) "
+                        + "AND [QuantidadeContada] >= 0 "
+                        + "AND [MovimentoOriginalId] IS NULL) OR "
+                        + "([Tipo] = 7 AND [CondicaoOrigem] IS NOT NULL "
+                        + "AND [CondicaoDestino] IS NOT NULL AND [QuantidadeContada] IS NULL "
+                        + "AND [MovimentoOriginalId] IS NULL) OR "
+                        + "([Tipo] = 8 AND [MovimentoOriginalId] IS NOT NULL "
+                        + "AND [QuantidadeContada] IS NULL))");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Contagem_Conciliada",
+                        "[Tipo] <> 6 OR "
+                        + "([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 1 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeVendavel] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeVendavel])) OR "
+                        + "([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 2 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeDanificada] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeDanificada])) OR "
+                        + "([CondicaoOrigem] IS NULL AND [CondicaoDestino] = 3 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeQuarentena] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeQuarentena])) OR "
+                        + "([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 1 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeVendavel] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeVendavel])) OR "
+                        + "([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 2 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeDanificada] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeDanificada])) OR "
+                        + "([CondicaoDestino] IS NULL AND [CondicaoOrigem] = 3 "
+                        + "AND [QuantidadeContada] = [SaldoPosterior_QuantidadeQuarentena] "
+                        + "AND CONVERT(bigint, [Quantidade]) = ABS("
+                        + "CONVERT(bigint, [QuantidadeContada]) - [SaldoAnterior_QuantidadeQuarentena]))");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Timestamps_Utc",
+                        "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Responsavel_NotEmpty",
+                        "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Motivo_NotBlank",
+                        "LEN(LTRIM(RTRIM([Motivo]))) > 0");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Chave_NotBlank",
+                        "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Estorno_NotSelf",
+                        "[MovimentoOriginalId] IS NULL OR [MovimentoOriginalId] <> [Id]");
+                });
+                movimento.HasKey(entity => entity.Id);
+                movimento.Property(entity => entity.Id)
+                    .ValueGeneratedNever();
+                movimento.Property(entity => entity.ProdutoVarianteId)
+                    .IsRequired();
+                movimento.Property(entity => entity.LoteId)
+                    .IsRequired();
+                movimento.Property(entity => entity.Tipo)
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+                movimento.Property(entity => entity.Quantidade)
+                    .IsRequired();
+                movimento.Property(entity => entity.CondicaoOrigem)
+                    .HasConversion<short?>()
+                    .HasColumnType("smallint");
+                movimento.Property(entity => entity.CondicaoDestino)
+                    .HasConversion<short?>()
+                    .HasColumnType("smallint");
+                movimento.Property(entity => entity.QuantidadeContada);
+                movimento.Property(entity => entity.MovimentoOriginalId);
+                movimento.Property(entity => entity.ResponsavelId)
+                    .IsRequired();
+                movimento.Property(entity => entity.Motivo)
+                    .HasMaxLength(MovimentoProdutoAcabado.MotivoMaxLength)
+                    .IsRequired();
+                movimento.Property(entity => entity.Observacao)
+                    .HasMaxLength(MovimentoProdutoAcabado.ObservacaoMaxLength);
+                movimento.Property(entity => entity.RegistradoEmUtc)
+                    .HasColumnType("datetimeoffset(7)")
+                    .IsRequired();
+                movimento.Property(entity => entity.ChaveIdempotencia)
+                    .HasMaxLength(MovimentoProdutoAcabado.ChaveIdempotenciaMaxLength)
+                    .UseCollation("Latin1_General_100_BIN2")
+                    .IsRequired();
+                movimento.Property(entity => entity.FingerprintRequisicao)
+                    .HasField("_fingerprintRequisicao")
+                    .HasColumnName("FingerprintRequisicao")
+                    .HasColumnType("binary(32)")
+                    .UsePropertyAccessMode(PropertyAccessMode.Field)
+                    .IsRequired();
+                movimento.OwnsOne(entity => entity.SaldoAnterior, saldoAnterior =>
+                {
+                    saldoAnterior.Property(value => value.QuantidadeVendavel)
+                        .HasColumnName("SaldoAnterior_QuantidadeVendavel")
+                        .IsRequired();
+                    saldoAnterior.Property(value => value.QuantidadeDanificada)
+                        .HasColumnName("SaldoAnterior_QuantidadeDanificada")
+                        .IsRequired();
+                    saldoAnterior.Property(value => value.QuantidadeQuarentena)
+                        .HasColumnName("SaldoAnterior_QuantidadeQuarentena")
+                        .IsRequired();
+                });
+                movimento.Navigation(entity => entity.SaldoAnterior)
+                    .IsRequired();
+                movimento.OwnsOne(entity => entity.SaldoPosterior, saldoPosterior =>
+                {
+                    saldoPosterior.Property(value => value.QuantidadeVendavel)
+                        .HasColumnName("SaldoPosterior_QuantidadeVendavel")
+                        .IsRequired();
+                    saldoPosterior.Property(value => value.QuantidadeDanificada)
+                        .HasColumnName("SaldoPosterior_QuantidadeDanificada")
+                        .IsRequired();
+                    saldoPosterior.Property(value => value.QuantidadeQuarentena)
+                        .HasColumnName("SaldoPosterior_QuantidadeQuarentena")
+                        .IsRequired();
+                });
+                movimento.Navigation(entity => entity.SaldoPosterior)
+                    .IsRequired();
+                movimento.HasOne<LoteProdutoAcabado>()
+                    .WithMany()
+                    .HasForeignKey(entity => new { entity.ProdutoVarianteId, entity.LoteId })
+                    .HasPrincipalKey(entity => new { entity.ProdutoVarianteId, entity.Id })
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_MovimentosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId")
+                    .IsRequired();
+                movimento.HasOne<MovimentoProdutoAcabado>()
+                    .WithMany()
+                    .HasForeignKey(entity => entity.MovimentoOriginalId)
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_MovimentosProdutoAcabado_MovimentosProdutoAcabado_MovimentoOriginalId");
+                movimento.HasIndex(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia })
+                    .IsUnique()
+                    .HasDatabaseName("UX_MovimentosProdutoAcabado_ResponsavelId_ChaveIdempotencia");
+                movimento.HasIndex(entity => new
+                    {
+                        entity.ProdutoVarianteId,
+                        entity.LoteId,
+                        entity.RegistradoEmUtc
+                    })
+                    .HasDatabaseName("IX_MovimentosProdutoAcabado_ProdutoVarianteId_LoteId_RegistradoEmUtc");
+                movimento.HasIndex(entity => new { entity.ProdutoVarianteId, entity.RegistradoEmUtc })
+                    .HasDatabaseName("IX_MovimentosProdutoAcabado_ProdutoVarianteId_RegistradoEmUtc");
+                movimento.HasIndex(entity => entity.MovimentoOriginalId)
+                    .IsUnique()
+                    .HasDatabaseName("UX_MovimentosProdutoAcabado_MovimentoOriginalId")
+                    .HasFilter("[MovimentoOriginalId] IS NOT NULL");
+            });
+
+            builder.Entity<ContagemSemDiferencaProdutoAcabado>(operacao =>
+            {
+                operacao.ToTable("ContagensSemDiferencaProdutoAcabado", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_ContagensSemDiferencaProdutoAcabado_Responsavel_NotEmpty",
+                        "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
+                    table.HasCheckConstraint(
+                        "CK_ContagensSemDiferencaProdutoAcabado_Chave_NotBlank",
+                        "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
+                    table.HasCheckConstraint(
+                        "CK_ContagensSemDiferencaProdutoAcabado_Timestamp_Utc",
+                        "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
+                });
+                operacao.HasKey(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia });
+                operacao.Property(entity => entity.ResponsavelId)
+                    .ValueGeneratedNever()
+                    .IsRequired();
+                operacao.Property(entity => entity.ChaveIdempotencia)
+                    .HasMaxLength(MovimentoProdutoAcabado.ChaveIdempotenciaMaxLength)
+                    .UseCollation("Latin1_General_100_BIN2")
+                    .IsRequired();
+                operacao.Property(entity => entity.FingerprintRequisicao)
+                    .HasField("_fingerprintRequisicao")
+                    .HasColumnName("FingerprintRequisicao")
+                    .HasColumnType("binary(32)")
+                    .UsePropertyAccessMode(PropertyAccessMode.Field)
+                    .IsRequired();
+                operacao.Property(entity => entity.RegistradoEmUtc)
+                    .HasColumnType("datetimeoffset(7)")
                     .IsRequired();
             });
 
@@ -1205,6 +1585,18 @@ public sealed class XaquiamuniDbContext
             throw new InvalidOperationException("Registros de idempotência também são imutáveis.");
         }
 
+        if (ChangeTracker.Entries<MovimentoProdutoAcabado>()
+            .Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Movimentos de produto acabado são append-only.");
+        }
+
+        if (ChangeTracker.Entries<ContagemSemDiferencaProdutoAcabado>()
+            .Any(entry => entry.State is EntityState.Modified or EntityState.Deleted))
+        {
+            throw new InvalidOperationException("Registros de idempotência também são imutáveis.");
+        }
+
         var movimentosAdicionados = ChangeTracker.Entries<MovimentoInsumo>()
             .Where(entry => entry.State == EntityState.Added)
             .Select(entry => entry.Entity)
@@ -1251,6 +1643,47 @@ public sealed class XaquiamuniDbContext
                     "O saldo físico só pode ser alterado junto com o movimento correspondente.");
             }
         }
+
+        var movimentosProdutoAcabadoAdicionados = ChangeTracker.Entries<MovimentoProdutoAcabado>()
+            .Where(entry => entry.State == EntityState.Added)
+            .Select(entry => entry.Entity)
+            .ToArray();
+        var saldosProdutoAcabadoAlterados = ChangeTracker.Entries<SaldoLoteProdutoAcabado>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
+            .ToArray();
+
+        foreach (var balance in saldosProdutoAcabadoAlterados)
+        {
+            var movements = movimentosProdutoAcabadoAdicionados
+                .Where(item =>
+                    item.ProdutoVarianteId == balance.Entity.ProdutoVarianteId
+                    && item.LoteId == balance.Entity.LoteId)
+                .ToArray();
+            if (movements.Length == 0
+                && balance.State == EntityState.Added
+                && balance.Entity.QuantidadeFisica == 0)
+            {
+                continue;
+            }
+
+            if (!SaldoProdutoAcabadoCorrespondeASequencia(balance, movements))
+            {
+                throw new InvalidOperationException(
+                    "O saldo de produto acabado só pode ser alterado junto com os movimentos correspondentes.");
+            }
+        }
+
+        foreach (var movement in movimentosProdutoAcabadoAdicionados)
+        {
+            var balance = saldosProdutoAcabadoAlterados.SingleOrDefault(entry =>
+                entry.Entity.ProdutoVarianteId == movement.ProdutoVarianteId
+                && entry.Entity.LoteId == movement.LoteId);
+            if (balance is null)
+            {
+                throw new InvalidOperationException(
+                    "Um movimento de produto acabado deve atualizar a posição de saldo correspondente.");
+            }
+        }
     }
 
     private static bool SaldoCorrespondeAoMovimento(
@@ -1271,5 +1704,70 @@ public sealed class XaquiamuniDbContext
                 || movement.QuantidadeContada == movement.SaldoPosterior)
             && movement.SaldoAnterior.UnidadeBase == movement.QuantidadeBase.UnidadeBase
             && quantity.UnidadeBase == movement.QuantidadeBase.UnidadeBase;
+    }
+
+    private static bool SaldoProdutoAcabadoCorrespondeASequencia(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<SaldoLoteProdutoAcabado> balance,
+        IReadOnlyCollection<MovimentoProdutoAcabado> movements)
+    {
+        if (movements.Count == 0)
+        {
+            return false;
+        }
+
+        var anteriorVendavel = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeVendavel).OriginalValue;
+        var anteriorDanificada = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeDanificada).OriginalValue;
+        var anteriorQuarentena = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeQuarentena).OriginalValue;
+
+        var restantes = movements.ToList();
+        while (restantes.Count > 0)
+        {
+            var movement = restantes.FirstOrDefault(item =>
+                item.SaldoAnterior.QuantidadeVendavel == anteriorVendavel
+                && item.SaldoAnterior.QuantidadeDanificada == anteriorDanificada
+                && item.SaldoAnterior.QuantidadeQuarentena == anteriorQuarentena);
+            if (movement is null)
+            {
+                return false;
+            }
+
+            restantes.Remove(movement);
+            anteriorVendavel = movement.SaldoPosterior.QuantidadeVendavel;
+            anteriorDanificada = movement.SaldoPosterior.QuantidadeDanificada;
+            anteriorQuarentena = movement.SaldoPosterior.QuantidadeQuarentena;
+        }
+
+        return anteriorVendavel == balance.Entity.QuantidadeVendavel
+            && anteriorDanificada == balance.Entity.QuantidadeDanificada
+            && anteriorQuarentena == balance.Entity.QuantidadeQuarentena;
+    }
+
+    private static bool SaldoProdutoAcabadoCorrespondeAoMovimento(
+        Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry<SaldoLoteProdutoAcabado> balance,
+        MovimentoProdutoAcabado movement)
+    {
+        var saldo = balance.Entity;
+        var anteriorVendavel = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeVendavel).OriginalValue;
+        var anteriorDanificada = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeDanificada).OriginalValue;
+        var anteriorQuarentena = balance.State == EntityState.Added
+            ? 0
+            : balance.Property(item => item.QuantidadeQuarentena).OriginalValue;
+
+        return movement.SaldoAnterior.QuantidadeVendavel == anteriorVendavel
+            && movement.SaldoAnterior.QuantidadeDanificada == anteriorDanificada
+            && movement.SaldoAnterior.QuantidadeQuarentena == anteriorQuarentena
+            && movement.SaldoPosterior.QuantidadeVendavel == saldo.QuantidadeVendavel
+            && movement.SaldoPosterior.QuantidadeDanificada == saldo.QuantidadeDanificada
+            && movement.SaldoPosterior.QuantidadeQuarentena == saldo.QuantidadeQuarentena;
     }
 }
