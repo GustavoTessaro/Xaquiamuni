@@ -1,0 +1,1094 @@
+<app-admin-workspace activePage="stock">
+  <div class="space-y-6">
+    <header>
+      <p class="text-sm font-semibold uppercase tracking-wide text-emerald-800">Estoque</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-emerald-950 sm:text-3xl">
+        Produtos acabados
+      </h1>
+      <p class="mt-2 text-sm text-slate-600">
+        Consulte posição, lotes, política e histórico das variantes comerciais.
+      </p>
+    </header>
+
+    @if (erro()) {
+      <p
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+        role="alert"
+      >
+        {{ erro() }}
+      </p>
+    }
+
+    @if (!varianteId()) {
+      <section
+        class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+        aria-labelledby="finished-goods-selection-title"
+      >
+        <h2 id="finished-goods-selection-title" class="text-lg font-semibold text-emerald-950">
+          Selecionar produto e variante
+        </h2>
+        @if (carregando()) {
+          <p class="mt-4 text-sm text-slate-600" role="status">Carregando produtos...</p>
+        } @else if (produtos().length === 0) {
+          <p
+            class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
+          >
+            Nenhum produto cadastrado.
+          </p>
+        } @else {
+          <div class="mt-4 grid gap-3 lg:grid-cols-2">
+            @for (produto of produtos(); track produto.id) {
+              <article class="rounded-xl border border-slate-200 p-4">
+                <h3 class="font-semibold text-slate-900">{{ produto.nome }}</h3>
+                <div class="mt-3 flex flex-wrap gap-2">
+                  @for (variante of produto.variantes; track variante.id) {
+                    <button
+                      type="button"
+                      (click)="selecionarVariante(produto.id, variante.id)"
+                      class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
+                      [attr.aria-label]="
+                        'Consultar ' + produto.nome + ' — ' + variante.identificacao
+                      "
+                    >
+                      {{ variante.identificacao }}
+                      @if (!variante.ativa) {
+                        <span class="text-xs"> (inativa)</span>
+                      }
+                    </button>
+                  }
+                </div>
+              </article>
+            }
+          </div>
+        }
+      </section>
+    } @else {
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <a
+          routerLink="/admin/estoque/produtos-acabados"
+          class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline"
+        >
+          Selecionar outra variante
+        </a>
+        @if (produtoSelecionado() && varianteSelecionada()) {
+          <p class="text-sm text-slate-600">
+            <strong class="text-slate-900">{{ produtoSelecionado()!.nome }}</strong>
+            · {{ varianteSelecionada()!.identificacao }} · {{ varianteSelecionada()!.unidadeVenda }}
+          </p>
+        }
+      </div>
+
+      @if (carregando() && !posicao()) {
+        <p
+          class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600"
+          role="status"
+        >
+          Carregando posição de estoque...
+        </p>
+      } @else if (posicao(); as position) {
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+          aria-labelledby="finished-position-title"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="finished-position-title" class="text-lg font-semibold text-emerald-950">
+                Posição da variante
+              </h2>
+              <p class="mt-1 text-sm text-slate-600">
+                Valores físicos e comerciais calculados pela API.
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="carregarVariante()"
+              [disabled]="carregando()"
+              class="min-h-10 rounded-xl border border-emerald-800 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+            >
+              {{ carregando() ? 'Atualizando...' : 'Atualizar posição' }}
+            </button>
+          </div>
+
+          <dl class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dt class="text-sm text-slate-600">Saldo físico</dt>
+              <dd class="mt-1 text-xl font-semibold text-slate-950">
+                {{ position.saldoFisico }} un.
+              </dd>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dt class="text-sm text-slate-600">Utilizável</dt>
+              <dd class="mt-1 text-xl font-semibold text-slate-950">
+                {{ position.saldoUtilizavel }} un.
+              </dd>
+            </div>
+            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+              <dt class="text-sm text-slate-600">Reservado</dt>
+              <dd class="mt-1 text-xl font-semibold text-slate-950">
+                {{ position.saldoReservado }} un.
+              </dd>
+            </div>
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+              <dt class="text-sm text-emerald-900">Saldo disponível</dt>
+              <dd class="mt-1 text-xl font-semibold text-emerald-950">
+                {{ position.saldoDisponivel }} un.
+              </dd>
+            </div>
+          </dl>
+
+          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+            <div class="rounded-xl border border-slate-200 p-3">
+              <p class="text-xs font-medium text-slate-500">Vendável</p>
+              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalVendavel() }} un.</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3">
+              <p class="text-xs font-medium text-slate-500">Danificada</p>
+              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalDanificada() }} un.</p>
+            </div>
+            <div class="rounded-xl border border-slate-200 p-3">
+              <p class="text-xs font-medium text-slate-500">Quarentena</p>
+              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalQuarentena() }} un.</p>
+            </div>
+          </div>
+
+          <p class="mt-4 text-sm text-slate-700">
+            Estoque mínimo:
+            <strong>{{
+              position.estoqueMinimoConfigurado
+                ? position.estoqueMinimo + ' un.'
+                : 'Não configurado'
+            }}</strong>
+            · {{ rotuloSituacao(position.situacao) }}
+          </p>
+        </section>
+
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+          aria-labelledby="finished-movement-title"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="finished-movement-title" class="text-lg font-semibold text-emerald-950">
+              Movimentações administrativas
+            </h2>
+            @if (acaoMovimentacao()) {
+              <button
+                type="button"
+                (click)="fecharMovimentacao()"
+                [disabled]="enviandoMovimentacao()"
+                class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"
+              >
+                Fechar
+              </button>
+            }
+          </div>
+          <div class="mt-4 flex flex-wrap gap-2">
+            <button
+              type="button"
+              (click)="abrirMovimentacao('Entrada')"
+              [disabled]="enviandoMovimentacao()"
+              class="min-h-10 rounded-lg bg-emerald-800 px-3 text-sm font-semibold text-white"
+            >
+              Registrar entrada
+            </button>
+            <button
+              type="button"
+              (click)="abrirMovimentacao('Saida')"
+              [disabled]="enviandoMovimentacao()"
+              class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900"
+            >
+              Registrar saída
+            </button>
+            <button
+              type="button"
+              (click)="abrirMovimentacao('Perda')"
+              [disabled]="enviandoMovimentacao()"
+              class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900"
+            >
+              Registrar perda
+            </button>
+            <button
+              type="button"
+              (click)="abrirMovimentacao('Descarte')"
+              [disabled]="enviandoMovimentacao()"
+              class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900"
+            >
+              Registrar descarte
+            </button>
+            <button
+              type="button"
+              (click)="abrirMovimentacao('Transferencia')"
+              [disabled]="enviandoMovimentacao()"
+              class="min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900"
+            >
+              Transferir condição
+            </button>
+          </div>
+
+          @if (sucessoMovimentacao()) {
+            <p
+              class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+              role="status"
+            >
+              {{ sucessoMovimentacao() }}
+            </p>
+          }
+          @if (erroMovimentacao()) {
+            <p
+              class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+              role="alert"
+            >
+              {{ erroMovimentacao() }}
+            </p>
+          }
+
+          @if (acaoMovimentacao() === 'Entrada') {
+            <form
+              class="mt-5 grid gap-4 sm:grid-cols-2"
+              [formGroup]="entradaForm"
+              (ngSubmit)="registrarEntrada()"
+            >
+              <div>
+                <label for="finished-entry-type" class="block text-sm font-semibold"
+                  >Tipo de entrada</label
+                >
+                <select
+                  id="finished-entry-type"
+                  formControlName="tipo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="EstoqueInicial">Estoque inicial</option>
+                  <option value="EntradaManual">Entrada manual</option>
+                </select>
+              </div>
+              <div>
+                <label for="finished-entry-condition" class="block text-sm font-semibold"
+                  >Condição de destino</label
+                >
+                <select
+                  id="finished-entry-condition"
+                  formControlName="condicaoDestino"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="Vendavel">Vendável</option>
+                  <option value="Danificada">Danificada</option>
+                  <option value="Quarentena">Quarentena</option>
+                </select>
+              </div>
+              <div>
+                <label for="finished-entry-quantity" class="block text-sm font-semibold"
+                  >Quantidade inteira</label
+                >
+                <input
+                  id="finished-entry-quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  formControlName="quantidade"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+              </div>
+              <div>
+                <label for="finished-entry-lot-mode" class="block text-sm font-semibold"
+                  >Lote</label
+                >
+                <select
+                  id="finished-entry-lot-mode"
+                  [value]="entradaForm.controls.novoLote.value ? 'novo' : 'existente'"
+                  (change)="
+                    entradaForm.controls.novoLote.setValue($any($event.target).value === 'novo')
+                  "
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="novo">Criar novo lote</option>
+                  <option value="existente">Usar lote existente</option>
+                </select>
+              </div>
+              @if (!entradaForm.controls.novoLote.value) {
+                <div>
+                  <label for="finished-entry-existing-lot" class="block text-sm font-semibold"
+                    >Lote existente</label
+                  >
+                  <select
+                    id="finished-entry-existing-lot"
+                    formControlName="loteId"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                  >
+                    <option value="">Selecione</option>
+                    @for (lote of position.lotes; track lote.loteId) {
+                      <option [value]="lote.loteId">{{ lote.codigo }}</option>
+                    }
+                  </select>
+                </div>
+              } @else {
+                <div>
+                  <label for="finished-entry-fabrication" class="block text-sm font-semibold"
+                    >Data de fabricação</label
+                  >
+                  <input
+                    id="finished-entry-fabrication"
+                    type="date"
+                    formControlName="dataFabricacao"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                </div>
+                <div>
+                  <label for="finished-entry-expiry" class="block text-sm font-semibold"
+                    >Validade manual (opcional)</label
+                  >
+                  <input
+                    id="finished-entry-expiry"
+                    type="date"
+                    formControlName="dataValidade"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                  <p class="mt-1 text-xs text-slate-500">
+                    Quando vazia, usa o prazo padrão configurado.
+                  </p>
+                </div>
+              }
+              <div class="sm:col-span-2">
+                <label for="finished-entry-reason" class="block text-sm font-semibold"
+                  >Motivo</label
+                >
+                <input
+                  id="finished-entry-reason"
+                  type="text"
+                  formControlName="motivo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="finished-entry-observation" class="block text-sm font-semibold"
+                  >Observação</label
+                >
+                <textarea
+                  id="finished-entry-observation"
+                  formControlName="observacao"
+                  rows="3"
+                  class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2"
+                ></textarea>
+              </div>
+              <button
+                type="submit"
+                [disabled]="enviandoMovimentacao()"
+                class="sm:col-span-2 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {{ enviandoMovimentacao() ? 'Registrando...' : 'Confirmar entrada' }}
+              </button>
+            </form>
+          }
+
+          @if (
+            acaoMovimentacao() === 'Saida' ||
+            acaoMovimentacao() === 'Perda' ||
+            acaoMovimentacao() === 'Descarte'
+          ) {
+            <form
+              class="mt-5 grid gap-4 sm:grid-cols-2"
+              [formGroup]="operacaoForm"
+              (ngSubmit)="registrarOperacao()"
+            >
+              <div>
+                <label for="finished-operation-type" class="block text-sm font-semibold"
+                  >Operação</label
+                >
+                <select
+                  id="finished-operation-type"
+                  [value]="operacaoForm.controls.tipo.value"
+                  (change)="selecionarTipoOperacao($event)"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="SaidaManual">Saída manual</option>
+                  <option value="Perda">Perda</option>
+                  <option value="Descarte">Descarte</option>
+                </select>
+              </div>
+              <div>
+                <label for="finished-operation-lot" class="block text-sm font-semibold">Lote</label>
+                <select
+                  id="finished-operation-lot"
+                  formControlName="loteId"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="">Selecione</option>
+                  @for (lote of position.lotes; track lote.loteId) {
+                    <option [value]="lote.loteId">
+                      {{ lote.codigo }} — físico {{ lote.saldoFisico }} un.
+                    </option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="finished-operation-condition" class="block text-sm font-semibold"
+                  >Condição de origem</label
+                >
+                <select
+                  id="finished-operation-condition"
+                  formControlName="condicaoOrigem"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  @if (operacaoForm.controls.tipo.value === 'SaidaManual') {
+                    <option value="Vendavel">Vendável</option>
+                  } @else {
+                    <option value="Vendavel">Vendável</option>
+                    <option value="Danificada">Danificada</option>
+                    <option value="Quarentena">Quarentena</option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="finished-operation-quantity" class="block text-sm font-semibold"
+                  >Quantidade inteira</label
+                >
+                <input
+                  id="finished-operation-quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  formControlName="quantidade"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (operacaoForm.controls.loteId.value) {
+                  <p class="mt-1 text-xs text-slate-500">
+                    Saldo na condição:
+                    {{
+                      saldoDaCondicao(
+                        operacaoForm.controls.loteId.value,
+                        operacaoForm.controls.condicaoOrigem.value
+                      )
+                    }}
+                    un.
+                  </p>
+                }
+              </div>
+              <div class="sm:col-span-2">
+                <label for="finished-operation-reason" class="block text-sm font-semibold"
+                  >Motivo</label
+                >
+                <input
+                  id="finished-operation-reason"
+                  type="text"
+                  formControlName="motivo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="finished-operation-observation" class="block text-sm font-semibold"
+                  >Observação</label
+                >
+                <textarea
+                  id="finished-operation-observation"
+                  formControlName="observacao"
+                  rows="3"
+                  class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2"
+                ></textarea>
+              </div>
+              <button
+                type="submit"
+                [disabled]="enviandoMovimentacao()"
+                class="sm:col-span-2 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {{ enviandoMovimentacao() ? 'Registrando...' : 'Confirmar operação' }}
+              </button>
+            </form>
+          }
+
+          @if (acaoMovimentacao() === 'Transferencia') {
+            <form
+              class="mt-5 grid gap-4 sm:grid-cols-2"
+              [formGroup]="transferenciaForm"
+              (ngSubmit)="registrarTransferencia()"
+            >
+              <div>
+                <label for="finished-transfer-lot" class="block text-sm font-semibold">Lote</label>
+                <select
+                  id="finished-transfer-lot"
+                  formControlName="loteId"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="">Selecione</option>
+                  @for (lote of position.lotes; track lote.loteId) {
+                    <option [value]="lote.loteId">
+                      {{ lote.codigo }} — físico {{ lote.saldoFisico }} un.
+                    </option>
+                  }
+                </select>
+              </div>
+              <div>
+                <label for="finished-transfer-quantity" class="block text-sm font-semibold"
+                  >Quantidade inteira</label
+                >
+                <input
+                  id="finished-transfer-quantity"
+                  type="number"
+                  min="1"
+                  step="1"
+                  formControlName="quantidade"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+              </div>
+              <div>
+                <label for="finished-transfer-origin" class="block text-sm font-semibold"
+                  >Origem</label
+                >
+                <select
+                  id="finished-transfer-origin"
+                  formControlName="condicaoOrigem"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="Vendavel">Vendável</option>
+                  <option value="Danificada">Danificada</option>
+                  <option value="Quarentena">Quarentena</option>
+                </select>
+                @if (transferenciaForm.controls.loteId.value) {
+                  <p class="mt-1 text-xs text-slate-500">
+                    Disponível na origem:
+                    {{
+                      saldoDaCondicao(
+                        transferenciaForm.controls.loteId.value,
+                        transferenciaForm.controls.condicaoOrigem.value
+                      )
+                    }}
+                    un.
+                  </p>
+                }
+              </div>
+              <div>
+                <label for="finished-transfer-destination" class="block text-sm font-semibold"
+                  >Destino</label
+                >
+                <select
+                  id="finished-transfer-destination"
+                  formControlName="condicaoDestino"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+                >
+                  <option value="Vendavel">Vendável</option>
+                  <option value="Danificada">Danificada</option>
+                  <option value="Quarentena">Quarentena</option>
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label for="finished-transfer-reason" class="block text-sm font-semibold"
+                  >Motivo</label
+                >
+                <input
+                  id="finished-transfer-reason"
+                  type="text"
+                  formControlName="motivo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+              </div>
+              <div class="sm:col-span-2">
+                <label for="finished-transfer-observation" class="block text-sm font-semibold"
+                  >Observação</label
+                >
+                <textarea
+                  id="finished-transfer-observation"
+                  formControlName="observacao"
+                  rows="3"
+                  class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2"
+                ></textarea>
+              </div>
+              <button
+                type="submit"
+                [disabled]="enviandoMovimentacao()"
+                class="sm:col-span-2 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+              >
+                {{ enviandoMovimentacao() ? 'Transferindo...' : 'Confirmar transferência' }}
+              </button>
+            </form>
+          }
+
+          @if (acaoMovimentacao() === 'Contagem') {
+            @if (loteDaContagem(); as lote) {
+              <form
+                class="mt-5 grid gap-4 sm:grid-cols-2"
+                [formGroup]="contagemForm"
+                (ngSubmit)="revisarContagem()"
+              >
+                <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p class="font-semibold text-slate-950">{{ lote.codigo }}</p>
+                  <p class="mt-1 text-sm text-slate-600">
+                    Fabricação {{ formatarDataCivil(lote.dataFabricacao) }} · Validade
+                    {{ formatarDataCivil(lote.dataValidade) }}
+                  </p>
+                </div>
+                <div>
+                  <label for="count-vendavel" class="block text-sm font-semibold"
+                    >Vendável encontrada</label
+                  >
+                  <input
+                    id="count-vendavel"
+                    type="number"
+                    min="0"
+                    step="1"
+                    formControlName="vendavel"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                </div>
+                <div>
+                  <label for="count-damaged" class="block text-sm font-semibold"
+                    >Danificada encontrada</label
+                  >
+                  <input
+                    id="count-damaged"
+                    type="number"
+                    min="0"
+                    step="1"
+                    formControlName="danificada"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                </div>
+                <div>
+                  <label for="count-quarantine" class="block text-sm font-semibold"
+                    >Quarentena encontrada</label
+                  >
+                  <input
+                    id="count-quarantine"
+                    type="number"
+                    min="0"
+                    step="1"
+                    formControlName="quarentena"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                </div>
+                <div>
+                  <label for="count-reason" class="block text-sm font-semibold">Motivo</label>
+                  <input
+                    id="count-reason"
+                    type="text"
+                    formControlName="motivo"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  />
+                </div>
+
+                @if (mostrandoResumoContagem()) {
+                  <div class="sm:col-span-2 rounded-xl border border-sky-200 bg-sky-50 p-4">
+                    <h3 class="font-semibold text-sky-950">Resumo da conferência</h3>
+                    <dl class="mt-3 grid gap-2 sm:grid-cols-3 text-sm">
+                      <div>
+                        <dt class="text-slate-500">Vendável</dt>
+                        <dd>
+                          {{ lote.quantidadeVendavel }} →
+                          {{ contagemForm.controls.vendavel.value ?? 0 }} ({{
+                            formatarDiferenca(
+                              diferencaCondicao(
+                                lote.quantidadeVendavel,
+                                contagemForm.controls.vendavel.value
+                              )
+                            )
+                          }})
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Danificada</dt>
+                        <dd>
+                          {{ lote.quantidadeDanificada }} →
+                          {{ contagemForm.controls.danificada.value ?? 0 }} ({{
+                            formatarDiferenca(
+                              diferencaCondicao(
+                                lote.quantidadeDanificada,
+                                contagemForm.controls.danificada.value
+                              )
+                            )
+                          }})
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Quarentena</dt>
+                        <dd>
+                          {{ lote.quantidadeQuarentena }} →
+                          {{ contagemForm.controls.quarentena.value ?? 0 }} ({{
+                            formatarDiferenca(
+                              diferencaCondicao(
+                                lote.quantidadeQuarentena,
+                                contagemForm.controls.quarentena.value
+                              )
+                            )
+                          }})
+                        </dd>
+                      </div>
+                    </dl>
+                    <p class="mt-3 text-sm text-slate-700">
+                      Diferença física total:
+                      {{
+                        formatarDiferenca(
+                          (contagemForm.controls.vendavel.value ?? 0) +
+                            (contagemForm.controls.danificada.value ?? 0) +
+                            (contagemForm.controls.quarentena.value ?? 0) -
+                            lote.saldoFisico
+                        )
+                      }}
+                    </p>
+                    <button
+                      type="button"
+                      (click)="confirmarContagem()"
+                      [disabled]="enviandoMovimentacao() || carregando()"
+                      class="mt-4 min-h-11 rounded-xl bg-sky-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                    >
+                      {{ enviandoMovimentacao() ? 'Confirmando...' : 'Confirmar contagem' }}
+                    </button>
+                    @if (conflitoContagemVersao()) {
+                      <p class="mt-3 text-sm text-amber-900">
+                        Atualize o snapshot quando estiver pronta. As quantidades e o motivo
+                        digitados serão mantidos para revisão.
+                      </p>
+                      <button
+                        type="button"
+                        (click)="recarregarContagemParaNovoSnapshot()"
+                        [disabled]="enviandoMovimentacao() || carregando()"
+                        class="ml-2 mt-4 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900"
+                      >
+                        Atualizar snapshot mantendo os valores digitados
+                      </button>
+                    }
+                  </div>
+                } @else {
+                  <button
+                    type="submit"
+                    [disabled]="enviandoMovimentacao() || carregando()"
+                    class="sm:col-span-2 min-h-11 rounded-xl border border-sky-700 px-4 text-sm font-semibold text-sky-900"
+                  >
+                    Revisar contagem
+                  </button>
+                }
+              </form>
+            }
+          }
+
+          @if (acaoMovimentacao() === 'Estorno') {
+            @if (movimentoEstorno(); as movimento) {
+              <form
+                class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4"
+                [formGroup]="estornoForm"
+                (ngSubmit)="confirmarEstorno()"
+              >
+                <h3 class="font-semibold text-amber-950">Confirmar estorno compensatório</h3>
+                <dl class="mt-3 grid gap-2 sm:grid-cols-2 text-sm">
+                  <div>
+                    <dt class="text-slate-500">Movimento</dt>
+                    <dd>{{ rotuloTipo(movimento.tipo) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-slate-500">Quantidade</dt>
+                    <dd>{{ movimento.quantidade }} un.</dd>
+                  </div>
+                  <div>
+                    <dt class="text-slate-500">Lote</dt>
+                    <dd>{{ movimento.codigoLote }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-slate-500">Data</dt>
+                    <dd>{{ formatarInstanteUtc(movimento.registradoEmUtc) }}</dd>
+                  </div>
+                </dl>
+                <p class="mt-3 text-sm text-amber-950">
+                  Este estorno criará uma nova movimentação compensatória. O histórico original será
+                  preservado.
+                </p>
+                <label for="reverse-reason" class="mt-4 block text-sm font-semibold"
+                  >Motivo do estorno</label
+                >
+                <input
+                  id="reverse-reason"
+                  type="text"
+                  formControlName="motivo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-amber-300 bg-white px-3"
+                />
+                <button
+                  type="submit"
+                  [disabled]="enviandoMovimentacao()"
+                  class="mt-4 min-h-11 rounded-xl bg-amber-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                >
+                  {{ enviandoMovimentacao() ? 'Estornando...' : 'Confirmar estorno' }}
+                </button>
+              </form>
+            }
+          }
+        </section>
+
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+          aria-labelledby="finished-lots-title"
+        >
+          <h2 id="finished-lots-title" class="text-lg font-semibold text-emerald-950">Lotes</h2>
+          @if (position.lotes.length === 0) {
+            <p
+              class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
+            >
+              Nenhum lote possui posição registrada para esta variante.
+            </p>
+          } @else {
+            <ul class="mt-4 grid list-none gap-3 p-0 lg:grid-cols-2">
+              @for (lote of position.lotes; track lote.loteId) {
+                <li class="rounded-xl border border-slate-200 p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 class="font-semibold text-slate-950">{{ lote.codigo }}</h3>
+                      <p class="mt-1 text-xs text-slate-500">
+                        {{
+                          lote.origemValidade === 'PrazoPadrao'
+                            ? 'Validade por prazo padrão'
+                            : 'Validade informada manualmente'
+                        }}
+                      </p>
+                    </div>
+                    <span
+                      [class]="
+                        lote.valido
+                          ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-950'
+                          : 'rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950'
+                      "
+                    >
+                      {{ rotuloValidade(lote) }}
+                    </span>
+                  </div>
+                  <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <dt class="text-slate-500">Fabricação</dt>
+                      <dd class="font-medium">{{ formatarDataCivil(lote.dataFabricacao) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Validade</dt>
+                      <dd class="font-medium">{{ formatarDataCivil(lote.dataValidade) }}</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Vendável</dt>
+                      <dd class="font-medium">{{ lote.quantidadeVendavel }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Danificada</dt>
+                      <dd class="font-medium">{{ lote.quantidadeDanificada }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Quarentena</dt>
+                      <dd class="font-medium">{{ lote.quantidadeQuarentena }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Físico</dt>
+                      <dd class="font-medium">{{ lote.saldoFisico }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Utilizável</dt>
+                      <dd class="font-medium">{{ lote.saldoUtilizavel }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="text-slate-500">Disponível</dt>
+                      <dd class="font-medium">{{ lote.saldoDisponivel }} un.</dd>
+                    </div>
+                  </dl>
+                  <button
+                    type="button"
+                    (click)="abrirContagem(lote)"
+                    class="mt-4 min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 hover:bg-sky-50"
+                  >
+                    Conferir estoque
+                  </button>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+          aria-labelledby="finished-policy-title"
+        >
+          <h2 id="finished-policy-title" class="text-lg font-semibold text-emerald-950">
+            Política de estoque
+          </h2>
+          @if (mensagemPolitica()) {
+            <p
+              class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+              role="status"
+            >
+              {{ mensagemPolitica() }}
+            </p>
+          }
+          <div class="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
+                >Estoque mínimo</label
+              >
+              <input
+                id="finished-minimum"
+                type="number"
+                min="0"
+                step="1"
+                [formControl]="estoqueMinimo"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+              />
+              @if (estoqueMinimo.touched && estoqueMinimo.invalid) {
+                <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+              }
+            </div>
+            <div>
+              <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
+                >Prazo padrão de validade (dias)</label
+              >
+              <input
+                id="finished-expiry"
+                type="number"
+                min="0"
+                step="1"
+                [formControl]="prazoValidade"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+              />
+              @if (prazoValidade.touched && prazoValidade.invalid) {
+                <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+              }
+            </div>
+          </div>
+          <button
+            type="button"
+            (click)="salvarPolitica()"
+            [disabled]="salvandoPolitica()"
+            class="mt-4 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
+          >
+            {{ salvandoPolitica() ? 'Salvando...' : 'Salvar política' }}
+          </button>
+        </section>
+
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+          aria-labelledby="finished-history-title"
+        >
+          <h2 id="finished-history-title" class="text-lg font-semibold text-emerald-950">
+            Histórico
+          </h2>
+          <div class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div>
+              <label for="finished-history-type" class="block text-sm font-semibold text-slate-800"
+                >Tipo</label
+              >
+              <select
+                id="finished-history-type"
+                [value]="tipoMovimento()"
+                (change)="definirTipo($event)"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+              >
+                <option value="">Todos</option>
+                @for (tipo of tiposMovimento; track tipo.value) {
+                  <option [value]="tipo.value">{{ tipo.label }}</option>
+                }
+              </select>
+            </div>
+            <div>
+              <label for="finished-history-lot" class="block text-sm font-semibold text-slate-800"
+                >Lote</label
+              >
+              <select
+                id="finished-history-lot"
+                [value]="loteMovimento()"
+                (change)="definirLote($event)"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
+              >
+                <option value="">Todos</option>
+                @for (lote of position.lotes; track lote.loteId) {
+                  <option [value]="lote.loteId">{{ lote.codigo }}</option>
+                }
+              </select>
+            </div>
+          </div>
+
+          @if (carregandoHistorico()) {
+            <p class="mt-4 text-sm text-slate-600" role="status">Carregando histórico...</p>
+          } @else if (erroHistorico()) {
+            <p
+              class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
+              role="alert"
+            >
+              {{ erroHistorico() }}
+            </p>
+          } @else if (movimentos().length === 0) {
+            <p
+              class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
+            >
+              Nenhuma movimentação encontrada.
+            </p>
+          } @else {
+            <ul class="mt-4 grid list-none gap-3 p-0">
+              @for (movimento of movimentos(); track movimento.id) {
+                <li class="rounded-xl border border-slate-200 p-4">
+                  <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <h3 class="font-semibold text-slate-950">{{ rotuloTipo(movimento.tipo) }}</h3>
+                      <p class="mt-1 text-sm text-slate-600">
+                        {{ formatarInstanteUtc(movimento.registradoEmUtc) }}
+                      </p>
+                    </div>
+                    <p class="text-lg font-semibold text-slate-950">
+                      {{ movimento.quantidade }} un.
+                    </p>
+                  </div>
+                  <p class="mt-3 text-sm text-slate-700">
+                    <strong>Lote:</strong> {{ movimento.codigoLote || 'Não informado' }}
+                  </p>
+                  <p class="mt-1 text-sm text-slate-700">
+                    <strong>Motivo:</strong> {{ movimento.motivo }}
+                  </p>
+                  @if (movimento.condicaoOrigem || movimento.condicaoDestino) {
+                    <p class="mt-1 text-sm text-slate-700">
+                      @if (movimento.condicaoOrigem) {
+                        Origem: {{ rotuloCondicao(movimento.condicaoOrigem) }}
+                      }
+                      @if (movimento.condicaoOrigem && movimento.condicaoDestino) {
+                        ·
+                      }
+                      @if (movimento.condicaoDestino) {
+                        Destino: {{ rotuloCondicao(movimento.condicaoDestino) }}
+                      }
+                    </p>
+                  }
+                  @if (movimento.movimentoOriginalId) {
+                    <p class="mt-1 text-sm text-slate-700">
+                      Estorno do movimento {{ movimento.movimentoOriginalId }}
+                    </p>
+                  }
+                  @if (movimento.tipo !== 'Estorno') {
+                    <button
+                      type="button"
+                      (click)="abrirEstorno(movimento)"
+                      [disabled]="enviandoMovimentacao() || movimentoJaEstornado(movimento)"
+                      class="mt-3 min-h-10 rounded-lg border border-amber-700 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-50"
+                    >
+                      {{
+                        movimentoJaEstornado(movimento)
+                          ? 'Movimento já estornado'
+                          : 'Estornar movimentação'
+                      }}
+                    </button>
+                  }
+                </li>
+              }
+            </ul>
+            <nav
+              class="mt-4 flex items-center justify-between gap-3"
+              aria-label="Paginação do histórico"
+            >
+              <button
+                type="button"
+                (click)="irParaPagina(pagina() - 1)"
+                [disabled]="pagina() <= 1"
+                class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <span class="text-sm text-slate-600"
+                >Página {{ pagina() }} de {{ totalPaginas() }}</span
+              >
+              <button
+                type="button"
+                (click)="irParaPagina(pagina() + 1)"
+                [disabled]="pagina() >= totalPaginas()"
+                class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </nav>
+          }
+        </section>
+      }
+    }
+  </div>
+</app-admin-workspace>
