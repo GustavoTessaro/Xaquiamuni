@@ -101,6 +101,7 @@ app.MapAdminCategoriaEndpoints();
 app.MapAdminProdutoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();
+app.MapAdminEstoqueProdutoAcabadoEndpoints();
 app.MapCatalogoPublicoEndpoints();
 
 app.Run();
