@@ -19,9 +19,11 @@ public sealed class CalendarioOperacionalEstoque : ICalendarioOperacionalEstoque
         _timeZone = TimeZoneInfo.FindSystemTimeZoneById(options.Value.TimeZoneId);
     }
 
-    public DateOnly ObterDataAtual()
+    public DateOnly ObterDataAtual() => ObterDataEm(_timeProvider.GetUtcNow());
+
+    public DateOnly ObterDataEm(DateTimeOffset instanteUtc)
     {
-        var instanteLocal = TimeZoneInfo.ConvertTime(_timeProvider.GetUtcNow(), _timeZone);
+        var instanteLocal = TimeZoneInfo.ConvertTime(instanteUtc, _timeZone);
         return DateOnly.FromDateTime(instanteLocal.DateTime);
     }
 

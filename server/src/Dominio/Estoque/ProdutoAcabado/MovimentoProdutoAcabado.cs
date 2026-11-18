@@ -25,7 +25,8 @@ public sealed class MovimentoProdutoAcabado
         string? observacao,
         DateTimeOffset registradoEmUtc,
         string chaveIdempotencia,
-        byte[] fingerprintRequisicao)
+        byte[] fingerprintRequisicao,
+        Guid? reservaProdutoAcabadoId)
     {
         Id = id;
         ProdutoVarianteId = produtoVarianteId;
@@ -38,6 +39,7 @@ public sealed class MovimentoProdutoAcabado
         SaldoAnterior = saldoAnterior;
         SaldoPosterior = saldoPosterior;
         MovimentoOriginalId = movimentoOriginalId;
+        ReservaProdutoAcabadoId = reservaProdutoAcabadoId;
         ResponsavelId = responsavelId;
         Motivo = motivo;
         Observacao = observacao;
@@ -62,6 +64,7 @@ public sealed class MovimentoProdutoAcabado
     public SaldoProdutoAcabadoSnapshot SaldoAnterior { get; private set; } = null!;
     public SaldoProdutoAcabadoSnapshot SaldoPosterior { get; private set; } = null!;
     public Guid? MovimentoOriginalId { get; private set; }
+    public Guid? ReservaProdutoAcabadoId { get; private set; }
     public Guid ResponsavelId { get; private set; }
     public string Motivo { get; private set; } = null!;
     public string? Observacao { get; private set; }
@@ -85,7 +88,8 @@ public sealed class MovimentoProdutoAcabado
         string? observacao,
         DateTimeOffset registradoEmUtc,
         string? chaveIdempotencia,
-        byte[]? fingerprintRequisicao)
+        byte[]? fingerprintRequisicao,
+        Guid? reservaProdutoAcabadoId = null)
     {
         ArgumentNullException.ThrowIfNull(saldoAnterior);
         ArgumentNullException.ThrowIfNull(saldoPosterior);
@@ -107,6 +111,11 @@ public sealed class MovimentoProdutoAcabado
         ValidarCondicao(condicaoOrigem, nameof(condicaoOrigem));
         ValidarCondicao(condicaoDestino, nameof(condicaoDestino));
         ValidarTipoECondicoes(tipo, condicaoOrigem, condicaoDestino, quantidadeContada, movimentoOriginalId);
+        if (reservaProdutoAcabadoId is not null && (reservaProdutoAcabadoId == Guid.Empty
+            || tipo != TipoMovimentoProdutoAcabado.SaidaManual || condicaoOrigem != CondicaoEstoqueProdutoAcabado.Vendavel))
+        {
+            throw new ArgumentException("A reserva deve identificar uma saída vendável.", nameof(reservaProdutoAcabadoId));
+        }
         if (registradoEmUtc.Offset != TimeSpan.Zero)
         {
             throw new ArgumentException("O instante de registro deve estar em UTC.", nameof(registradoEmUtc));
@@ -130,7 +139,8 @@ public sealed class MovimentoProdutoAcabado
             NormalizarObservacao(observacao),
             registradoEmUtc,
             NormalizarChave(chaveIdempotencia),
-            fingerprintRequisicao!);
+            fingerprintRequisicao!,
+            reservaProdutoAcabadoId);
     }
 
     internal static string NormalizarMotivo(string? motivo)

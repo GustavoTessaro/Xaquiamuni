@@ -32,20 +32,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICicloReservasPr
             await using var transaction = await _dbContext.Database
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
 
-            // A alocação também adquire primeiro o lock do pedido, antes de qualquer lock por variante.
-            await AdquirirLockPedidoAsync(pedidoId, cancellationToken).ConfigureAwait(false);
             var reservasDoPedido = _dbContext.ReservasProdutoAcabado.Where(reserva => reserva.PedidoId == pedidoId);
-            var variantes = await reservasDoPedido.Select(reserva => reserva.ProdutoVarianteId)
-                .Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+            var variantes = await BloquearPedidoEVariantesAsync(pedidoId, cancellationToken).ConfigureAwait(false);
             if (variantes.Count == 0)
             {
                 return TransicaoReservasStatus.ReservasNaoEncontradas;
-            }
-
-            variantes.Sort();
-            foreach (var variante in variantes)
-            {
-                await AdquirirLockVarianteAsync(variante, cancellationToken).ConfigureAwait(false);
             }
 
             var reservas = await reservasDoPedido.ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -80,4 +71,20 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICicloReservasPr
 
     private Task AdquirirLockPedidoAsync(Guid pedidoId, CancellationToken cancellationToken) =>
         AdquirirLockAsync($"finished-order:{pedidoId:D}", cancellationToken);
+
+    private async Task<List<Guid>> BloquearPedidoEVariantesAsync(Guid pedidoId, CancellationToken cancellationToken)
+    {
+        // A alocação também adquire primeiro o lock do pedido.
+        await AdquirirLockPedidoAsync(pedidoId, cancellationToken).ConfigureAwait(false);
+        var variantes = await _dbContext.ReservasProdutoAcabado
+            .Where(reserva => reserva.PedidoId == pedidoId)
+            .Select(reserva => reserva.ProdutoVarianteId).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+        variantes.Sort();
+        foreach (var variante in variantes)
+        {
+            await AdquirirLockVarianteAsync(variante, cancellationToken).ConfigureAwait(false);
+        }
+
+        return variantes;
+    }
 }

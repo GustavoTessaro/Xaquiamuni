@@ -740,6 +740,56 @@ public sealed class EstoqueProdutoAcabadoTests
         return (variante, politica, lote, SaldoLoteProdutoAcabado.CriarZero(lote));
     }
 
+    [Fact]
+    public void Retirada_BaixaVendavelComVinculoEReservaConsumida()
+    {
+        var variante = CriarVariante();
+        var dia = new DateOnly(2026, 11, 17);
+        var lote = LoteProdutoAcabado.Criar(variante, null, dia, dia);
+        var saldo = SaldoLoteProdutoAcabado.CriarZero(lote);
+        saldo.RegistrarEntrada(lote, 3, CondicaoEstoqueProdutoAcabado.Vendavel,
+            TipoMovimentoProdutoAcabado.EntradaManual, ResponsavelId, "Entrada",
+            RegistradoEmUtc, "entrada-retirada", Fingerprint());
+        var reserva = ReservaProdutoAcabado.Criar(Guid.NewGuid(), variante.Id, lote.Id, 2, RegistradoEmUtc);
+        reserva.ConfirmarCompromisso(RegistradoEmUtc);
+
+        var movimento = saldo.RegistrarRetirada(reserva, variante, lote, dia, ResponsavelId, RegistradoEmUtc);
+
+        Assert.Equal(reserva.Id, movimento.ReservaProdutoAcabadoId);
+        Assert.Equal(lote.Id, movimento.LoteId);
+        Assert.Equal(3, movimento.SaldoAnterior.QuantidadeVendavel);
+        Assert.Equal(1, movimento.SaldoPosterior.QuantidadeVendavel);
+        Assert.Equal(1, saldo.QuantidadeFisica);
+        Assert.Equal(EstadoReservaProdutoAcabado.Consumida, reserva.Estado);
+        Assert.Throws<InvalidOperationException>(() =>
+            saldo.RegistrarRetirada(reserva, variante, lote, dia, ResponsavelId, RegistradoEmUtc));
+        Assert.Throws<ArgumentException>(() => saldo.Estornar(lote, movimento, [movimento],
+            ResponsavelId, "Correção", RegistradoEmUtc, "estorno-retirada", Fingerprint()));
+        Assert.Equal(1, saldo.QuantidadeFisica);
+    }
+
+    [Fact]
+    public void Retirada_RejeitaLoteVencidoOuSemSaldoVendavelSemConsumirAReserva()
+    {
+        var variante = CriarVariante();
+        var dia = new DateOnly(2026, 11, 17);
+        var lote = LoteProdutoAcabado.Criar(variante, null, dia, dia);
+        var saldo = SaldoLoteProdutoAcabado.CriarZero(lote);
+        saldo.RegistrarEntrada(lote, 3, CondicaoEstoqueProdutoAcabado.Quarentena,
+            TipoMovimentoProdutoAcabado.EntradaManual, ResponsavelId, "Entrada",
+            RegistradoEmUtc, "retirada-quarentena", Fingerprint());
+        var reserva = ReservaProdutoAcabado.Criar(Guid.NewGuid(), variante.Id, lote.Id, 2, RegistradoEmUtc);
+        reserva.ConfirmarCompromisso(RegistradoEmUtc);
+
+        Assert.Throws<InvalidOperationException>(() =>
+            saldo.RegistrarRetirada(reserva, variante, lote, dia.AddDays(1), ResponsavelId, RegistradoEmUtc));
+        Assert.Throws<InvalidOperationException>(() =>
+            saldo.RegistrarRetirada(reserva, variante, lote, dia, ResponsavelId, RegistradoEmUtc));
+        Assert.Equal(EstadoReservaProdutoAcabado.Confirmada, reserva.Estado);
+        Assert.Equal(3, saldo.QuantidadeFisica);
+        Assert.Equal(0, saldo.QuantidadeVendavel);
+    }
+
     private static ProdutoVariante CriarVariante() =>
         Produto.CriarSimples(
             "Sabonete de Lavanda",

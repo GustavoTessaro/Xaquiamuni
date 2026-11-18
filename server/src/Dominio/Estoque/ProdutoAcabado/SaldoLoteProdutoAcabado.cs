@@ -95,16 +95,7 @@ public sealed class SaldoLoteProdutoAcabado
         byte[]? fingerprintRequisicao,
         string? observacao = null)
     {
-        ValidarVarianteDoLote(variante, lote);
-        if (!variante!.Ativa)
-        {
-            throw new InvalidOperationException("Uma variante inativa não pode ter saída vendável.");
-        }
-
-        if (!lote.EstaValidoEm(dataReferencia))
-        {
-            throw new InvalidOperationException("Um lote vencido não pode ter saída vendável.");
-        }
+        ValidarSaidaVendavel(variante, lote, dataReferencia);
 
         return AplicarAlteracao(
             lote,
@@ -120,6 +111,49 @@ public sealed class SaldoLoteProdutoAcabado
             registradoEmUtc,
             chaveIdempotencia,
             fingerprintRequisicao);
+    }
+
+    public MovimentoProdutoAcabado RegistrarRetirada(
+        ReservaProdutoAcabado reserva,
+        ProdutoVariante variante,
+        LoteProdutoAcabado lote,
+        DateOnly dataReferencia,
+        Guid responsavelId,
+        DateTimeOffset registradoEmUtc)
+    {
+        ArgumentNullException.ThrowIfNull(reserva);
+        if (reserva.Estado != EstadoReservaProdutoAcabado.Confirmada)
+        {
+            throw new InvalidOperationException("Somente uma reserva confirmada pode ser retirada.");
+        }
+
+        ValidarSaidaVendavel(variante, lote, dataReferencia);
+        var movimento = AplicarAlteracao(
+            lote, TipoMovimentoProdutoAcabado.SaidaManual, reserva.Quantidade,
+            CondicaoEstoqueProdutoAcabado.Vendavel, condicaoDestino: null,
+            quantidadeContada: null, movimentoOriginalId: null,
+            responsavelId, "Retirada de pedido", observacao: null, registradoEmUtc,
+            chaveIdempotencia: $"retirada:{Guid.NewGuid():N}",
+            fingerprintRequisicao: System.Security.Cryptography.SHA256.HashData(reserva.Id.ToByteArray()),
+            reservaProdutoAcabadoId: reserva.Id, aplicar: false);
+
+        reserva.Consumir(variante, lote, this, dataReferencia, registradoEmUtc);
+        AplicarMovimento(movimento);
+        return movimento;
+    }
+
+    private void ValidarSaidaVendavel(ProdutoVariante? variante, LoteProdutoAcabado lote, DateOnly dataReferencia)
+    {
+        ValidarVarianteDoLote(variante, lote);
+        if (!variante!.Ativa)
+        {
+            throw new InvalidOperationException("Uma variante inativa não pode ter saída vendável.");
+        }
+
+        if (!lote.EstaValidoEm(dataReferencia))
+        {
+            throw new InvalidOperationException("Um lote vencido não pode ter saída vendável.");
+        }
     }
 
     public MovimentoProdutoAcabado RegistrarPerda(
@@ -277,6 +311,7 @@ public sealed class SaldoLoteProdutoAcabado
         ArgumentNullException.ThrowIfNull(movimentoOriginal);
         ArgumentNullException.ThrowIfNull(historico);
         if (movimentoOriginal.Tipo == TipoMovimentoProdutoAcabado.Estorno
+            || movimentoOriginal.ReservaProdutoAcabadoId is not null
             || movimentoOriginal.ProdutoVarianteId != ProdutoVarianteId
             || movimentoOriginal.LoteId != LoteId
             || lote.Id != LoteId
@@ -346,7 +381,9 @@ public sealed class SaldoLoteProdutoAcabado
         string? observacao,
         DateTimeOffset registradoEmUtc,
         string? chaveIdempotencia,
-        byte[]? fingerprintRequisicao)
+        byte[]? fingerprintRequisicao,
+        Guid? reservaProdutoAcabadoId = null,
+        bool aplicar = true)
     {
         ValidarContexto(
             lote,
@@ -424,8 +461,12 @@ public sealed class SaldoLoteProdutoAcabado
             observacao,
             registradoEmUtc,
             chaveIdempotencia,
-            fingerprintRequisicao);
-        AplicarMovimento(movimento);
+            fingerprintRequisicao,
+            reservaProdutoAcabadoId);
+        if (aplicar)
+        {
+            AplicarMovimento(movimento);
+        }
         return movimento;
     }
 

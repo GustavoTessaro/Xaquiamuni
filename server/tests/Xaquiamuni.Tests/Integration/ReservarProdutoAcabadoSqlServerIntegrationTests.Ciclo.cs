@@ -267,8 +267,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await using var database = await SqlServerTestDatabase.CreateAsync(targetMigration: anterior);
         await using var context = database.CreateVerificationContext();
         var variante = await CriarVarianteAsync(context);
-        var primeiroLote = (await EntrarAsync(context, variante.Id, 1)).Lote!;
-        var segundoLote = (await EntrarAsync(context, variante.Id, 1)).Lote!;
+        var primeiroLote = LoteProdutoAcabado.Criar(variante, null, Hoje, Hoje);
+        var segundoLote = LoteProdutoAcabado.Criar(variante, null, Hoje, Hoje);
+        context.LotesProdutoAcabado.AddRange(primeiroLote, segundoLote);
         var pedido = Guid.NewGuid();
         var agora = await LerUtcSqlAsync(context);
         context.ReservasProdutoAcabado.AddRange(

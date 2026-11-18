@@ -325,5 +325,6 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     private sealed class CalendarioFixo : ICalendarioOperacionalEstoque
     {
         public DateOnly ObterDataAtual() => Hoje;
+        public DateOnly ObterDataEm(DateTimeOffset instanteUtc) => Hoje;
     }
 }

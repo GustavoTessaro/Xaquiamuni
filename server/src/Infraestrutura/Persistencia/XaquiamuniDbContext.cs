@@ -611,6 +611,10 @@ public sealed class XaquiamuniDbContext
                     table.HasCheckConstraint(
                         "CK_MovimentosProdutoAcabado_Estorno_NotSelf",
                         "[MovimentoOriginalId] IS NULL OR [MovimentoOriginalId] <> [Id]");
+                    table.HasCheckConstraint(
+                        "CK_MovimentosProdutoAcabado_Reserva_SaidaVendavel",
+                        "[ReservaProdutoAcabadoId] IS NULL OR ([Tipo] = 3 "
+                        + "AND [CondicaoOrigem] IS NOT NULL AND [CondicaoOrigem] = 1 AND [CondicaoDestino] IS NULL)");
                 });
                 movimento.HasKey(entity => entity.Id);
                 movimento.Property(entity => entity.Id)
@@ -633,6 +637,7 @@ public sealed class XaquiamuniDbContext
                     .HasColumnType("smallint");
                 movimento.Property(entity => entity.QuantidadeContada);
                 movimento.Property(entity => entity.MovimentoOriginalId);
+                movimento.Property(entity => entity.ReservaProdutoAcabadoId);
                 movimento.Property(entity => entity.ResponsavelId)
                     .IsRequired();
                 movimento.Property(entity => entity.Motivo)
@@ -693,6 +698,22 @@ public sealed class XaquiamuniDbContext
                     .HasForeignKey(entity => entity.MovimentoOriginalId)
                     .OnDelete(DeleteBehavior.Restrict)
                     .HasConstraintName("FK_MovimentosProdutoAcabado_MovimentosProdutoAcabado_MovimentoOriginalId");
+                movimento.HasOne<ReservaProdutoAcabado>()
+                    .WithMany()
+                    .HasForeignKey(entity => new
+                    {
+                        entity.ReservaProdutoAcabadoId, entity.ProdutoVarianteId, entity.LoteId, entity.Quantidade
+                    })
+                    .HasPrincipalKey(entity => new { entity.Id, entity.ProdutoVarianteId, entity.LoteId, entity.Quantidade })
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .HasConstraintName("FK_MovimentosProdutoAcabado_Reserva_Retirada");
+                movimento.HasIndex(entity => new
+                    {
+                        entity.ReservaProdutoAcabadoId, entity.ProdutoVarianteId, entity.LoteId, entity.Quantidade
+                    })
+                    .IsUnique()
+                    .HasDatabaseName("UX_MovimentosProdutoAcabado_Reserva_Retirada")
+                    .HasFilter("[ReservaProdutoAcabadoId] IS NOT NULL");
                 movimento.HasIndex(entity => new { entity.ResponsavelId, entity.ChaveIdempotencia })
                     .IsUnique()
                     .HasDatabaseName("UX_MovimentosProdutoAcabado_ResponsavelId_ChaveIdempotencia");
@@ -1722,6 +1743,7 @@ public sealed class XaquiamuniDbContext
             .Where(entry => entry.State == EntityState.Added)
             .Select(entry => entry.Entity)
             .ToArray();
+        ValidarBaixasDeReservas(movimentosProdutoAcabadoAdicionados);
         var saldosProdutoAcabadoAlterados = ChangeTracker.Entries<SaldoLoteProdutoAcabado>()
             .Where(entry => entry.State is EntityState.Added or EntityState.Modified)
             .ToArray();
@@ -1757,6 +1779,30 @@ public sealed class XaquiamuniDbContext
                 throw new InvalidOperationException(
                     "Um movimento de produto acabado deve atualizar a posição de saldo correspondente.");
             }
+        }
+    }
+
+    private void ValidarBaixasDeReservas(IReadOnlyCollection<MovimentoProdutoAcabado> movimentosAdicionados)
+    {
+        var consumidas = ChangeTracker.Entries<ReservaProdutoAcabado>()
+            .Where(entry => entry.Entity.Estado == EstadoReservaProdutoAcabado.Consumida
+                && (entry.State == EntityState.Added || (entry.State == EntityState.Modified
+                    && entry.Property(reserva => reserva.Estado).OriginalValue != EstadoReservaProdutoAcabado.Consumida)))
+            .Select(entry => entry.Entity)
+            .ToDictionary(reserva => reserva.Id);
+
+        foreach (var movimento in movimentosAdicionados.Where(movimento => movimento.ReservaProdutoAcabadoId.HasValue))
+        {
+            if (!consumidas.Remove(movimento.ReservaProdutoAcabadoId!.Value, out var reserva)
+                || reserva.EncerradaEmUtc != movimento.RegistradoEmUtc)
+            {
+                throw new InvalidOperationException("O movimento de retirada exige o consumo correspondente na mesma gravação.");
+            }
+        }
+
+        if (consumidas.Count != 0)
+        {
+            throw new InvalidOperationException("O consumo de uma reserva exige a baixa correspondente na mesma gravação.");
         }
     }
 

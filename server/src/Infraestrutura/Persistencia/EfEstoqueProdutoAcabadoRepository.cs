@@ -1095,7 +1095,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                     movimento => movimento.Id == input.MovimentoOriginalId,
                     cancellationToken).ConfigureAwait(false);
             if (original is null
-                || original.Tipo == TipoMovimentoProdutoAcabado.Estorno)
+                || original.Tipo == TipoMovimentoProdutoAcabado.Estorno
+                || original.ReservaProdutoAcabadoId is not null)
             {
                 return await ReverterEstornoComFalhaAsync(
                     transaction,

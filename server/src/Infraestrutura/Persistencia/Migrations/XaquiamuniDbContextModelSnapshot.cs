@@ -1011,6 +1011,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<DateTimeOffset>("RegistradoEmUtc")
                         .HasColumnType("datetimeoffset(7)");
 
+                    b.Property<Guid?>("ReservaProdutoAcabadoId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ResponsavelId")
                         .HasColumnType("uniqueidentifier");
 
@@ -1034,6 +1037,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("ProdutoVarianteId", "LoteId", "RegistradoEmUtc")
                         .HasDatabaseName("IX_MovimentosProdutoAcabado_ProdutoVarianteId_LoteId_RegistradoEmUtc");
 
+                    b.HasIndex("ReservaProdutoAcabadoId", "ProdutoVarianteId", "LoteId", "Quantidade")
+                        .IsUnique()
+                        .HasDatabaseName("UX_MovimentosProdutoAcabado_Reserva_Retirada")
+                        .HasFilter("[ReservaProdutoAcabadoId] IS NOT NULL");
+
                     b.ToTable("MovimentosProdutoAcabado", null, t =>
                         {
                             t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Chave_NotBlank", "LEN(LTRIM(RTRIM([ChaveIdempotencia]))) > 0");
@@ -1049,6 +1057,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                             t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Motivo_NotBlank", "LEN(LTRIM(RTRIM([Motivo]))) > 0");
 
                             t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Quantidade_Positive", "[Quantidade] > 0");
+
+                            t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Reserva_SaidaVendavel", "[ReservaProdutoAcabadoId] IS NULL OR ([Tipo] = 3 AND [CondicaoOrigem] IS NOT NULL AND [CondicaoOrigem] = 1 AND [CondicaoDestino] IS NULL)");
 
                             t.HasCheckConstraint("CK_MovimentosProdutoAcabado_Responsavel_NotEmpty", "[ResponsavelId] <> '00000000-0000-0000-0000-000000000000'");
 
@@ -1874,6 +1884,13 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_MovimentosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId");
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.ReservaProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("ReservaProdutoAcabadoId", "ProdutoVarianteId", "LoteId", "Quantidade")
+                        .HasPrincipalKey("Id", "ProdutoVarianteId", "LoteId", "Quantidade")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_MovimentosProdutoAcabado_Reserva_Retirada");
 
                     b.OwnsOne("Xaquiamuni.Dominio.Estoque.SaldoProdutoAcabadoSnapshot", "SaldoAnterior", b1 =>
                         {

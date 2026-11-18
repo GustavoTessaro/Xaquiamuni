@@ -58,6 +58,7 @@ public sealed class EstoqueProdutoAcabadoAplicacaoTests
     private sealed class CalendarioFake(DateOnly data) : ICalendarioOperacionalEstoque
     {
         public DateOnly ObterDataAtual() => data;
+        public DateOnly ObterDataEm(DateTimeOffset instanteUtc) => data;
     }
 
     private sealed class ConsultaRepositoryFake : IEstoqueProdutoAcabadoConsultaRepository
