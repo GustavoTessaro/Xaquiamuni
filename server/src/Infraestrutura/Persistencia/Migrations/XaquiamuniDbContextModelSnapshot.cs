@@ -276,6 +276,138 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ClientePerfis", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ItemPedido", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NomeProduto")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NomeVariante")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("PrecoUnitarioCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ProdutoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PedidoId", "ProdutoVarianteId")
+                        .IsUnique();
+
+                    b.HasIndex("ProdutoId", "ProdutoVarianteId");
+
+                    b.ToTable("ItensPedido", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ItensPedido_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [PedidoId] <> '00000000-0000-0000-0000-000000000000' AND [ProdutoId] <> '00000000-0000-0000-0000-000000000000' AND [ProdutoVarianteId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_ItensPedido_Nomes_NotBlank", "LEN(LTRIM(RTRIM([NomeProduto]))) > 0 AND LEN(LTRIM(RTRIM([NomeVariante]))) > 0");
+
+                            t.HasCheckConstraint("CK_ItensPedido_PrecoCentavos_Valid", "[PrecoUnitarioCentavos] >= 0 AND [PrecoUnitarioCentavos] <= CONVERT(bigint, 9223372036854775807) / NULLIF(CONVERT(bigint, [Quantidade]), 0)");
+
+                            t.HasCheckConstraint("CK_ItensPedido_Quantidade_Positive", "[Quantidade] > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Pedido", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CriadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("EncerradoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("EncerradoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("ModalidadeEntrega")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("MotivoCancelamento")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("PagamentoConfirmadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("PagamentoConfirmadoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("PrazoPagamentoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("PreparacaoIniciadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("PreparacaoIniciadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("RetiradaAutorizadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("RetiradaAutorizadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("Situacao")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("TotalCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "CriadoEmUtc");
+
+                    b.HasIndex("Situacao", "PrazoPagamentoEmUtc");
+
+                    b.ToTable("Pedidos", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Pedidos_Auditoria_Valid", "([PagamentoConfirmadoEmUtc] IS NULL AND [PagamentoConfirmadoPorId] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PagamentoConfirmadoPorId] IS NOT NULL AND [PagamentoConfirmadoPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PagamentoConfirmadoEmUtc]) = 0)) AND ([PreparacaoIniciadaEmUtc] IS NULL AND [PreparacaoIniciadaPorId] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [PreparacaoIniciadaPorId] IS NOT NULL AND [PreparacaoIniciadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PreparacaoIniciadaEmUtc]) = 0)) AND ([RetiradaAutorizadaEmUtc] IS NULL AND [RetiradaAutorizadaPorId] IS NULL OR ([RetiradaAutorizadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaPorId] IS NOT NULL AND [RetiradaAutorizadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [RetiradaAutorizadaEmUtc]) = 0))");
+
+                            t.HasCheckConstraint("CK_Pedidos_Cronologia_Valid", "([PagamentoConfirmadoEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] >= [CriadoEmUtc] AND [PagamentoConfirmadoEmUtc] < [PrazoPagamentoEmUtc])) AND ([PreparacaoIniciadaEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] >= [PagamentoConfirmadoEmUtc])) AND ([RetiradaAutorizadaEmUtc] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] >= [PreparacaoIniciadaEmUtc])) AND ([EncerradoEmUtc] IS NULL OR (DATEPART(TZOFFSET, [EncerradoEmUtc]) = 0 AND [EncerradoEmUtc] >= COALESCE([RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], [PagamentoConfirmadoEmUtc], [CriadoEmUtc])))");
+
+                            t.HasCheckConstraint("CK_Pedidos_Encerramento_Valid", "(([Situacao] IN (5, 6) AND [EncerradoPorId] IS NOT NULL AND [EncerradoPorId] <> '00000000-0000-0000-0000-000000000000') OR ([Situacao] NOT IN (5, 6) AND [EncerradoPorId] IS NULL)) AND (([Situacao] = 6 AND [MotivoCancelamento] IS NOT NULL AND LEN(LTRIM(RTRIM([MotivoCancelamento]))) > 0) OR ([Situacao] <> 6 AND [MotivoCancelamento] IS NULL))");
+
+                            t.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [ClienteId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "[ModalidadeEntrega] = 1");
+
+                            t.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas", "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 AND DATEDIFF_BIG(hour, [CriadoEmUtc], [PrazoPagamentoEmUtc]) = 24 AND CAST([CriadoEmUtc] AS time(7)) = CAST([PrazoPagamentoEmUtc] AS time(7))");
+
+                            t.HasCheckConstraint("CK_Pedidos_Situacao_Valid", "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 5 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NOT NULL AND [EncerradoEmUtc] >= [PrazoPagamentoEmUtc])");
+
+                            t.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1503,6 +1635,31 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ItemPedido", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithMany("Itens")
+                        .HasForeignKey("PedidoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoId", "ProdutoVarianteId")
+                        .HasPrincipalKey("ProdutoId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Pedido", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ClientePerfil", null)
+                        .WithMany()
+                        .HasForeignKey("ClienteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Entidades.Categoria", "Categoria")
@@ -2033,6 +2190,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Pedido", b =>
+                {
+                    b.Navigation("Itens");
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>

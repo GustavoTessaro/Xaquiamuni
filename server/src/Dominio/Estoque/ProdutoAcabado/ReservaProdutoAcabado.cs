@@ -1,10 +1,11 @@
 using Xaquiamuni.Dominio.Entidades;
+using Xaquiamuni.Dominio.Valores;
 
 namespace Xaquiamuni.Dominio.Estoque;
 
 public sealed class ReservaProdutoAcabado
 {
-    public static TimeSpan Prazo { get; } = TimeSpan.FromHours(24);
+    public static TimeSpan Prazo => PrazoPagamentoCompra.Duracao;
 
     private ReservaProdutoAcabado(
         Guid pedidoId,

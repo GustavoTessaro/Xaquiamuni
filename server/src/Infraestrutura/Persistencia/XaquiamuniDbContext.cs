@@ -21,6 +21,8 @@ public sealed class XaquiamuniDbContext
     }
 
     public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
+    public DbSet<Pedido> Pedidos => Set<Pedido>();
+    public DbSet<ItemPedido> ItensPedido => Set<ItemPedido>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Produto> Produtos => Set<Produto>();
@@ -69,6 +71,7 @@ public sealed class XaquiamuniDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        PedidoMapping.Configurar(builder);
 
         builder.Entity<XaquiamuniUser>()
             .HasIndex(user => user.NormalizedEmail)
