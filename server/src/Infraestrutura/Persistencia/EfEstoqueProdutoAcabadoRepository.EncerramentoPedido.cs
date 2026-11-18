@@ -20,9 +20,10 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEncerrarPedidoC
         int limite, CursorPedidosVencidos? apos, CancellationToken cancellationToken)
     {
         var agora = await _dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+        var fimVarredura = apos?.LimiteVarreduraUtc is { } limiteUtc && limiteUtc < agora ? limiteUtc : agora;
         var consulta = _dbContext.Pedidos.AsNoTracking()
             .Where(pedido => pedido.Situacao == SituacaoPedido.AguardandoPagamento
-                && pedido.PrazoPagamentoEmUtc <= agora);
+                && pedido.PrazoPagamentoEmUtc <= fimVarredura);
         if (apos is not null)
         {
             consulta = consulta.Where(pedido => pedido.PrazoPagamentoEmUtc > apos.PrazoPagamentoEmUtc
@@ -51,7 +52,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEncerrarPedidoC
             resultados.Add(new(candidato.PedidoId, status));
         }
 
-        return new(resultados, candidatos.Count > limite ? candidatos[limite - 1] : null);
+        return new(resultados, candidatos.Count > limite
+            ? candidatos[limite - 1] with { LimiteVarreduraUtc = fimVarredura }
+            : null);
     }
 
     private async Task<EncerrarPedidoStatus> EncerrarPedidoAsync(

@@ -19,6 +19,7 @@ using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Imagens;
 using Xaquiamuni.Infraestrutura.Outbox;
+using Xaquiamuni.Infraestrutura.Pedidos;
 using Xaquiamuni.Infraestrutura.Persistencia;
 using Xaquiamuni.Infraestrutura.Persistencia.Outbox;
 using Xaquiamuni.Infraestrutura.Seguranca;
@@ -185,6 +186,19 @@ public static class DependencyInjection
         if (resendEmailOptions.Enabled)
         {
             services.AddResendEmailSender(configuration);
+        }
+
+        var expiracaoWorkerSection = configuration.GetSection(ExpiracaoPedidosWorkerOptions.SectionName);
+        services.AddOptions<ExpiracaoPedidosWorkerOptions>()
+            .Bind(expiracaoWorkerSection)
+            .Validate(options => options.CycleInterval >= TimeSpan.FromSeconds(5)
+                && options.CycleInterval <= TimeSpan.FromHours(1), "Invalid order expiration interval.")
+            .Validate(options => options.BatchSize is >= 1 and <= 100, "Invalid order expiration batch size.")
+            .Validate(options => options.MaxPagesPerCycle is >= 1 and <= 20, "Invalid order expiration page limit.")
+            .ValidateOnStart();
+        if (expiracaoWorkerSection.GetValue<bool>(nameof(ExpiracaoPedidosWorkerOptions.Enabled)))
+        {
+            services.AddHostedService<ExpiracaoPedidosBackgroundService>();
         }
 
         var outboxWorkerSection = configuration.GetSection(EmailOutboxBackgroundServiceOptions.SectionName);

@@ -21,7 +21,8 @@ public enum EncerrarPedidoStatus
     FalhaPersistencia,
 }
 
-public sealed record CursorPedidosVencidos(DateTimeOffset PrazoPagamentoEmUtc, Guid PedidoId);
+public sealed record CursorPedidosVencidos(
+    DateTimeOffset PrazoPagamentoEmUtc, Guid PedidoId, DateTimeOffset? LimiteVarreduraUtc = null);
 public sealed record ResultadoEncerramentoPedido(Guid PedidoId, EncerrarPedidoStatus Status);
 
 public sealed record LotePedidosVencidos(
