@@ -12,7 +12,18 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { EMPTY, catchError, finalize, forkJoin, from, Observable, switchMap, tap } from 'rxjs';
+import {
+  EMPTY,
+  catchError,
+  finalize,
+  forkJoin,
+  from,
+  Observable,
+  of,
+  Subscription,
+  switchMap,
+  tap,
+} from 'rxjs';
 import { AdminAuthService } from '../../../core/admin-auth/admin-auth.service';
 import { AdminProduto, ProdutosService } from '../../../core/admin-produtos/produtos.service';
 import {
@@ -66,7 +77,12 @@ export class AdminProdutosAcabadosComponent {
   protected readonly totalPaginas = computed(() =>
     Math.max(1, Math.ceil(this.totalMovimentos() / PAGE_SIZE)),
   );
+  protected readonly carregandoProdutos = signal(false);
   protected readonly carregando = signal(false);
+  protected readonly erroProdutos = signal('');
+  protected readonly erroPosicao = signal('');
+  protected readonly erroPolitica = signal('');
+  private consultaVariante?: Subscription;
   protected readonly carregandoHistorico = signal(false);
   protected readonly salvandoPolitica = signal(false);
   protected readonly erro = signal('');
@@ -294,88 +310,116 @@ export class AdminProdutosAcabadosComponent {
       if (selected === this.varianteId()) {
         return;
       }
+      this.consultaVariante?.unsubscribe();
+      this.erro.set('');
+      this.erroPosicao.set('');
+      this.erroPolitica.set('');
       this.varianteId.set(selected);
       this.limparContagem();
       this.contagemConcluidaLoteId.set(null);
       this.posicao.set(null);
       this.politica.set(null);
       this.movimentos.set([]);
-      if (selected) {
-        this.carregarVariante();
+      if (!this.carregandoProdutos() && !this.erroProdutos()) {
+        this.consultarVarianteDoCatalogo();
       }
     });
   }
 
   protected carregarProdutos(): void {
-    this.carregando.set(true);
-    this.erro.set('');
+    if (this.carregandoProdutos()) {
+      return;
+    }
+    this.carregandoProdutos.set(true);
+    this.erroProdutos.set('');
     this.produtosService
       .listar()
       .pipe(
         takeUntilDestroyed(this.destroyRef),
-        finalize(() => this.carregando.set(false)),
+        finalize(() => this.carregandoProdutos.set(false)),
       )
       .subscribe({
         next: (produtos) => {
           this.produtos.set(produtos);
-          const currentVariant = this.varianteId();
-          if (!currentVariant) {
-            return;
-          }
-          const belongs = produtos.some((produto) =>
-            produto.variantes.some((variante) => variante.id === currentVariant),
-          );
-          if (!belongs) {
-            this.erro.set('A variante selecionada não foi encontrada.');
-            return;
-          }
-          this.carregarVariante();
+          this.consultarVarianteDoCatalogo();
         },
-        error: (error: unknown) => {
-          this.erro.set(this.mensagemErro(error, 'Não foi possível carregar os produtos.'));
+        error: () => {
+          this.erroProdutos.set('Não foi possível carregar os produtos.');
         },
       });
   }
 
-  protected selecionarVariante(produtoId: string, varianteId: string): void {
-    if (!varianteId) {
+  private consultarVarianteDoCatalogo(): void {
+    if (!this.varianteId()) {
       return;
     }
-    this.varianteId.set(varianteId);
+    if (this.varianteSelecionada()) {
+      this.carregarVariante();
+    } else {
+      this.erro.set('A variante selecionada não foi encontrada.');
+    }
+  }
+
+  protected selecionarVariante(varianteId: string): void {
     void this.router.navigate(['/admin/estoque/produtos-acabados', varianteId]);
   }
 
-  protected carregarVariante(): void {
+  private recarregarVarianteAposOperacao(): void {
+    this.consultaVariante?.unsubscribe();
+    this.carregarVariante();
+  }
+
+  protected carregarVariante(consulta: 'ambas' | 'posicao' | 'politica' = 'ambas'): void {
     const variant = this.varianteId();
-    if (!variant) {
+    if (!variant || this.carregando()) {
       return;
     }
 
     this.carregando.set(true);
     this.erro.set('');
     this.mensagemPolitica.set('');
-    forkJoin({
-      posicao: this.produtosAcabadosService.consultarPosicao(variant),
-      politica: this.produtosAcabadosService.consultarPolitica(variant),
+    const consultarPosicao = consulta !== 'politica';
+    const consultarPolitica = consulta !== 'posicao';
+    if (consultarPosicao) {
+      this.erroPosicao.set('');
+    }
+    if (consultarPolitica) {
+      this.erroPolitica.set('');
+    }
+
+    this.consultaVariante = forkJoin({
+      posicao: consultarPosicao
+        ? this.produtosAcabadosService.consultarPosicao(variant).pipe(
+            catchError(() => {
+              this.erroPosicao.set('Não foi possível consultar o estoque desta variante.');
+              return of(null);
+            }),
+          )
+        : of(null),
+      politica: consultarPolitica
+        ? this.produtosAcabadosService.consultarPolitica(variant).pipe(
+            catchError(() => {
+              this.erroPolitica.set('Não foi possível consultar a política de estoque.');
+              return of(null);
+            }),
+          )
+        : of(null),
     })
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => this.carregando.set(false)),
       )
-      .subscribe({
-        next: ({ posicao, politica }) => {
-          this.posicao.set(posicao);
+      .subscribe(({ posicao, politica }) => {
+        if (politica) {
           this.politica.set(politica);
           this.estoqueMinimo.setValue(politica.estoqueMinimo);
           this.prazoValidade.setValue(politica.prazoValidadePadraoDias);
+        }
+        if (posicao) {
+          this.posicao.set(posicao);
           this.pagina.set(1);
           this.carregarHistorico();
-        },
-        error: (error: unknown) => {
-          this.erro.set(
-            this.mensagemErro(error, 'Não foi possível carregar o estoque da variante.'),
-          );
-        },
+        }
       });
   }
 
@@ -733,7 +777,7 @@ export class AdminProdutosAcabadosComponent {
           this.mostrandoResumoContagem.set(false);
           this.conflitoContagemVersao.set(false);
           this.erroMovimentacao.set('');
-          this.carregarVariante();
+          this.recarregarVarianteAposOperacao();
         },
         error: (error: unknown) => {
           this.erroMovimentacao.set(
@@ -813,7 +857,7 @@ export class AdminProdutosAcabadosComponent {
                 this.contagemConcluidaLoteId.set(this.contagemLoteCapturado());
                 this.limparContagem();
               }
-              this.carregarVariante();
+              this.recarregarVarianteAposOperacao();
             }),
             catchError((error: unknown) => {
               this.registrarFalhaMovimentacao(error, acao, pending);
@@ -1052,7 +1096,10 @@ export class AdminProdutosAcabadosComponent {
 
   protected salvarPolitica(): void {
     const variant = this.varianteId();
-    if (!variant || this.estoqueMinimo.invalid || this.prazoValidade.invalid) {
+    if (!variant || !this.politica() || this.erroPolitica() || this.carregando()) {
+      return;
+    }
+    if (this.estoqueMinimo.invalid || this.prazoValidade.invalid) {
       this.estoqueMinimo.markAsTouched();
       this.prazoValidade.markAsTouched();
       return;

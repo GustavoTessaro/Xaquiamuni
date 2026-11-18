@@ -19,7 +19,25 @@
       </p>
     }
 
-    @if (!varianteId()) {
+    @if (carregandoProdutos()) {
+      <p
+        class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600"
+        role="status"
+      >
+        Carregando produtos...
+      </p>
+    } @else if (erroProdutos()) {
+      <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <p role="alert">{{ erroProdutos() }}</p>
+        <button
+          type="button"
+          (click)="carregarProdutos()"
+          class="mt-2 min-h-11 rounded-lg border border-red-800 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    } @else if (!varianteId()) {
       <section
         class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
         aria-labelledby="finished-goods-selection-title"
@@ -27,9 +45,7 @@
         <h2 id="finished-goods-selection-title" class="text-lg font-semibold text-emerald-950">
           Selecionar produto e variante
         </h2>
-        @if (carregando()) {
-          <p class="mt-4 text-sm text-slate-600" role="status">Carregando produtos...</p>
-        } @else if (produtos().length === 0) {
+        @if (produtos().length === 0) {
           <p
             class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
           >
@@ -44,7 +60,7 @@
                   @for (variante of produto.variantes; track variante.id) {
                     <button
                       type="button"
-                      (click)="selecionarVariante(produto.id, variante.id)"
+                      (click)="selecionarVariante(variante.id)"
                       class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
                       [attr.aria-label]="
                         'Consultar ' + produto.nome + ' — ' + variante.identificacao
@@ -78,14 +94,41 @@
         }
       </div>
 
-      @if (carregando() && !posicao()) {
+      @if (erroPosicao()) {
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p role="alert">{{ erroPosicao() }}</p>
+          <button
+            type="button"
+            (click)="carregarVariante('posicao')"
+            [disabled]="carregando()"
+            class="mt-2 min-h-11 rounded-lg border border-red-800 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
+          >
+            Tentar consultar o estoque novamente
+          </button>
+        </div>
+      }
+      @if (erroPolitica()) {
+        <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p role="alert">{{ erroPolitica() }}</p>
+          <button
+            type="button"
+            (click)="carregarVariante('politica')"
+            [disabled]="carregando()"
+            class="mt-2 min-h-11 rounded-lg border border-red-800 px-3 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
+          >
+            Tentar consultar a política novamente
+          </button>
+        </div>
+      }
+      @if (carregando()) {
         <p
           class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600"
           role="status"
         >
-          Carregando posição de estoque...
+          Consultando dados de estoque...
         </p>
-      } @else if (posicao(); as position) {
+      }
+      @if (posicao(); as position) {
         <section
           class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
           aria-labelledby="finished-position-title"
@@ -1304,48 +1347,50 @@
               {{ mensagemPolitica() }}
             </p>
           }
-          <div class="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
-                >Estoque mínimo</label
-              >
-              <input
-                id="finished-minimum"
-                type="number"
-                min="0"
-                step="1"
-                [formControl]="estoqueMinimo"
-                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-              />
-              @if (estoqueMinimo.touched && estoqueMinimo.invalid) {
-                <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
-              }
+          @if (politica()) {
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
+                  >Estoque mínimo</label
+                >
+                <input
+                  id="finished-minimum"
+                  type="number"
+                  min="0"
+                  step="1"
+                  [formControl]="estoqueMinimo"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (estoqueMinimo.touched && estoqueMinimo.invalid) {
+                  <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+                }
+              </div>
+              <div>
+                <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
+                  >Prazo padrão de validade (dias)</label
+                >
+                <input
+                  id="finished-expiry"
+                  type="number"
+                  min="0"
+                  step="1"
+                  [formControl]="prazoValidade"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (prazoValidade.touched && prazoValidade.invalid) {
+                  <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+                }
+              </div>
             </div>
-            <div>
-              <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
-                >Prazo padrão de validade (dias)</label
-              >
-              <input
-                id="finished-expiry"
-                type="number"
-                min="0"
-                step="1"
-                [formControl]="prazoValidade"
-                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-              />
-              @if (prazoValidade.touched && prazoValidade.invalid) {
-                <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
-              }
-            </div>
-          </div>
-          <button
-            type="button"
-            (click)="salvarPolitica()"
-            [disabled]="salvandoPolitica()"
-            class="mt-4 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
-          >
-            {{ salvandoPolitica() ? 'Salvando...' : 'Salvar política' }}
-          </button>
+            <button
+              type="button"
+              (click)="salvarPolitica()"
+              [disabled]="salvandoPolitica() || carregando() || !!erroPolitica()"
+              class="mt-4 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
+            >
+              {{ salvandoPolitica() ? 'Salvando...' : 'Salvar política' }}
+            </button>
+          }
         </section>
 
         <section

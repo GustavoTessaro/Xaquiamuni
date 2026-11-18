@@ -106,6 +106,7 @@ async function montarComponente(
   api: ReturnType<typeof criarApi>,
   atorId = 'actor-1',
   varianteSelecionada = true,
+  listar = () => of([produto]),
 ): Promise<ComponentFixture<AdminProdutosAcabadosComponent>> {
   const params = convertToParamMap(varianteSelecionada ? { varianteId: 'variant-1' } : {});
   await TestBed.configureTestingModule({
@@ -120,7 +121,7 @@ async function montarComponente(
         provide: AdminAuthService,
         useValue: { getCurrentSession: () => of({ userId: atorId }) },
       },
-      { provide: ProdutosService, useValue: { listar: () => of([produto]) } },
+      { provide: ProdutosService, useValue: { listar } },
       { provide: ProdutosAcabadosService, useValue: api },
     ],
   }).compileComponents();
@@ -220,6 +221,113 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Selecionar produto e variante');
     expect(text).toContain('Sabonete');
     expect(text).toContain('Lavanda 100 g');
+  });
+
+  it('distingue falha do catálogo e repete somente a listagem, sem duplicar a tentativa', async () => {
+    const resposta = new Subject<(typeof produto)[]>();
+    const listar = vi
+      .fn(() => resposta.asObservable())
+      .mockImplementationOnce(() => throwError(() => new HttpErrorResponse({ status: 503 })));
+    const api = criarApi();
+    const fixture = await montarComponente(api, 'actor-1', false, listar);
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Não foi possível carregar os produtos.',
+    );
+    expect(root.textContent).not.toContain('Nenhum produto cadastrado');
+    const tentar = Array.from(root.querySelectorAll('button')).find(
+      (button) => button.textContent?.trim() === 'Tentar novamente',
+    )!;
+    tentar.click();
+    tentar.click();
+    fixture.detectChanges();
+
+    expect(listar).toHaveBeenCalledTimes(2);
+    expect(root.querySelector('[role="status"]')?.textContent).toContain('Carregando produtos');
+    expect(root.textContent).not.toContain('Nenhum produto cadastrado');
+
+    resposta.next([produto]);
+    resposta.complete();
+    fixture.detectChanges();
+
+    expect(root.textContent).toContain('Lavanda 100 g');
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(api.consultarPosicao).not.toHaveBeenCalled();
+    expect(api.consultarPolitica).not.toHaveBeenCalled();
+  });
+
+  it('mostra a lista vazia somente após uma consulta bem-sucedida', async () => {
+    const fixture = await montarComponente(criarApi(), 'actor-1', false, () => of([]));
+    expect(fixture.nativeElement.textContent).toContain('Nenhum produto cadastrado');
+    expect(fixture.nativeElement.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('preserva a variante do endereço quando a consulta inicial do catálogo falha', async () => {
+    const listar = vi
+      .fn(() => of([produto]))
+      .mockImplementationOnce(() => throwError(() => new HttpErrorResponse({ status: 503 })));
+    const api = criarApi();
+    const fixture = await montarComponente(api, 'actor-1', true, listar);
+    expect(api.consultarPosicao).not.toHaveBeenCalled();
+
+    clicar(fixture, 'Tentar novamente');
+
+    expect(listar).toHaveBeenCalledTimes(2);
+    expect(api.consultarPosicao).toHaveBeenCalledExactlyOnceWith('variant-1');
+    expect(fixture.nativeElement.textContent).toContain('Lavanda 100 g');
+    expect(fixture.nativeElement.textContent).toContain('Posição da variante');
+  });
+
+  it('recupera a posição inicial da mesma variante e reaproveita a política carregada', async () => {
+    const api = criarApi();
+    api.consultarPosicao.mockImplementationOnce(() =>
+      throwError(() => new HttpErrorResponse({ status: 503 })),
+    );
+    const listar = vi.fn(() => of([produto]));
+    const fixture = await montarComponente(api, 'actor-1', true, listar);
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Não foi possível consultar o estoque desta variante.',
+    );
+    expect(root.textContent).not.toContain('Posição da variante');
+    expect(root.textContent).not.toContain('Não foi possível consultar a política');
+    expect(api.listarMovimentacoes).not.toHaveBeenCalled();
+
+    clicar(fixture, 'Tentar consultar o estoque novamente');
+
+    expect(root.textContent).toContain('Posição da variante');
+    expect(root.querySelector<HTMLInputElement>('#finished-expiry')?.value).toBe('30');
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(api.consultarPosicao.mock.calls).toEqual([['variant-1'], ['variant-1']]);
+    expect(api.consultarPolitica).toHaveBeenCalledTimes(1);
+    expect(api.listarMovimentacoes).toHaveBeenCalledTimes(1);
+    expect(listar).toHaveBeenCalledTimes(1);
+  });
+
+  it('mantém posição e histórico disponíveis quando apenas a política falha', async () => {
+    const api = criarApi();
+    api.consultarPolitica.mockImplementationOnce(() =>
+      throwError(() => new HttpErrorResponse({ status: 503 })),
+    );
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Não foi possível consultar a política de estoque.',
+    );
+    expect(root.textContent).toContain('Posição da variante');
+    expect(root.textContent).toContain('Histórico');
+    expect(root.textContent).not.toContain('Salvar política');
+
+    clicar(fixture, 'Tentar consultar a política novamente');
+
+    expect(root.querySelector('[role="alert"]')).toBeNull();
+    expect(root.querySelector<HTMLInputElement>('#finished-expiry')?.value).toBe('30');
+    expect(api.consultarPolitica).toHaveBeenCalledTimes(2);
+    expect(api.consultarPosicao).toHaveBeenCalledTimes(1);
+    expect(api.listarMovimentacoes).toHaveBeenCalledTimes(1);
   });
 
   it('explica os saldos, condições e lotes sem sugerir automação futura', async () => {
