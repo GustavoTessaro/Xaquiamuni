@@ -15,6 +15,7 @@ describe('PublicProductCardComponent', () => {
       conteudoUrl: '/api/catalogo/produtos/product-1/imagens/image-1/conteudo',
     },
     precoMinimo: 18,
+    disponivel: true,
     precoMaximo: 18,
     unidadesVenda: ['UN'],
     medidas: [{ opcaoId: 'option-1', pesoLiquidoGramas: 100, volumeLiquidoMililitros: null }],
@@ -39,9 +40,23 @@ describe('PublicProductCardComponent', () => {
     expect(element.textContent?.replace(/\u00a0/g, ' ')).toContain('R$ 18,00');
     expect(element.textContent).toContain('Unidade');
     expect(element.textContent).toContain('100 g');
+    expect(element.textContent).toContain('Disponível');
     expect(element.querySelector('button')).toBeNull();
     expect(element.querySelector('a')?.getAttribute('href')).toBe('/produtos/product-1');
     expect(element.textContent?.toLowerCase()).not.toContain('estoque');
+  });
+
+  it('mantém o link de detalhes para um produto esgotado e trata resposta sem disponibilidade', () => {
+    fixture.componentRef.setInput('product', { ...product, disponivel: false });
+    fixture.detectChanges();
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('Esgotado');
+    expect(element.querySelector('a')?.getAttribute('href')).toBe('/produtos/product-1');
+
+    fixture.componentRef.setInput('product', { ...product, disponivel: undefined });
+    fixture.detectChanges();
+    expect(element.textContent).toContain('Disponibilidade não informada');
+    expect(element.textContent).not.toContain('Disponível');
   });
 
   it('uses a neutral placeholder when the public image fails', () => {
@@ -57,6 +72,7 @@ describe('PublicProductCardComponent', () => {
     fixture.componentRef.setInput('product', {
       ...product,
       precoMinimo: 18,
+      disponivel: true,
       precoMaximo: 25,
     });
     fixture.detectChanges();

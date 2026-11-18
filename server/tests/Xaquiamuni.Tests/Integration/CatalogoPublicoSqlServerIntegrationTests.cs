@@ -14,8 +14,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Catalogo.Publico;
 using Xaquiamuni.Aplicacao.Imagens;
+using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Api.Catalogo;
 using Xaquiamuni.Dominio.Entidades;
+using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Infraestrutura.Persistencia;
 
 namespace Xaquiamuni.Tests.Integration;
@@ -155,6 +157,81 @@ public sealed class CatalogoPublicoSqlServerIntegrationTests
         var serialized = await detailsResponse.Content.ReadAsStringAsync();
         Assert.DoesNotContain("ChaveArmazenamento", serialized, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("NomeOriginal", serialized, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task PublicCatalog_UsesCommercialAvailabilityWithoutExposingStockOrOrders()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        using var storage = new TemporaryImageStorage();
+        using var factory = CreateFactory(database, storage.RootPath);
+        using var client = CreateClient(factory);
+        var catalog = await SeedCatalogAsync(database, factory);
+        await using var context = database.CreateVerificationContext();
+        var agora = await context.Database.SqlQueryRaw<DateTimeOffset>(
+            "SELECT TODATETIMEOFFSET(SYSUTCDATETIME(), '+00:00') AS [Value]").SingleAsync();
+        var calendario = database.Services.GetRequiredService<ICalendarioOperacionalEstoque>();
+        var hoje = calendario.ObterDataEm(agora);
+        var estoque = database.Services.GetRequiredService<IEstoqueProdutoAcabadoRepository>();
+        var principal = await EntradaAsync(catalog.MainVariantId, hoje, CondicaoEstoqueProdutoAcabado.Vendavel);
+        var secundaria = await EntradaAsync(catalog.SecondaryVariantId, hoje, CondicaoEstoqueProdutoAcabado.Vendavel);
+        await EntradaAsync(catalog.MainVariantId, hoje.AddDays(-1), CondicaoEstoqueProdutoAcabado.Vendavel);
+        await EntradaAsync(catalog.MainVariantId, hoje, CondicaoEstoqueProdutoAcabado.Quarentena);
+        await EntradaAsync(catalog.InactiveVariantId, hoje, CondicaoEstoqueProdutoAcabado.Vendavel);
+
+        var ativa = ReservaProdutoAcabado.Criar(Guid.NewGuid(), catalog.MainVariantId, principal, 1, agora.AddHours(-1));
+        var confirmada = ReservaProdutoAcabado.Criar(Guid.NewGuid(), catalog.MainVariantId, principal, 1, agora.AddDays(-2));
+        confirmada.ConfirmarCompromisso(confirmada.CriadaEmUtc.AddHours(1));
+        var expirada = ReservaProdutoAcabado.Criar(Guid.NewGuid(), catalog.SecondaryVariantId, secundaria, 1, agora.AddDays(-2));
+        expirada.Expirar(agora);
+        var ativaVencida = ReservaProdutoAcabado.Criar(Guid.NewGuid(), catalog.SecondaryVariantId, secundaria, 1, agora.AddDays(-2));
+        var liberada = ReservaProdutoAcabado.Criar(Guid.NewGuid(), catalog.SecondaryVariantId, secundaria, 1, agora.AddHours(-1));
+        liberada.Liberar(agora, "Cancelamento autorizado");
+        context.ReservasProdutoAcabado.AddRange(ativa, confirmada, expirada, ativaVencida, liberada);
+        await context.SaveChangesAsync();
+
+        var pagina = await client.GetFromJsonAsync<CatalogoPublicoPaginaResponse>("/api/catalogo/produtos");
+        Assert.NotNull(pagina);
+        Assert.True(Assert.Single(pagina.Itens, p => p.Id == catalog.MultiOptionProductId).Disponivel);
+        Assert.False(Assert.Single(pagina.Itens, p => p.Id == catalog.SimpleProductId).Disponivel);
+
+        using var resposta = await client.GetAsync($"/api/catalogo/produtos/{catalog.MultiOptionProductId:D}");
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        var detalhe = await resposta.Content.ReadFromJsonAsync<ProdutoCatalogoDetalheResponse>();
+        Assert.NotNull(detalhe);
+        Assert.True(detalhe.Disponivel);
+        Assert.Equal(catalog.MainVariantId, detalhe.OpcaoPrincipalId);
+        Assert.False(Assert.Single(detalhe.Opcoes, o => o.Id == catalog.MainVariantId).Disponivel);
+        Assert.True(Assert.Single(detalhe.Opcoes, o => o.Id == catalog.SecondaryVariantId).Disponivel);
+        Assert.DoesNotContain(detalhe.Opcoes, o => o.Id == catalog.InactiveVariantId);
+        var simples = await client.GetFromJsonAsync<ProdutoCatalogoDetalheResponse>(
+            $"/api/catalogo/produtos/{catalog.SimpleProductId:D}");
+        Assert.NotNull(simples);
+        Assert.False(simples.Disponivel);
+        Assert.False(Assert.Single(simples.Opcoes).Disponivel);
+
+        var consultaAdmin = new EfEstoqueProdutoAcabadoConsultaRepository(context);
+        foreach (var opcao in detalhe.Opcoes)
+        {
+            var posicao = await consultaAdmin.ConsultarPosicaoVarianteAsync(opcao.Id, hoje);
+            Assert.Equal(posicao!.Resumo.SaldoDisponivel > 0, opcao.Disponivel);
+        }
+
+        var json = await resposta.Content.ReadAsStringAsync();
+        foreach (var privado in new[] { "loteId", "pedidoId", "saldo", "quantidade", "reserva", "cliente", principal.ToString(), ativa.PedidoId.ToString() })
+        {
+            Assert.DoesNotContain(privado, json, StringComparison.OrdinalIgnoreCase);
+        }
+
+        async Task<Guid> EntradaAsync(Guid variante, DateOnly validade, CondicaoEstoqueProdutoAcabado condicao)
+        {
+            var resultado = await estoque.RegistrarEntradaAsync(new(
+                variante, Guid.NewGuid(), TipoMovimentoProdutoAcabado.EntradaManual, 2, condicao,
+                "Estoque de teste", Guid.NewGuid().ToString("N"), DataFabricacaoNovoLote: hoje.AddDays(-2),
+                DataValidadeNovoLote: validade));
+            Assert.True(resultado.Sucesso, resultado.Erro);
+            return resultado.Lote!.Id;
+        }
     }
 
     [SqlServerIntegrationFact]

@@ -13,6 +13,7 @@ import { formatarUnidadeVenda } from './catalogo-formatacao';
 export class PublicProductCardComponent {
   readonly product = input.required<ProdutoCatalogoResumo>();
   readonly catalogReturn = input<CatalogoPublicoRetorno | null>(null);
+  readonly availabilityKnown = input(true);
   protected readonly imageUnavailable = signal(false);
 
   private readonly resetImageFallback = effect(() => {

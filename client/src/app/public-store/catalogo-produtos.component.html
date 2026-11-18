@@ -66,7 +66,11 @@
   } @else {
     <div class="catalog-grid">
       @for (product of products(); track product.id) {
-        <app-public-product-card [product]="product" [catalogReturn]="catalogReturn" />
+        <app-public-product-card
+          [product]="product"
+          [catalogReturn]="catalogReturn"
+          [availabilityKnown]="!loading() && !errorMessage()"
+        />
       }
     </div>
 

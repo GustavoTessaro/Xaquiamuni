@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Catalogo.Publico;
+using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class EfCatalogoPublicoRepository(XaquiamuniDbContext dbContext)
+public sealed class EfCatalogoPublicoRepository(
+    XaquiamuniDbContext dbContext, ICalendarioOperacionalEstoque calendario)
     : ICatalogoPublicoRepository
 {
     public async Task<IReadOnlyList<Categoria>> ListarCategoriasAtivasAsync(
@@ -43,14 +45,55 @@ public sealed class EfCatalogoPublicoRepository(XaquiamuniDbContext dbContext)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new CatalogoPublicoPagina(resultado, totalItens);
+        var disponiveis = await ConsultarOpcoesDisponiveisAsync(resultado, cancellationToken).ConfigureAwait(false);
+        return new CatalogoPublicoPagina(resultado.Select(produto => Mapear(produto, disponiveis)).ToArray(), totalItens);
     }
 
-    public Task<Produto?> ConsultarProdutoAsync(
+    public async Task<ProdutoCatalogoPublico?> ConsultarProdutoAsync(
         Guid produtoId,
-        CancellationToken cancellationToken = default) =>
-        IncluirDetalhesPublicos(FiltrarProdutosVisiveis(dbContext.Produtos.AsNoTracking()))
-            .SingleOrDefaultAsync(produto => produto.Id == produtoId, cancellationToken);
+        CancellationToken cancellationToken = default)
+    {
+        var produto = await IncluirDetalhesPublicos(FiltrarProdutosVisiveis(dbContext.Produtos.AsNoTracking()))
+            .SingleOrDefaultAsync(item => item.Id == produtoId, cancellationToken).ConfigureAwait(false);
+        if (produto is null)
+        {
+            return null;
+        }
+
+        var disponiveis = await ConsultarOpcoesDisponiveisAsync([produto], cancellationToken).ConfigureAwait(false);
+        return Mapear(produto, disponiveis);
+    }
+
+    private async Task<HashSet<Guid>> ConsultarOpcoesDisponiveisAsync(
+        IReadOnlyList<Produto> produtos, CancellationToken cancellationToken)
+    {
+        if (produtos.Count == 0)
+        {
+            return [];
+        }
+
+        var variantes = produtos.SelectMany(produto => produto.Variantes).Select(variante => variante.Id).ToArray();
+        var agoraUtc = await dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+        var dataOperacional = calendario.ObterDataEm(agoraUtc);
+        var compromissos = dbContext.ReservasProdutoAcabado.ComprometidasEm(agoraUtc);
+        var disponiveis = await (
+            from lote in dbContext.LotesProdutoAcabado
+            join saldo in dbContext.SaldosProdutoAcabado on new { lote.ProdutoVarianteId, LoteId = lote.Id }
+                equals new { saldo.ProdutoVarianteId, saldo.LoteId }
+            where variantes.Contains(lote.ProdutoVarianteId) && lote.DataValidade >= dataOperacional
+                && dbContext.ProdutoVariantes.Any(variante => variante.Id == lote.ProdutoVarianteId && variante.Ativa)
+                && saldo.QuantidadeVendavel > 0
+                && saldo.QuantidadeVendavel > compromissos
+                    .Where(reserva => reserva.ProdutoVarianteId == lote.ProdutoVarianteId && reserva.LoteId == lote.Id)
+                    .Sum(reserva => (long)reserva.Quantidade)
+            select lote.ProdutoVarianteId
+        ).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+        return disponiveis.ToHashSet();
+    }
+
+    private static ProdutoCatalogoPublico Mapear(Produto produto, HashSet<Guid> disponiveis) =>
+        new(produto, produto.Variantes.Where(variante => disponiveis.Contains(variante.Id))
+            .Select(variante => variante.Id).ToHashSet());
 
     private static IQueryable<Produto> FiltrarProdutosVisiveis(IQueryable<Produto> produtos) =>
         produtos.Where(produto =>

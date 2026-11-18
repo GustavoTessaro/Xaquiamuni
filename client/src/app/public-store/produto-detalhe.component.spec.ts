@@ -34,6 +34,7 @@ const simpleProduct: ProdutoCatalogoDetalhe = {
   categoriaNome: 'Sabonetes Artesanais',
   requerSelecaoDeOpcao: false,
   opcaoPrincipalId: 'soap-default',
+  disponivel: true,
   fotoPrincipal: soapMainImage,
   galeria: [soapMainImage, soapGalleryImage],
   caracteristicas: [],
@@ -43,6 +44,7 @@ const simpleProduct: ProdutoCatalogoDetalhe = {
       identificacao: null,
       unidadeVenda: 'UN',
       precoVenda: 18,
+      disponivel: true,
       principal: true,
       pesoLiquidoGramas: 100,
       volumeLiquidoMililitros: null,
@@ -81,6 +83,7 @@ const candleProduct: ProdutoCatalogoDetalhe = {
   categoriaNome: 'Velas Aromáticas Artesanais',
   requerSelecaoDeOpcao: true,
   opcaoPrincipalId: 'candle-small-option',
+  disponivel: true,
   fotoPrincipal: candleMainImage,
   galeria: [candleMainImage, candleGeneralImage, candleLargeImage],
   caracteristicas: [
@@ -119,6 +122,7 @@ const candleProduct: ProdutoCatalogoDetalhe = {
       identificacao: 'Padrão',
       unidadeVenda: 'UN',
       precoVenda: 35,
+      disponivel: false,
       principal: true,
       pesoLiquidoGramas: 100,
       volumeLiquidoMililitros: null,
@@ -151,6 +155,7 @@ const candleProduct: ProdutoCatalogoDetalhe = {
       identificacao: 'Padrão',
       unidadeVenda: 'PCT',
       precoVenda: 55,
+      disponivel: true,
       principal: false,
       pesoLiquidoGramas: 200,
       volumeLiquidoMililitros: null,
@@ -226,6 +231,7 @@ describe('ProdutoDetalheComponent', () => {
     expect(text(harness)).toContain('R$ 18,00');
     expect(text(harness)).toContain('Unidade');
     expect(text(harness)).toContain('100 g');
+    expect(text(harness)).toContain('Disponível');
     expect(text(harness)).not.toContain('Padrão');
     expect(harness.fixture.nativeElement.querySelector('.product-detail__selectors')).toBeNull();
     expect(text(harness).toLowerCase()).not.toContain('estoque');
@@ -237,6 +243,10 @@ describe('ProdutoDetalheComponent', () => {
       vi.fn(() => of(candleProduct)),
       '/produtos/candle',
     );
+    const disponibilidade = harness.fixture.nativeElement.querySelector(
+      '[data-testid="product-availability"][role="status"]',
+    ) as HTMLElement;
+    expect(disponibilidade.textContent).toContain('Opção esgotada');
 
     expect(text(harness)).toContain('R$ 35,00');
     expect(text(harness)).toContain('100 g');
@@ -255,6 +265,7 @@ describe('ProdutoDetalheComponent', () => {
     ]);
 
     choose(harness, 'characteristic-weight', 'value-200g');
+    expect(disponibilidade.textContent).toContain('Disponível');
     expect(text(harness)).toContain('R$ 55,00');
     expect(text(harness)).toContain('Pacote');
     expect(text(harness)).toContain('200 g');
@@ -272,6 +283,27 @@ describe('ProdutoDetalheComponent', () => {
     ].map((image) => image.getAttribute('src'));
     expect(variantThumbnails).toContain(candleGeneralImage.conteudoUrl);
     expect(variantThumbnails).not.toContain(candleMainImage.conteudoUrl);
+  });
+
+  it('mostra esgotado no detalhe simples e omite o indicador quando a consulta falha', async () => {
+    const consultar = vi
+      .fn<() => Observable<ProdutoCatalogoDetalhe>>()
+      .mockReturnValueOnce(
+        of({
+          ...simpleProduct,
+          disponivel: false,
+          opcoes: simpleProduct.opcoes.map((opcao) => ({ ...opcao, disponivel: false })),
+        }),
+      )
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })));
+    const harness = await createPage(consultar);
+    expect(text(harness)).toContain('Esgotado');
+
+    await harness.navigateByUrl('/produtos/falha', ProdutoDetalheComponent);
+    harness.fixture.detectChanges();
+    expect(
+      harness.fixture.nativeElement.querySelector('[data-testid="product-availability"]'),
+    ).toBeNull();
   });
 
   it('resolves an incompatible choice to a real active combination', async () => {

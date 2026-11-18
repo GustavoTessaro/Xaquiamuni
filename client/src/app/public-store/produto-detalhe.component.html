@@ -138,7 +138,24 @@
           </div>
         }
 
-        @if (selectedOption(); as option) {
+        @let opcaoParaEstoque = selectedOption();
+        @let disponivel = opcaoParaEstoque ? opcaoParaEstoque.disponivel : item.disponivel;
+        <p class="product-detail__measures" role="status" data-testid="product-availability">
+          <span>
+            @if (disponivel === true) {
+              {{
+                opcaoParaEstoque || !item.requerSelecaoDeOpcao
+                  ? 'Disponível'
+                  : 'Há opções disponíveis'
+              }}
+            } @else if (disponivel === false) {
+              {{ opcaoParaEstoque && item.requerSelecaoDeOpcao ? 'Opção esgotada' : 'Esgotado' }}
+            } @else {
+              Disponibilidade não informada
+            }
+          </span>
+        </p>
+        @if (opcaoParaEstoque; as option) {
           <div class="product-detail__price" aria-live="polite">
             <strong>{{ formatPrice(option.precoVenda) }}</strong>
             <span>{{ formatUnit(option.unidadeVenda) }}</span>

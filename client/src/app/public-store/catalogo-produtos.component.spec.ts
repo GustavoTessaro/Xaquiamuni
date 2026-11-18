@@ -21,6 +21,7 @@ describe('CatalogoProdutosComponent', () => {
       conteudoUrl: '/api/catalogo/produtos/product-1/imagens/image-1/conteudo',
     },
     precoMinimo: 18,
+    disponivel: true,
     precoMaximo: 25,
     unidadesVenda: ['UN'],
     medidas: [],
@@ -49,7 +50,8 @@ describe('CatalogoProdutosComponent', () => {
   }
 
   beforeEach(() => {
-    listarProdutos = vi.fn<CatalogoPublicoService['listarProdutos']>()
+    listarProdutos = vi
+      .fn<CatalogoPublicoService['listarProdutos']>()
       .mockReturnValue(of(page([product])));
   });
 
@@ -90,7 +92,9 @@ describe('CatalogoProdutosComponent', () => {
   it('requests the next real API page and appends its products', async () => {
     listarProdutos
       .mockReturnValueOnce(of(page([product], 1, 2)))
-      .mockReturnValueOnce(of(page([{ ...product, id: 'product-2', nome: 'Vela artesanal' }], 2, 2)));
+      .mockReturnValueOnce(
+        of(page([{ ...product, id: 'product-2', nome: 'Vela artesanal' }], 2, 2)),
+      );
     await createComponent();
 
     const button = pageElement.querySelector('.catalog-load-more button') as HTMLButtonElement;
@@ -111,8 +115,9 @@ describe('CatalogoProdutosComponent', () => {
     listarProdutos.mockReturnValueOnce(throwError(() => new Error('network')));
     await createComponent();
     expect(pageElement.textContent).toContain('Não foi possível carregar os produtos agora');
-    expect(pageElement.querySelector('.catalog-state--error button')?.textContent)
-      .toContain('Tentar novamente');
+    expect(pageElement.querySelector('.catalog-state--error button')?.textContent).toContain(
+      'Tentar novamente',
+    );
   });
 
   it('shows loading feedback while the public endpoint is pending', async () => {
@@ -149,9 +154,24 @@ describe('CatalogoProdutosComponent', () => {
     expect(pageElement.textContent).toContain('Resultado atualizado');
   });
 
-  it('does not render a purchase action or claim stock availability', async () => {
+  it('shows availability without rendering a purchase action', async () => {
     await createComponent();
     expect(pageElement.querySelector('button.comprar, a.comprar')).toBeNull();
-    expect(pageElement.textContent.toLowerCase()).not.toContain('em estoque');
+    expect(pageElement.textContent).toContain('Disponível');
+  });
+
+  it('preserva os cards sem afirmar disponibilidade durante uma falha de atualização', async () => {
+    listarProdutos
+      .mockReturnValueOnce(of(page([product], 1, 2)))
+      .mockReturnValueOnce(throwError(() => new Error('network')));
+    await createComponent();
+    (pageElement.querySelector('.catalog-load-more button') as HTMLButtonElement).click();
+    harness.fixture.detectChanges();
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+
+    expect(pageElement.textContent).toContain('Sabonete de lavanda');
+    expect(pageElement.textContent).toContain('Disponibilidade não informada');
+    expect(pageElement.textContent).not.toContain('Disponível');
   });
 });

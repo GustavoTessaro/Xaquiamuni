@@ -10,8 +10,10 @@ public sealed record CatalogoPublicoFiltro(
     int Take);
 
 public sealed record CatalogoPublicoPagina(
-    IReadOnlyList<Produto> Produtos,
+    IReadOnlyList<ProdutoCatalogoPublico> Produtos,
     int TotalItens);
+
+public sealed record ProdutoCatalogoPublico(Produto Produto, IReadOnlySet<Guid> OpcoesDisponiveis);
 
 public interface ICatalogoPublicoRepository
 {
@@ -22,7 +24,7 @@ public interface ICatalogoPublicoRepository
         CatalogoPublicoFiltro filtro,
         CancellationToken cancellationToken = default);
 
-    Task<Produto?> ConsultarProdutoAsync(
+    Task<ProdutoCatalogoPublico?> ConsultarProdutoAsync(
         Guid produtoId,
         CancellationToken cancellationToken = default);
 }
@@ -36,7 +38,7 @@ public interface IConsultarCatalogoPublico
         CatalogoPublicoFiltro filtro,
         CancellationToken cancellationToken = default);
 
-    Task<Produto?> ConsultarProdutoAsync(
+    Task<ProdutoCatalogoPublico?> ConsultarProdutoAsync(
         Guid produtoId,
         CancellationToken cancellationToken = default);
 
@@ -59,7 +61,7 @@ public sealed class ConsultarCatalogoPublico(
         CancellationToken cancellationToken = default) =>
         repository.ListarProdutosAsync(filtro, cancellationToken);
 
-    public Task<Produto?> ConsultarProdutoAsync(
+    public Task<ProdutoCatalogoPublico?> ConsultarProdutoAsync(
         Guid produtoId,
         CancellationToken cancellationToken = default) =>
         repository.ConsultarProdutoAsync(produtoId, cancellationToken);

@@ -184,10 +184,12 @@ public sealed record ProdutoCatalogoResumoResponse(
     decimal PrecoMinimo,
     decimal PrecoMaximo,
     IReadOnlyList<string> UnidadesVenda,
-    IReadOnlyList<ProdutoCatalogoMedidaResponse> Medidas)
+    IReadOnlyList<ProdutoCatalogoMedidaResponse> Medidas,
+    bool Disponivel)
 {
-    public static ProdutoCatalogoResumoResponse From(Produto produto)
+    public static ProdutoCatalogoResumoResponse From(ProdutoCatalogoPublico item)
     {
+        var produto = item.Produto;
         var opcoesAtivas = produto.Variantes.Where(variante => variante.Ativa).ToArray();
         var imagemPrincipal = produto.Imagens.Single(imagem => imagem.Principal);
         return new ProdutoCatalogoResumoResponse(
@@ -210,7 +212,8 @@ public sealed record ProdutoCatalogoResumoResponse(
                     opcao.Id,
                     opcao.PesoLiquidoGramas,
                     opcao.VolumeLiquidoMililitros))
-                .ToArray());
+                .ToArray(),
+            item.OpcoesDisponiveis.Count > 0);
     }
 }
 
@@ -271,7 +274,8 @@ public sealed record ProdutoCatalogoOpcaoResponse(
     bool Principal,
     decimal? PesoLiquidoGramas,
     decimal? VolumeLiquidoMililitros,
-    IReadOnlyList<ProdutoCatalogoCaracteristicaSelecaoResponse> Caracteristicas);
+    IReadOnlyList<ProdutoCatalogoCaracteristicaSelecaoResponse> Caracteristicas,
+    bool Disponivel);
 
 /// <summary>Uma característica e o valor efetivamente associados a uma opção.</summary>
 public sealed record ProdutoCatalogoCaracteristicaSelecaoResponse(
@@ -293,10 +297,12 @@ public sealed record ProdutoCatalogoDetalheResponse(
     ProdutoCatalogoImagemResponse FotoPrincipal,
     IReadOnlyList<ProdutoCatalogoImagemResponse> Galeria,
     IReadOnlyList<ProdutoCatalogoCaracteristicaResponse> Caracteristicas,
-    IReadOnlyList<ProdutoCatalogoOpcaoResponse> Opcoes)
+    IReadOnlyList<ProdutoCatalogoOpcaoResponse> Opcoes,
+    bool Disponivel)
 {
-    public static ProdutoCatalogoDetalheResponse From(Produto produto)
+    public static ProdutoCatalogoDetalheResponse From(ProdutoCatalogoPublico item)
     {
+        var produto = item.Produto;
         var opcoesAtivas = produto.Variantes
             .Where(variante => variante.Ativa)
             .OrderByDescending(variante => variante.Padrao)
@@ -358,7 +364,8 @@ public sealed record ProdutoCatalogoDetalheResponse(
                         associacao.ProdutoCaracteristicaValorId,
                         associacao.Valor.Nome,
                         associacao.Valor.ValorMedidaCanonico))
-                    .ToArray()))
+                    .ToArray(),
+                item.OpcoesDisponiveis.Contains(opcao.Id)))
             .ToArray();
         var imagemPrincipal = galeria.Single(imagem => imagem.Principal);
 
@@ -373,6 +380,7 @@ public sealed record ProdutoCatalogoDetalheResponse(
             imagemPrincipal,
             galeria,
             caracteristicas,
-            opcoes);
+            opcoes,
+            item.OpcoesDisponiveis.Count > 0);
     }
 }

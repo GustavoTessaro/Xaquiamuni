@@ -27,6 +27,7 @@ export interface ProdutoCatalogoResumo {
   precoMaximo: number;
   unidadesVenda: string[];
   medidas: ProdutoCatalogoMedida[];
+  disponivel: boolean;
 }
 
 export interface CatalogoPublicoPagina {
@@ -84,6 +85,7 @@ export interface ProdutoCatalogoOpcao {
   pesoLiquidoGramas: number | null;
   volumeLiquidoMililitros: number | null;
   caracteristicas: ProdutoCatalogoCaracteristicaSelecao[];
+  disponivel: boolean;
 }
 
 export interface ProdutoCatalogoDetalhe {
@@ -98,6 +100,7 @@ export interface ProdutoCatalogoDetalhe {
   galeria: ProdutoCatalogoImagem[];
   caracteristicas: ProdutoCatalogoCaracteristica[];
   opcoes: ProdutoCatalogoOpcao[];
+  disponivel: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

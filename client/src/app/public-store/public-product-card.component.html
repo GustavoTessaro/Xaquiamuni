@@ -34,6 +34,15 @@
   <div class="product-card__body">
     <h3>{{ product().nome }}</h3>
     <p class="product-card__meta">
+      <span>
+        @if (availabilityKnown() && product().disponivel === true) {
+          Disponível
+        } @else if (availabilityKnown() && product().disponivel === false) {
+          Esgotado
+        } @else {
+          Disponibilidade não informada
+        }
+      </span>
       @if (units) {
         <span>{{ units }}</span>
       }

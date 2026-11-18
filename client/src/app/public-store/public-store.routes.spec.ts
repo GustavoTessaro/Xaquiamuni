@@ -111,6 +111,7 @@ describe('public store routes', () => {
       categoriaNome: 'Sabonetes Artesanais',
       fotoPrincipal: { id: 'image-1', conteudoUrl: '/public-images/image-1' },
       precoMinimo: 18,
+      disponivel: true,
       precoMaximo: 18,
       unidadesVenda: ['UN'],
       medidas: [{ opcaoId: 'option-1', pesoLiquidoGramas: 100, volumeLiquidoMililitros: null }],
@@ -123,6 +124,7 @@ describe('public store routes', () => {
       categoriaNome: product.categoriaNome,
       requerSelecaoDeOpcao: false,
       opcaoPrincipalId: 'option-1',
+      disponivel: true,
       fotoPrincipal: {
         ...product.fotoPrincipal,
         ordemExibicao: 1,
@@ -144,6 +146,7 @@ describe('public store routes', () => {
           identificacao: null,
           unidadeVenda: 'UN',
           precoVenda: 18,
+          disponivel: true,
           principal: true,
           pesoLiquidoGramas: 100,
           volumeLiquidoMililitros: null,
