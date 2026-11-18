@@ -222,6 +222,24 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Lavanda 100 g');
   });
 
+  it('explica os saldos, condições e lotes sem sugerir automação futura', async () => {
+    const fixture = await montarComponente(criarApi());
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text).toContain('Produtos prontos para venda');
+    expect(text).toContain('Total registrado, incluindo unidades indisponíveis.');
+    expect(text).toContain('Apto para uso conforme as regras do estoque e do lote.');
+    expect(text).toContain('Comprometido com operações, quando houver.');
+    expect(text).toContain('Liberado para venda conforme as regras atuais.');
+    expect(text).toContain('Produto em condições de venda.');
+    expect(text).toContain('Com problema e indisponível para venda.');
+    expect(text).toContain('Separado temporariamente e indisponível para venda.');
+    expect(text).toContain(
+      'Grupo identificado de unidades com informações de fabricação e validade.',
+    );
+    expect(text).toContain('Quantidade de referência para alertar sobre necessidade de reposição.');
+  });
+
   it('abre o formulário no cartão do lote com quantidades encontradas vazias e foco acessível', async () => {
     const api = criarApi();
     const fixture = await montarComponente(api);

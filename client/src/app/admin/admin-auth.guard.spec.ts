@@ -278,7 +278,8 @@ describe('adminAuthGuard', () => {
 
     await harness.navigateByUrl('/admin/estoque/insumos', AdminInsumosComponent);
     expect(TestBed.inject(Router).url).toBe('/admin/estoque/insumos');
-    expect(harness.routeNativeElement?.textContent).toContain('Estoque de insumos');
+    expect(harness.routeNativeElement?.textContent).toContain('Insumos para produção');
+    expect(harness.routeNativeElement?.textContent).toContain('Produtos prontos para venda');
 
     await harness.navigateByUrl(
       '/admin/estoque/insumos/insumo-1/consultas',

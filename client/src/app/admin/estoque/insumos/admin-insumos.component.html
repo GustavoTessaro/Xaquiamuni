@@ -10,10 +10,10 @@
           id="stock-supplies-title"
           class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
         >
-          Estoque de insumos
+          Insumos para produção
         </h1>
         <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          Consulte cadastros e saldos físicos e disponíveis. Os filtros são aplicados pelo servidor.
+          Consulte os itens usados na produção e seus saldos.
         </p>
       </div>
       <div class="flex flex-wrap gap-3">
@@ -182,9 +182,12 @@
                   class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
                 >
                   <div>
-                    <dt class="text-xs font-medium text-slate-500">Físico</dt>
+                    <dt class="text-xs font-medium text-slate-500">Saldo físico</dt>
                     <dd class="mt-1 text-sm font-semibold text-slate-900">
                       {{ formatarQuantidade(insumo.saldoFisico, insumo.unidadeBase) }}
+                    </dd>
+                    <dd class="mt-1 text-xs text-slate-500">
+                      Total registrado, incluindo quantidades indisponíveis.
                     </dd>
                   </div>
                   <div>
@@ -192,15 +195,21 @@
                     <dd class="mt-1 text-sm font-semibold text-slate-900">
                       {{ formatarQuantidade(insumo.saldoDisponivel, insumo.unidadeBase) }}
                     </dd>
+                    <dd class="mt-1 text-xs text-slate-500">
+                      Quantidade liberada para utilização.
+                    </dd>
                   </div>
                   <div>
-                    <dt class="text-xs font-medium text-slate-500">Mínimo</dt>
+                    <dt class="text-xs font-medium text-slate-500">Estoque mínimo</dt>
                     <dd class="mt-1 text-sm font-semibold text-slate-900">
                       {{
                         insumo.estoqueMinimoConfigurado
                           ? formatarQuantidade(insumo.estoqueMinimo ?? '0', insumo.unidadeBase)
                           : 'Não configurado'
                       }}
+                    </dd>
+                    <dd class="mt-1 text-xs text-slate-500">
+                      Referência para alertar sobre necessidade de reposição.
                     </dd>
                   </div>
                   <div>

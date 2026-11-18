@@ -3,10 +3,10 @@
     <header>
       <p class="text-sm font-semibold uppercase tracking-wide text-emerald-800">Estoque</p>
       <h1 class="mt-1 text-2xl font-bold tracking-tight text-emerald-950 sm:text-3xl">
-        Produtos acabados
+        Produtos prontos para venda
       </h1>
       <p class="mt-2 text-sm text-slate-600">
-        Consulte posição, lotes, política e histórico das variantes comerciais.
+        Consulte os saldos, lotes e movimentações de cada produto e variante.
       </p>
     </header>
 
@@ -96,7 +96,7 @@
                 Posição da variante
               </h2>
               <p class="mt-1 text-sm text-slate-600">
-                Valores físicos e comerciais calculados pela API.
+                Os saldos seguem as regras atuais do estoque e dos lotes.
               </p>
             </div>
             <button
@@ -115,11 +115,17 @@
               <dd class="mt-1 text-xl font-semibold text-slate-950">
                 {{ position.saldoFisico }} un.
               </dd>
+              <dd class="mt-1 text-xs text-slate-600">
+                Total registrado, incluindo unidades indisponíveis.
+              </dd>
             </div>
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
               <dt class="text-sm text-slate-600">Utilizável</dt>
               <dd class="mt-1 text-xl font-semibold text-slate-950">
                 {{ position.saldoUtilizavel }} un.
+              </dd>
+              <dd class="mt-1 text-xs text-slate-600">
+                Apto para uso conforme as regras do estoque e do lote.
               </dd>
             </div>
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
@@ -127,11 +133,17 @@
               <dd class="mt-1 text-xl font-semibold text-slate-950">
                 {{ position.saldoReservado }} un.
               </dd>
+              <dd class="mt-1 text-xs text-slate-600">
+                Comprometido com operações, quando houver.
+              </dd>
             </div>
             <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
               <dt class="text-sm text-emerald-900">Saldo disponível</dt>
               <dd class="mt-1 text-xl font-semibold text-emerald-950">
                 {{ position.saldoDisponivel }} un.
+              </dd>
+              <dd class="mt-1 text-xs text-emerald-900">
+                Liberado para venda conforme as regras atuais.
               </dd>
             </div>
           </dl>
@@ -140,26 +152,36 @@
             <div class="rounded-xl border border-slate-200 p-3">
               <p class="text-xs font-medium text-slate-500">Vendável</p>
               <p class="mt-1 text-base font-semibold text-slate-900">{{ totalVendavel() }} un.</p>
+              <p class="mt-1 text-xs text-slate-600">Produto em condições de venda.</p>
             </div>
             <div class="rounded-xl border border-slate-200 p-3">
-              <p class="text-xs font-medium text-slate-500">Danificada</p>
+              <p class="text-xs font-medium text-slate-500">Avariado (danificado)</p>
               <p class="mt-1 text-base font-semibold text-slate-900">{{ totalDanificada() }} un.</p>
+              <p class="mt-1 text-xs text-slate-600">Com problema e indisponível para venda.</p>
             </div>
             <div class="rounded-xl border border-slate-200 p-3">
               <p class="text-xs font-medium text-slate-500">Quarentena</p>
               <p class="mt-1 text-base font-semibold text-slate-900">{{ totalQuarentena() }} un.</p>
+              <p class="mt-1 text-xs text-slate-600">
+                Separado temporariamente e indisponível para venda.
+              </p>
             </div>
           </div>
 
-          <p class="mt-4 text-sm text-slate-700">
-            Estoque mínimo:
-            <strong>{{
-              position.estoqueMinimoConfigurado
-                ? position.estoqueMinimo + ' un.'
-                : 'Não configurado'
-            }}</strong>
-            · {{ rotuloSituacao(position.situacao) }}
-          </p>
+          <div class="mt-4">
+            <p class="text-sm text-slate-700">
+              Estoque mínimo:
+              <strong>{{
+                position.estoqueMinimoConfigurado
+                  ? position.estoqueMinimo + ' un.'
+                  : 'Não configurado'
+              }}</strong>
+              · {{ rotuloSituacao(position.situacao) }}
+            </p>
+            <p class="mt-1 text-xs text-slate-600">
+              Quantidade de referência para alertar sobre necessidade de reposição.
+            </p>
+          </div>
         </section>
 
         <section
@@ -655,6 +677,9 @@
           aria-labelledby="finished-lots-title"
         >
           <h2 id="finished-lots-title" class="text-lg font-semibold text-emerald-950">Lotes</h2>
+          <p class="mt-1 text-sm text-slate-600">
+            Grupo identificado de unidades com informações de fabricação e validade.
+          </p>
           @if (position.lotes.length === 0) {
             <p
               class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
