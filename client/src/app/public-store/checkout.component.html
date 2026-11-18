@@ -1,0 +1,101 @@
+<section class="compra" aria-labelledby="checkout-title">
+  <h1 id="checkout-title">Revisar compra</h1>
+  @if (checkout.pendente()) {
+    <section class="painel" aria-labelledby="recuperar-title">
+      <h2 id="recuperar-title">Recuperar pedido</h2>
+      <p>
+        A confirmação do pedido está pendente. Repita a tentativa original para verificar o
+        resultado.
+      </p>
+      @if (carrinhoMudou()) {
+        <p>Seu carrinho mudou. A recuperação usará somente as quantidades da tentativa original.</p>
+      }
+      @if (carrinhoMudou()) {
+        <ul aria-label="Itens da tentativa original">
+          @for (item of itensOriginais(); track item.produtoVarianteId) {
+            <li>
+              {{ item.quantidade }} ×
+              @if (item.atual; as original) {
+                {{ original.nome }} {{ original.variante }}
+              } @else {
+                Opção {{ item.produtoVarianteId }}
+              }
+            </li>
+          }
+        </ul>
+      }
+      <button
+        class="principal"
+        type="button"
+        (click)="enviar(true)"
+        [disabled]="checkout.enviando()"
+      >
+        Recuperar tentativa original
+      </button>
+    </section>
+  }
+  @if (carrinho.itens().length) {
+    <div class="grade">
+      <ul class="painel linhas" aria-label="Itens do carrinho atual">
+        @for (item of carrinho.itens(); track item.varianteId) {
+          <li>
+            <div>
+              <h2>{{ item.nome }}</h2>
+              @if (item.variante) {
+                <p>{{ item.variante }}</p>
+              }
+              <p>
+                Quantidade: {{ item.quantidade }} · {{ formatarPreco(item.precoCentavos) }} por
+                unidade
+              </p>
+              @if (item.disponivel === false) {
+                <p class="aviso">Opção indisponível.</p>
+              }
+            </div>
+            <strong>{{ formatarPreco(item.precoCentavos * item.quantidade) }}</strong>
+          </li>
+        }
+      </ul>
+      <section class="painel resumo" aria-labelledby="checkout-summary">
+        <h2 id="checkout-summary">Resumo</h2>
+        <p>Modalidade: <strong>Retirada local</strong></p>
+        <p>
+          Subtotal estimado: <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong>
+        </p>
+        <p>O servidor revalida preços e disponibilidade ao criar o pedido.</p>
+        @if (consultando() && !checkout.pendente()) {
+          <p role="status">Consultando disponibilidade…</p>
+        }
+        @if (indisponivel()) {
+          <p class="aviso">
+            Remova os itens indisponíveis do carrinho antes de fazer um novo pedido.
+          </p>
+        } @else if (!valido()) {
+          <p class="aviso">
+            Revise os itens e as quantidades. O pedido aceita até 100 opções de produto.
+          </p>
+        }
+        @if (!checkout.pendente()) {
+          <button
+            class="principal"
+            type="button"
+            (click)="enviar(false)"
+            [disabled]="checkout.enviando() || consultando() || indisponivel() || !valido()"
+          >
+            Finalizar compra
+          </button>
+        }
+        <a routerLink="/carrinho">Voltar ao carrinho</a>
+      </section>
+    </div>
+  } @else {
+    <p>Seu carrinho está vazio.</p>
+    <a routerLink="/produtos">Continuar comprando</a>
+  }
+  @if (checkout.enviando()) {
+    <p role="status">Processando a solicitação do pedido…</p>
+  }
+  @if (erro()) {
+    <p role="alert" class="aviso">{{ erro() }}</p>
+  }
+</section>

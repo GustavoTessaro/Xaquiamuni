@@ -1,0 +1,86 @@
+.compra {
+  width: min(1200px, calc(100% - 2rem));
+  margin-inline: auto;
+  padding-block: 2rem 4rem;
+  color: #173c2c;
+  display: grid;
+  gap: 1rem;
+}
+
+h1 {
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 1.1rem;
+  font-weight: 650;
+}
+
+.grade {
+  display: grid;
+  gap: 1rem;
+  align-items: start;
+}
+
+.painel {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid #e8e4d7;
+  border-radius: 1rem;
+  background: #fffdf8;
+  overflow-wrap: anywhere;
+}
+
+.linhas {
+  list-style: none;
+}
+
+.linhas li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.linhas li + li {
+  border-top: 1px solid #e8e4d7;
+  padding-top: 0.75rem;
+}
+
+.aviso {
+  color: #7a371f;
+}
+
+a {
+  justify-self: start;
+  text-decoration: underline;
+}
+
+.principal {
+  justify-self: start;
+  min-height: 44px;
+  border-radius: 0.55rem;
+  background: #1c4a32;
+  color: #fffdf8;
+  padding: 0.5rem 0.85rem;
+  cursor: pointer;
+}
+
+.principal:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+:is(a, button):focus-visible {
+  outline: 2px solid #345b40;
+  outline-offset: 3px;
+}
+
+@media (min-width: 800px) {
+  .grade {
+    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  }
+}

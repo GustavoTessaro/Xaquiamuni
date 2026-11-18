@@ -112,6 +112,18 @@ export const routes: Routes = [
       import('./public-store/store-layout.component').then((module) => module.StoreLayoutComponent),
     children: [
       {
+        path: 'checkout',
+        loadComponent: () =>
+          import('./public-store/checkout.component').then((module) => module.CheckoutComponent),
+      },
+      {
+        path: 'pedidos/:id',
+        loadComponent: () =>
+          import('./public-store/pedido-confirmacao.component').then(
+            (module) => module.PedidoConfirmacaoComponent,
+          ),
+      },
+      {
         path: 'carrinho',
         loadComponent: () =>
           import('./public-store/carrinho.component').then((module) => module.CarrinhoComponent),

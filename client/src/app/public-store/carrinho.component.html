@@ -7,6 +7,9 @@
   @if (carrinho.itens().length === 0) {
     <div class="cart__empty">
       <p>Seu carrinho está vazio.</p>
+      @if (tentativaPendente) {
+        <a class="cart__primary" routerLink="/checkout">Recuperar pedido</a>
+      }
       <a class="cart__primary" routerLink="/produtos">Continuar comprando</a>
     </div>
   } @else {
@@ -79,7 +82,8 @@
           <span>Subtotal estimado</span>
           <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong>
         </p>
-        <a class="cart__primary" routerLink="/produtos">Continuar comprando</a>
+        <a class="cart__primary" routerLink="/checkout">Revisar compra</a>
+        <a routerLink="/produtos">Continuar comprando</a>
         <button type="button" (click)="esvaziar()">Esvaziar carrinho</button>
       </aside>
     </div>

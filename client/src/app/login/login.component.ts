@@ -14,9 +14,10 @@ import {
   ReactiveFormsModule,
   Validators,
 } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, TimeoutError, finalize, interval } from 'rxjs';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
+import { uuidValido } from '../public-store/pedidos.service';
 
 type LoginControls = {
   email: FormControl<string>;
@@ -51,6 +52,16 @@ export class LoginComponent implements OnDestroy {
   protected readonly errorMessage = signal('');
 
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
+  private readonly router = inject(Router);
+  protected get retornoCheckout() {
+    return this.route.snapshot.queryParamMap.get('retorno') === 'checkout';
+  }
+  protected get destinoCompra(): string[] | null {
+    const pedido = this.route.snapshot.queryParamMap.get('pedido');
+    return this.retornoCheckout ? ['/checkout'] : uuidValido(pedido) ? ['/pedidos', pedido] : null;
+  }
+
   private pendingConfirmationEmail: string | null = null;
   private retryUntil: number | null = null;
   private retryTimer: Subscription | null = null;
@@ -327,6 +338,9 @@ export class LoginComponent implements OnDestroy {
       .subscribe({
         next: (session) => {
           this.session.set(session);
+          if (purpose === 'login' && session && this.destinoCompra) {
+            void this.router.navigate(this.destinoCompra);
+          }
           if (purpose === 'login' && session) {
             this.successMessage.set('Login realizado com sucesso.');
           } else if (purpose === 'login' && !session) {

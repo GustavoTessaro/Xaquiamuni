@@ -1,4 +1,4 @@
-import { HttpErrorResponse } from '@angular/common/http';
+import { DOCUMENT } from '@angular/common';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -9,9 +9,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { catchError, from, map, mergeMap, of } from 'rxjs';
 import { CarrinhoService, ItemCarrinho, formatarCentavos } from './carrinho.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
+import { revalidarCarrinho } from './revalidar-carrinho';
+import { lerTentativaCompra } from './checkout.service';
 
 @Component({
   selector: 'app-carrinho',
@@ -21,6 +22,7 @@ import { CatalogoPublicoService } from './catalogo-publico.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CarrinhoComponent implements OnInit {
+  protected readonly tentativaPendente = !!lerTentativaCompra(inject(DOCUMENT).defaultView);
   protected readonly carrinho = inject(CarrinhoService);
   protected readonly erroQuantidade = signal<string | null>(null);
   protected readonly mensagemQuantidade = signal('');
@@ -29,36 +31,12 @@ export class CarrinhoComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   ngOnInit(): void {
-    const produtos = [...new Set(this.carrinho.itens().map((item) => item.produtoId))];
-    for (const id of produtos) {
+    for (const id of new Set(this.carrinho.itens().map((item) => item.produtoId))) {
       this.carrinho.sinalizarDisponibilidade(id, null);
     }
-
-    from(produtos)
-      .pipe(
-        mergeMap(
-          (id) =>
-            this.catalogo.consultarProduto(id).pipe(
-              map((produto) => ({ id, produto, ausente: false })),
-              catchError((erro: unknown) =>
-                of({
-                  id,
-                  produto: null,
-                  ausente: erro instanceof HttpErrorResponse && erro.status === 404,
-                }),
-              ),
-            ),
-          4,
-        ),
-        takeUntilDestroyed(this.destroyRef),
-      )
-      .subscribe(({ id, produto, ausente }) => {
-        if (produto?.id === id) {
-          this.carrinho.atualizarDisponibilidade(produto);
-        } else {
-          this.carrinho.sinalizarDisponibilidade(id, ausente ? false : null);
-        }
-      });
+    revalidarCarrinho(this.carrinho, this.catalogo)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe();
   }
 
   protected alterarQuantidade(item: ItemCarrinho, campo: HTMLInputElement): void {

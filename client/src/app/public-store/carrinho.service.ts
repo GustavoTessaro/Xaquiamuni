@@ -1,5 +1,6 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
+import type { ItemCompra } from './pedidos.service';
 import { ProdutoCatalogoDetalhe } from './catalogo-publico.service';
 
 const chaveCarrinho = 'xaquiamuni:carrinho:v1';
@@ -19,7 +20,7 @@ export type ResultadoCarrinho = 'ok' | 'indisponivel' | 'invalido';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-export function formatarCentavos(centavos: number): string {
+export function formatarCentavos(centavos: number | string): string {
   const valor = BigInt(centavos);
   return moeda
     .formatToParts(valor / 100n)
@@ -32,6 +33,7 @@ export function formatarCentavos(centavos: number): string {
 @Injectable({ providedIn: 'root' })
 export class CarrinhoService {
   private readonly documento = inject(DOCUMENT);
+  private compraAplicada: string | null = null;
   private readonly itensInternos = signal<ItemCarrinho[]>(this.restaurar());
   private readonly falhaPersistencia = signal(false);
   readonly itens = this.itensInternos.asReadonly();
@@ -95,6 +97,45 @@ export class CarrinhoService {
     this.gravar([]);
   }
 
+  sincronizarItens(): ItemCarrinho[] {
+    if (!this.persistenciaIndisponivel()) {
+      const atuais = new Map(this.itens().map((item) => [item.varianteId, item]));
+      const salvos = this.restaurar();
+      this.itensInternos.set(
+        salvos.map((item) => {
+          const atual = atuais.get(item.varianteId);
+          return atual?.produtoId === item.produtoId
+            ? { ...item, disponivel: atual.disponivel }
+            : item;
+        }),
+      );
+    }
+    return this.itens();
+  }
+
+  confirmarCompra(chave: string, comprados: readonly ItemCompra[]): boolean {
+    this.sincronizarItens();
+    const porVariante = new Map(
+      comprados.map((item) => [item.produtoVarianteId.toLowerCase(), item]),
+    );
+    const restantes =
+      this.compraAplicada === chave
+        ? this.itens()
+        : this.itens().flatMap((item) => {
+            const comprado = porVariante.get(item.varianteId.toLowerCase());
+            if (!comprado || comprado.produtoId.toLowerCase() !== item.produtoId.toLowerCase()) {
+              return [item];
+            }
+            const quantidade = item.quantidade - comprado.quantidade;
+            return quantidade > 0 ? [{ ...item, quantidade }] : [];
+          });
+
+    // A marca e as quantidades são persistidas juntas para impedir baixa repetida no carrinho.
+    this.compraAplicada = chave;
+    this.gravar(restantes);
+    return !this.persistenciaIndisponivel();
+  }
+
   atualizarDisponibilidade(produto: ProdutoCatalogoDetalhe): void {
     const opcoes = new Map(produto.opcoes.map((opcao) => [opcao.id, opcao]));
     this.itensInternos.update((itens) =>
@@ -126,9 +167,12 @@ export class CarrinhoService {
     try {
       const armazenamento = this.documento.defaultView?.localStorage;
       if (armazenamento) {
+        const dados = itens.map(({ disponivel: _, ...item }) => item);
         armazenamento.setItem(
           chaveCarrinho,
-          JSON.stringify(itens.map(({ disponivel: _, ...item }) => item)),
+          JSON.stringify(
+            this.compraAplicada ? { itens: dados, compraAplicada: this.compraAplicada } : dados,
+          ),
         );
       }
       this.falhaPersistencia.set(!armazenamento);
@@ -141,7 +185,14 @@ export class CarrinhoService {
   private restaurar(): ItemCarrinho[] {
     try {
       const bruto = this.documento.defaultView?.localStorage.getItem(chaveCarrinho);
-      const dados: unknown = bruto ? JSON.parse(bruto) : null;
+      const salvo = bruto ? JSON.parse(bruto) : null;
+      const dados: unknown = Array.isArray(salvo) ? salvo : salvo?.itens;
+      if (
+        typeof salvo?.compraAplicada === 'string' &&
+        /^[a-f0-9-]{36}$/i.test(salvo.compraAplicada)
+      ) {
+        this.compraAplicada = salvo.compraAplicada;
+      }
       if (!Array.isArray(dados)) {
         return [];
       }

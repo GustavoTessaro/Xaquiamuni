@@ -1,0 +1,225 @@
+import { DOCUMENT } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Injectable, inject, signal } from '@angular/core';
+import { firstValueFrom, timeout } from 'rxjs';
+import { AuthService } from '../core/auth/auth.service';
+import { CarrinhoService } from './carrinho.service';
+import {
+  ItemCompra,
+  PedidoCliente,
+  PedidosService,
+  itensCompraValidos,
+  mesmosItensCompra,
+  uuidValido,
+} from './pedidos.service';
+
+const chaveLocal = 'xaquiamuni:tentativa-compra:v1';
+
+interface TentativaCompra {
+  chave: string;
+  vinculo: string;
+  itens: ItemCompra[];
+}
+
+export type ResultadoCheckout =
+  | { estado: 'login' }
+  | { estado: 'erro'; mensagem: string }
+  | { estado: 'sucesso'; pedido: PedidoCliente };
+
+@Injectable({ providedIn: 'root' })
+export class CheckoutService {
+  private readonly janela = inject(DOCUMENT).defaultView;
+  private readonly pedidos = inject(PedidosService);
+  private readonly auth = inject(AuthService);
+  private readonly carrinho = inject(CarrinhoService);
+  private readonly pendenteInterna = signal(lerTentativaCompra(this.janela));
+  private readonly enviandoInterno = signal(false);
+  readonly pendente = this.pendenteInterna.asReadonly();
+  readonly enviando = this.enviandoInterno.asReadonly();
+
+  atualizarTentativa(): void {
+    this.pendenteInterna.set(lerTentativaCompra(this.janela));
+  }
+
+  async enviar(itens: ItemCompra[], recuperar: boolean): Promise<ResultadoCheckout | null> {
+    if (this.enviando()) {
+      return null;
+    }
+
+    this.enviandoInterno.set(true);
+    try {
+      const executar = () => this.processar(itens, recuperar);
+      const locks = this.janela?.navigator.locks;
+      return await (locks
+        ? locks.request(chaveLocal, { ifAvailable: true }, (lock) =>
+            lock
+              ? executar()
+              : erro('A compra está sendo processada em outra aba. Aguarde e tente novamente.'),
+          )
+        : executar());
+    } catch (falha) {
+      if (falha instanceof HttpErrorResponse) {
+        if (falha.status === 401) return { estado: 'login' };
+        if (falha.status === 403)
+          return erro('Entre com uma conta de cliente habilitada para comprar.');
+      }
+      return erro(
+        'Não foi possível preparar a compra. Verifique a conexão e o armazenamento do navegador.',
+      );
+    } finally {
+      this.atualizarTentativa();
+      this.enviandoInterno.set(false);
+    }
+  }
+
+  private async processar(itens: ItemCompra[], recuperar: boolean): Promise<ResultadoCheckout> {
+    const armazenamento = this.janela?.localStorage;
+    if (!armazenamento)
+      return erro('Permita o armazenamento local para registrar a tentativa de compra.');
+    const anterior = lerTentativaCompra(this.janela);
+    if (!anterior && armazenamento.getItem(chaveLocal) !== null) {
+      return erro(
+        'O registro de uma tentativa anterior está inválido. Não foi enviado outro pedido.',
+      );
+    }
+    this.pendenteInterna.set(anterior);
+    if (anterior && !recuperar) {
+      return erro('Há uma tentativa pendente. Use a recuperação antes de enviar o carrinho atual.');
+    }
+    if (!anterior && recuperar) {
+      return erro('A tentativa já foi resolvida nesta sessão do navegador.');
+    }
+    if (!anterior && !itensCompraValidos(itens)) {
+      return erro('Revise os itens e as quantidades no carrinho.');
+    }
+
+    if (!anterior) {
+      const carrinho = this.carrinho.sincronizarItens();
+      if (carrinho.some((item) => item.disponivel === false)) {
+        return erro('Remova os itens indisponíveis antes de enviar o carrinho.');
+      }
+      const atuais = carrinho.map((item) => ({
+        produtoId: item.produtoId,
+        produtoVarianteId: item.varianteId,
+        quantidade: item.quantidade,
+      }));
+      if (!mesmosItensCompra(itens, atuais)) {
+        return erro('O carrinho mudou. Revise as quantidades antes de finalizar.');
+      }
+    }
+
+    // O token é vinculado à sessão. Conferimos a conta depois de obter o token.
+    const { requestToken } = await firstValueFrom(this.pedidos.obterToken());
+    const sessao = await firstValueFrom(this.auth.obterSessao().pipe(timeout(30_000)));
+    if (!sessao) {
+      return { estado: 'login' };
+    }
+    if (!uuidValido(sessao.userId) || !this.janela?.crypto.subtle || !requestToken) {
+      return erro('Não foi possível preparar o envio seguro do pedido.');
+    }
+
+    const hash = await this.janela.crypto.subtle.digest(
+      'SHA-256',
+      new TextEncoder().encode(`xaquiamuni:compra:${sessao.userId.toLowerCase()}`),
+    );
+    const vinculo = Array.from(new Uint8Array(hash), (byte) =>
+      byte.toString(16).padStart(2, '0'),
+    ).join('');
+    if (anterior && vinculo !== anterior.vinculo) {
+      return erro('Entre com a conta usada na tentativa original para recuperar a compra.');
+    }
+
+    const tentativa = anterior ?? { chave: this.janela.crypto.randomUUID(), vinculo, itens };
+    if (!anterior) {
+      armazenamento.setItem(chaveLocal, JSON.stringify(tentativa));
+      this.pendenteInterna.set(tentativa);
+    }
+
+    let pedido: PedidoCliente;
+    try {
+      pedido = await firstValueFrom(
+        this.pedidos.criar(tentativa.itens, tentativa.chave, requestToken),
+      );
+    } catch (falha) {
+      return this.tratarFalha(falha, !!anterior, armazenamento);
+    }
+
+    if (this.carrinho.confirmarCompra(tentativa.chave, pedido.itens)) {
+      try {
+        armazenamento.removeItem(chaveLocal);
+      } catch {
+        // A repetição permanece segura, inclusive no ajuste do carrinho.
+      }
+    }
+    return { estado: 'sucesso', pedido };
+  }
+
+  private tratarFalha(
+    falha: unknown,
+    repeticao: boolean,
+    armazenamento: Storage,
+  ): ResultadoCheckout {
+    if (falha instanceof HttpErrorResponse) {
+      const codigo = (falha.error as { codigo?: string } | null)?.codigo;
+      if (falha.status === 401) {
+        return { estado: 'login' };
+      }
+      if (falha.status === 409 && codigo === 'itens_indisponiveis') {
+        armazenamento.removeItem(chaveLocal);
+        return erro(
+          'Não há estoque para todos os itens solicitados. Revise as opções e quantidades no carrinho.',
+        );
+      }
+      if (falha.status === 409 && codigo === 'chave_em_uso') {
+        return erro(
+          'A tentativa entrou em conflito com um pedido registrado. Ela foi preservada para evitar uma segunda compra.',
+        );
+      }
+      if (falha.status === 403) {
+        if (!repeticao) armazenamento.removeItem(chaveLocal);
+        return erro(
+          'Sua conta não está habilitada para fazer este pedido. Confira seu cadastro e a confirmação do e-mail.',
+        );
+      }
+      if ([400, 413, 415].includes(falha.status)) {
+        if (!repeticao) armazenamento.removeItem(chaveLocal);
+        return erro('A solicitação foi recusada. Confira as quantidades e tente novamente.');
+      }
+    }
+
+    return erro(
+      'Ainda não foi possível confirmar o resultado. Repita a tentativa original para verificar o pedido.',
+    );
+  }
+}
+
+export function lerTentativaCompra(janela: Window | null): TentativaCompra | null {
+  try {
+    const bruto = janela?.localStorage.getItem(chaveLocal);
+    const tentativa = bruto ? JSON.parse(bruto) : null;
+    if (
+      !tentativa ||
+      !uuidValido(tentativa.chave) ||
+      typeof tentativa.vinculo !== 'string' ||
+      !/^[a-f0-9]{64}$/.test(tentativa.vinculo) ||
+      !itensCompraValidos(tentativa.itens)
+    ) {
+      return null;
+    }
+    return {
+      chave: tentativa.chave,
+      vinculo: tentativa.vinculo,
+      itens: tentativa.itens.map(({ produtoId, produtoVarianteId, quantidade }: ItemCompra) => ({
+        produtoId,
+        produtoVarianteId,
+        quantidade,
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function erro(mensagem: string): ResultadoCheckout {
+  return { estado: 'erro', mensagem };
+}

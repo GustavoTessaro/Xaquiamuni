@@ -1,0 +1,51 @@
+<section class="compra" aria-labelledby="pedido-title">
+  <h1 id="pedido-title">Pedido</h1>
+  @if (carregando()) {
+    <p role="status">Consultando seu pedido…</p>
+  } @else if (pedido(); as confirmado) {
+    <div class="grade">
+      <ul class="painel linhas" aria-label="Itens do pedido">
+        @for (item of confirmado.itens; track item.produtoVarianteId) {
+          <li>
+            <div>
+              <h2>{{ item.nomeProduto }}</h2>
+              <p>{{ item.nomeVariante }}</p>
+              <p>
+                Quantidade: {{ item.quantidade }} ·
+                {{ formatarPreco(item.precoUnitarioCentavos) }} por unidade
+              </p>
+            </div>
+            <strong>{{ formatarPreco(item.subtotalCentavos) }}</strong>
+          </li>
+        }
+      </ul>
+      <section class="painel resumo" aria-labelledby="pedido-resumo">
+        <h2 id="pedido-resumo">{{ situacoes[confirmado.situacao] }}</h2>
+        <p>
+          Número do pedido: <strong class="identificador">{{ confirmado.id }}</strong>
+        </p>
+        <p>Modalidade: <strong>Retirada local</strong></p>
+        <p>
+          Total: <strong>{{ formatarPreco(confirmado.totalCentavos) }}</strong>
+        </p>
+        @if (confirmado.situacao === 'AguardandoPagamento') {
+          <p>
+            Prazo para pagamento:
+            <time [attr.datetime]="confirmado.prazoPagamentoEmUtc">
+              {{ confirmado.prazoPagamentoEmUtc | date: 'dd/MM/yyyy HH:mm' }}
+            </time>
+            (horário local)
+          </p>
+          <p>As instruções de pagamento ainda não estão disponíveis.</p>
+        }
+      </section>
+    </div>
+  } @else if (erro()) {
+    <p role="alert" class="aviso">{{ erro() }}</p>
+    @if (requerLogin()) {
+      <a routerLink="/login" [queryParams]="{ pedido: idPedido() }">Entrar</a>
+    }
+    <button class="principal" type="button" (click)="tentarNovamente()">Consultar novamente</button>
+  }
+  <a routerLink="/produtos">Continuar comprando</a>
+</section>

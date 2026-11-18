@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import {
   AbstractControl,
   FormControl,
@@ -9,7 +9,7 @@ import {
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { CadastroService, RegisterClientRequest } from './cadastro.service';
 import {
   brazilianCpfValidator,
@@ -61,6 +61,12 @@ export class CadastroComponent {
   protected readonly registrationSucceeded = signal(false);
   protected readonly errorMessage = signal('');
   protected readonly serverErrors = signal<Record<string, string>>({});
+
+  private readonly route = inject(ActivatedRoute);
+
+  protected get retornoCheckout(): boolean {
+    return this.route.snapshot.queryParamMap.get('retorno') === 'checkout';
+  }
 
   constructor(private readonly cadastroService: CadastroService) {
     this.form.valueChanges

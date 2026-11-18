@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TimeoutError } from 'rxjs';
 import { AuthService } from '../core/auth/auth.service';
 
@@ -49,6 +49,11 @@ export class ConfirmEmailComponent implements OnDestroy {
       validators: [Validators.required, Validators.email, Validators.maxLength(256)],
     }),
   });
+
+  private readonly route = inject(ActivatedRoute);
+  protected get retornoCheckout() {
+    return this.route.snapshot.queryParamMap.get('retorno') === 'checkout';
+  }
 
   private readonly authService = inject(AuthService);
   private readonly destroyRef = inject(DestroyRef);
