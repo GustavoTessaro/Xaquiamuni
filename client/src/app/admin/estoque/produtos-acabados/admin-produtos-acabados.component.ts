@@ -3,6 +3,8 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  ElementRef,
+  ViewChild,
   computed,
   inject,
   signal,
@@ -158,21 +160,24 @@ export class AdminProdutosAcabadosComponent {
     vendavel: new FormControl<number | null>(null, [
       Validators.required,
       Validators.min(0),
+      Validators.max(2147483647),
       Validators.pattern(/^\d+$/),
     ]),
     danificada: new FormControl<number | null>(null, [
       Validators.required,
       Validators.min(0),
+      Validators.max(2147483647),
       Validators.pattern(/^\d+$/),
     ]),
     quarentena: new FormControl<number | null>(null, [
       Validators.required,
       Validators.min(0),
+      Validators.max(2147483647),
       Validators.pattern(/^\d+$/),
     ]),
     motivo: new FormControl('', {
       nonNullable: true,
-      validators: [Validators.required, Validators.maxLength(120)],
+      validators: [Validators.required, Validators.pattern(/\S/), Validators.maxLength(120)],
     }),
   });
   protected readonly estornoForm = new FormGroup({
@@ -185,6 +190,8 @@ export class AdminProdutosAcabadosComponent {
   protected readonly mostrandoResumoContagem = signal(false);
   protected readonly contagemVersaoCapturada = signal<string | null>(null);
   protected readonly contagemLoteCapturado = signal<string | null>(null);
+  protected readonly contagemLoteSnapshot = signal<LoteProdutoAcabado | null>(null);
+  protected readonly contagemConcluidaLoteId = signal<string | null>(null);
   protected readonly conflitoContagemVersao = signal(false);
   protected readonly atorId = signal('');
 
@@ -232,6 +239,36 @@ export class AdminProdutosAcabadosComponent {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
   private readonly operacaoPendenteStore = inject(OperacaoPendenteStore);
+  private focoInicialContagemPendente = false;
+  private campoVendavelContagem?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('countVendavelInput')
+  private set countVendavelInput(element: ElementRef<HTMLInputElement> | undefined) {
+    this.campoVendavelContagem = element;
+    if (element && this.focoInicialContagemPendente) {
+      this.focoInicialContagemPendente = false;
+      element.nativeElement.focus({ preventScroll: true });
+    }
+  }
+
+  @ViewChild('countSummary')
+  private set countSummary(element: ElementRef<HTMLElement> | undefined) {
+    element?.nativeElement.focus();
+  }
+
+  @ViewChild('countErrorAlert')
+  private set countErrorAlert(element: ElementRef<HTMLElement> | undefined) {
+    element?.nativeElement.focus({ preventScroll: true });
+  }
+
+  @ViewChild('countDanificadaInput')
+  private campoDanificadaContagem?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('countQuarentenaInput')
+  private campoQuarentenaContagem?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('countReasonInput')
+  private campoMotivoContagem?: ElementRef<HTMLInputElement>;
 
   constructor() {
     this.carregarProdutos();
@@ -258,6 +295,8 @@ export class AdminProdutosAcabadosComponent {
         return;
       }
       this.varianteId.set(selected);
+      this.limparContagem();
+      this.contagemConcluidaLoteId.set(null);
       this.posicao.set(null);
       this.politica.set(null);
       this.movimentos.set([]);
@@ -344,9 +383,16 @@ export class AdminProdutosAcabadosComponent {
     if (this.enviandoMovimentacao()) {
       return;
     }
+    if (this.acaoMovimentacao() === 'Contagem') {
+      this.erroMovimentacao.set(
+        'Cancele ou conclua a contagem física antes de iniciar outra movimentação.',
+      );
+      return;
+    }
     this.acaoMovimentacao.set(acao);
     this.sucessoMovimentacao.set('');
     this.erroMovimentacao.set('');
+    this.contagemConcluidaLoteId.set(null);
     if (acao === 'Saida') {
       this.operacaoForm.controls.tipo.setValue('SaidaManual');
     } else if (acao === 'Perda') {
@@ -477,26 +523,45 @@ export class AdminProdutosAcabadosComponent {
     if (this.enviandoMovimentacao()) {
       return;
     }
+    const loteEmContagem = this.contagemLoteCapturado();
+    if (this.acaoMovimentacao() === 'Contagem' && loteEmContagem === lote.loteId) {
+      this.campoVendavelContagem?.nativeElement.focus({ preventScroll: true });
+      return;
+    }
+    if (this.acaoMovimentacao() === 'Contagem' && loteEmContagem !== lote.loteId) {
+      this.erroMovimentacao.set(
+        'Cancele a conferência aberta antes de iniciar a contagem de outro lote.',
+      );
+      return;
+    }
+    if (this.acaoMovimentacao()) {
+      this.erroMovimentacao.set('Feche a movimentação atual antes de iniciar uma contagem física.');
+      return;
+    }
+    this.focoInicialContagemPendente = true;
     this.acaoMovimentacao.set('Contagem');
     this.mostrandoResumoContagem.set(false);
     this.erroMovimentacao.set('');
     this.sucessoMovimentacao.set('');
     this.conflitoContagemVersao.set(false);
+    this.contagemConcluidaLoteId.set(null);
     this.contagemVersaoCapturada.set(lote.versaoSaldo);
     this.contagemLoteCapturado.set(lote.loteId);
+    this.contagemLoteSnapshot.set(lote);
     this.contagemForm.reset({
       loteId: lote.loteId,
-      vendavel: lote.quantidadeVendavel,
-      danificada: lote.quantidadeDanificada,
-      quarentena: lote.quantidadeQuarentena,
+      vendavel: null,
+      danificada: null,
+      quarentena: null,
       motivo: '',
     });
   }
 
   protected revisarContagem(): void {
+    this.erroMovimentacao.set('');
     if (this.contagemForm.invalid) {
       this.contagemForm.markAllAsTouched();
-      this.erroMovimentacao.set('Revise as quantidades inteiras não negativas e o motivo.');
+      this.focarPrimeiroCampoContagemInvalido();
       return;
     }
     const values = this.contagemForm.getRawValue();
@@ -509,9 +574,54 @@ export class AdminProdutosAcabadosComponent {
     this.mostrandoResumoContagem.set(true);
   }
 
+  protected voltarAEditarContagem(): void {
+    this.mostrandoResumoContagem.set(false);
+    this.campoVendavelContagem?.nativeElement.focus({ preventScroll: true });
+  }
+
+  protected cancelarContagem(): void {
+    if (this.enviandoMovimentacao()) {
+      return;
+    }
+    this.limparContagem();
+  }
+
+  protected erroContagemVisivel(
+    campo: 'vendavel' | 'danificada' | 'quarentena' | 'motivo',
+  ): boolean {
+    const control = this.contagemForm.controls[campo];
+    return control.touched && control.invalid;
+  }
+
+  protected mensagemErroContagem(
+    campo: 'vendavel' | 'danificada' | 'quarentena' | 'motivo',
+  ): string {
+    const control = this.contagemForm.controls[campo];
+    if (control.hasError('required')) {
+      return campo === 'motivo'
+        ? 'Informe o motivo da contagem.'
+        : 'Informe a quantidade encontrada. Digite 0 se não houver unidades.';
+    }
+    if (control.hasError('max')) {
+      return 'A quantidade não pode exceder 2.147.483.647 unidades.';
+    }
+    if (control.hasError('min') || control.hasError('pattern')) {
+      return 'Informe um número inteiro não negativo.';
+    }
+    if (control.hasError('maxlength')) {
+      return 'O motivo deve ter no máximo 120 caracteres.';
+    }
+    return 'Revise este campo.';
+  }
+
   protected confirmarContagem(): void {
     const varianteId = this.varianteId();
-    if (!varianteId || this.contagemForm.invalid || this.enviandoMovimentacao()) {
+    if (
+      !varianteId ||
+      !this.mostrandoResumoContagem() ||
+      this.contagemForm.invalid ||
+      this.enviandoMovimentacao()
+    ) {
       return;
     }
     const value = this.contagemForm.getRawValue();
@@ -566,8 +676,12 @@ export class AdminProdutosAcabadosComponent {
   }
 
   protected loteDaContagem(): LoteProdutoAcabado | null {
-    const loteId = this.contagemForm.controls.loteId.value;
-    return this.posicao()?.lotes.find((lote) => lote.loteId === loteId) ?? null;
+    const lote = this.contagemLoteSnapshot();
+    return lote?.loteId === this.contagemLoteCapturado() ? lote : null;
+  }
+
+  protected loteEmContagem(loteId: string): boolean {
+    return this.acaoMovimentacao() === 'Contagem' && this.contagemLoteCapturado() === loteId;
   }
 
   protected diferencaCondicao(atual: number, encontrada: number | null): number {
@@ -591,6 +705,7 @@ export class AdminProdutosAcabadosComponent {
       return;
     }
 
+    this.erroMovimentacao.set('');
     this.produtosAcabadosService
       .consultarLote(varianteId, loteId)
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -612,6 +727,7 @@ export class AdminProdutosAcabadosComponent {
           );
           this.contagemVersaoCapturada.set(lote.versaoSaldo);
           this.contagemLoteCapturado.set(lote.loteId);
+          this.contagemLoteSnapshot.set(lote);
           this.mostrandoResumoContagem.set(false);
           this.conflitoContagemVersao.set(false);
           this.erroMovimentacao.set('');
@@ -640,6 +756,36 @@ export class AdminProdutosAcabadosComponent {
     }
   }
 
+  private limparContagem(): void {
+    if (this.acaoMovimentacao() === 'Contagem') {
+      this.acaoMovimentacao.set(null);
+    }
+    this.erroMovimentacao.set('');
+    this.sucessoMovimentacao.set('');
+    this.mostrandoResumoContagem.set(false);
+    this.conflitoContagemVersao.set(false);
+    this.contagemVersaoCapturada.set(null);
+    this.contagemLoteCapturado.set(null);
+    this.contagemLoteSnapshot.set(null);
+    this.contagemForm.reset({
+      loteId: '',
+      vendavel: null,
+      danificada: null,
+      quarentena: null,
+      motivo: '',
+    });
+  }
+
+  private focarPrimeiroCampoContagemInvalido(): void {
+    const campos = [
+      [this.contagemForm.controls.vendavel, this.campoVendavelContagem],
+      [this.contagemForm.controls.danificada, this.campoDanificadaContagem],
+      [this.contagemForm.controls.quarentena, this.campoQuarentenaContagem],
+      [this.contagemForm.controls.motivo, this.campoMotivoContagem],
+    ] as const;
+    campos.find(([control]) => control.invalid)?.[1]?.nativeElement.focus({ preventScroll: true });
+  }
+
   private executarMovimentacao<T>(
     acao: string,
     payload: T,
@@ -661,6 +807,10 @@ export class AdminProdutosAcabadosComponent {
             tap(() => {
               this.sucessoMovimentacao.set('Movimentação registrada com sucesso.');
               this.limparOperacaoConfirmada(pending.storageKey);
+              if (acao === 'contagem') {
+                this.contagemConcluidaLoteId.set(this.contagemLoteCapturado());
+                this.limparContagem();
+              }
               this.carregarVariante();
             }),
             catchError((error: unknown) => {

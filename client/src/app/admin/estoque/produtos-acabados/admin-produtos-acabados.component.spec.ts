@@ -183,12 +183,26 @@ function preencherEntrada(
   preencher(fixture, '#finished-entry-reason', 'Recebimento reservado');
 }
 
-function clicarConferirEstoque(fixture: ComponentFixture<AdminProdutosAcabadosComponent>): void {
+function abrirContagem(fixture: ComponentFixture<AdminProdutosAcabadosComponent>): void {
   clicar(fixture, 'Conferir estoque');
-  preencher(fixture, '#count-vendavel', '4');
-  preencher(fixture, '#count-damaged', '2');
-  preencher(fixture, '#count-quarantine', '0');
-  preencher(fixture, '#count-reason', 'Contagem física');
+}
+
+function preencherContagem(
+  fixture: ComponentFixture<AdminProdutosAcabadosComponent>,
+  vendavel: string,
+  danificada: string,
+  quarentena: string,
+  motivo = 'Contagem física',
+): void {
+  preencher(fixture, '#count-vendavel', vendavel);
+  preencher(fixture, '#count-damaged', danificada);
+  preencher(fixture, '#count-quarantine', quarentena);
+  preencher(fixture, '#count-reason', motivo);
+}
+
+function clicarConferirEstoque(fixture: ComponentFixture<AdminProdutosAcabadosComponent>): void {
+  abrirContagem(fixture);
+  preencherContagem(fixture, '4', '2', '0');
   clicar(fixture, 'Revisar contagem');
 }
 
@@ -208,12 +222,235 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Lavanda 100 g');
   });
 
-  it('envia a contagem com o snapshot original', async () => {
+  it('abre o formulário no cartão do lote com quantidades encontradas vazias e foco acessível', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+
+    const form = root.querySelector<HTMLFormElement>('#count-form');
+    const card = form?.closest('li');
+    const codigoLote = card?.querySelector('code');
+    expect(form).not.toBeNull();
+    expect(card?.querySelector('h3')?.textContent).toContain('Lote');
+    expect(codigoLote?.textContent).toContain(loteInicial.codigo);
+    expect(codigoLote?.getAttribute('title')).toContain(loteInicial.codigo);
+    expect(card?.className).toContain('lg:col-span-2');
+    expect(root.querySelectorAll('#count-form')).toHaveLength(1);
+    expect(root.querySelector<HTMLInputElement>('#count-vendavel')?.value).toBe('');
+    expect(root.querySelector<HTMLInputElement>('#count-damaged')?.value).toBe('');
+    expect(root.querySelector<HTMLInputElement>('#count-quarantine')?.value).toBe('');
+    expect(root.querySelector('#count-vendavel-registered')?.textContent).toContain('5 un.');
+    expect(root.querySelector('#count-damaged-registered')?.textContent).toContain('1 un.');
+    expect(root.querySelector('#count-quarantine-registered')?.textContent).toContain('0 un.');
+    expect(root.querySelectorAll('button[aria-label^="Conferir estoque do lote"]')).toHaveLength(1);
+    expect(document.activeElement).toBe(root.querySelector('#count-vendavel'));
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+  });
+
+  it('mantém somente uma contagem aberta e impede perder valores ao escolher outro lote', async () => {
+    const api = criarApi();
+    const segundoLote = {
+      ...loteInicial,
+      loteId: 'lot-2',
+      codigo: 'PA-20261117-DEF',
+      versaoSaldo: 'BwgJCgsM',
+    };
+    api.consultarPosicao.mockReturnValue(
+      of({
+        ...criarPosicao(),
+        lotes: [loteInicial, segundoLote],
+      }),
+    );
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    expect(root.querySelectorAll('button[aria-label^="Conferir estoque do lote"]')).toHaveLength(2);
+    abrirContagem(fixture);
+    preencher(fixture, '#count-vendavel', '4');
+    const segundoLoteButton = root.querySelector<HTMLButtonElement>(
+      '[aria-label="Conferir estoque do lote PA-20261117-DEF"]',
+    );
+    expect(segundoLoteButton).not.toBeNull();
+    segundoLoteButton!.click();
+    fixture.detectChanges();
+
+    expect(root.querySelectorAll('#count-form')).toHaveLength(1);
+    expect(root.querySelector('#count-form')?.closest('li')?.textContent).toContain(
+      loteInicial.codigo,
+    );
+    expect(root.querySelector<HTMLInputElement>('#count-vendavel')?.value).toBe('4');
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain(
+      'Cancele a conferência aberta antes de iniciar a contagem de outro lote.',
+    );
+  });
+
+  it('exige zeros explícitos e não envia a contagem antes da confirmação final', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    preencherContagem(fixture, '0', '0', '0');
+    clicar(fixture, 'Revisar contagem');
+
+    expect(root.querySelector('#count-summary-title')).not.toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('#count-summary-title'));
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+
+    clicar(fixture, 'Confirmar contagem');
+    await estabilizar(fixture);
+
+    expect(api.registrarContagem.mock.calls[0]?.[1]).toMatchObject({
+      quantidadeVendavel: 0,
+      quantidadeDanificada: 0,
+      quantidadeQuarentena: 0,
+      motivo: 'Contagem física',
+    });
+  });
+
+  it('revisa diferenças positivas, negativas e nulas antes do envio', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    preencherContagem(fixture, '6', '0', '0');
+    clicar(fixture, 'Revisar contagem');
+
+    expect(root.querySelector('#count-summary-vendavel-registered')?.textContent).toContain(
+      '5 un.',
+    );
+    expect(root.querySelector('#count-summary-vendavel-found')?.textContent).toContain('6 un.');
+    expect(root.querySelector('#count-summary-vendavel-difference')?.textContent).toContain(
+      '+1 un.',
+    );
+    expect(root.querySelector('#count-summary-damaged-registered')?.textContent).toContain('1 un.');
+    expect(root.querySelector('#count-summary-damaged-found')?.textContent).toContain('0 un.');
+    expect(root.querySelector('#count-summary-damaged-difference')?.textContent).toContain(
+      '-1 un.',
+    );
+    expect(root.querySelector('#count-summary-quarantine-registered')?.textContent).toContain(
+      '0 un.',
+    );
+    expect(root.querySelector('#count-summary-quarantine-found')?.textContent).toContain('0 un.');
+    expect(root.querySelector('#count-summary-quarantine-difference')?.textContent).toContain(
+      '0 un.',
+    );
+    const texto = root
+      .querySelector('#count-summary-title')
+      ?.parentElement?.textContent?.replace(/\s+/g, ' ');
+    expect(texto).toContain('Registrado no sistema');
+    expect(texto).toContain('Encontrado na contagem');
+    expect(texto).toContain('Diferença física total: 0 un.');
+    expect(texto).toContain('os ajustes serão registrados no histórico');
+    expect(texto).toContain('sem movimentação de ajuste');
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+  });
+
+  it('preserva o snapshot capturado mesmo se a posição geral for atualizada durante a edição', async () => {
+    const api = criarApi();
+    const posicaoAtualizada = {
+      ...criarPosicao({
+        ...loteInicial,
+        versaoSaldo: 'BwgJCgsM',
+        quantidadeVendavel: 8,
+        quantidadeDanificada: 0,
+        saldoFisico: 8,
+        saldoUtilizavel: 8,
+        saldoDisponivel: 8,
+      }),
+    };
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    api.consultarPosicao.mockReturnValueOnce(of(posicaoAtualizada));
+    clicar(fixture, 'Atualizar posição');
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    preencherContagem(fixture, '6', '0', '0');
+    clicar(fixture, 'Revisar contagem');
+    expect(root.querySelector('#count-summary-vendavel-registered')?.textContent).toContain(
+      '5 un.',
+    );
+    expect(root.querySelector('#count-summary-vendavel-found')?.textContent).toContain('6 un.');
+    expect(root.querySelector('#count-summary-vendavel-difference')?.textContent).toContain(
+      '+1 un.',
+    );
+
+    clicar(fixture, 'Confirmar contagem');
+    await estabilizar(fixture);
+    expect(api.registrarContagem.mock.calls[0]?.[1]?.versaoSaldoEsperada).toBe('AQIDBAUG');
+  });
+
+  it('exige nova revisão após voltar para editar os valores', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    preencherContagem(fixture, '6', '0', '0');
+    clicar(fixture, 'Revisar contagem');
+    clicar(fixture, 'Voltar e editar');
+
+    expect(root.querySelector('#count-summary-title')).toBeNull();
+    expect(root.querySelector<HTMLButtonElement>('button[type="submit"]')?.textContent).toContain(
+      'Revisar contagem',
+    );
+    expect(root.querySelector<HTMLInputElement>('#count-vendavel')?.readOnly).toBe(false);
+    preencher(fixture, '#count-vendavel', '7');
+    clicar(fixture, 'Revisar contagem');
+    expect(root.querySelector('#count-summary-title')?.parentElement?.textContent).toContain(
+      '7 un.',
+    );
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+  });
+
+  it('mostra validações próximas aos campos e foca o primeiro campo inválido', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    clicar(fixture, 'Revisar contagem');
+
+    expect(root.querySelector('#count-vendavel-error')?.textContent).toContain(
+      'Digite 0 se não houver unidades.',
+    );
+    expect(root.querySelector('#count-reason-error')?.textContent).toContain(
+      'Informe o motivo da contagem.',
+    );
+    expect(root.querySelector('#count-vendavel')?.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('#count-vendavel')?.getAttribute('aria-describedby')).toContain(
+      'count-vendavel-error',
+    );
+    expect(document.activeElement).toBe(root.querySelector('#count-vendavel'));
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+  });
+
+  it('permite cancelar a contagem sem enviar operação', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    abrirContagem(fixture);
+    preencher(fixture, '#count-vendavel', '4');
+    clicar(fixture, 'Cancelar');
+
+    expect(root.querySelector('#count-form')).toBeNull();
+    expect(api.registrarContagem).not.toHaveBeenCalled();
+  });
+
+  it('envia a contagem com o snapshot original somente após revisar e confirmar', async () => {
     const api = criarApi();
     const fixture = await montarComponente(api);
     const root = fixture.nativeElement as HTMLElement;
 
     clicarConferirEstoque(fixture);
+    expect(api.registrarContagem).not.toHaveBeenCalled();
     clicar(fixture, 'Confirmar contagem');
     await estabilizar(fixture);
 
@@ -229,6 +466,8 @@ describe('AdminProdutosAcabadosComponent', () => {
       },
       expect.any(String),
     );
+    expect(root.querySelector('#count-form')).toBeNull();
+    expect(root.textContent).toContain('Conferência do lote registrada.');
   });
 
   it.each([
@@ -269,12 +508,18 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(root.textContent).toContain('Atualize o snapshot quando estiver pronta');
     expect(api.registrarContagem.mock.calls[0]?.[1]?.versaoSaldoEsperada).toBe('AQIDBAUG');
     expect(api.consultarLote).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(root.querySelector('[role="alert"]'));
 
     clicar(fixture, 'Atualizar snapshot mantendo os valores digitados');
     await estabilizar(fixture);
     expect(root.querySelector<HTMLInputElement>('#count-vendavel')?.value).toBe('4');
     expect(root.querySelector<HTMLInputElement>('#count-damaged')?.value).toBe('2');
+    expect(root.querySelector<HTMLInputElement>('#count-quarantine')?.value).toBe('0');
     expect(root.querySelector<HTMLInputElement>('#count-reason')?.value).toBe('Contagem física');
+    expect(root.querySelector('#count-summary-title')).toBeNull();
+    expect(root.textContent).toContain('Revisar contagem');
+    expect(root.textContent).not.toContain('Confirmar contagem');
+    expect(api.registrarContagem).toHaveBeenCalledTimes(1);
 
     clicar(fixture, 'Revisar contagem');
     clicar(fixture, 'Confirmar contagem');

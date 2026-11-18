@@ -170,7 +170,7 @@
             <h2 id="finished-movement-title" class="text-lg font-semibold text-emerald-950">
               Movimentações administrativas
             </h2>
-            @if (acaoMovimentacao()) {
+            @if (acaoMovimentacao() && acaoMovimentacao() !== 'Contagem') {
               <button
                 type="button"
                 (click)="fecharMovimentacao()"
@@ -224,7 +224,7 @@
             </button>
           </div>
 
-          @if (sucessoMovimentacao()) {
+          @if (sucessoMovimentacao() && !contagemConcluidaLoteId()) {
             <p
               class="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
               role="status"
@@ -232,7 +232,7 @@
               {{ sucessoMovimentacao() }}
             </p>
           }
-          @if (erroMovimentacao()) {
+          @if (erroMovimentacao() && acaoMovimentacao() !== 'Contagem') {
             <p
               class="mt-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
               role="alert"
@@ -599,163 +599,6 @@
             </form>
           }
 
-          @if (acaoMovimentacao() === 'Contagem') {
-            @if (loteDaContagem(); as lote) {
-              <form
-                class="mt-5 grid gap-4 sm:grid-cols-2"
-                [formGroup]="contagemForm"
-                (ngSubmit)="revisarContagem()"
-              >
-                <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                  <p class="font-semibold text-slate-950">{{ lote.codigo }}</p>
-                  <p class="mt-1 text-sm text-slate-600">
-                    Fabricação {{ formatarDataCivil(lote.dataFabricacao) }} · Validade
-                    {{ formatarDataCivil(lote.dataValidade) }}
-                  </p>
-                </div>
-                <div>
-                  <label for="count-vendavel" class="block text-sm font-semibold"
-                    >Vendável encontrada</label
-                  >
-                  <input
-                    id="count-vendavel"
-                    type="number"
-                    min="0"
-                    step="1"
-                    formControlName="vendavel"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                </div>
-                <div>
-                  <label for="count-damaged" class="block text-sm font-semibold"
-                    >Danificada encontrada</label
-                  >
-                  <input
-                    id="count-damaged"
-                    type="number"
-                    min="0"
-                    step="1"
-                    formControlName="danificada"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                </div>
-                <div>
-                  <label for="count-quarantine" class="block text-sm font-semibold"
-                    >Quarentena encontrada</label
-                  >
-                  <input
-                    id="count-quarantine"
-                    type="number"
-                    min="0"
-                    step="1"
-                    formControlName="quarentena"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                </div>
-                <div>
-                  <label for="count-reason" class="block text-sm font-semibold">Motivo</label>
-                  <input
-                    id="count-reason"
-                    type="text"
-                    formControlName="motivo"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                </div>
-
-                @if (mostrandoResumoContagem()) {
-                  <div class="sm:col-span-2 rounded-xl border border-sky-200 bg-sky-50 p-4">
-                    <h3 class="font-semibold text-sky-950">Resumo da conferência</h3>
-                    <dl class="mt-3 grid gap-2 sm:grid-cols-3 text-sm">
-                      <div>
-                        <dt class="text-slate-500">Vendável</dt>
-                        <dd>
-                          {{ lote.quantidadeVendavel }} →
-                          {{ contagemForm.controls.vendavel.value ?? 0 }} ({{
-                            formatarDiferenca(
-                              diferencaCondicao(
-                                lote.quantidadeVendavel,
-                                contagemForm.controls.vendavel.value
-                              )
-                            )
-                          }})
-                        </dd>
-                      </div>
-                      <div>
-                        <dt class="text-slate-500">Danificada</dt>
-                        <dd>
-                          {{ lote.quantidadeDanificada }} →
-                          {{ contagemForm.controls.danificada.value ?? 0 }} ({{
-                            formatarDiferenca(
-                              diferencaCondicao(
-                                lote.quantidadeDanificada,
-                                contagemForm.controls.danificada.value
-                              )
-                            )
-                          }})
-                        </dd>
-                      </div>
-                      <div>
-                        <dt class="text-slate-500">Quarentena</dt>
-                        <dd>
-                          {{ lote.quantidadeQuarentena }} →
-                          {{ contagemForm.controls.quarentena.value ?? 0 }} ({{
-                            formatarDiferenca(
-                              diferencaCondicao(
-                                lote.quantidadeQuarentena,
-                                contagemForm.controls.quarentena.value
-                              )
-                            )
-                          }})
-                        </dd>
-                      </div>
-                    </dl>
-                    <p class="mt-3 text-sm text-slate-700">
-                      Diferença física total:
-                      {{
-                        formatarDiferenca(
-                          (contagemForm.controls.vendavel.value ?? 0) +
-                            (contagemForm.controls.danificada.value ?? 0) +
-                            (contagemForm.controls.quarentena.value ?? 0) -
-                            lote.saldoFisico
-                        )
-                      }}
-                    </p>
-                    <button
-                      type="button"
-                      (click)="confirmarContagem()"
-                      [disabled]="enviandoMovimentacao() || carregando()"
-                      class="mt-4 min-h-11 rounded-xl bg-sky-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
-                    >
-                      {{ enviandoMovimentacao() ? 'Confirmando...' : 'Confirmar contagem' }}
-                    </button>
-                    @if (conflitoContagemVersao()) {
-                      <p class="mt-3 text-sm text-amber-900">
-                        Atualize o snapshot quando estiver pronta. As quantidades e o motivo
-                        digitados serão mantidos para revisão.
-                      </p>
-                      <button
-                        type="button"
-                        (click)="recarregarContagemParaNovoSnapshot()"
-                        [disabled]="enviandoMovimentacao() || carregando()"
-                        class="ml-2 mt-4 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900"
-                      >
-                        Atualizar snapshot mantendo os valores digitados
-                      </button>
-                    }
-                  </div>
-                } @else {
-                  <button
-                    type="submit"
-                    [disabled]="enviandoMovimentacao() || carregando()"
-                    class="sm:col-span-2 min-h-11 rounded-xl border border-sky-700 px-4 text-sm font-semibold text-sky-900"
-                  >
-                    Revisar contagem
-                  </button>
-                }
-              </form>
-            }
-          }
-
           @if (acaoMovimentacao() === 'Estorno') {
             @if (movimentoEstorno(); as movimento) {
               <form
@@ -821,10 +664,23 @@
           } @else {
             <ul class="mt-4 grid list-none gap-3 p-0 lg:grid-cols-2">
               @for (lote of position.lotes; track lote.loteId) {
-                <li class="rounded-xl border border-slate-200 p-4">
+                <li
+                  [class]="
+                    loteEmContagem(lote.loteId)
+                      ? 'rounded-xl border border-sky-300 bg-sky-50/20 p-4 shadow-sm lg:col-span-2'
+                      : 'rounded-xl border border-slate-200 bg-white p-4'
+                  "
+                >
                   <div class="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <h3 class="font-semibold text-slate-950">{{ lote.codigo }}</h3>
+                      <h3 class="text-sm font-semibold text-slate-800">Lote</h3>
+                      <p class="mt-1 text-xs text-slate-500">Código do lote</p>
+                      <code
+                        class="block max-w-56 truncate text-xs text-slate-500"
+                        [title]="'Código completo: ' + lote.codigo"
+                      >
+                        {{ lote.codigo }}
+                      </code>
                       <p class="mt-1 text-xs text-slate-500">
                         {{
                           lote.origemValidade === 'PrazoPadrao'
@@ -842,7 +698,486 @@
                     >
                       {{ rotuloValidade(lote) }}
                     </span>
+                    <button
+                      type="button"
+                      (click)="abrirContagem(lote)"
+                      [attr.aria-label]="'Conferir estoque do lote ' + lote.codigo"
+                      [attr.aria-expanded]="loteEmContagem(lote.loteId)"
+                      [attr.aria-controls]="loteEmContagem(lote.loteId) ? 'count-form' : null"
+                      [disabled]="enviandoMovimentacao()"
+                      class="min-h-11 rounded-lg bg-sky-800 px-4 text-sm font-semibold text-white hover:bg-sky-900 disabled:opacity-60"
+                    >
+                      Conferir estoque
+                    </button>
                   </div>
+                  @if (contagemConcluidaLoteId() === lote.loteId) {
+                    <p
+                      class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                      role="status"
+                    >
+                      Conferência do lote registrada.
+                    </p>
+                  }
+                  @if (loteEmContagem(lote.loteId)) {
+                    @if (loteDaContagem(); as loteContagem) {
+                      <form
+                        id="count-form"
+                        class="mt-4 grid gap-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4"
+                        [formGroup]="contagemForm"
+                        (ngSubmit)="revisarContagem()"
+                        aria-labelledby="count-form-title"
+                      >
+                        <div>
+                          <h4 id="count-form-title" class="text-base font-semibold text-sky-950">
+                            Contagem física
+                          </h4>
+                          <p class="mt-1 text-sm text-slate-700">
+                            {{ produtoSelecionado()?.nome }} ·
+                            {{ varianteSelecionada()?.identificacao }}
+                          </p>
+                          <p class="mt-1 text-xs text-slate-600">
+                            Lote:
+                            <code
+                              class="font-mono"
+                              [title]="'Código completo: ' + loteContagem.codigo"
+                              >{{ loteContagem.codigo }}</code
+                            >
+                          </p>
+                          <p class="mt-1 text-sm text-slate-600">
+                            Fabricação {{ formatarDataCivil(loteContagem.dataFabricacao) }} ·
+                            validade {{ formatarDataCivil(loteContagem.dataValidade) }}
+                          </p>
+                          <p class="mt-2 text-sm text-slate-700">
+                            Conte as unidades deste lote e informe o total encontrado em cada
+                            condição. Digite 0 quando não houver unidades.
+                          </p>
+                        </div>
+
+                        @if (erroMovimentacao()) {
+                          <p
+                            #countErrorAlert
+                            class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                            role="alert"
+                            tabindex="-1"
+                          >
+                            {{ erroMovimentacao() }}
+                          </p>
+                        }
+
+                        <fieldset class="min-w-0">
+                          <legend class="mb-3 text-sm font-semibold text-slate-900">
+                            Quantidades por condição
+                          </legend>
+                          <div
+                            class="hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)]"
+                            aria-hidden="true"
+                          >
+                            <span>Condição</span>
+                            <span>Registrado no sistema</span>
+                            <span>Encontrado na contagem</span>
+                          </div>
+                          <div class="grid gap-3">
+                            <div
+                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
+                            >
+                              <p class="font-semibold text-slate-900">Vendável</p>
+                              <div>
+                                <span class="text-xs text-slate-600 sm:hidden"
+                                  >Registrado no sistema</span
+                                >
+                                <output
+                                  id="count-vendavel-registered"
+                                  aria-label="Quantidade vendável registrada no sistema"
+                                  class="block font-medium text-slate-900"
+                                >
+                                  {{ loteContagem.quantidadeVendavel }} un.
+                                </output>
+                              </div>
+                              <div>
+                                <label for="count-vendavel" class="block text-sm font-semibold">
+                                  Quantidade vendável encontrada
+                                </label>
+                                <input
+                                  #countVendavelInput
+                                  id="count-vendavel"
+                                  type="number"
+                                  min="0"
+                                  max="2147483647"
+                                  step="1"
+                                  inputmode="numeric"
+                                  required
+                                  formControlName="vendavel"
+                                  [readonly]="mostrandoResumoContagem()"
+                                  [attr.aria-invalid]="
+                                    erroContagemVisivel('vendavel') ? 'true' : null
+                                  "
+                                  [attr.aria-describedby]="
+                                    erroContagemVisivel('vendavel')
+                                      ? 'count-vendavel-help count-vendavel-error'
+                                      : 'count-vendavel-help'
+                                  "
+                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                />
+                                <p id="count-vendavel-help" class="mt-1 text-xs text-slate-600">
+                                  Use um número inteiro, inclusive 0.
+                                </p>
+                                @if (erroContagemVisivel('vendavel')) {
+                                  <p id="count-vendavel-error" class="mt-1 text-sm text-red-700">
+                                    {{ mensagemErroContagem('vendavel') }}
+                                  </p>
+                                }
+                              </div>
+                            </div>
+                            <div
+                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
+                            >
+                              <p class="font-semibold text-slate-900">Avariada (danificada)</p>
+                              <div>
+                                <span class="text-xs text-slate-600 sm:hidden"
+                                  >Registrado no sistema</span
+                                >
+                                <output
+                                  id="count-damaged-registered"
+                                  aria-label="Quantidade danificada registrada no sistema"
+                                  class="block font-medium text-slate-900"
+                                >
+                                  {{ loteContagem.quantidadeDanificada }} un.
+                                </output>
+                              </div>
+                              <div>
+                                <label for="count-damaged" class="block text-sm font-semibold">
+                                  Quantidade avariada encontrada
+                                </label>
+                                <input
+                                  #countDanificadaInput
+                                  id="count-damaged"
+                                  type="number"
+                                  min="0"
+                                  max="2147483647"
+                                  step="1"
+                                  inputmode="numeric"
+                                  required
+                                  formControlName="danificada"
+                                  [readonly]="mostrandoResumoContagem()"
+                                  [attr.aria-invalid]="
+                                    erroContagemVisivel('danificada') ? 'true' : null
+                                  "
+                                  [attr.aria-describedby]="
+                                    erroContagemVisivel('danificada')
+                                      ? 'count-damaged-help count-damaged-error'
+                                      : 'count-damaged-help'
+                                  "
+                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                />
+                                <p id="count-damaged-help" class="mt-1 text-xs text-slate-600">
+                                  Corresponde à condição danificada no estoque.
+                                </p>
+                                @if (erroContagemVisivel('danificada')) {
+                                  <p id="count-damaged-error" class="mt-1 text-sm text-red-700">
+                                    {{ mensagemErroContagem('danificada') }}
+                                  </p>
+                                }
+                              </div>
+                            </div>
+                            <div
+                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
+                            >
+                              <p class="font-semibold text-slate-900">Quarentena</p>
+                              <div>
+                                <span class="text-xs text-slate-600 sm:hidden"
+                                  >Registrado no sistema</span
+                                >
+                                <output
+                                  id="count-quarantine-registered"
+                                  aria-label="Quantidade em quarentena registrada no sistema"
+                                  class="block font-medium text-slate-900"
+                                >
+                                  {{ loteContagem.quantidadeQuarentena }} un.
+                                </output>
+                              </div>
+                              <div>
+                                <label for="count-quarantine" class="block text-sm font-semibold">
+                                  Quantidade em quarentena encontrada
+                                </label>
+                                <input
+                                  #countQuarentenaInput
+                                  id="count-quarantine"
+                                  type="number"
+                                  min="0"
+                                  max="2147483647"
+                                  step="1"
+                                  inputmode="numeric"
+                                  required
+                                  formControlName="quarentena"
+                                  [readonly]="mostrandoResumoContagem()"
+                                  [attr.aria-invalid]="
+                                    erroContagemVisivel('quarentena') ? 'true' : null
+                                  "
+                                  [attr.aria-describedby]="
+                                    erroContagemVisivel('quarentena')
+                                      ? 'count-quarantine-help count-quarantine-error'
+                                      : 'count-quarantine-help'
+                                  "
+                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                />
+                                <p id="count-quarantine-help" class="mt-1 text-xs text-slate-600">
+                                  Use um número inteiro, inclusive 0.
+                                </p>
+                                @if (erroContagemVisivel('quarentena')) {
+                                  <p id="count-quarantine-error" class="mt-1 text-sm text-red-700">
+                                    {{ mensagemErroContagem('quarentena') }}
+                                  </p>
+                                }
+                              </div>
+                            </div>
+                          </div>
+                        </fieldset>
+
+                        <div>
+                          <label for="count-reason" class="block text-sm font-semibold">
+                            Motivo da contagem
+                          </label>
+                          <input
+                            #countReasonInput
+                            id="count-reason"
+                            type="text"
+                            maxlength="120"
+                            required
+                            formControlName="motivo"
+                            [readonly]="mostrandoResumoContagem()"
+                            [attr.aria-invalid]="erroContagemVisivel('motivo') ? 'true' : null"
+                            [attr.aria-describedby]="
+                              erroContagemVisivel('motivo')
+                                ? 'count-reason-help count-reason-error'
+                                : 'count-reason-help'
+                            "
+                            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                          />
+                          <p id="count-reason-help" class="mt-1 text-xs text-slate-600">
+                            Exemplo: contagem física do lote.
+                          </p>
+                          @if (erroContagemVisivel('motivo')) {
+                            <p id="count-reason-error" class="mt-1 text-sm text-red-700">
+                              {{ mensagemErroContagem('motivo') }}
+                            </p>
+                          }
+                        </div>
+
+                        @if (mostrandoResumoContagem()) {
+                          <section
+                            class="rounded-xl border border-sky-200 bg-white p-4"
+                            aria-labelledby="count-summary-title"
+                          >
+                            <h5
+                              #countSummary
+                              id="count-summary-title"
+                              class="font-semibold text-sky-950"
+                              tabindex="-1"
+                            >
+                              Resumo da conferência
+                            </h5>
+                            <p class="mt-1 text-sm text-slate-700">
+                              Compare o saldo registrado com o total encontrado em cada condição.
+                            </p>
+                            <div
+                              class="mt-4 hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                              aria-hidden="true"
+                            >
+                              <span>Condição</span>
+                              <span>Registrado no sistema</span>
+                              <span>Encontrado na contagem</span>
+                              <span>Diferença</span>
+                            </div>
+                            <dl class="mt-3 space-y-2 text-sm">
+                              <div
+                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                              >
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                  <dd class="font-semibold text-slate-900">Vendável</dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Registrado no sistema
+                                  </dt>
+                                  <dd id="count-summary-vendavel-registered">
+                                    {{ loteContagem.quantidadeVendavel }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Encontrado na contagem
+                                  </dt>
+                                  <dd id="count-summary-vendavel-found">
+                                    {{ contagemForm.controls.vendavel.value }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                  <dd id="count-summary-vendavel-difference">
+                                    {{
+                                      formatarDiferenca(
+                                        diferencaCondicao(
+                                          loteContagem.quantidadeVendavel,
+                                          contagemForm.controls.vendavel.value
+                                        )
+                                      )
+                                    }}
+                                  </dd>
+                                </div>
+                              </div>
+                              <div
+                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                              >
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                  <dd class="font-semibold text-slate-900">
+                                    Avariada (danificada)
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Registrado no sistema
+                                  </dt>
+                                  <dd id="count-summary-damaged-registered">
+                                    {{ loteContagem.quantidadeDanificada }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Encontrado na contagem
+                                  </dt>
+                                  <dd id="count-summary-damaged-found">
+                                    {{ contagemForm.controls.danificada.value }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                  <dd id="count-summary-damaged-difference">
+                                    {{
+                                      formatarDiferenca(
+                                        diferencaCondicao(
+                                          loteContagem.quantidadeDanificada,
+                                          contagemForm.controls.danificada.value
+                                        )
+                                      )
+                                    }}
+                                  </dd>
+                                </div>
+                              </div>
+                              <div
+                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                              >
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                  <dd class="font-semibold text-slate-900">Quarentena</dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Registrado no sistema
+                                  </dt>
+                                  <dd id="count-summary-quarantine-registered">
+                                    {{ loteContagem.quantidadeQuarentena }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">
+                                    Encontrado na contagem
+                                  </dt>
+                                  <dd id="count-summary-quarantine-found">
+                                    {{ contagemForm.controls.quarentena.value }} un.
+                                  </dd>
+                                </div>
+                                <div>
+                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                  <dd id="count-summary-quarantine-difference">
+                                    {{
+                                      formatarDiferenca(
+                                        diferencaCondicao(
+                                          loteContagem.quantidadeQuarentena,
+                                          contagemForm.controls.quarentena.value
+                                        )
+                                      )
+                                    }}
+                                  </dd>
+                                </div>
+                              </div>
+                            </dl>
+                            <p class="mt-3 text-sm font-semibold text-slate-900">
+                              Diferença física total:
+                              {{
+                                formatarDiferenca(
+                                  (contagemForm.controls.vendavel.value ?? 0) +
+                                    (contagemForm.controls.danificada.value ?? 0) +
+                                    (contagemForm.controls.quarentena.value ?? 0) -
+                                    loteContagem.saldoFisico
+                                )
+                              }}
+                            </p>
+                            <p class="mt-3 text-sm text-slate-700">
+                              Ao confirmar, os saldos deste lote serão atualizados para as
+                              quantidades encontradas. Se houver diferenças, os ajustes serão
+                              registrados no histórico. Se não houver diferença, a conferência será
+                              registrada sem movimentação de ajuste.
+                            </p>
+                            @if (conflitoContagemVersao()) {
+                              <p class="mt-3 text-sm font-medium text-amber-900" role="status">
+                                O estoque mudou durante a conferência. Atualize o snapshot quando
+                                estiver pronta; as quantidades e o motivo digitados serão mantidos.
+                              </p>
+                              <button
+                                type="button"
+                                (click)="recarregarContagemParaNovoSnapshot()"
+                                [disabled]="enviandoMovimentacao() || carregando()"
+                                class="mt-3 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900 disabled:opacity-60"
+                              >
+                                Atualizar snapshot mantendo os valores digitados
+                              </button>
+                            }
+                          </section>
+                        }
+
+                        <div class="flex flex-wrap gap-2">
+                          @if (mostrandoResumoContagem()) {
+                            <button
+                              type="button"
+                              (click)="voltarAEditarContagem()"
+                              [disabled]="enviandoMovimentacao() || carregando()"
+                              class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 disabled:opacity-60"
+                            >
+                              Voltar e editar
+                            </button>
+                            <button
+                              type="button"
+                              (click)="confirmarContagem()"
+                              [disabled]="
+                                enviandoMovimentacao() || carregando() || conflitoContagemVersao()
+                              "
+                              class="min-h-11 rounded-xl bg-sky-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                            >
+                              {{ enviandoMovimentacao() ? 'Confirmando...' : 'Confirmar contagem' }}
+                            </button>
+                          } @else {
+                            <button
+                              type="submit"
+                              [disabled]="enviandoMovimentacao() || carregando()"
+                              class="min-h-11 rounded-xl border border-sky-700 px-4 text-sm font-semibold text-sky-900 disabled:opacity-60"
+                            >
+                              Revisar contagem
+                            </button>
+                          }
+                          <button
+                            type="button"
+                            (click)="cancelarContagem()"
+                            [disabled]="enviandoMovimentacao()"
+                            class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      </form>
+                    }
+                  }
                   <dl class="mt-4 grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <dt class="text-slate-500">Fabricação</dt>
@@ -877,13 +1212,6 @@
                       <dd class="font-medium">{{ lote.saldoDisponivel }} un.</dd>
                     </div>
                   </dl>
-                  <button
-                    type="button"
-                    (click)="abrirContagem(lote)"
-                    class="mt-4 min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 hover:bg-sky-50"
-                  >
-                    Conferir estoque
-                  </button>
                 </li>
               }
             </ul>
