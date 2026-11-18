@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IEncerrarPedidoCompraRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<EncerrarPedidoCompra>();
         services.AddScoped<IConsultarPedidosCliente, EfConsultaPedidosCliente>();
+        services.AddScoped<IConsultarPedidosAdmin, EfConsultaPedidosAdmin>();
         services.AddScoped<IEstoqueProdutoAcabadoRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IReservaProdutoAcabadoRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IReservarProdutoAcabado, ReservarProdutoAcabado>();

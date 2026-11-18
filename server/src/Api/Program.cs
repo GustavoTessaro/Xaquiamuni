@@ -81,7 +81,8 @@ app.Use(async (context, next) =>
                 StringComparison.OrdinalIgnoreCase);
 
     if (isAuthenticationWrite || isCurrentClientRequest
-        || context.Request.Path.StartsWithSegments(PedidosClienteEndpoints.BasePath))
+        || context.Request.Path.StartsWithSegments(PedidosClienteEndpoints.BasePath)
+        || context.Request.Path.StartsWithSegments(AdminPedidosEndpoints.BasePath))
     {
         context.Response.Headers.CacheControl = "no-store";
     }
@@ -106,6 +107,7 @@ app.MapAdminEstoqueInsumoEndpoints();
 app.MapAdminEstoqueProdutoAcabadoEndpoints();
 app.MapCatalogoPublicoEndpoints();
 app.MapPedidosClienteEndpoints();
+app.MapAdminPedidosEndpoints();
 
 app.Run();
 
