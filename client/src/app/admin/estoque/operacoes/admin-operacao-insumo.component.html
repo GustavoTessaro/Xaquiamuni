@@ -372,9 +372,10 @@
                     @for (lot of posicoesLote(); track lot.loteId) {
                       @if (form.controls.acao.value !== 'SaidaManual' || lot.elegivel) {
                         <option [value]="lot.loteId">
-                          {{ lot.identificacaoLote || lot.loteId }} —
-                          {{ rotuloSituacaoLote(lot) }} — físico
-                          {{ formatarQuantidade(lot.saldoFisico) }}
+                          Validade {{ lot.dataValidade || 'não informada' }} ·
+                          {{ rotuloSituacaoLote(lot) }} · físico
+                          {{ formatarQuantidade(lot.saldoFisico) }} ·
+                          {{ lot.identificacaoLote || lot.loteId }}
                         </option>
                       }
                     }

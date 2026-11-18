@@ -240,6 +240,47 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Quantidade de referência para alertar sobre necessidade de reposição.');
   });
 
+  it('identifica lotes por datas e saldo nos seletores de movimentação e histórico', async () => {
+    const fixture = await montarComponente(criarApi());
+    const root = fixture.nativeElement as HTMLElement;
+
+    const filtroHistorico = root.querySelector<HTMLOptionElement>(
+      '#finished-history-lot option[value="lot-1"]',
+    );
+    expect(filtroHistorico?.textContent).toContain('Validade 17/12/2026');
+    expect(filtroHistorico?.textContent).toContain('fabricação 17/11/2026');
+    expect(filtroHistorico?.textContent).toContain(loteInicial.codigo);
+
+    clicar(fixture, 'Registrar entrada');
+    const modoLote = root.querySelector<HTMLSelectElement>('#finished-entry-lot-mode');
+    expect(modoLote).not.toBeNull();
+    modoLote!.value = 'existente';
+    modoLote!.dispatchEvent(new Event('change', { bubbles: true }));
+    fixture.detectChanges();
+
+    const entradaOption = root.querySelector<HTMLOptionElement>(
+      '#finished-entry-existing-lot option[value="lot-1"]',
+    );
+    expect(entradaOption?.textContent).toContain('Validade 17/12/2026');
+    expect(entradaOption?.textContent).toContain('Válido');
+    expect(entradaOption?.textContent).toContain(loteInicial.codigo);
+
+    clicar(fixture, 'Registrar saída');
+    const saidaOption = root.querySelector<HTMLOptionElement>(
+      '#finished-operation-lot option[value="lot-1"]',
+    );
+    expect(saidaOption?.textContent).toContain('Fabricação 17/11/2026');
+    expect(saidaOption?.textContent).toContain('físico 6 un.');
+    expect(saidaOption?.textContent).toContain(loteInicial.codigo);
+
+    clicar(fixture, 'Transferir condição');
+    const transferenciaOption = root.querySelector<HTMLOptionElement>(
+      '#finished-transfer-lot option[value="lot-1"]',
+    );
+    expect(transferenciaOption?.textContent).toContain('Validade 17/12/2026');
+    expect(transferenciaOption?.textContent).toContain(loteInicial.codigo);
+  });
+
   it('abre o formulário no cartão do lote com quantidades encontradas vazias e foco acessível', async () => {
     const api = criarApi();
     const fixture = await montarComponente(api);
@@ -249,9 +290,19 @@ describe('AdminProdutosAcabadosComponent', () => {
 
     const form = root.querySelector<HTMLFormElement>('#count-form');
     const card = form?.closest('li');
-    const codigoLote = card?.querySelector('code');
+    const codigoLote = card?.querySelector('details code');
     expect(form).not.toBeNull();
-    expect(card?.querySelector('h3')?.textContent).toContain('Lote');
+    expect(card?.querySelector('h3')?.textContent).toContain('Validade');
+    expect(root.querySelector('#finished-lots-title')?.parentElement?.textContent).toContain(
+      'Sabonete · Lavanda 100 g',
+    );
+    expect(card?.textContent).toContain('17/12/2026');
+    expect(card?.textContent).toContain('Fabricação 17/11/2026');
+    expect(card?.textContent).toContain('Vendável');
+    expect(card?.textContent).toContain('6 un.');
+    expect(card?.querySelector('details summary')?.textContent).toContain(
+      'Código do lote (rastreabilidade)',
+    );
     expect(codigoLote?.textContent).toContain(loteInicial.codigo);
     expect(codigoLote?.getAttribute('title')).toContain(loteInicial.codigo);
     expect(card?.className).toContain('lg:col-span-2');

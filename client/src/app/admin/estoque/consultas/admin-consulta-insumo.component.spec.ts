@@ -157,9 +157,18 @@ describe('AdminConsultaInsumoComponent', () => {
     expect(root.textContent).toContain('10 g');
     expect(root.textContent).toContain('0 g');
     expect(root.querySelectorAll('section[aria-labelledby="posicao-titulo"] li').length).toBe(3);
+    const lotCard = root.querySelector<HTMLElement>('section[aria-labelledby="posicao-titulo"] li');
+    expect(lotCard?.querySelector('h4')?.textContent).toContain('Base glicerinada');
+    expect(lotCard?.textContent).toContain('04/03/2026');
+    expect(lotCard?.querySelector('details summary')?.textContent).toContain(
+      'Código do lote (rastreabilidade)',
+    );
+    expect(lotCard?.querySelector('details code')?.textContent).toContain('Vencido');
 
     const lotFilter = root.querySelector<HTMLSelectElement>('select[aria-label="Lote"]');
     expect(lotFilter).not.toBeNull();
+    expect(lotFilter?.options[1]?.textContent).toContain('Validade 04/03/2026');
+    expect(lotFilter?.options[1]?.textContent).toContain('Vencido');
     lotFilter!.value = 'lote-vencido';
     lotFilter!.dispatchEvent(new Event('change', { bubbles: true }));
     harness.fixture.detectChanges();

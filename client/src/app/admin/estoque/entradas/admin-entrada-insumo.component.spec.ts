@@ -222,6 +222,15 @@ describe('AdminEntradaInsumoComponent', () => {
       '#stock-entry-lot option[value="lote-bloqueado"]',
     );
     expect(blockedOption?.disabled).toBe(true);
+    expect(blockedOption?.textContent).toContain('Validade 01/01/2027');
+    expect(blockedOption?.textContent).toContain('Bloqueado');
+    expect(blockedOption?.textContent).toContain('4 g');
+    expect(blockedOption?.textContent).toContain('Lote bloqueado');
+    const lotCard = root.querySelector<HTMLElement>('li details');
+    expect(lotCard?.querySelector('summary')?.textContent).toContain(
+      'Código do lote (rastreabilidade)',
+    );
+    expect(lotCard?.querySelector('code')?.textContent).toContain('Lote bloqueado');
 
     setSelect(harness, '#stock-entry-lot', 'lote-elegivel');
     setInput(harness, '#stock-entry-quantity', '5');

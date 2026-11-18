@@ -167,6 +167,8 @@ describe('AdminOperacaoInsumoComponent', () => {
           ...posicaoAgregada.posicoes[0]!,
           loteId: 'lote-bloqueado',
           identificacaoLote: 'Lote bloqueado',
+          dataEntrada: '2026-06-15',
+          dataValidade: '2026-12-01',
           bloqueado: true,
           elegivel: false,
           saldoFisico: '5',
@@ -184,6 +186,12 @@ describe('AdminOperacaoInsumoComponent', () => {
     setInput(harness, '[formControlName="motivo"]', 'Lote avariado');
     expect(harness.routeNativeElement?.textContent).toContain('Bloqueado');
     expect(harness.routeNativeElement?.textContent).toContain('5 g');
+    const lotOption = harness.routeNativeElement?.querySelector<HTMLOptionElement>(
+      'select[formControlName="loteId"] option[value="lote-bloqueado"]',
+    );
+    expect(lotOption?.textContent).toContain('Validade 2026-12-01');
+    expect(lotOption?.textContent).toContain('Bloqueado');
+    expect(lotOption?.textContent).toContain('Lote bloqueado');
     clickText(harness, 'Revisar operação');
     clickText(harness, 'Confirmar operação');
 
