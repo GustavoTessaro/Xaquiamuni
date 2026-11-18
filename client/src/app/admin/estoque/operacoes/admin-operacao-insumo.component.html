@@ -1,0 +1,561 @@
+<app-admin-workspace activePage="stock">
+  <div class="space-y-6">
+    <a
+      [routerLink]="
+        detalhe()
+          ? ['/admin/estoque/insumos', detalhe()?.resumo?.insumoId]
+          : ['/admin/estoque/insumos']
+      "
+      class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+    >
+      {{ detalhe() ? 'Voltar ao insumo' : 'Voltar para insumos' }}
+    </a>
+
+    <header>
+      <p class="text-sm font-semibold uppercase tracking-wide text-emerald-800">Estoque</p>
+      <h1 class="mt-1 text-2xl font-bold tracking-tight text-emerald-950 sm:text-3xl">
+        {{ rotuloAcao() }}
+      </h1>
+      <p class="mt-2 max-w-3xl text-sm text-slate-600">
+        Registre uma operação com confirmação do servidor. Nenhum saldo é alterado antes da
+        confirmação da API.
+      </p>
+    </header>
+
+    @if (erroPendente()) {
+      <section class="rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
+        <p class="text-sm text-red-900">{{ erroPendente() }}</p>
+      </section>
+    }
+
+    @if (erro()) {
+      <p
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ erro() }}
+      </p>
+    }
+    @if (mensagemSucesso()) {
+      <section class="rounded-xl border border-emerald-200 bg-emerald-50 p-4" role="status">
+        <p class="font-semibold text-emerald-950">{{ mensagemSucesso() }}</p>
+        @if (erroPosicao()) {
+          <p class="mt-2 text-sm text-emerald-950">
+            A operação foi confirmada, mas a atualização da consulta falhou: {{ erroPosicao() }}
+          </p>
+        } @else if (posicao(); as stock) {
+          <p class="mt-2 text-sm text-emerald-950">
+            Saldo físico atualizado:
+            {{ formatarQuantidade(stock.resumo.saldoFisico, stock.resumo.unidadeBase) }}.
+          </p>
+        }
+        @if (carregandoPosicao()) {
+          <p class="mt-2 text-sm text-emerald-950" role="status">
+            Atualizando a posição confirmada pela API...
+          </p>
+        }
+        @if (erroAtualizacaoHistorico()) {
+          <p class="mt-2 text-sm text-emerald-950">
+            A operação foi confirmada, mas a atualização do histórico falhou:
+            {{ erroAtualizacaoHistorico() }}
+          </p>
+        } @else if (historicoAtualizado(); as history) {
+          <p class="mt-2 text-sm text-emerald-950">
+            Histórico atualizado pela API: {{ history.totalItens }} movimentação(ões).
+            @if (history.itens[0]; as recent) {
+              Movimento mais recente: {{ recent.id }} ({{ rotuloMovimento(recent.tipo) }}).
+            }
+          </p>
+        }
+        <div class="mt-3 flex flex-wrap gap-3">
+          @if (detalhe(); as item) {
+            <a
+              [routerLink]="['/admin/estoque/insumos', item.resumo.insumoId, 'consultas']"
+              class="inline-flex min-h-10 items-center rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              Ver posição e histórico
+            </a>
+          }
+          @if (!modoEstorno()) {
+            <button
+              type="button"
+              (click)="selecionarOutroInsumo()"
+              class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-emerald-950 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              Selecionar outro insumo
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    @if (!carregandoSessao() && operacaoPendente(); as pending) {
+      @if (etapa() === 'incerta' || etapa() === 'conflito') {
+        <section
+          class="rounded-2xl border border-amber-300 bg-amber-50 p-4 sm:p-6"
+          aria-labelledby="operacao-pendente-titulo"
+        >
+          <h2 id="operacao-pendente-titulo" class="font-semibold text-amber-950">
+            Tentativa pendente — {{ rotuloAcao(pending.resumo.acao) }}
+          </h2>
+          <p class="mt-2 text-sm text-amber-950">
+            {{ pending.resumo.insumoNome }} · {{ pending.resumo.motivo }}
+          </p>
+          @if (pending.resumo.quantidade !== null) {
+            <p class="mt-1 text-sm text-amber-950">
+              {{ formatarQuantidade(pending.resumo.quantidade, pending.resumo.unidade) }}
+            </p>
+          }
+          @if (etapa() === 'incerta') {
+            <button
+              type="button"
+              (click)="tentarNovamente()"
+              [disabled]="enviando()"
+              class="mt-4 inline-flex min-h-11 items-center rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900 disabled:cursor-wait disabled:opacity-60"
+            >
+              {{ enviando() ? 'Reenviando...' : 'Reenviar a mesma operação' }}
+            </button>
+          } @else if (podeRecontar()) {
+            <button
+              type="button"
+              (click)="confirmarNovaConferencia()"
+              [disabled]="carregandoPosicao()"
+              class="mt-4 inline-flex min-h-11 items-center rounded-xl border border-amber-900 px-4 text-sm font-semibold text-amber-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-900 disabled:opacity-60"
+            >
+              Atualizar posição e iniciar nova conferência
+            </button>
+          }
+        </section>
+      }
+    }
+
+    @if (
+      !carregandoSessao() && !erroPendente() && etapa() !== 'incerta' && etapa() !== 'conflito'
+    ) {
+      @if (carregando()) {
+        <p
+          class="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
+          role="status"
+        >
+          Carregando dados do insumo...
+        </p>
+      } @else if (!detalhe()) {
+        <section class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-6">
+          <h2 class="text-lg font-semibold text-emerald-950">Selecione um insumo</h2>
+          <label class="mt-4 block text-sm font-medium text-slate-800">
+            Buscar por nome
+            <input
+              [formControl]="busca"
+              (keyup.enter)="pesquisar()"
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              type="search"
+              autocomplete="off"
+            />
+          </label>
+          <button
+            type="button"
+            (click)="pesquisar()"
+            [disabled]="carregandoLista()"
+            class="mt-3 inline-flex min-h-10 items-center rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 disabled:opacity-60"
+          >
+            Buscar
+          </button>
+
+          @if (carregandoLista()) {
+            <p class="mt-4 text-sm text-slate-600" role="status">Carregando insumos...</p>
+          } @else if (erroLista()) {
+            <div class="mt-4 rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
+              <p class="text-sm text-red-900">{{ erroLista() }}</p>
+              <button
+                type="button"
+                (click)="carregarInsumos()"
+                class="mt-2 min-h-10 text-sm font-semibold text-red-900 underline"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          } @else if (resultados().length === 0) {
+            <p class="mt-4 rounded-xl bg-slate-50 p-5 text-center text-sm text-slate-600">
+              Nenhum insumo encontrado.
+            </p>
+          } @else {
+            <ul class="mt-4 grid list-none gap-3 p-0 sm:grid-cols-2">
+              @for (item of resultados(); track item.insumoId) {
+                <li class="rounded-xl border border-slate-200 p-4">
+                  <h3 class="font-semibold text-slate-950">{{ item.nome }}</h3>
+                  <p class="mt-1 text-sm text-slate-600">
+                    {{ rotuloTipoInsumo(item.tipo) }} · {{ unidadeLabel(item.unidadeBase) }}
+                  </p>
+                  <button
+                    type="button"
+                    (click)="selecionarInsumo(item)"
+                    class="mt-3 min-h-10 rounded-lg bg-emerald-900 px-3 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+                  >
+                    Selecionar insumo
+                  </button>
+                </li>
+              }
+            </ul>
+            @if (totalPaginas() > 1) {
+              <nav class="mt-4 flex items-center justify-between" aria-label="Paginação de insumos">
+                <button
+                  type="button"
+                  (click)="irParaPagina(pagina() - 1)"
+                  [disabled]="pagina() <= 1 || carregandoLista()"
+                  class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  Anterior
+                </button>
+                <span class="text-sm text-slate-700"
+                  >Página {{ pagina() }} de {{ totalPaginas() }}</span
+                >
+                <button
+                  type="button"
+                  (click)="irParaPagina(pagina() + 1)"
+                  [disabled]="pagina() >= totalPaginas() || carregandoLista()"
+                  class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold disabled:opacity-50"
+                >
+                  Próxima
+                </button>
+              </nav>
+            }
+          }
+        </section>
+      } @else {
+        <section class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-6">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 class="text-lg font-semibold text-emerald-950">{{ detalhe()?.resumo?.nome }}</h2>
+              <p class="mt-1 text-sm text-slate-600">
+                Unidade-base: {{ unidadeLabel(unidadeBase()) }}.
+                {{
+                  detalhe()?.resumo?.controlaLote ? 'Controle por lote.' : 'Sem controle por lote.'
+                }}
+              </p>
+            </div>
+            @if (!modoEstorno()) {
+              <button
+                type="button"
+                (click)="selecionarOutroInsumo()"
+                class="min-h-10 text-sm font-semibold text-emerald-800 underline underline-offset-4"
+              >
+                Trocar insumo
+              </button>
+            }
+          </div>
+
+          <div class="mt-4 flex flex-wrap items-center gap-3">
+            <div class="rounded-xl bg-slate-50 px-4 py-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Físico</p>
+              <p class="mt-1 font-semibold text-slate-950">
+                {{ formatarQuantidade(posicao()?.resumo?.saldoFisico ?? null) }}
+              </p>
+            </div>
+            <div class="rounded-xl bg-slate-50 px-4 py-3">
+              <p class="text-xs font-medium uppercase tracking-wide text-slate-500">Disponível</p>
+              <p class="mt-1 font-semibold text-slate-950">
+                {{ formatarQuantidade(posicao()?.resumo?.saldoDisponivel ?? null) }}
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="carregarPosicao()"
+              [disabled]="carregandoPosicao()"
+              class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 disabled:opacity-60"
+            >
+              {{ carregandoPosicao() ? 'Atualizando...' : 'Atualizar posição' }}
+            </button>
+          </div>
+          @if (erroPosicao()) {
+            <div class="mt-3 rounded-xl border border-red-200 bg-red-50 p-3" role="alert">
+              <p class="text-sm text-red-900">{{ erroPosicao() }}</p>
+              <button
+                type="button"
+                (click)="carregarPosicao()"
+                class="mt-2 text-sm font-semibold underline"
+              >
+                Tentar novamente
+              </button>
+            </div>
+          }
+          @if (mensagemRecontagem()) {
+            <p
+              class="mt-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"
+              role="status"
+            >
+              {{ mensagemRecontagem() }}
+            </p>
+          }
+
+          @if (form.controls.acao.value === 'Estorno') {
+            @if (buscandoMovimento()) {
+              <p class="mt-5 text-sm text-slate-600" role="status">
+                Carregando movimento original...
+              </p>
+            } @else if (movimentoOriginal(); as original) {
+              <section class="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4">
+                <h3 class="font-semibold text-amber-950">Movimento original</h3>
+                <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <dt class="text-amber-900">Tipo</dt>
+                    <dd class="font-medium">{{ rotuloMovimento(original.tipo) }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-amber-900">Quantidade</dt>
+                    <dd class="font-medium">
+                      {{ formatarQuantidade(original.quantidadeBase, original.unidadeBase) }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-amber-900">Lote</dt>
+                    <dd class="font-medium">{{ original.identificacaoLote || 'Sem lote' }}</dd>
+                  </div>
+                  <div>
+                    <dt class="text-amber-900">Referência</dt>
+                    <dd class="break-all font-medium">{{ original.id }}</dd>
+                  </div>
+                </dl>
+              </section>
+            }
+            @if (movimentoOriginal()?.tipo !== 'Estorno') {
+              <form [formGroup]="form" (ngSubmit)="solicitarRevisao()" class="mt-5 space-y-4">
+                <label class="block text-sm font-medium text-slate-800">
+                  Motivo do estorno
+                  <input
+                    formControlName="motivo"
+                    maxlength="300"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                    type="text"
+                  />
+                </label>
+                <label class="block text-sm font-medium text-slate-800">
+                  Observação <span class="font-normal text-slate-500">(opcional)</span>
+                  <textarea
+                    formControlName="observacao"
+                    maxlength="500"
+                    rows="3"
+                    class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                  ></textarea>
+                </label>
+                <button
+                  type="submit"
+                  [disabled]="buscandoMovimento()"
+                  class="inline-flex min-h-11 items-center rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+                >
+                  Revisar estorno
+                </button>
+              </form>
+            }
+          } @else {
+            <form [formGroup]="form" (ngSubmit)="solicitarRevisao()" class="mt-6 space-y-5">
+              <label class="block text-sm font-medium text-slate-800">
+                Operação
+                <select
+                  formControlName="acao"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                >
+                  @for (item of tiposAcao; track item.value) {
+                    <option [value]="item.value">{{ item.label }}</option>
+                  }
+                </select>
+              </label>
+
+              @if (permiteLoteAtual()) {
+                <label class="block text-sm font-medium text-slate-800">
+                  Lote
+                  <select
+                    formControlName="loteId"
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                  >
+                    <option value="">Selecione o lote</option>
+                    @for (lot of posicoesLote(); track lot.loteId) {
+                      @if (form.controls.acao.value !== 'SaidaManual' || lot.elegivel) {
+                        <option [value]="lot.loteId">
+                          {{ lot.identificacaoLote || lot.loteId }} —
+                          {{ rotuloSituacaoLote(lot) }} — físico
+                          {{ formatarQuantidade(lot.saldoFisico) }}
+                        </option>
+                      }
+                    }
+                  </select>
+                </label>
+              }
+
+              @if (form.controls.acao.value === 'Contagem') {
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p class="text-sm font-semibold text-slate-900">Contagem física</p>
+                  <p class="mt-1 text-sm text-slate-700">
+                    Saldo físico registrado:
+                    {{
+                      formatarQuantidade(
+                        posicaoSelecionada()?.saldoFisico ?? posicao()?.resumo?.saldoFisico ?? null
+                      )
+                    }}
+                  </p>
+                  <p class="mt-1 text-sm text-slate-700">
+                    Diferença calculada:
+                    <span class="font-semibold"
+                      >{{ diferencaFormatada() }} {{ unidadeLabel(unidadeBase()) }}</span
+                    >
+                  </p>
+                </div>
+              } @else {
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                  <p class="text-sm font-semibold text-slate-900">
+                    Saldo
+                    {{ form.controls.acao.value === 'SaidaManual' ? 'disponível' : 'físico' }} da
+                    posição
+                  </p>
+                  <p class="mt-1 text-sm text-slate-700">
+                    {{
+                      formatarQuantidade(
+                        form.controls.acao.value === 'SaidaManual'
+                          ? (posicaoSelecionada()?.saldoDisponivel ??
+                              posicao()?.resumo?.saldoDisponivel ??
+                              null)
+                          : (posicaoSelecionada()?.saldoFisico ??
+                              posicao()?.resumo?.saldoFisico ??
+                              null)
+                      )
+                    }}
+                  </p>
+                  @if (form.controls.acao.value !== 'SaidaManual') {
+                    <p class="mt-1 text-xs text-slate-600">
+                      Perdas e descartes podem ser associados a lotes vencidos ou bloqueados; o
+                      limite é o saldo físico.
+                    </p>
+                  }
+                </div>
+              }
+
+              <label class="block text-sm font-medium text-slate-800">
+                {{
+                  form.controls.acao.value === 'Contagem'
+                    ? 'Quantidade física encontrada'
+                    : 'Quantidade na unidade-base'
+                }}
+                <span class="font-normal text-slate-500">({{ unidadeLabel(unidadeBase()) }})</span>
+                <input
+                  formControlName="quantidade"
+                  type="text"
+                  inputmode="decimal"
+                  autocomplete="off"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                />
+              </label>
+
+              <label class="block text-sm font-medium text-slate-800">
+                Motivo
+                <input
+                  formControlName="motivo"
+                  maxlength="300"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                  type="text"
+                />
+              </label>
+              <label class="block text-sm font-medium text-slate-800">
+                Observação <span class="font-normal text-slate-500">(opcional)</span>
+                <textarea
+                  formControlName="observacao"
+                  maxlength="500"
+                  rows="3"
+                  class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                ></textarea>
+              </label>
+              <button
+                type="submit"
+                [disabled]="carregandoPosicao() || enviando() || !posicao()"
+                class="inline-flex min-h-11 items-center rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Revisar operação
+              </button>
+            </form>
+          }
+        </section>
+      }
+    }
+
+    @if (etapa() === 'revisao' && detalhe(); as item) {
+      @if (resumoAtual(); as summary) {
+        <section class="rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-6">
+          <h2 class="text-lg font-semibold text-emerald-950">Confirme os dados</h2>
+          <dl class="mt-4 grid gap-3 sm:grid-cols-2">
+            <div class="rounded-xl bg-slate-50 p-3">
+              <dt class="text-sm text-slate-600">Insumo</dt>
+              <dd class="mt-1 font-semibold text-slate-950">{{ summary.insumoNome }}</dd>
+            </div>
+            <div class="rounded-xl bg-slate-50 p-3">
+              <dt class="text-sm text-slate-600">Operação</dt>
+              <dd class="mt-1 font-semibold text-slate-950">{{ rotuloAcao(summary.acao) }}</dd>
+            </div>
+            @if (summary.quantidade !== null) {
+              <div class="rounded-xl bg-slate-50 p-3">
+                <dt class="text-sm text-slate-600">
+                  {{ summary.acao === 'Contagem' ? 'Quantidade encontrada' : 'Quantidade' }}
+                </dt>
+                <dd class="mt-1 font-semibold text-slate-950">
+                  {{ formatarQuantidade(summary.quantidade, summary.unidade) }}
+                </dd>
+              </div>
+            }
+            @if (summary.acao === 'Contagem') {
+              <div class="rounded-xl bg-slate-50 p-3">
+                <dt class="text-sm text-slate-600">Saldo físico antes</dt>
+                <dd class="mt-1 font-semibold text-slate-950">
+                  {{ formatarQuantidade(summary.saldoReferencia, summary.unidade) }}
+                </dd>
+              </div>
+              <div class="rounded-xl bg-slate-50 p-3">
+                <dt class="text-sm text-slate-600">Diferença calculada</dt>
+                <dd class="mt-1 font-semibold text-slate-950">
+                  {{ formatarDiferenca(summary.diferenca) }}
+                  {{ unidadeLabel(summary.unidade) }}
+                </dd>
+              </div>
+            }
+            <div class="rounded-xl bg-slate-50 p-3">
+              <dt class="text-sm text-slate-600">Lote</dt>
+              <dd class="mt-1 font-semibold text-slate-950">{{ summary.lote || 'Sem lote' }}</dd>
+            </div>
+            @if (summary.movimentoOriginalId) {
+              <div class="rounded-xl bg-slate-50 p-3 sm:col-span-2">
+                <dt class="text-sm text-slate-600">Movimento original</dt>
+                <dd class="mt-1 break-all font-semibold text-slate-950">
+                  {{ summary.movimentoOriginalId }}
+                </dd>
+              </div>
+            }
+            <div class="rounded-xl bg-slate-50 p-3 sm:col-span-2">
+              <dt class="text-sm text-slate-600">Motivo</dt>
+              <dd class="mt-1 font-semibold text-slate-950">{{ summary.motivo }}</dd>
+            </div>
+          </dl>
+          <div class="mt-5 flex flex-wrap gap-3">
+            <button
+              type="button"
+              (click)="voltarParaFormulario()"
+              class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 hover:bg-slate-50"
+            >
+              Voltar e corrigir
+            </button>
+            <button
+              type="button"
+              (click)="confirmarOperacao()"
+              [disabled]="enviando()"
+              class="min-h-11 rounded-xl bg-emerald-900 px-4 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+            >
+              {{ enviando() ? 'Enviando...' : 'Confirmar operação' }}
+            </button>
+          </div>
+        </section>
+      }
+    }
+
+    @if (etapa() === 'enviando') {
+      <p class="rounded-xl bg-slate-50 p-4 text-sm text-slate-700" role="status">
+        Enviando operação; não feche esta página.
+      </p>
+    }
+  </div>
+</app-admin-workspace>

@@ -1,0 +1,267 @@
+<app-admin-workspace activePage="stock">
+  <div class="space-y-6">
+    <section
+      class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end"
+      aria-labelledby="stock-supplies-title"
+    >
+      <div>
+        <p class="text-sm font-medium text-emerald-800">Estoque</p>
+        <h1
+          id="stock-supplies-title"
+          class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl"
+        >
+          Estoque de insumos
+        </h1>
+        <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          Consulte cadastros e saldos físicos e disponíveis. Os filtros são aplicados pelo servidor.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-3">
+        <a
+          routerLink="/admin/estoque/insumos/entradas"
+          class="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-800 px-4 py-2 text-sm font-semibold text-emerald-900 transition hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+        >
+          Registrar entrada
+        </a>
+        <a
+          routerLink="/admin/estoque/insumos/novo"
+          class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+        >
+          Novo insumo
+        </a>
+      </div>
+    </section>
+
+    @if (erroCarregamento()) {
+      <div
+        class="flex flex-col gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+        role="alert"
+        aria-live="assertive"
+      >
+        <p class="text-sm text-red-800">{{ erroCarregamento() }}</p>
+        <button
+          type="button"
+          (click)="carregarInsumos()"
+          [disabled]="carregando()"
+          class="min-h-10 shrink-0 rounded-lg px-3 text-sm font-semibold text-red-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    }
+
+    <section
+      class="grid gap-4 rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:grid-cols-2 sm:p-5"
+      aria-label="Filtros de insumos"
+    >
+      <div>
+        <label for="stock-supply-search" class="block text-sm font-semibold text-slate-800">
+          Buscar por nome
+        </label>
+        <input
+          id="stock-supply-search"
+          type="search"
+          [formControl]="busca"
+          autocomplete="off"
+          placeholder="Ex.: Base glicerinada"
+          class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+        />
+      </div>
+      <div class="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label
+            for="stock-supply-active-filter"
+            class="block text-sm font-semibold text-slate-800"
+          >
+            Cadastro
+          </label>
+          <select
+            id="stock-supply-active-filter"
+            [value]="filtroAtivo()"
+            (change)="definirFiltroAtivo($event)"
+            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+          >
+            <option value="todos">Todos</option>
+            <option value="ativos">Ativos</option>
+            <option value="inativos">Inativos</option>
+          </select>
+        </div>
+        <div>
+          <label
+            for="stock-supply-situation-filter"
+            class="block text-sm font-semibold text-slate-800"
+          >
+            Situação do estoque
+          </label>
+          <select
+            id="stock-supply-situation-filter"
+            [value]="filtroSituacao()"
+            (change)="definirFiltroSituacao($event)"
+            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+          >
+            <option value="">Todas</option>
+            @for (situacao of situacoes; track situacao.valor) {
+              <option [value]="situacao.valor">{{ situacao.rotulo }}</option>
+            }
+          </select>
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 sm:col-span-2">Ordenação: nome (A–Z).</p>
+    </section>
+
+    @if (carregando()) {
+      <p
+        class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600 shadow-sm"
+        role="status"
+        aria-live="polite"
+      >
+        Carregando insumos...
+      </p>
+    } @else if (erroCarregamento() && insumos().length === 0) {
+      <p class="sr-only">A lista de insumos está indisponível.</p>
+    } @else if (insumos().length === 0) {
+      <section
+        class="rounded-2xl border border-dashed border-emerald-900/30 bg-white px-5 py-10 text-center shadow-sm"
+        aria-labelledby="stock-supplies-empty-title"
+      >
+        <h2 id="stock-supplies-empty-title" class="text-lg font-semibold text-slate-900">
+          Nenhum insumo encontrado
+        </h2>
+        <p class="mx-auto mt-2 max-w-lg text-sm leading-6 text-slate-600">
+          Cadastre um insumo ou ajuste os filtros para consultar outros resultados.
+        </p>
+        <a
+          routerLink="/admin/estoque/insumos/novo"
+          class="mt-5 inline-flex min-h-11 items-center rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+        >
+          Novo insumo
+        </a>
+      </section>
+    } @else {
+      <section [attr.aria-busy]="carregando()" aria-label="Resultados de insumos">
+        <p class="mb-3 text-sm text-slate-600" aria-live="polite">
+          {{ totalItens() }} {{ totalItens() === 1 ? 'insumo encontrado' : 'insumos encontrados' }}
+        </p>
+        <ul class="grid list-none gap-3 p-0 lg:grid-cols-2">
+          @for (insumo of insumos(); track insumo.insumoId) {
+            <li>
+              <article
+                class="h-full rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
+              >
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <h2 class="break-words text-lg font-semibold text-slate-900">
+                      {{ insumo.nome }}
+                    </h2>
+                    <p class="mt-1 text-sm text-slate-600">
+                      {{ rotuloTipo(insumo.tipo) }} · {{ rotuloUnidade(insumo.unidadeBase) }}
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <span
+                      [class]="
+                        insumo.ativo
+                          ? 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-950'
+                          : 'rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800'
+                      "
+                    >
+                      {{ insumo.ativo ? 'Ativo' : 'Inativo' }}
+                    </span>
+                    <span
+                      [class]="
+                        'rounded-full border px-3 py-1 text-xs font-semibold ' +
+                        classeSituacao(insumo.situacao)
+                      "
+                    >
+                      {{ rotuloSituacao(insumo.situacao) }}
+                    </span>
+                  </div>
+                </div>
+
+                <dl
+                  class="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-slate-100 pt-4 sm:grid-cols-4"
+                >
+                  <div>
+                    <dt class="text-xs font-medium text-slate-500">Físico</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">
+                      {{ formatarQuantidade(insumo.saldoFisico, insumo.unidadeBase) }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-medium text-slate-500">Disponível</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">
+                      {{ formatarQuantidade(insumo.saldoDisponivel, insumo.unidadeBase) }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-medium text-slate-500">Mínimo</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">
+                      {{
+                        insumo.estoqueMinimoConfigurado
+                          ? formatarQuantidade(insumo.estoqueMinimo ?? '0', insumo.unidadeBase)
+                          : 'Não configurado'
+                      }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-medium text-slate-500">Tipo</dt>
+                    <dd class="mt-1 text-sm font-semibold text-slate-900">
+                      {{ rotuloTipo(insumo.tipo) }}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div class="mt-4 border-t border-slate-100 pt-3">
+                  <a
+                    [routerLink]="['/admin/estoque/insumos', insumo.insumoId]"
+                    class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                    [attr.aria-label]="'Abrir cadastro de ' + insumo.nome"
+                  >
+                    Ver e editar
+                  </a>
+                  @if (insumo.ativo) {
+                    <a
+                      [routerLink]="['/admin/estoque/insumos/entradas']"
+                      [queryParams]="{ insumoId: insumo.insumoId }"
+                      class="ml-2 inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      [attr.aria-label]="'Registrar entrada para ' + insumo.nome"
+                    >
+                      Registrar entrada
+                    </a>
+                  }
+                </div>
+              </article>
+            </li>
+          }
+        </ul>
+
+        @if (totalPaginas() > 1) {
+          <nav
+            class="mt-5 flex flex-wrap items-center justify-between gap-3"
+            aria-label="Paginação de insumos"
+          >
+            <button
+              type="button"
+              (click)="irParaPagina(pagina() - 1)"
+              [disabled]="pagina() <= 1 || carregando()"
+              class="min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <p class="text-sm text-slate-600" aria-live="polite">
+              Página {{ pagina() }} de {{ totalPaginas() }}
+            </p>
+            <button
+              type="button"
+              (click)="irParaPagina(pagina() + 1)"
+              [disabled]="pagina() >= totalPaginas() || carregando()"
+              class="min-h-10 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </nav>
+        }
+      </section>
+    }
+  </div>
+</app-admin-workspace>

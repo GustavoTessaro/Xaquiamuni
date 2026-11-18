@@ -1,0 +1,527 @@
+<app-admin-workspace activePage="stock">
+  <div class="space-y-6">
+    <a
+      routerLink="/admin/estoque/insumos"
+      class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+    >
+      Voltar para insumos
+    </a>
+
+    <header>
+      <p class="text-sm font-medium text-emerald-800">Estoque</p>
+      <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+        {{ titulo() }}
+      </h1>
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+        {{
+          editando
+            ? 'Atualize os dados cadastrais e gerencie as formas de compra deste insumo.'
+            : 'Cadastre a matéria-prima, embalagem ou outro item controlado pelo estoque. O cadastro não movimenta saldo.'
+        }}
+      </p>
+    </header>
+
+    @if (mensagem()) {
+      <p
+        class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-950"
+        role="status"
+        aria-live="polite"
+      >
+        {{ mensagem() }}
+      </p>
+    }
+
+    @if (carregando()) {
+      <p
+        class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-600 shadow-sm"
+        role="status"
+        aria-live="polite"
+      >
+        Carregando dados do insumo...
+      </p>
+    } @else if (erroCarregamento()) {
+      <section
+        class="rounded-2xl border border-red-200 bg-red-50 p-5"
+        role="alert"
+        aria-live="assertive"
+      >
+        <p class="text-sm text-red-900">{{ erroCarregamento() }}</p>
+        @if (!erroCarregamento().includes('não foi encontrado')) {
+          <button
+            type="button"
+            (click)="carregarDetalhe()"
+            [disabled]="carregando()"
+            class="mt-3 min-h-10 rounded-lg px-3 text-sm font-semibold text-red-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800 disabled:opacity-60"
+          >
+            Tentar novamente
+          </button>
+        }
+      </section>
+    } @else {
+      <section
+        class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm sm:p-6"
+        aria-labelledby="stock-supply-form-title"
+      >
+        <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-start">
+          <div>
+            <h2 id="stock-supply-form-title" class="text-lg font-semibold text-slate-900">
+              Dados do insumo
+            </h2>
+            @if (editando && detalhe(); as item) {
+              <p class="mt-1 text-sm text-slate-600">
+                Unidade-base: {{ rotuloUnidadeBase(item.resumo.unidadeBase) }}. Ela não pode ser
+                alterada após o cadastro.
+              </p>
+            }
+          </div>
+          @if (editando && detalhe(); as item) {
+            <div class="flex flex-wrap items-center gap-3">
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId: item.resumo.insumoId, acao: 'SaidaManual' }"
+                class="inline-flex min-h-10 items-center rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                Registrar saída
+              </a>
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId: item.resumo.insumoId, acao: 'Perda' }"
+                class="inline-flex min-h-10 items-center rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-800"
+              >
+                Registrar perda ou descarte
+              </a>
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId: item.resumo.insumoId, acao: 'Contagem' }"
+                class="inline-flex min-h-10 items-center rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-800"
+              >
+                Fazer contagem
+              </a>
+              @if (item.resumo.ativo) {
+                <a
+                  [routerLink]="['/admin/estoque/insumos/entradas']"
+                  [queryParams]="{ insumoId: item.resumo.insumoId }"
+                  class="inline-flex min-h-10 items-center rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                >
+                  Registrar entrada
+                </a>
+              }
+              <a
+                [routerLink]="['/admin/estoque/insumos', item.resumo.insumoId, 'consultas']"
+                class="inline-flex min-h-10 items-center rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                Posição e histórico
+              </a>
+              <span
+                [class]="
+                  item.resumo.ativo
+                    ? 'rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-950'
+                    : 'rounded-full border border-slate-300 bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-800'
+                "
+              >
+                {{ item.resumo.ativo ? 'Ativo' : 'Inativo' }}
+              </span>
+              <button
+                type="button"
+                (click)="alterarStatus()"
+                [disabled]="alterandoStatus() || salvando()"
+                class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {{
+                  alterandoStatus() ? 'Atualizando...' : item.resumo.ativo ? 'Inativar' : 'Ativar'
+                }}
+              </button>
+            </div>
+          }
+        </div>
+
+        @if (erroFormulario()) {
+          <p
+            class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+            role="alert"
+            aria-live="assertive"
+          >
+            {{ erroFormulario() }}
+          </p>
+        }
+
+        <form
+          class="mt-5 grid gap-5 sm:grid-cols-2"
+          [formGroup]="form"
+          (ngSubmit)="salvarInsumo()"
+          novalidate
+        >
+          <div class="sm:col-span-2">
+            <label for="stock-supply-name" class="block text-sm font-semibold text-slate-800">
+              Nome <span aria-hidden="true">*</span>
+            </label>
+            <input
+              id="stock-supply-name"
+              type="text"
+              formControlName="nome"
+              maxlength="200"
+              autocomplete="off"
+              required
+              aria-describedby="stock-supply-name-hint"
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            />
+            <p id="stock-supply-name-hint" class="mt-1 text-xs text-slate-500">
+              Até 200 caracteres.
+            </p>
+            @if (errorField(form.controls.nome, false)) {
+              <p class="mt-1 text-sm text-red-800" role="alert">
+                @if (
+                  form.controls.nome.hasError('required') ||
+                  form.controls.nome.hasError('whitespace')
+                ) {
+                  Informe o nome do insumo.
+                } @else {
+                  O nome deve ter no máximo 200 caracteres.
+                }
+              </p>
+            }
+          </div>
+
+          <div>
+            <label for="stock-supply-type" class="block text-sm font-semibold text-slate-800">
+              Tipo <span aria-hidden="true">*</span>
+            </label>
+            <select
+              id="stock-supply-type"
+              formControlName="tipo"
+              required
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              <option value="MateriaPrima">Matéria-prima</option>
+              <option value="Embalagem">Embalagem</option>
+              <option value="Outro">Outro</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="stock-supply-base-unit" class="block text-sm font-semibold text-slate-800">
+              Unidade-base <span aria-hidden="true">*</span>
+            </label>
+            <select
+              id="stock-supply-base-unit"
+              formControlName="unidadeBase"
+              required
+              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:bg-slate-100 disabled:text-slate-600"
+            >
+              <option value="Grama">Grama (g)</option>
+              <option value="Mililitro">Mililitro (ml)</option>
+              <option value="Unidade">Unidade (un.)</option>
+            </select>
+          </div>
+
+          <div>
+            <label for="stock-supply-minimum" class="block text-sm font-semibold text-slate-800">
+              Estoque mínimo <span class="font-normal text-slate-500">(opcional)</span>
+            </label>
+            <input
+              id="stock-supply-minimum"
+              type="number"
+              formControlName="estoqueMinimo"
+              min="0"
+              max="999999999999.9999"
+              step="0.000001"
+              inputmode="decimal"
+              [attr.aria-describedby]="'stock-supply-minimum-hint'"
+            />
+            <p id="stock-supply-minimum-hint" class="mt-1 text-xs text-slate-500">
+              Quantidade na unidade-base; até 6 casas decimais.
+            </p>
+            @if (
+              errorField(form.controls.estoqueMinimo, false) ||
+              (form.controls.estoqueMinimo.touched && form.hasError('integerMinimum'))
+            ) {
+              <p class="mt-1 text-sm text-red-800" role="alert">
+                @if (form.controls.estoqueMinimo.hasError('min')) {
+                  O estoque mínimo não pode ser negativo.
+                } @else if (form.hasError('integerMinimum')) {
+                  Para unidade inteira, o estoque mínimo deve ser um número inteiro.
+                } @else if (form.controls.estoqueMinimo.hasError('decimalScale')) {
+                  Use no máximo 6 casas decimais.
+                } @else {
+                  A quantidade excede o limite permitido.
+                }
+              </p>
+            }
+          </div>
+
+          <fieldset class="space-y-3 rounded-xl border border-slate-200 p-4 sm:col-span-2">
+            <legend class="px-1 text-sm font-semibold text-slate-800">Rastreamento</legend>
+            <label class="flex min-h-10 items-start gap-3 text-sm text-slate-800">
+              <input
+                type="checkbox"
+                formControlName="controlaLote"
+                class="mt-0.5 size-4 rounded border-slate-300 text-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              />
+              <span>
+                Controla estoque por lote
+                <span class="mt-0.5 block text-xs text-slate-500">
+                  Lotes e seus saldos serão controlados separadamente.
+                </span>
+              </span>
+            </label>
+            <label
+              class="flex min-h-10 items-start gap-3 text-sm text-slate-800"
+              [class.opacity-60]="!form.controls.controlaLote.value"
+            >
+              <input
+                type="checkbox"
+                formControlName="validadeObrigatoria"
+                class="mt-0.5 size-4 rounded border-slate-300 text-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              />
+              <span>
+                Exige data de validade para cada lote
+                @if (!form.controls.controlaLote.value) {
+                  <span class="mt-0.5 block text-xs text-slate-500">
+                    Ative o controle por lote para habilitar esta opção.
+                  </span>
+                }
+              </span>
+            </label>
+          </fieldset>
+
+          <div class="flex flex-wrap items-center gap-3 sm:col-span-2">
+            <button
+              type="submit"
+              [disabled]="salvando()"
+              class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {{ salvando() ? 'Salvando...' : editando ? 'Salvar alterações' : 'Cadastrar insumo' }}
+            </button>
+            <a
+              routerLink="/admin/estoque/insumos"
+              class="inline-flex min-h-11 items-center rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+            >
+              Cancelar
+            </a>
+          </div>
+        </form>
+      </section>
+
+      @if (editando && detalhe(); as item) {
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm sm:p-6"
+          aria-labelledby="stock-supply-forms-title"
+        >
+          <div class="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+            <div>
+              <h2 id="stock-supply-forms-title" class="text-lg font-semibold text-slate-900">
+                Formas de compra
+              </h2>
+              <p class="mt-1 text-sm text-slate-600">
+                Cada fator representa a quantidade da embalagem na unidade-base ({{
+                  rotuloUnidadeBase(item.resumo.unidadeBase)
+                }}).
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="abrirNovaForma()"
+              [disabled]="mostrandoForma() || salvandoForma()"
+              class="inline-flex min-h-10 items-center justify-center rounded-xl border border-emerald-800 px-4 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Nova forma de compra
+            </button>
+          </div>
+
+          @if (erroForma()) {
+            <p
+              class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+              role="alert"
+              aria-live="assertive"
+            >
+              {{ erroForma() }}
+            </p>
+          }
+          @if (mensagemForma()) {
+            <p
+              class="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950"
+              role="status"
+              aria-live="polite"
+            >
+              {{ mensagemForma() }}
+            </p>
+          }
+
+          @if (mostrandoForma()) {
+            <form
+              class="mt-5 grid gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2"
+              [formGroup]="formaForm"
+              (ngSubmit)="salvarForma()"
+              novalidate
+            >
+              <h3 class="text-base font-semibold text-slate-900 sm:col-span-2">
+                {{ formaEmEdicao() ? 'Editar forma de compra' : 'Cadastrar forma de compra' }}
+              </h3>
+              <div>
+                <label for="purchase-form-name" class="block text-sm font-semibold text-slate-800">
+                  Nome <span aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="purchase-form-name"
+                  type="text"
+                  formControlName="nome"
+                  required
+                  maxlength="100"
+                  autocomplete="off"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                />
+                @if (errorField(formaForm.controls.nome, false)) {
+                  <p class="mt-1 text-sm text-red-800" role="alert">
+                    Informe um nome com até 100 caracteres.
+                  </p>
+                }
+              </div>
+              <div>
+                <label for="purchase-form-unit" class="block text-sm font-semibold text-slate-800">
+                  Unidade da embalagem <span aria-hidden="true">*</span>
+                </label>
+                <select
+                  id="purchase-form-unit"
+                  formControlName="unidade"
+                  required
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                >
+                  @for (unidade of unidadeFormaCompra(); track unidade) {
+                    <option [value]="unidade">{{ rotuloUnidade(unidade) }}</option>
+                  }
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label
+                  for="purchase-form-quantity"
+                  class="block text-sm font-semibold text-slate-800"
+                >
+                  Quantidade por embalagem <span aria-hidden="true">*</span>
+                </label>
+                <input
+                  id="purchase-form-quantity"
+                  type="number"
+                  formControlName="quantidadeEquivalentePorEmbalagem"
+                  [attr.min]="unidadeFactorMin(formaForm.controls.unidade.value)"
+                  [attr.step]="unidadeFactorStep(formaForm.controls.unidade.value)"
+                  inputmode="decimal"
+                  required
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                />
+                @if (
+                  formaForm.controls.quantidadeEquivalentePorEmbalagem.touched &&
+                  (formaForm.controls.quantidadeEquivalentePorEmbalagem.invalid ||
+                    formaForm.invalid)
+                ) {
+                  <p class="mt-1 text-sm text-red-800" role="alert">
+                    @if (formaForm.hasError('integerUnit')) {
+                      A quantidade em unidades inteiras deve ser um número inteiro.
+                    } @else if (formaForm.hasError('decimalScale')) {
+                      Use no máximo 6 casas decimais.
+                    } @else if (formaForm.hasError('maximum')) {
+                      A equivalência ultrapassa o limite permitido.
+                    } @else {
+                      Informe uma quantidade maior que zero.
+                    }
+                  </p>
+                }
+                @if (equivalenciaForma()) {
+                  <p class="mt-2 text-sm font-medium text-emerald-900" aria-live="polite">
+                    {{ equivalenciaForma() }}
+                  </p>
+                }
+              </div>
+              <div class="flex flex-wrap gap-3 sm:col-span-2">
+                <button
+                  type="submit"
+                  [disabled]="salvandoForma()"
+                  class="inline-flex min-h-10 items-center justify-center rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {{
+                    salvandoForma()
+                      ? 'Salvando...'
+                      : formaEmEdicao()
+                        ? 'Salvar forma'
+                        : 'Cadastrar forma'
+                  }}
+                </button>
+                <button
+                  type="button"
+                  (click)="cancelarForma()"
+                  [disabled]="salvandoForma()"
+                  class="inline-flex min-h-10 items-center rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </form>
+          }
+
+          @if (item.formasCompra.length === 0) {
+            <p
+              class="mt-5 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
+            >
+              Nenhuma forma de compra cadastrada.
+            </p>
+          } @else {
+            <ul class="mt-5 list-none divide-y divide-slate-100 p-0">
+              @for (forma of item.formasCompra; track forma.id) {
+                <li class="flex flex-col justify-between gap-3 py-4 sm:flex-row sm:items-center">
+                  <div class="min-w-0">
+                    <div class="flex flex-wrap items-center gap-2">
+                      <h3 class="break-words font-semibold text-slate-900">{{ forma.nome }}</h3>
+                      <span
+                        [class]="
+                          forma.ativa
+                            ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-950'
+                            : 'rounded-full border border-slate-300 bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-800'
+                        "
+                      >
+                        {{ forma.ativa ? 'Ativa' : 'Inativa' }}
+                      </span>
+                    </div>
+                    <p class="mt-1 text-sm text-slate-600">
+                      {{
+                        formatarQuantidade(forma.quantidadeEquivalentePorEmbalagem, forma.unidade)
+                      }}
+                      na unidade-base por embalagem
+                    </p>
+                  </div>
+                  <div class="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      (click)="editarForma(forma)"
+                      [disabled]="mostrandoForma() || salvandoForma() || formaPendente(forma.id)"
+                      [attr.aria-label]="'Editar forma de compra ' + forma.nome"
+                      class="min-h-10 rounded-lg px-3 text-sm font-semibold text-emerald-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Editar
+                    </button>
+                    <button
+                      type="button"
+                      (click)="alterarStatusForma(forma)"
+                      [disabled]="formaPendente(forma.id)"
+                      [attr.aria-label]="
+                        (forma.ativa ? 'Inativar forma de compra ' : 'Ativar forma de compra ') +
+                        forma.nome
+                      "
+                      class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {{
+                        formaPendente(forma.id)
+                          ? 'Atualizando...'
+                          : forma.ativa
+                            ? 'Inativar'
+                            : 'Ativar'
+                      }}
+                    </button>
+                  </div>
+                </li>
+              }
+            </ul>
+          }
+        </section>
+      }
+    }
+  </div>
+</app-admin-workspace>

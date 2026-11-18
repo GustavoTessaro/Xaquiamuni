@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, inject, signal } from '@angular/core';
-import { Router, RouterLink } from '@angular/router';
+import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 
@@ -7,7 +7,7 @@ export type AdminWorkspacePage = 'overview' | 'categories' | 'products' | 'stock
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [RouterLink, RouterLinkActive],
   selector: 'app-admin-workspace',
   styleUrl: './admin-workspace.component.css',
   templateUrl: './admin-workspace.component.html',
@@ -27,7 +27,8 @@ export class AdminWorkspaceComponent {
 
     this.signingOut.set(true);
     this.errorMessage.set('');
-    this.adminAuthService.logout()
+    this.adminAuthService
+      .logout()
       .pipe(finalize(() => this.signingOut.set(false)))
       .subscribe({
         next: () => {

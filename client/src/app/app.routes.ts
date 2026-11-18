@@ -12,6 +12,78 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
   {
+    path: 'admin/estoque/insumos/operacoes',
+    loadComponent: () =>
+      import('./admin/estoque/operacoes/admin-operacao-insumo.component').then(
+        (module) => module.AdminOperacaoInsumoComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos/entradas',
+    loadComponent: () =>
+      import('./admin/estoque/entradas/admin-entrada-insumo.component').then(
+        (module) => module.AdminEntradaInsumoComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos/:id/movimentacoes/:movimentoId/estornar',
+    loadComponent: () =>
+      import('./admin/estoque/operacoes/admin-operacao-insumo.component').then(
+        (module) => module.AdminOperacaoInsumoComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos/novo',
+    loadComponent: () =>
+      import('./admin/estoque/insumos/admin-insumo-form.component').then(
+        (module) => module.AdminInsumoFormComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos/:id/consultas',
+    loadComponent: () =>
+      import('./admin/estoque/consultas/admin-consulta-insumo.component').then(
+        (module) => module.AdminConsultaInsumoComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos/:id',
+    loadComponent: () =>
+      import('./admin/estoque/insumos/admin-insumo-form.component').then(
+        (module) => module.AdminInsumoFormComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/insumos',
+    loadComponent: () =>
+      import('./admin/estoque/insumos/admin-insumos.component').then(
+        (module) => module.AdminInsumosComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/produtos-acabados/:varianteId',
+    loadComponent: () =>
+      import('./admin/estoque/produtos-acabados/admin-produtos-acabados.component').then(
+        (module) => module.AdminProdutosAcabadosComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/estoque/produtos-acabados',
+    loadComponent: () =>
+      import('./admin/estoque/produtos-acabados/admin-produtos-acabados.component').then(
+        (module) => module.AdminProdutosAcabadosComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/produtos/:produtoId/fotos',
     loadComponent: () =>
       import('./admin/produtos/admin-produto-imagens.component').then(

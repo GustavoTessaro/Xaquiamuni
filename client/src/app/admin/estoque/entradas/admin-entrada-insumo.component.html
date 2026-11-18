@@ -1,0 +1,786 @@
+<app-admin-workspace activePage="stock">
+  <div class="space-y-6">
+    @if (retornoInsumoId(); as insumoId) {
+      <a
+        [routerLink]="['/admin/estoque/insumos', insumoId]"
+        class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+      >
+        Voltar ao insumo
+      </a>
+    } @else {
+      <a
+        routerLink="/admin/estoque/insumos"
+        class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+      >
+        Voltar para insumos
+      </a>
+    }
+
+    <header>
+      <p class="text-sm font-medium text-emerald-800">Estoque</p>
+      <h1 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+        Registrar entrada de insumo
+      </h1>
+      <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+        Registre o estoque inicial ou uma aquisição. O saldo só muda após confirmação da API.
+      </p>
+    </header>
+
+    @if (erroRecuperacaoPendente()) {
+      <p
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ erroRecuperacaoPendente() }}
+      </p>
+    }
+
+    @if (erroEntrada() && etapa() !== 'incerta' && etapa() !== 'conflito') {
+      <p
+        class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+        role="alert"
+        aria-live="assertive"
+      >
+        {{ erroEntrada() }}
+      </p>
+    }
+
+    @if (carregandoSessao()) {
+      <p
+        class="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600"
+        role="status"
+      >
+        Verificando sessão administrativa...
+      </p>
+    } @else if (erroRecuperacaoPendente()) {
+      <section class="rounded-2xl border border-amber-200 bg-amber-50 p-5">
+        <h2 class="font-semibold text-amber-950">Reconciliação necessária</h2>
+        <p class="mt-2 text-sm leading-6 text-amber-900">
+          Não inicie outra entrada até confirmar no histórico se a operação anterior foi registrada.
+        </p>
+      </section>
+    } @else if (etapa() === 'incerta' || etapa() === 'conflito') {
+      <section
+        class="space-y-4 rounded-2xl border border-amber-300 bg-amber-50 p-5 shadow-sm"
+        role="alert"
+        aria-live="assertive"
+      >
+        <div>
+          <h2 class="text-lg font-semibold text-amber-950">
+            {{ etapa() === 'incerta' ? 'Confirmação pendente' : 'Conflito de idempotência' }}
+          </h2>
+          <p class="mt-1 text-sm leading-6 text-amber-900">{{ erroEntrada() }}</p>
+        </div>
+        @if (resumo(); as item) {
+          <dl class="grid gap-3 rounded-xl border border-amber-200 bg-white p-4 sm:grid-cols-2">
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Insumo</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">{{ item.insumoNome }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Tipo</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">{{ item.tipoLabel }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Quantidade informada</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ item.quantidadeOriginal }} · {{ item.unidadeOriginalLabel }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Equivalência na unidade-base</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ item.quantidadeBase }} {{ rotuloUnidade(item.unidadeBase) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Lote</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">{{ item.loteLabel }}</dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Custo total</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ item.custoTotal ?? 'Desconhecido' }}
+              </dd>
+            </div>
+          </dl>
+        }
+        @if (etapa() === 'incerta') {
+          <button
+            type="button"
+            (click)="repetirOperacaoPendente()"
+            [disabled]="enviando()"
+            class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {{ enviando() ? 'Reenviando...' : 'Tentar novamente com os mesmos dados' }}
+          </button>
+        }
+      </section>
+    } @else if (etapa() === 'enviando') {
+      <section
+        class="rounded-2xl border border-emerald-950/10 bg-white p-6 text-sm text-slate-700 shadow-sm"
+        role="status"
+        aria-live="polite"
+      >
+        Registrando a entrada. Não feche esta tela nem envie outra operação.
+      </section>
+    } @else if (etapa() === 'sucesso') {
+      <section
+        class="space-y-4 rounded-2xl border border-emerald-200 bg-emerald-50 p-5 shadow-sm"
+        aria-labelledby="stock-entry-success-title"
+      >
+        <div>
+          <h2 id="stock-entry-success-title" class="text-lg font-semibold text-emerald-950">
+            Entrada registrada
+          </h2>
+          @if (resumo(); as item) {
+            <p class="mt-1 text-sm text-emerald-900">
+              {{ item.quantidadeBase }} {{ rotuloUnidade(item.unidadeBase) }} adicionados a
+              {{ item.insumoNome }}.
+            </p>
+          }
+          @if (movimento(); as item) {
+            <p class="mt-1 text-sm text-emerald-900">
+              Referência do movimento: <span class="font-mono">{{ item.id }}</span>
+            </p>
+          }
+        </div>
+
+        @if (selecionado(); as item) {
+          <div class="rounded-xl border border-emerald-200 bg-white p-4">
+            <h3 class="font-semibold text-slate-900">Posição atualizada</h3>
+            @if (atualizandoSaldo()) {
+              <p class="mt-2 text-sm text-slate-600" role="status">
+                Atualizando consulta de saldo...
+              </p>
+            } @else {
+              <p class="mt-2 text-sm text-slate-700">{{ saldoAtualizadoLabel() }}</p>
+              <dl class="mt-3 grid gap-3 sm:grid-cols-3">
+                <div>
+                  <dt class="text-xs font-medium text-slate-500">Utilizável</dt>
+                  <dd class="mt-1 text-sm font-semibold text-slate-900">
+                    {{ formatarSaldo(item.saldoUtilizavel, item.unidadeBase) }}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs font-medium text-slate-500">Disponível</dt>
+                  <dd class="mt-1 text-sm font-semibold text-slate-900">
+                    {{ formatarSaldo(item.saldoDisponivel, item.unidadeBase) }}
+                  </dd>
+                </div>
+                <div>
+                  <dt class="text-xs font-medium text-slate-500">Reservado</dt>
+                  <dd class="mt-1 text-sm font-semibold text-slate-900">
+                    {{ formatarSaldo(item.saldoReservado, item.unidadeBase) }}
+                  </dd>
+                </div>
+              </dl>
+            }
+            @if (erroSaldo()) {
+              <p class="mt-3 text-sm text-red-800" role="alert">{{ erroSaldo() }}</p>
+              <button
+                type="button"
+                (click)="recarregarSaldo()"
+                [disabled]="atualizandoSaldo()"
+                class="mt-2 min-h-10 rounded-lg px-3 text-sm font-semibold text-emerald-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-60"
+              >
+                Atualizar saldo
+              </button>
+            }
+          </div>
+        }
+        <button
+          type="button"
+          (click)="selecionarOutraMateriaPrima()"
+          [disabled]="!!chavePendente()"
+          class="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-800 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+        >
+          {{
+            chavePendente() ? 'Reconcilie a operação antes de continuar' : 'Registrar outra entrada'
+          }}
+        </button>
+      </section>
+    } @else if (carregandoDetalhe()) {
+      <p
+        class="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600"
+        role="status"
+      >
+        Carregando dados do insumo...
+      </p>
+    } @else if (erroDetalhe()) {
+      <section class="rounded-2xl border border-red-200 bg-red-50 p-5" role="alert">
+        <p class="text-sm text-red-900">{{ erroDetalhe() }}</p>
+        <button
+          type="button"
+          (click)="recarregarDetalhe()"
+          class="mt-3 min-h-10 rounded-lg px-3 text-sm font-semibold text-red-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-800"
+        >
+          Tentar novamente
+        </button>
+      </section>
+    } @else if (selecionado(); as item) {
+      @if (etapa() === 'revisao') {
+        @if (resumo(); as review) {
+          <section
+            class="space-y-5 rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm sm:p-6"
+            aria-labelledby="stock-entry-review-title"
+          >
+            <div>
+              <h2 id="stock-entry-review-title" class="text-lg font-semibold text-slate-900">
+                Revise a entrada antes de registrar
+              </h2>
+              <p class="mt-1 text-sm leading-6 text-slate-600">
+                O saldo não será alterado até a API confirmar esta operação.
+              </p>
+            </div>
+            <dl class="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Insumo</dt>
+                <dd class="mt-1 font-semibold text-slate-900">{{ review.insumoNome }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Tipo de entrada</dt>
+                <dd class="mt-1 font-semibold text-slate-900">{{ review.tipoLabel }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Quantidade original</dt>
+                <dd class="mt-1 font-semibold text-slate-900">
+                  {{ review.quantidadeOriginal }} · {{ review.unidadeOriginalLabel }}
+                </dd>
+                @if (review.formaCompraNome) {
+                  <p class="mt-1 text-xs text-slate-600">{{ review.formaCompraNome }}</p>
+                }
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Na unidade-base</dt>
+                <dd class="mt-1 font-semibold text-slate-900">
+                  {{ review.quantidadeBase }} {{ rotuloUnidade(review.unidadeBase) }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Lote</dt>
+                <dd class="mt-1 font-semibold text-slate-900">{{ review.loteLabel }}</dd>
+              </div>
+              <div>
+                <dt class="text-xs font-medium text-slate-500">Custo total</dt>
+                <dd class="mt-1 font-semibold text-slate-900">
+                  {{ review.custoTotal ?? 'Desconhecido' }}
+                </dd>
+                @if (review.custoUnitarioEstimado) {
+                  <p class="mt-1 text-xs text-slate-600">
+                    Estimativa informativa por unidade-base:
+                    {{ review.custoUnitarioEstimado }}
+                  </p>
+                }
+              </div>
+            </dl>
+            <div class="flex flex-wrap gap-3">
+              <button
+                type="button"
+                (click)="confirmarEntrada()"
+                [disabled]="enviando()"
+                class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {{ enviando() ? 'Registrando...' : 'Confirmar entrada' }}
+              </button>
+              <button
+                type="button"
+                (click)="voltarParaFormulario()"
+                [disabled]="enviando()"
+                class="inline-flex min-h-11 items-center justify-center rounded-xl border border-slate-300 px-5 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-60"
+              >
+                Voltar e editar
+              </button>
+            </div>
+          </section>
+        }
+      } @else {
+        <section
+          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm sm:p-6"
+          aria-labelledby="stock-entry-form-title"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 id="stock-entry-form-title" class="text-lg font-semibold text-slate-900">
+                {{ item.nome }}
+              </h2>
+              <p class="mt-1 text-sm text-slate-600">
+                {{
+                  item.tipo === 'MateriaPrima'
+                    ? 'Matéria-prima'
+                    : item.tipo === 'Embalagem'
+                      ? 'Embalagem'
+                      : 'Outro'
+                }}
+                · Unidade-base: {{ rotuloUnidade(item.unidadeBase) }}
+              </p>
+            </div>
+            <button
+              type="button"
+              (click)="selecionarOutraMateriaPrima()"
+              [disabled]="!!chavePendente()"
+              class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-50"
+            >
+              Escolher outro insumo
+            </button>
+          </div>
+
+          <dl class="mt-5 grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-3">
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Físico</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ formatarSaldo(item.saldoFisico, item.unidadeBase) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Utilizável</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ formatarSaldo(item.saldoUtilizavel, item.unidadeBase) }}
+              </dd>
+            </div>
+            <div>
+              <dt class="text-xs font-medium text-slate-500">Disponível</dt>
+              <dd class="mt-1 text-sm font-semibold text-slate-900">
+                {{ formatarSaldo(item.saldoDisponivel, item.unidadeBase) }}
+              </dd>
+            </div>
+          </dl>
+
+          @if (erroValidacao()) {
+            <p
+              class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900"
+              role="alert"
+            >
+              {{ erroValidacao() }}
+            </p>
+          }
+          <form
+            class="mt-5 grid gap-5 sm:grid-cols-2"
+            [formGroup]="form"
+            (ngSubmit)="solicitarRevisao()"
+            novalidate
+          >
+            <div>
+              <label for="stock-entry-type" class="block text-sm font-semibold text-slate-800">
+                Tipo de entrada <span aria-hidden="true">*</span>
+              </label>
+              <select
+                id="stock-entry-type"
+                formControlName="tipo"
+                required
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                <option value="Aquisicao">Aquisição</option>
+                <option value="EstoqueInicial">Estoque inicial</option>
+              </select>
+            </div>
+
+            <div>
+              <label
+                for="stock-entry-quantity-mode"
+                class="block text-sm font-semibold text-slate-800"
+              >
+                Informar quantidade por <span aria-hidden="true">*</span>
+              </label>
+              <select
+                id="stock-entry-quantity-mode"
+                formControlName="formaQuantidade"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                <option value="Direta">Unidade física</option>
+                <option value="FormaCompra" [disabled]="formasCompraAtivas().length === 0">
+                  Forma de compra cadastrada
+                </option>
+              </select>
+            </div>
+
+            @if (form.controls.formaQuantidade.value === 'Direta') {
+              <div>
+                <label for="stock-entry-unit" class="block text-sm font-semibold text-slate-800">
+                  Unidade física <span aria-hidden="true">*</span>
+                </label>
+                <select
+                  id="stock-entry-unit"
+                  formControlName="unidadeOriginal"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                >
+                  @for (unidade of unidadesDiretas(); track unidade) {
+                    <option [value]="unidade">{{ rotuloUnidade(unidade) }}</option>
+                  }
+                </select>
+              </div>
+            } @else {
+              <div>
+                <label
+                  for="stock-entry-purchase-form"
+                  class="block text-sm font-semibold text-slate-800"
+                >
+                  Forma de compra <span aria-hidden="true">*</span>
+                </label>
+                <select
+                  id="stock-entry-purchase-form"
+                  formControlName="formaCompraId"
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                >
+                  <option value="">Selecione uma forma ativa</option>
+                  @for (forma of formasCompraAtivas(); track forma.id) {
+                    <option [value]="forma.id">
+                      {{ forma.nome }} — {{ equivalenciaForma(forma) }}
+                    </option>
+                  }
+                </select>
+                @if (formasCompraAtivas().length === 0) {
+                  <p class="mt-1 text-sm text-amber-900">
+                    Cadastre uma forma de compra ativa para usar esta opção.
+                  </p>
+                }
+              </div>
+            }
+
+            <div>
+              <label for="stock-entry-quantity" class="block text-sm font-semibold text-slate-800">
+                Quantidade <span aria-hidden="true">*</span>
+              </label>
+              <input
+                id="stock-entry-quantity"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                maxlength="64"
+                formControlName="quantidadeOriginal"
+                required
+                aria-describedby="stock-entry-quantity-help"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              />
+              <p id="stock-entry-quantity-help" class="mt-1 text-xs text-slate-500">
+                Use vírgula decimal. Embalagens devem ser informadas em quantidade inteira.
+              </p>
+              @if (exibirErroCampo('quantidadeOriginal')) {
+                <p class="mt-1 text-sm text-red-800" role="alert">Informe a quantidade.</p>
+              }
+              @if (quantidadeBasePreview()) {
+                <p class="mt-2 text-sm font-medium text-emerald-900" aria-live="polite">
+                  Equivalência: {{ quantidadeBasePreview() }}
+                </p>
+              }
+            </div>
+
+            <div>
+              <label for="stock-entry-cost" class="block text-sm font-semibold text-slate-800">
+                Custo total <span class="font-normal text-slate-500">(opcional)</span>
+              </label>
+              <input
+                id="stock-entry-cost"
+                type="text"
+                inputmode="decimal"
+                autocomplete="off"
+                maxlength="64"
+                formControlName="custoTotal"
+                aria-describedby="stock-entry-cost-help"
+                class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              />
+              <p id="stock-entry-cost-help" class="mt-1 text-xs text-slate-500">
+                Deixe vazio se desconhecido. Zero é um valor conhecido; use até 2 casas decimais.
+              </p>
+              @if (custoFormatado() !== 'Desconhecido') {
+                <p class="mt-2 text-sm text-slate-700" aria-live="polite">
+                  Custo informado: {{ custoFormatado() }}
+                </p>
+              }
+              @if (custoUnitarioPreview(); as unitCost) {
+                <p class="mt-1 text-xs text-slate-600">
+                  Estimativa informativa por unidade-base: {{ unitCost }}
+                </p>
+              }
+            </div>
+
+            <div class="sm:col-span-2">
+              <label for="stock-entry-note" class="block text-sm font-semibold text-slate-800">
+                Observação <span class="font-normal text-slate-500">(opcional)</span>
+              </label>
+              <textarea
+                id="stock-entry-note"
+                rows="3"
+                maxlength="500"
+                formControlName="observacao"
+                class="mt-1.5 w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              ></textarea>
+              <p class="mt-1 text-xs text-slate-500">Até 500 caracteres.</p>
+            </div>
+
+            @if (item.controlaLote) {
+              <fieldset class="space-y-4 rounded-xl border border-slate-200 p-4 sm:col-span-2">
+                <legend class="px-1 text-sm font-semibold text-slate-800">Dados do lote</legend>
+                <div class="flex flex-wrap gap-4">
+                  <label class="inline-flex min-h-10 items-center gap-2 text-sm text-slate-800">
+                    <input type="radio" value="Novo" formControlName="formaLote" />
+                    Cadastrar novo lote
+                  </label>
+                  @if (lotes().length > 0) {
+                    <label class="inline-flex min-h-10 items-center gap-2 text-sm text-slate-800">
+                      <input type="radio" value="Existente" formControlName="formaLote" />
+                      Usar lote existente
+                    </label>
+                  }
+                </div>
+
+                @if (form.controls.formaLote.value === 'Existente') {
+                  <div>
+                    <label for="stock-entry-lot" class="block text-sm font-semibold text-slate-800">
+                      Lote deste insumo <span aria-hidden="true">*</span>
+                    </label>
+                    <select
+                      id="stock-entry-lot"
+                      formControlName="loteId"
+                      class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                    >
+                      <option value="">Selecione um lote</option>
+                      @for (lote of lotes(); track lote.loteId) {
+                        <option
+                          [value]="lote.loteId"
+                          [disabled]="form.controls.tipo.value === 'Aquisicao' && !lote.elegivel"
+                        >
+                          {{ lote.identificacaoLote || 'Lote sem identificação' }}
+                          · {{ rotuloSituacaoLote(lote) }} · validade
+                          {{ formatarDataCivil(lote.dataValidade) }}
+                        </option>
+                      }
+                    </select>
+                    @if (selecionadoIneligivel(); as lote) {
+                      <p class="mt-2 text-sm text-amber-900" role="status">
+                        Este lote continua com saldo físico, mas não é utilizável. Estoque inicial
+                        pode registrá-lo quando permitido; aquisição exige lote elegível.
+                      </p>
+                    }
+                    <ul class="mt-3 grid list-none gap-2 p-0 sm:grid-cols-2">
+                      @for (lote of lotes(); track lote.loteId) {
+                        <li class="rounded-lg border border-slate-200 p-3 text-sm">
+                          <p class="font-semibold text-slate-900">
+                            {{ lote.identificacaoLote || 'Lote sem identificação' }}
+                          </p>
+                          <p class="mt-1 text-slate-600">
+                            Entrada {{ formatarDataCivil(lote.dataEntrada) }} · validade
+                            {{ formatarDataCivil(lote.dataValidade) }}
+                          </p>
+                          <p class="mt-1 text-slate-600">
+                            Físico: {{ formatarSaldo(lote.saldoFisico, item.unidadeBase) }} ·
+                            {{ rotuloSituacaoLote(lote) }}
+                          </p>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                } @else {
+                  <div class="grid gap-4 sm:grid-cols-2">
+                    <div class="sm:col-span-2">
+                      <label
+                        for="stock-entry-lot-name"
+                        class="block text-sm font-semibold text-slate-800"
+                      >
+                        Identificação do lote <span aria-hidden="true">*</span>
+                      </label>
+                      <input
+                        id="stock-entry-lot-name"
+                        type="text"
+                        maxlength="100"
+                        formControlName="identificacaoNovoLote"
+                        required
+                        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        for="stock-entry-lot-date"
+                        class="block text-sm font-semibold text-slate-800"
+                      >
+                        Data de entrada <span aria-hidden="true">*</span>
+                      </label>
+                      <input
+                        id="stock-entry-lot-date"
+                        type="date"
+                        formControlName="dataEntradaNovoLote"
+                        required
+                        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        for="stock-entry-lot-expiry"
+                        class="block text-sm font-semibold text-slate-800"
+                      >
+                        Validade
+                        @if (item.validadeObrigatoria) {
+                          <span aria-hidden="true">*</span>
+                        } @else {
+                          <span class="font-normal text-slate-500">(opcional)</span>
+                        }
+                      </label>
+                      <input
+                        id="stock-entry-lot-expiry"
+                        type="date"
+                        formControlName="dataValidadeNovoLote"
+                        [required]="item.validadeObrigatoria"
+                        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      />
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label
+                        for="stock-entry-lot-supplier"
+                        class="block text-sm font-semibold text-slate-800"
+                      >
+                        Fornecedor <span class="font-normal text-slate-500">(opcional)</span>
+                      </label>
+                      <input
+                        id="stock-entry-lot-supplier"
+                        type="text"
+                        maxlength="200"
+                        formControlName="fornecedorNovoLote"
+                        class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      />
+                    </div>
+                    @if (form.controls.tipo.value === 'EstoqueInicial') {
+                      <label
+                        class="flex min-h-10 items-start gap-3 text-sm text-slate-800 sm:col-span-2"
+                      >
+                        <input
+                          type="checkbox"
+                          formControlName="novoLoteBloqueado"
+                          class="mt-0.5 size-4 rounded border-slate-300 text-emerald-800"
+                        />
+                        <span>
+                          Abrir este lote como bloqueado
+                          <span class="mt-0.5 block text-xs text-slate-500">
+                            O saldo permanecerá físico, mas não será utilizável nem disponível.
+                          </span>
+                        </span>
+                      </label>
+                    }
+                  </div>
+                }
+                <p class="text-xs leading-5 text-slate-500">
+                  As datas são civis (ano-mês-dia), sem conversão de fuso. Lotes vencidos ou
+                  bloqueados não são apresentados como utilizáveis.
+                </p>
+              </fieldset>
+            } @else {
+              <p
+                class="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700 sm:col-span-2"
+              >
+                Este insumo usa saldo agregado e não controla lotes. Nenhum lote será criado.
+              </p>
+            }
+
+            <div class="sm:col-span-2">
+              <button
+                type="submit"
+                class="inline-flex min-h-11 items-center justify-center rounded-xl bg-emerald-800 px-5 py-2 text-sm font-semibold text-white hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                Revisar entrada
+              </button>
+            </div>
+          </form>
+        </section>
+      }
+    } @else {
+      <section class="space-y-4 rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm">
+        <div>
+          <h2 class="text-lg font-semibold text-slate-900">Selecione um insumo ativo</h2>
+          <p class="mt-1 text-sm text-slate-600">
+            A busca e a paginação são aplicadas pela API; insumos inativos não recebem entradas.
+          </p>
+        </div>
+
+        @if (erroBusca()) {
+          <div class="rounded-xl border border-red-200 bg-red-50 p-4" role="alert">
+            <p class="text-sm text-red-900">{{ erroBusca() }}</p>
+            <button
+              type="button"
+              (click)="carregarInsumosAtivos()"
+              [disabled]="buscandoInsumos()"
+              class="mt-2 min-h-10 rounded-lg px-3 text-sm font-semibold text-red-900 underline underline-offset-4 disabled:opacity-60"
+            >
+              Tentar novamente
+            </button>
+          </div>
+        }
+
+        <div>
+          <label for="stock-entry-search" class="block text-sm font-semibold text-slate-800">
+            Buscar por nome
+          </label>
+          <input
+            id="stock-entry-search"
+            type="search"
+            [formControl]="busca"
+            autocomplete="off"
+            placeholder="Ex.: Base glicerinada"
+            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+          />
+        </div>
+
+        @if (buscandoInsumos()) {
+          <p class="py-4 text-sm text-slate-600" role="status" aria-live="polite">
+            Carregando insumos...
+          </p>
+        } @else if (resultados().length === 0 && !erroBusca()) {
+          <p class="rounded-xl border border-dashed border-slate-300 p-5 text-sm text-slate-600">
+            Nenhum insumo ativo encontrado.
+          </p>
+        } @else if (resultados().length > 0) {
+          <ul class="grid list-none gap-3 p-0 sm:grid-cols-2">
+            @for (insumo of resultados(); track insumo.insumoId) {
+              <li>
+                <button
+                  type="button"
+                  (click)="selecionarInsumo(insumo)"
+                  [disabled]="carregandoDetalhe()"
+                  class="w-full rounded-xl border border-slate-200 p-4 text-left hover:border-emerald-700 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-60"
+                >
+                  <span class="block font-semibold text-slate-900">{{ insumo.nome }}</span>
+                  <span class="mt-1 block text-sm text-slate-600">
+                    {{
+                      insumo.tipo === 'MateriaPrima'
+                        ? 'Matéria-prima'
+                        : insumo.tipo === 'Embalagem'
+                          ? 'Embalagem'
+                          : 'Outro'
+                    }}
+                    · {{ rotuloUnidade(insumo.unidadeBase) }} · Disponível
+                    {{ formatarSaldo(insumo.saldoDisponivel, insumo.unidadeBase) }}
+                  </span>
+                </button>
+              </li>
+            }
+          </ul>
+          @if (totalPaginasInsumos() > 1) {
+            <nav
+              class="flex items-center justify-between gap-3"
+              aria-label="Paginação de insumos ativos"
+            >
+              <button
+                type="button"
+                (click)="avancarBusca(paginaInsumos() - 1)"
+                [disabled]="paginaInsumos() <= 1 || buscandoInsumos()"
+                class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-50"
+              >
+                Anterior
+              </button>
+              <p class="text-sm text-slate-600" aria-live="polite">
+                Página {{ paginaInsumos() }} de {{ totalPaginasInsumos() }}
+              </p>
+              <button
+                type="button"
+                (click)="avancarBusca(paginaInsumos() + 1)"
+                [disabled]="paginaInsumos() >= totalPaginasInsumos() || buscandoInsumos()"
+                class="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-50"
+              >
+                Próxima
+              </button>
+            </nav>
+          }
+        }
+      </section>
+    }
+  </div>
+</app-admin-workspace>

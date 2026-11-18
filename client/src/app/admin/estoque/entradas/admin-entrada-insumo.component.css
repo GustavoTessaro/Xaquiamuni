@@ -1,0 +1,11 @@
+:host {
+  display: block;
+}
+
+input[type='date'],
+input[type='text'],
+input[type='search'],
+textarea,
+select {
+  color-scheme: light;
+}
