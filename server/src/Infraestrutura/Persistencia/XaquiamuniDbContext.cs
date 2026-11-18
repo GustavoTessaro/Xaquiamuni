@@ -45,6 +45,8 @@ public sealed class XaquiamuniDbContext
     public DbSet<LoteProdutoAcabado> LotesProdutoAcabado => Set<LoteProdutoAcabado>();
     public DbSet<SaldoLoteProdutoAcabado> SaldosProdutoAcabado =>
         Set<SaldoLoteProdutoAcabado>();
+    public DbSet<ReservaProdutoAcabado> ReservasProdutoAcabado =>
+        Set<ReservaProdutoAcabado>();
     public DbSet<MovimentoProdutoAcabado> MovimentosProdutoAcabado =>
         Set<MovimentoProdutoAcabado>();
     public DbSet<ContagemSemDiferencaProdutoAcabado> ContagensSemDiferencaProdutoAcabado =>
@@ -421,6 +423,76 @@ public sealed class XaquiamuniDbContext
                 saldo.HasIndex(entity => new { entity.ProdutoVarianteId, entity.LoteId })
                     .IsUnique()
                     .HasDatabaseName("UX_SaldosProdutoAcabado_ProdutoVarianteId_LoteId");
+            });
+
+            builder.Entity<ReservaProdutoAcabado>(reserva =>
+            {
+                reserva.ToTable("ReservasProdutoAcabado", table =>
+                {
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Identificadores_NotEmpty",
+                        "[Id] <> '00000000-0000-0000-0000-000000000000' "
+                        + "AND [PedidoId] <> '00000000-0000-0000-0000-000000000000' "
+                        + "AND [ProdutoVarianteId] <> '00000000-0000-0000-0000-000000000000' "
+                        + "AND [LoteId] <> '00000000-0000-0000-0000-000000000000'");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Quantidade_Positive",
+                        "[Quantidade] > 0");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Timestamps_Utc",
+                        "DATEPART(TZOFFSET, [CriadaEmUtc]) = 0 AND DATEPART(TZOFFSET, [ExpiraEmUtc]) = 0 "
+                        + "AND ([ConfirmadaEmUtc] IS NULL OR DATEPART(TZOFFSET, [ConfirmadaEmUtc]) = 0) "
+                        + "AND ([EncerradaEmUtc] IS NULL OR DATEPART(TZOFFSET, [EncerradaEmUtc]) = 0)");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Prazo_24Horas",
+                        "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 "
+                        + "AND CAST([CriadaEmUtc] AS time(7)) = CAST([ExpiraEmUtc] AS time(7))");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Cronologia_Valid",
+                        "([ConfirmadaEmUtc] IS NULL OR ([ConfirmadaEmUtc] >= [CriadaEmUtc] "
+                        + "AND [ConfirmadaEmUtc] < [ExpiraEmUtc])) "
+                        + "AND ([EncerradaEmUtc] IS NULL OR [EncerradaEmUtc] >= "
+                        + "COALESCE([ConfirmadaEmUtc], [CriadaEmUtc]))");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Estado_Valid",
+                        "([Estado] = 0 AND [ConfirmadaEmUtc] IS NULL AND [EncerradaEmUtc] IS NULL) "
+                        + "OR ([Estado] = 1 AND [ConfirmadaEmUtc] IS NOT NULL AND [EncerradaEmUtc] IS NULL) "
+                        + "OR ([Estado] = 2 AND [EncerradaEmUtc] IS NOT NULL "
+                        + "AND ([ConfirmadaEmUtc] IS NOT NULL OR [EncerradaEmUtc] < [ExpiraEmUtc])) "
+                        + "OR ([Estado] = 3 AND [ConfirmadaEmUtc] IS NULL "
+                        + "AND [EncerradaEmUtc] IS NOT NULL AND [EncerradaEmUtc] >= [ExpiraEmUtc]) "
+                        + "OR ([Estado] = 4 AND [ConfirmadaEmUtc] IS NOT NULL AND [EncerradaEmUtc] IS NOT NULL)");
+                    table.HasCheckConstraint(
+                        "CK_ReservasProdutoAcabado_Motivo_Valid",
+                        "([Estado] = 2 AND [MotivoEncerramento] IS NOT NULL "
+                        + "AND LEN(LTRIM(RTRIM([MotivoEncerramento]))) > 0) "
+                        + "OR ([Estado] <> 2 AND [MotivoEncerramento] IS NULL)");
+                });
+                reserva.HasKey(entity => entity.Id);
+                reserva.Property(entity => entity.Id).ValueGeneratedNever();
+                reserva.Property(entity => entity.PedidoId).IsRequired();
+                reserva.Property(entity => entity.ProdutoVarianteId).IsRequired();
+                reserva.Property(entity => entity.LoteId).IsRequired();
+                reserva.Property(entity => entity.Quantidade).HasColumnType("int").IsRequired();
+                reserva.Property(entity => entity.CriadaEmUtc).HasColumnType("datetimeoffset(7)").IsRequired();
+                reserva.Property(entity => entity.ExpiraEmUtc).HasColumnType("datetimeoffset(7)").IsRequired();
+                reserva.Property(entity => entity.ConfirmadaEmUtc).HasColumnType("datetimeoffset(7)");
+                reserva.Property(entity => entity.EncerradaEmUtc).HasColumnType("datetimeoffset(7)");
+                reserva.Property(entity => entity.Estado)
+                    .HasConversion<short>()
+                    .HasColumnType("smallint")
+                    .IsRequired();
+                reserva.Property(entity => entity.MotivoEncerramento);
+                reserva.Property<byte[]>("Versao").IsRowVersion().IsRequired();
+                reserva.HasOne<LoteProdutoAcabado>()
+                    .WithMany()
+                    .HasForeignKey(entity => new { entity.ProdutoVarianteId, entity.LoteId })
+                    .HasPrincipalKey(entity => new { entity.ProdutoVarianteId, entity.Id })
+                    .OnDelete(DeleteBehavior.Restrict)
+                    .IsRequired();
+                reserva.HasIndex(entity => entity.PedidoId);
+                reserva.HasIndex(entity => new { entity.ProdutoVarianteId, entity.LoteId, entity.Estado });
+                reserva.HasIndex(entity => new { entity.Estado, entity.ExpiraEmUtc });
             });
 
             builder.Entity<MovimentoProdutoAcabado>(movimento =>

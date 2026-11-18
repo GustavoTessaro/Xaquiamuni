@@ -1085,6 +1085,73 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReservaProdutoAcabado", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("ConfirmadaEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<DateTimeOffset?>("EncerradaEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<short>("Estado")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset>("ExpiraEmUtc")
+                        .HasColumnType("datetimeoffset(7)");
+
+                    b.Property<Guid>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("MotivoEncerramento")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.Property<byte[]>("Versao")
+                        .IsConcurrencyToken()
+                        .IsRequired()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("rowversion");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PedidoId");
+
+                    b.HasIndex("Estado", "ExpiraEmUtc");
+
+                    b.HasIndex("ProdutoVarianteId", "LoteId", "Estado");
+
+                    b.ToTable("ReservasProdutoAcabado", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Cronologia_Valid", "([ConfirmadaEmUtc] IS NULL OR ([ConfirmadaEmUtc] >= [CriadaEmUtc] AND [ConfirmadaEmUtc] < [ExpiraEmUtc])) AND ([EncerradaEmUtc] IS NULL OR [EncerradaEmUtc] >= COALESCE([ConfirmadaEmUtc], [CriadaEmUtc]))");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Estado_Valid", "([Estado] = 0 AND [ConfirmadaEmUtc] IS NULL AND [EncerradaEmUtc] IS NULL) OR ([Estado] = 1 AND [ConfirmadaEmUtc] IS NOT NULL AND [EncerradaEmUtc] IS NULL) OR ([Estado] = 2 AND [EncerradaEmUtc] IS NOT NULL AND ([ConfirmadaEmUtc] IS NOT NULL OR [EncerradaEmUtc] < [ExpiraEmUtc])) OR ([Estado] = 3 AND [ConfirmadaEmUtc] IS NULL AND [EncerradaEmUtc] IS NOT NULL AND [EncerradaEmUtc] >= [ExpiraEmUtc]) OR ([Estado] = 4 AND [ConfirmadaEmUtc] IS NOT NULL AND [EncerradaEmUtc] IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [PedidoId] <> '00000000-0000-0000-0000-000000000000' AND [ProdutoVarianteId] <> '00000000-0000-0000-0000-000000000000' AND [LoteId] <> '00000000-0000-0000-0000-000000000000'");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Motivo_Valid", "([Estado] = 2 AND [MotivoEncerramento] IS NOT NULL AND LEN(LTRIM(RTRIM([MotivoEncerramento]))) > 0) OR ([Estado] <> 2 AND [MotivoEncerramento] IS NULL)");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Prazo_24Horas", "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 AND CAST([CriadaEmUtc] AS time(7)) = CAST([ExpiraEmUtc] AS time(7))");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Quantidade_Positive", "[Quantidade] > 0");
+
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Timestamps_Utc", "DATEPART(TZOFFSET, [CriadaEmUtc]) = 0 AND DATEPART(TZOFFSET, [ExpiraEmUtc]) = 0 AND ([ConfirmadaEmUtc] IS NULL OR DATEPART(TZOFFSET, [ConfirmadaEmUtc]) = 0) AND ([EncerradaEmUtc] IS NULL OR DATEPART(TZOFFSET, [EncerradaEmUtc]) = 0)");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1873,6 +1940,16 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("FK_PoliticasEstoqueProdutoVariante_ProdutoVariantes_ProdutoVarianteId");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReservaProdutoAcabado", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoVarianteId", "LoteId")
+                        .HasPrincipalKey("ProdutoVarianteId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.SaldoInsumo", b =>

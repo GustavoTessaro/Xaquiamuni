@@ -216,9 +216,9 @@ public sealed class ReservaProdutoAcabado
 
 public enum EstadoReservaProdutoAcabado
 {
-    Ativa,
-    Confirmada,
-    Liberada,
-    Expirada,
-    Consumida
+    Ativa = 0,
+    Confirmada = 1,
+    Liberada = 2,
+    Expirada = 3,
+    Consumida = 4
 }
