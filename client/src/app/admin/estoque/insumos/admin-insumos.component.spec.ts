@@ -123,6 +123,31 @@ describe('AdminInsumosComponent', () => {
     expect(text()).toContain('999.999.999.999,999999 g');
   });
 
+  it('links each supply card directly to its stock and history while preserving existing actions', () => {
+    render();
+
+    const cards = Array.from(root().querySelectorAll('article'));
+    expect(cards).toHaveLength(rows.length);
+    for (const [index, insumo] of rows.entries()) {
+      const card = cards[index]!;
+      const path = `/admin/estoque/insumos/${insumo.insumoId}`;
+      const stock = card.querySelector<HTMLAnchorElement>(`a[href="${path}/consultas"]`)!;
+      expect(stock.textContent?.trim()).toBe('Ver estoque e histórico');
+      expect(stock.getAttribute('aria-label')).toBe(`Ver estoque e histórico de ${insumo.nome}`);
+      expect(stock.tabIndex).toBe(0);
+      expect(stock.classList.contains('focus-visible:outline-2')).toBe(true);
+      expect(stock.parentElement?.classList.contains('flex-wrap')).toBe(true);
+      expect(card.querySelector(`a[href="${path}"]`)?.textContent?.trim()).toBe('Ver e editar');
+      const entrada = card.querySelector(
+        `a[href="/admin/estoque/insumos/entradas?insumoId=${insumo.insumoId}"]`,
+      );
+      expect(entrada?.textContent?.trim() ?? null).toBe(insumo.ativo ? 'Registrar entrada' : null);
+
+      stock.click();
+      expect(String(navigateByUrl.mock.lastCall?.[0])).toBe(`${path}/consultas`);
+    }
+  });
+
   it('sends search, status, situation, and pagination to the API instead of filtering locally', () => {
     const page: AdminPagina<AdminResumoInsumoPreciso> = {
       itens: rows,
@@ -198,6 +223,7 @@ describe('AdminInsumosComponent', () => {
     pending.complete();
     fixture.detectChanges();
     expect(text()).toContain('Nenhum insumo encontrado');
+    expect(root().querySelector('a[href$="/consultas"]')).toBeNull();
 
     setSelect('stock-supply-active-filter', 'inativos');
     expect(text()).toContain('Não foi possível carregar os insumos.');

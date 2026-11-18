@@ -220,10 +220,17 @@
                   </div>
                 </dl>
 
-                <div class="mt-4 border-t border-slate-100 pt-3">
+                <div class="mt-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+                  <a
+                    [routerLink]="['/admin/estoque/insumos', insumo.insumoId, 'consultas']"
+                    class="inline-flex min-h-11 items-center rounded-lg bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-900 hover:bg-emerald-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                    [attr.aria-label]="'Ver estoque e histórico de ' + insumo.nome"
+                  >
+                    Ver estoque e histórico
+                  </a>
                   <a
                     [routerLink]="['/admin/estoque/insumos', insumo.insumoId]"
-                    class="inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                    class="inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
                     [attr.aria-label]="'Abrir cadastro de ' + insumo.nome"
                   >
                     Ver e editar
@@ -232,7 +239,7 @@
                     <a
                       [routerLink]="['/admin/estoque/insumos/entradas']"
                       [queryParams]="{ insumoId: insumo.insumoId }"
-                      class="ml-2 inline-flex min-h-10 items-center rounded-lg px-3 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                      class="inline-flex min-h-11 items-center rounded-lg px-3 py-2 text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
                       [attr.aria-label]="'Registrar entrada para ' + insumo.nome"
                     >
                       Registrar entrada
