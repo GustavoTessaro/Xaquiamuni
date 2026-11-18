@@ -21,6 +21,7 @@ import {
   CatalogoPublicoService,
 } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
+import { CarrinhoService } from './carrinho.service';
 
 type ProdutoResult =
   | { id: string; product: ProdutoCatalogoDetalhe; failed: false }
@@ -44,6 +45,7 @@ export class ProdutoDetalheComponent implements OnInit {
   protected readonly selectedValues = signal<Record<string, string>>({});
   protected readonly selectedImageId = signal<string | null>(null);
   protected readonly selectionNotice = signal('');
+  protected readonly mensagemCarrinho = signal('');
   protected readonly returnFilters = signal<CatalogoPublicoRetorno>({});
   protected readonly selectedOption = computed(() => {
     const optionId = this.selectedOptionId();
@@ -74,6 +76,7 @@ export class ProdutoDetalheComponent implements OnInit {
 
   private readonly route = inject(ActivatedRoute);
   private readonly catalogService = inject(CatalogoPublicoService);
+  private readonly carrinho = inject(CarrinhoService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly retryRequests = new Subject<string>();
   private currentProductId: string | null = null;
@@ -120,6 +123,22 @@ export class ProdutoDetalheComponent implements OnInit {
       style: 'currency',
       currency: 'BRL',
     }).format(price);
+  }
+
+  protected adicionarAoCarrinho(): void {
+    const produto = this.product();
+    const opcao = this.selectedOption();
+    if (!produto || !opcao) {
+      return;
+    }
+    const resultado = this.carrinho.adicionar(produto, opcao.id);
+    this.mensagemCarrinho.set(
+      resultado === 'ok'
+        ? 'Item adicionado ao carrinho.'
+        : resultado === 'indisponivel'
+          ? 'Esta opção está indisponível para adicionar ao carrinho.'
+          : 'Não foi possível adicionar esta opção ao carrinho.',
+    );
   }
 
   protected formatMeasure(value: number, unit: 'g' | 'ml'): string {
@@ -271,17 +290,20 @@ export class ProdutoDetalheComponent implements OnInit {
     this.selectedValues.set({});
     this.selectedImageId.set(null);
     this.selectionNotice.set('');
+    this.mensagemCarrinho.set('');
   }
 
   private applyResult(result: ProdutoResult): void {
     this.loading.set(false);
     if (result.failed) {
       this.notFound.set(result.error instanceof HttpErrorResponse && result.error.status === 404);
+      this.carrinho.sinalizarDisponibilidade(result.id, this.notFound() ? false : null);
       this.requestError.set(!this.notFound());
       return;
     }
 
     this.product.set(result.product);
+    this.carrinho.atualizarDisponibilidade(result.product);
     const defaultOption =
       result.product.opcoes.find((option) => option.id === result.product.opcaoPrincipalId) ??
       result.product.opcoes.find((option) => option.principal) ??
@@ -294,6 +316,7 @@ export class ProdutoDetalheComponent implements OnInit {
   }
 
   private applyOption(option: ProdutoCatalogoOpcao): void {
+    this.mensagemCarrinho.set('');
     this.selectedOptionId.set(option.id);
     this.selectedValues.set(
       Object.fromEntries(

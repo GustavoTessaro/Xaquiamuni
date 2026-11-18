@@ -247,6 +247,10 @@ describe('ProdutoDetalheComponent', () => {
       '[data-testid="product-availability"][role="status"]',
     ) as HTMLElement;
     expect(disponibilidade.textContent).toContain('Opção esgotada');
+    const adicionar = harness.fixture.nativeElement.querySelector(
+      '.product-detail__add-to-cart',
+    ) as HTMLButtonElement;
+    expect(adicionar.disabled).toBe(true);
 
     expect(text(harness)).toContain('R$ 35,00');
     expect(text(harness)).toContain('100 g');
@@ -266,6 +270,7 @@ describe('ProdutoDetalheComponent', () => {
 
     choose(harness, 'characteristic-weight', 'value-200g');
     expect(disponibilidade.textContent).toContain('Disponível');
+    expect(adicionar.disabled).toBe(false);
     expect(text(harness)).toContain('R$ 55,00');
     expect(text(harness)).toContain('Pacote');
     expect(text(harness)).toContain('200 g');

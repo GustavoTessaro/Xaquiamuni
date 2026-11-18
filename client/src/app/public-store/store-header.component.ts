@@ -21,6 +21,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, filter, finalize, of } from 'rxjs';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
+import { CarrinhoService } from './carrinho.service';
 import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-publico.service';
 
 @Component({
@@ -39,6 +40,7 @@ export class StoreHeaderComponent implements OnInit {
   protected readonly signingOut = signal(false);
   protected readonly accountError = signal('');
   protected readonly searchTerm = signal('');
+  protected readonly quantidadeCarrinho = inject(CarrinhoService).quantidadeTotal;
 
   private readonly authService = inject(AuthService);
   private readonly catalogService = inject(CatalogoPublicoService);

@@ -37,6 +37,17 @@
     </form>
 
     <div class="store-account">
+      <a
+        class="store-account__cart"
+        routerLink="/carrinho"
+        routerLinkActive="is-active"
+        ariaCurrentWhenActive="page"
+        [attr.aria-label]="
+          'Carrinho, ' + quantidadeCarrinho() + (quantidadeCarrinho() === 1 ? ' item' : ' itens')
+        "
+      >
+        Carrinho <span aria-hidden="true">{{ quantidadeCarrinho() }}</span>
+      </a>
       @if (sessionLoading()) {
         <span class="store-account__status" role="status">Verificando conta...</span>
       } @else if (session()) {

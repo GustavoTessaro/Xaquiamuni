@@ -103,13 +103,17 @@ describe('public store routes', () => {
     expect(listarCategorias).toHaveBeenCalled();
   });
 
-  it('navigates from a filtered catalog to a public product and back with filters preserved', async () => {
+  it('preserves catalog filters and lets an anonymous customer use the cart and header indicator', async () => {
+    localStorage.removeItem('xaquiamuni:carrinho:v1');
     const product: ProdutoCatalogoResumo = {
       id: 'product-1',
       nome: 'Sabonete artesanal',
       categoriaId: 'category-1',
       categoriaNome: 'Sabonetes Artesanais',
-      fotoPrincipal: { id: 'image-1', conteudoUrl: '/public-images/image-1' },
+      fotoPrincipal: {
+        id: 'image-1',
+        conteudoUrl: '/api/catalogo/produtos/product-1/imagens/image-1/conteudo',
+      },
       precoMinimo: 18,
       disponivel: true,
       precoMaximo: 18,
@@ -218,6 +222,67 @@ describe('public store routes', () => {
       pagina: 1,
       itensPorPagina: 12,
     });
+
+    await harness.navigateByUrl('/produtos/product-1', StoreLayoutComponent);
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+    const root = harness.fixture.nativeElement as HTMLElement;
+    const cartLink = root.querySelector<HTMLAnchorElement>('a[href="/carrinho"]')!;
+    expect(cartLink.getAttribute('aria-label')).toBe('Carrinho, 0 itens');
+    const adicionar = root.querySelector<HTMLButtonElement>('.product-detail__add-to-cart')!;
+    expect(adicionar.disabled).toBe(false);
+    adicionar.click();
+    adicionar.click();
+    harness.fixture.detectChanges();
+    expect(cartLink.getAttribute('aria-label')).toBe('Carrinho, 2 itens');
+    expect(
+      root.querySelector('[role="status"].product-detail__cart-message')?.textContent,
+    ).toContain('Item adicionado ao carrinho.');
+
+    consultarProduto.mockReturnValueOnce(
+      of({
+        ...details,
+        disponivel: false,
+        opcoes: details.opcoes.map((option) => ({ ...option, disponivel: false })),
+      }),
+    );
+    cartLink.click();
+    await harness.fixture.whenStable();
+    harness.fixture.detectChanges();
+    expect(TestBed.inject(Router).url).toBe('/carrinho');
+    expect(cartLink.getAttribute('aria-current')).toBe('page');
+    expect(root.querySelector('.cart__item img')?.getAttribute('src')).toBe(
+      product.fotoPrincipal.conteudoUrl,
+    );
+    expect(root.querySelector('.cart__subtotal strong')?.textContent?.replace(/\s+/g, ' ')).toBe(
+      'R$ 36,00',
+    );
+    expect(root.textContent).toContain('Opção indisponível.');
+    const campo = root.querySelector<HTMLInputElement>('#cart-quantity-option-1')!;
+    expect(campo.labels?.[0]?.textContent).toContain('Sabonete artesanal');
+    expect(campo.inputMode).toBe('numeric');
+    campo.value = '3';
+    campo.dispatchEvent(new Event('change'));
+    harness.fixture.detectChanges();
+    expect(campo.value).toBe('2');
+    expect(campo.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('#cart-quantity-error')?.textContent).toContain(
+      'opção precisa estar disponível',
+    );
+    campo.value = '1';
+    campo.dispatchEvent(new Event('change'));
+    harness.fixture.detectChanges();
+    expect(cartLink.getAttribute('aria-label')).toBe('Carrinho, 1 item');
+    expect(root.querySelector('.cart__subtotal strong')?.textContent?.replace(/\s+/g, ' ')).toBe(
+      'R$ 18,00',
+    );
+    root
+      .querySelector<HTMLButtonElement>('button[aria-label="Remover Sabonete artesanal"]')!
+      .click();
+    harness.fixture.detectChanges();
+    expect(root.textContent).toContain('Seu carrinho está vazio.');
+    expect(root.querySelector('.cart__empty a')?.getAttribute('href')).toBe('/produtos');
+    expect(cartLink.getAttribute('aria-label')).toBe('Carrinho, 0 itens');
   });
 
   it('closes the categories menu after selecting an API category', async () => {

@@ -1,0 +1,87 @@
+<section class="cart" aria-labelledby="cart-title">
+  <h1 id="cart-title">Carrinho</h1>
+  @if (carrinho.persistenciaIndisponivel()) {
+    <p role="status">O navegador não conseguiu salvar o carrinho para a próxima visita.</p>
+  }
+
+  @if (carrinho.itens().length === 0) {
+    <div class="cart__empty">
+      <p>Seu carrinho está vazio.</p>
+      <a class="cart__primary" routerLink="/produtos">Continuar comprando</a>
+    </div>
+  } @else {
+    <p>Os preços são informativos. As unidades só serão reservadas ao fazer um pedido.</p>
+    <div class="cart__layout">
+      <ul class="cart__items">
+        @for (item of carrinho.itens(); track item.varianteId) {
+          <li class="cart__item">
+            <div class="cart__image">
+              @if (item.imagem) {
+                <img [src]="item.imagem" alt="" loading="lazy" />
+              }
+            </div>
+            <div class="cart__product">
+              <h2>
+                <a [routerLink]="['/produtos', item.produtoId]">{{ item.nome }}</a>
+              </h2>
+              @if (item.variante) {
+                <p>{{ item.variante }}</p>
+              }
+              <p>{{ formatarPreco(item.precoCentavos) }} por unidade</p>
+              <p class="cart__availability" aria-live="polite">
+                @if (item.disponivel === false) {
+                  Opção indisponível.
+                } @else if (item.disponivel === null) {
+                  Disponibilidade ainda não confirmada.
+                }
+              </p>
+            </div>
+            <div class="cart__quantity">
+              <label [attr.for]="'cart-quantity-' + item.varianteId">
+                Quantidade<span class="sr-only"> de {{ item.nome }} {{ item.variante }}</span>
+              </label>
+              <input
+                #quantidade
+                [id]="'cart-quantity-' + item.varianteId"
+                type="text"
+                inputmode="numeric"
+                pattern="[0-9]+"
+                [value]="item.quantidade"
+                (change)="alterarQuantidade(item, quantidade)"
+                (keydown.enter)="quantidade.blur()"
+                [attr.aria-invalid]="erroQuantidade() === item.varianteId ? 'true' : null"
+                [attr.aria-describedby]="
+                  erroQuantidade() === item.varianteId ? 'cart-quantity-error' : null
+                "
+              />
+              @if (erroQuantidade() === item.varianteId) {
+                <p id="cart-quantity-error" role="alert">{{ mensagemQuantidade() }}</p>
+              }
+            </div>
+            <div class="cart__line-total">
+              <strong>{{ formatarPreco(item.precoCentavos * item.quantidade) }}</strong>
+              <button
+                type="button"
+                (click)="remover(item.varianteId)"
+                [attr.aria-label]="
+                  'Remover ' + item.nome + (item.variante ? ' — ' + item.variante : '')
+                "
+              >
+                Remover
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+      <aside class="cart__summary" aria-labelledby="cart-summary">
+        <h2 id="cart-summary">Resumo</h2>
+        <p class="cart__subtotal" aria-live="polite">
+          <span>Subtotal estimado</span>
+          <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong>
+        </p>
+        <a class="cart__primary" routerLink="/produtos">Continuar comprando</a>
+        <button type="button" (click)="esvaziar()">Esvaziar carrinho</button>
+      </aside>
+    </div>
+  }
+</section>

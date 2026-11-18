@@ -129,6 +129,25 @@
   font-weight: 600;
 }
 
+.store-account__cart {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 44px;
+  font-weight: 650;
+}
+
+.store-account__cart span {
+  border-radius: 999px;
+  background: #edf1e7;
+  padding-inline: 0.45rem;
+}
+
+.store-account__cart:focus-visible {
+  outline: 2px solid #345b40;
+  outline-offset: 3px;
+}
+
 .store-account__register {
   padding: 0.58rem 0.9rem;
   border: 1px solid #9a8450;
@@ -363,6 +382,17 @@
     padding: 0.55rem 0.25rem;
     color: #777a68;
     font-size: 0.84rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .store-header__inner {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .store-account {
+    justify-content: flex-start;
+    flex-wrap: wrap;
   }
 }
 

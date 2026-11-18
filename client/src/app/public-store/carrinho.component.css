@@ -1,0 +1,152 @@
+.cart {
+  width: min(1200px, calc(100% - 2rem));
+  margin-inline: auto;
+  padding-block: 2rem 4rem;
+  color: #173c2c;
+}
+
+.cart__layout,
+.cart__items,
+.cart__summary,
+.cart__line-total {
+  display: grid;
+  gap: 1rem;
+}
+
+.cart > h1 {
+  margin-bottom: 1rem;
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 700;
+}
+
+.cart__layout {
+  align-items: start;
+  margin-top: 1.5rem;
+}
+
+.cart__items {
+  min-width: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.cart__item,
+.cart__empty,
+.cart__summary {
+  min-width: 0;
+  border: 1px solid #e8e4d7;
+  border-radius: 1rem;
+  background: #fffdf8;
+  padding: 1rem;
+}
+
+.cart__item {
+  display: grid;
+  grid-template-columns: minmax(3rem, 4rem) minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.cart__image {
+  overflow: hidden;
+  aspect-ratio: 1;
+  border-radius: 0.55rem;
+  background: #f0f0e7;
+}
+
+.cart__image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.cart__product {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.cart__product h2,
+.cart__summary h2 {
+  font-size: 1.05rem;
+  font-weight: 650;
+}
+
+.cart__product p {
+  margin-top: 0.2rem;
+}
+
+.cart__availability,
+.cart__quantity p {
+  color: #7a4c24;
+  font-size: 0.875rem;
+}
+
+.cart__quantity label,
+.cart__quantity input {
+  display: block;
+}
+
+.cart__quantity input {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 7rem;
+  min-height: 44px;
+  margin-top: 0.35rem;
+  padding-inline: 0.55rem;
+  border: 1px solid #817853;
+  border-radius: 0.5rem;
+}
+
+.cart__line-total {
+  justify-items: end;
+  text-align: right;
+}
+
+.cart__subtotal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.cart button,
+.cart__primary {
+  min-height: 44px;
+  padding: 0.45rem 0.65rem;
+}
+
+.cart button {
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.cart__primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.55rem;
+  background: #1c4a32;
+  color: #fffdf8;
+  text-decoration: none;
+}
+
+.cart__empty p {
+  margin-bottom: 1rem;
+}
+
+.cart :is(a, input, button):focus-visible {
+  outline: 2px solid #345b40;
+  outline-offset: 3px;
+}
+
+@media (min-width: 660px) {
+  .cart__item {
+    grid-template-columns: 4rem minmax(0, 1fr) minmax(6rem, 0.35fr) auto;
+  }
+}
+
+@media (min-width: 960px) {
+  .cart__layout {
+    grid-template-columns: minmax(0, 2fr) minmax(16rem, 1fr);
+  }
+}

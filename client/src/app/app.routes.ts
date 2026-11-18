@@ -112,6 +112,11 @@ export const routes: Routes = [
       import('./public-store/store-layout.component').then((module) => module.StoreLayoutComponent),
     children: [
       {
+        path: 'carrinho',
+        loadComponent: () =>
+          import('./public-store/carrinho.component').then((module) => module.CarrinhoComponent),
+      },
+      {
         path: '',
         loadComponent: () =>
           import('./public-store/store-home.component').then((module) => module.StoreHomeComponent),

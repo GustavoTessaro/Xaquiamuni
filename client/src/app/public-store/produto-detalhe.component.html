@@ -167,6 +167,15 @@
               }
             </p>
           }
+          <button
+            type="button"
+            class="product-detail__add-to-cart"
+            [disabled]="option.disponivel !== true"
+            (click)="adicionarAoCarrinho()"
+          >
+            Adicionar ao carrinho
+          </button>
+          <p class="product-detail__cart-message" role="status">{{ mensagemCarrinho() }}</p>
         } @else if (item.requerSelecaoDeOpcao) {
           <p class="product-detail__choose-option" role="status">
             Escolha uma opção para ver o preço e as medidas.

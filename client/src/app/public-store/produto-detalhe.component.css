@@ -200,6 +200,33 @@
   background: #f0f0e7;
 }
 
+.product-detail__add-to-cart {
+  min-height: 44px;
+  margin-top: 1rem;
+  padding: 0.55rem 1rem;
+  border-radius: 0.55rem;
+  background: #1c4a32;
+  color: #fffdf8;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.product-detail__add-to-cart:disabled {
+  background: #e4e8df;
+  color: #556257;
+  cursor: default;
+}
+
+.product-detail__add-to-cart:focus-visible {
+  outline: 2px solid #345b40;
+  outline-offset: 3px;
+}
+
+.product-detail__cart-message:not(:empty) {
+  margin-top: 0.5rem;
+  color: #345b40;
+}
+
 .product-detail__state {
   display: grid;
   min-height: 45vh;
