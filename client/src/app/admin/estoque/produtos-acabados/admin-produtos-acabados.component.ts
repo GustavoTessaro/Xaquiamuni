@@ -4,7 +4,9 @@ import {
   Component,
   DestroyRef,
   ElementRef,
+  Injector,
   ViewChild,
+  afterNextRender,
   computed,
   inject,
   signal,
@@ -254,9 +256,16 @@ export class AdminProdutosAcabadosComponent {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly operacaoPendenteStore = inject(OperacaoPendenteStore);
   private focoInicialContagemPendente = false;
   private campoVendavelContagem?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('policyMinimumInput')
+  private campoEstoqueMinimo?: ElementRef<HTMLInputElement>;
+
+  @ViewChild('policyExpiryInput')
+  private campoPrazoValidade?: ElementRef<HTMLInputElement>;
 
   @ViewChild('countVendavelInput')
   private set countVendavelInput(element: ElementRef<HTMLInputElement> | undefined) {
@@ -1102,6 +1111,8 @@ export class AdminProdutosAcabadosComponent {
     if (this.estoqueMinimo.invalid || this.prazoValidade.invalid) {
       this.estoqueMinimo.markAsTouched();
       this.prazoValidade.markAsTouched();
+      const campo = this.estoqueMinimo.invalid ? this.campoEstoqueMinimo : this.campoPrazoValidade;
+      afterNextRender(() => campo?.nativeElement.focus(), { injector: this.injector });
       return;
     }
 

@@ -1356,38 +1356,64 @@
             </p>
           }
           @if (politica()) {
+            @let erroEstoqueMinimoVisivel = estoqueMinimo.touched && estoqueMinimo.invalid;
+            @let erroPrazoValidadeVisivel = prazoValidade.touched && prazoValidade.invalid;
             <div class="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
                   >Estoque mínimo</label
                 >
                 <input
+                  #policyMinimumInput
                   id="finished-minimum"
                   type="number"
                   min="0"
                   step="1"
                   [formControl]="estoqueMinimo"
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  [attr.aria-invalid]="erroEstoqueMinimoVisivel ? 'true' : null"
+                  [attr.aria-describedby]="
+                    erroEstoqueMinimoVisivel
+                      ? 'finished-minimum-error finished-minimum-help'
+                      : 'finished-minimum-help'
+                  "
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
                 />
-                @if (estoqueMinimo.touched && estoqueMinimo.invalid) {
-                  <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+                @if (erroEstoqueMinimoVisivel) {
+                  <p id="finished-minimum-error" class="mt-1 text-sm text-red-700">
+                    <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+                  </p>
                 }
+                <p id="finished-minimum-help" class="mt-1 text-xs text-slate-600">
+                  Em branco, o estoque mínimo fica sem configuração.
+                </p>
               </div>
               <div>
                 <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
                   >Prazo padrão de validade (dias)</label
                 >
                 <input
+                  #policyExpiryInput
                   id="finished-expiry"
                   type="number"
                   min="0"
                   step="1"
                   [formControl]="prazoValidade"
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                  [attr.aria-invalid]="erroPrazoValidadeVisivel ? 'true' : null"
+                  [attr.aria-describedby]="
+                    erroPrazoValidadeVisivel
+                      ? 'finished-expiry-error finished-expiry-help'
+                      : 'finished-expiry-help'
+                  "
+                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
                 />
-                @if (prazoValidade.touched && prazoValidade.invalid) {
-                  <p class="mt-1 text-sm text-red-700">Informe um inteiro maior ou igual a zero.</p>
+                @if (erroPrazoValidadeVisivel) {
+                  <p id="finished-expiry-error" class="mt-1 text-sm text-red-700">
+                    <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+                  </p>
                 }
+                <p id="finished-expiry-help" class="mt-1 text-xs text-slate-600">
+                  Sem prazo padrão, informe a validade ao criar o lote.
+                </p>
               </div>
             </div>
             <button

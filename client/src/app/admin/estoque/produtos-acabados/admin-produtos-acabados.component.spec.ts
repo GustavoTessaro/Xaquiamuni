@@ -9,6 +9,7 @@ import {
   ContagemProdutoAcabadoRequest,
   EntradaProdutoAcabadoRequest,
   LoteProdutoAcabado,
+  PoliticaEstoqueProdutoAcabado,
   PosicaoProdutoAcabado,
   ProdutosAcabadosService,
 } from '../../../core/admin-estoque/produtos-acabados.service';
@@ -76,6 +77,7 @@ function criarPosicao(lote = loteInicial): PosicaoProdutoAcabado {
 
 function criarApi() {
   return {
+    configurarPolitica: vi.fn(),
     consultarPosicao: vi.fn(() => of(criarPosicao())),
     consultarLote: vi.fn(() => of(loteInicial)),
     consultarPolitica: vi.fn(() =>
@@ -328,6 +330,97 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(api.consultarPolitica).toHaveBeenCalledTimes(2);
     expect(api.consultarPosicao).toHaveBeenCalledTimes(1);
     expect(api.listarMovimentacoes).toHaveBeenCalledTimes(1);
+  });
+
+  it('associa rótulos e ajuda aos campos da política e só apresenta erros após interação', async () => {
+    const fixture = await montarComponente(criarApi());
+    const root = fixture.nativeElement as HTMLElement;
+    const minimo = root.querySelector<HTMLInputElement>('#finished-minimum')!;
+    const prazo = root.querySelector<HTMLInputElement>('#finished-expiry')!;
+
+    expect(minimo.labels?.[0]?.textContent?.trim()).toBe('Estoque mínimo');
+    expect(prazo.labels?.[0]?.textContent?.trim()).toBe('Prazo padrão de validade (dias)');
+    expect(minimo.getAttribute('aria-describedby')).toBe('finished-minimum-help');
+    expect(prazo.getAttribute('aria-describedby')).toBe('finished-expiry-help');
+    expect(root.querySelector('#finished-minimum-help')?.textContent).toContain(
+      'Em branco, o estoque mínimo fica sem configuração.',
+    );
+    expect(root.querySelector('#finished-expiry-help')?.textContent).toContain(
+      'Sem prazo padrão, informe a validade ao criar o lote.',
+    );
+    preencher(fixture, '#finished-minimum', '-1');
+    expect(minimo.hasAttribute('aria-invalid')).toBe(false);
+    expect(root.querySelector('#finished-minimum-error')).toBeNull();
+
+    minimo.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+    expect(minimo.getAttribute('aria-invalid')).toBe('true');
+    expect(minimo.getAttribute('aria-describedby')).toBe(
+      'finished-minimum-error finished-minimum-help',
+    );
+    expect(root.querySelector('#finished-minimum-error')?.textContent).toContain(
+      'Erro: Informe um inteiro maior ou igual a zero.',
+    );
+    expect(prazo.hasAttribute('aria-invalid')).toBe(false);
+
+    preencher(fixture, '#finished-minimum', '0');
+    expect(minimo.hasAttribute('aria-invalid')).toBe(false);
+    expect(minimo.getAttribute('aria-describedby')).toBe('finished-minimum-help');
+    expect(root.querySelector('#finished-minimum-error')).toBeNull();
+  });
+
+  it('foca o primeiro erro ao salvar e envia zero e prazo em branco depois da correção', async () => {
+    const api = criarApi();
+    const resposta = new Subject<PoliticaEstoqueProdutoAcabado>();
+    api.configurarPolitica.mockReturnValue(resposta);
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const minimo = root.querySelector('#finished-minimum');
+    const prazo = root.querySelector('#finished-expiry');
+    preencher(fixture, '#finished-minimum', '-1');
+    preencher(fixture, '#finished-expiry', '1.5');
+
+    clicar(fixture, 'Salvar política');
+    expect(api.configurarPolitica).not.toHaveBeenCalled();
+    expect(root.ownerDocument.activeElement).toBe(minimo);
+    expect(prazo?.getAttribute('aria-invalid')).toBe('true');
+    expect(prazo?.getAttribute('aria-describedby')).toBe(
+      'finished-expiry-error finished-expiry-help',
+    );
+    expect(root.querySelector('#finished-expiry-error')?.textContent).toContain(
+      'Erro: Informe um inteiro maior ou igual a zero.',
+    );
+
+    preencher(fixture, '#finished-minimum', '0');
+    clicar(fixture, 'Salvar política');
+    expect(root.ownerDocument.activeElement).toBe(prazo);
+    expect(api.configurarPolitica).not.toHaveBeenCalled();
+
+    preencher(fixture, '#finished-expiry', '');
+    expect(prazo?.hasAttribute('aria-invalid')).toBe(false);
+    expect(prazo?.getAttribute('aria-describedby')).toBe('finished-expiry-help');
+    expect(root.querySelector('#finished-expiry-error')).toBeNull();
+    clicar(fixture, 'Salvar política');
+    expect(api.configurarPolitica).toHaveBeenCalledExactlyOnceWith('variant-1', {
+      estoqueMinimo: 0,
+      prazoValidadePadraoDias: null,
+    });
+    const salvar = Array.from(root.querySelectorAll('button')).find((button) =>
+      button.textContent?.includes('Salvando...'),
+    );
+    expect(salvar?.disabled).toBe(true);
+
+    resposta.next({
+      produtoVarianteId: 'variant-1',
+      estoqueMinimo: 0,
+      prazoValidadePadraoDias: null,
+    });
+    resposta.complete();
+    fixture.detectChanges();
+    expect(root.querySelector('[role="status"]')?.textContent).toContain(
+      'Política de estoque salva.',
+    );
+    expect(salvar?.disabled).toBe(false);
   });
 
   it('explica os saldos, condições e lotes sem sugerir automação futura', async () => {
