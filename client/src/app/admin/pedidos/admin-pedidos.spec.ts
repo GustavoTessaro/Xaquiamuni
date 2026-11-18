@@ -325,4 +325,151 @@ describe('Pedidos administrativos', () => {
     expect(harness.routeNativeElement!.textContent).not.toContain('Confirmar pagamento');
     expect(harness.routeNativeElement!.textContent).not.toContain('Cancelar pedido');
   });
+
+  const etapas = [
+    {
+      origem: 'PagamentoConfirmado',
+      acao: 'Iniciar preparação',
+      botao: 'Confirmar início',
+      rota: 'iniciar-preparacao',
+      destino: 'EmPreparacao',
+      repeticao: 'já havia sido iniciada',
+    },
+    {
+      origem: 'EmPreparacao',
+      acao: 'Liberar para retirada',
+      botao: 'Confirmar liberação',
+      rota: 'liberar-retirada',
+      destino: 'ProntoParaRetirada',
+      repeticao: 'já estava pronto',
+    },
+    {
+      origem: 'ProntoParaRetirada',
+      acao: 'Confirmar entrega',
+      botao: 'Registrar entrega',
+      rota: 'confirmar-entrega',
+      destino: 'Entregue',
+      repeticao: 'já estava registrada',
+    },
+  ] as const;
+
+  function comSituacao(situacao: DetalhePedidoAdmin['pedido']['situacao']): DetalhePedidoAdmin {
+    return { ...detalhe, pedido: { ...detalhe.pedido, situacao } };
+  }
+
+  function declararEntrega(harness: RouterTestingHarness): void {
+    const caixa =
+      harness.routeNativeElement!.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    caixa.click();
+    harness.detectChanges();
+  }
+
+  it.each(etapas.flatMap((etapa) => [false, true].map((repetida) => ({ ...etapa, repetida }))))(
+    '$acao solicita confirmação, atualiza pela API e trata repetição $repetida',
+    async ({ origem, acao, botao, rota, destino, repeticao, repetida }) => {
+      const harness = await abrirPedido(comSituacao(origem));
+      const area = harness.routeNativeElement!.querySelector('[aria-labelledby="pedido-acoes"]')!;
+      expect([...area.querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual([
+        acao,
+      ]);
+      clicar(harness, acao);
+      await harness.fixture.whenStable();
+      const formulario = area.querySelector('form')!;
+      const submit = formulario.querySelector<HTMLButtonElement>('button[type=submit]')!;
+      expect(submit.textContent?.trim()).toBe(botao);
+      http.expectNone('/api/auth/csrf');
+
+      if (rota === 'confirmar-entrega') {
+        const caixa = formulario.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+        expect(caixa.checked).toBe(false);
+        expect(document.activeElement).toBe(caixa);
+        expect(submit.disabled).toBe(true);
+        expect(formulario.textContent).toContain('baixa física definitiva');
+        expect(caixa.closest('label')?.textContent).toContain(
+          'entregues presencialmente ao cliente',
+        );
+        formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+        http.expectNone('/api/auth/csrf');
+        declararEntrega(harness);
+      } else {
+        expect(document.activeElement).toBe(submit);
+        if (rota === 'liberar-retirada') {
+          expect(formulario.textContent).toContain('A entrega presencial é confirmada depois.');
+        }
+      }
+
+      formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+      formulario.dispatchEvent(new Event('submit', { cancelable: true }));
+      harness.detectChanges();
+      expect(formulario.getAttribute('aria-busy')).toBe('true');
+      expect(formulario.querySelector('fieldset')?.disabled).toBe(true);
+      const post = enviarComando(rota);
+      expect(post.request.body).toEqual(
+        rota === 'confirmar-entrega' ? { entregaPresencialConfirmada: true } : {},
+      );
+      post.flush({ id, situacao: destino, repetida });
+      const recarga = http.expectOne({ method: 'GET', url: `${api}/${id}` });
+      harness.detectChanges();
+      expect(harness.routeNativeElement!.textContent).toContain('Carregando pedido');
+      recarga.flush(comSituacao(destino));
+      harness.detectChanges();
+      const estado =
+        destino === 'Entregue'
+          ? 'Entregue'
+          : destino === 'EmPreparacao'
+            ? 'Em preparação'
+            : 'Pronto para retirada';
+      expect(harness.routeNativeElement!.querySelector('dl')?.textContent).toContain(estado);
+      const mensagem = harness.routeNativeElement!.querySelector('[role=status]')?.textContent;
+      if (repetida) expect(mensagem).toContain(repeticao);
+      else expect(mensagem).toBeTruthy();
+      expect(harness.routeNativeElement!.querySelector('form')).toBeNull();
+    },
+  );
+
+  it.each(['Cancelado', 'Expirado', 'Entregue'] as const)(
+    'omite ações incompatíveis em %s',
+    async (situacao) => {
+      const harness = await abrirPedido(comSituacao(situacao));
+      expect(
+        harness.routeNativeElement!.querySelector('[aria-labelledby="pedido-acoes"] button'),
+      ).toBeNull();
+    },
+  );
+
+  it.each([
+    ['estado_incompativel', 'não permite'],
+    ['reservas_inconsistentes', 'reservas do pedido apresentam uma divergência'],
+    ['lote_inelegivel', 'lote reservado não está apto'],
+    ['saldo_insuficiente', 'saldo dos lotes reservados é insuficiente'],
+    ['conflito_concorrencia', 'Outra operação está atualizando'],
+  ] as const)('recarrega após conflito de entrega %s', async (codigo, mensagem) => {
+    const harness = await abrirPedido(comSituacao('ProntoParaRetirada'));
+    clicar(harness, 'Confirmar entrega');
+    declararEntrega(harness);
+    clicar(harness, 'Registrar entrega');
+    enviarComando('confirmar-entrega').flush({ codigo }, { status: 409, statusText: 'Conflict' });
+    http.expectOne({ method: 'GET', url: `${api}/${id}` }).flush(comSituacao('ProntoParaRetirada'));
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.querySelector('[role=alert]')?.textContent).toContain(
+      mensagem,
+    );
+    expect(harness.routeNativeElement!.querySelector('form')).toBeNull();
+    clicar(harness, 'Confirmar entrega');
+    expect(
+      harness.routeNativeElement!.querySelector<HTMLInputElement>('input[type=checkbox]')?.checked,
+    ).toBe(false);
+    http.expectNone('/api/auth/csrf');
+  });
+
+  it.each([401, 403, 404])('limpa o detalhe após erro %s na operação', async (status) => {
+    const harness = await abrirPedido(comSituacao('EmPreparacao'));
+    clicar(harness, 'Liberar para retirada');
+    clicar(harness, 'Confirmar liberação');
+    enviarComando('liberar-retirada').flush(null, { status, statusText: 'Recusado' });
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.querySelector('[role=alert]')).not.toBeNull();
+    expect(harness.routeNativeElement!.querySelector('form')).toBeNull();
+    expect(harness.routeNativeElement!.textContent).not.toContain('cliente@example.test');
+  });
 });

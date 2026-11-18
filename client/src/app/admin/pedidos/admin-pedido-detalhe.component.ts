@@ -35,7 +35,53 @@ import { formatarCentavos } from '../../public-store/carrinho.service';
 import { situacoesPedido, uuidValido } from '../../public-store/pedidos.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 
-type Acao = 'pagamento' | 'cancelamento';
+const acoes = {
+  pagamento: {
+    rotulo: 'Confirmar pagamento',
+    titulo: 'Conferência bancária',
+    enviar: 'Registrar confirmação',
+    declaracao: 'Conferi que o pagamento deste pedido foi recebido na conta bancária.',
+    sucesso: 'Pagamento confirmado.',
+    repetida: 'O pagamento já estava confirmado.',
+  },
+  cancelamento: {
+    rotulo: 'Cancelar pedido',
+    titulo: 'Confirmação de cancelamento',
+    enviar: 'Confirmar cancelamento',
+    orientacao: 'Confira o motivo antes de confirmar. Esta ação encerra o pedido.',
+    sucesso: 'Pedido cancelado.',
+    repetida: 'O pedido já estava cancelado com esse motivo.',
+  },
+  preparacao: {
+    rotulo: 'Iniciar preparação',
+    titulo: 'Iniciar preparação do pedido',
+    enviar: 'Confirmar início',
+    orientacao: 'Confirme para registrar que a preparação deste pedido começou.',
+    sucesso: 'Preparação iniciada.',
+    repetida: 'A preparação deste pedido já havia sido iniciada.',
+  },
+  retirada: {
+    rotulo: 'Liberar para retirada',
+    titulo: 'Liberar pedido para retirada',
+    enviar: 'Confirmar liberação',
+    orientacao:
+      'Esta ação registra que os produtos estão prontos para retirada. A entrega presencial é confirmada depois.',
+    sucesso: 'Pedido pronto para retirada.',
+    repetida: 'O pedido já estava pronto para retirada.',
+  },
+  entrega: {
+    rotulo: 'Confirmar entrega',
+    titulo: 'Confirmar entrega presencial',
+    enviar: 'Registrar entrega',
+    orientacao:
+      'Esta ação registra a entrega presencial e realiza a baixa física definitiva do estoque.',
+    declaracao: 'Confirmo que os produtos deste pedido foram entregues presencialmente ao cliente.',
+    sucesso: 'Entrega registrada.',
+    repetida: 'A entrega deste pedido já estava registrada.',
+  },
+};
+
+type Acao = keyof typeof acoes;
 type EstadoDetalhe =
   | { tipo: 'carregando' }
   | { tipo: 'erro'; status: number }
@@ -54,6 +100,7 @@ export class AdminPedidoDetalheComponent {
   private readonly injector = inject(Injector);
   private readonly atualizar = new Subject<void>();
   private readonly confirmarCampo = viewChild<ElementRef<HTMLInputElement>>('confirmarCampo');
+  private readonly confirmarBotao = viewChild<ElementRef<HTMLButtonElement>>('confirmarBotao');
   private readonly motivoCampo = viewChild<ElementRef<HTMLTextAreaElement>>('motivoCampo');
   private readonly titulo = viewChild<ElementRef<HTMLElement>>('titulo');
   private readonly agora = signal(Date.now());
@@ -67,6 +114,7 @@ export class AdminPedidoDetalheComponent {
   protected readonly enviando = signal(false);
   protected readonly sucesso = signal('');
   protected readonly erro = signal('');
+  protected readonly acoes = acoes;
   protected readonly situacoes = situacoesPedido;
   protected readonly formatarPreco = formatarCentavos;
   private readonly pedido = computed(() => {
@@ -80,6 +128,21 @@ export class AdminPedidoDetalheComponent {
       pedido?.situacao === 'AguardandoPagamento' &&
       Date.parse(pedido.prazoPagamentoEmUtc) > this.agora()
     );
+  });
+
+  protected readonly acoesDisponiveis = computed((): Acao[] => {
+    switch (this.pedido()?.situacao) {
+      case 'AguardandoPagamento':
+        return this.podeAlterar() ? ['pagamento', 'cancelamento'] : [];
+      case 'PagamentoConfirmado':
+        return ['preparacao'];
+      case 'EmPreparacao':
+        return ['retirada'];
+      case 'ProntoParaRetirada':
+        return ['entrega'];
+      default:
+        return [];
+    }
   });
 
   constructor() {
@@ -131,14 +194,18 @@ export class AdminPedidoDetalheComponent {
   }
 
   protected abrir(acao: Acao): void {
-    if (!this.podeAlterar() || this.enviando()) return;
+    if (!this.acoesDisponiveis().includes(acao) || this.enviando()) return;
     this.limparAcao();
     this.sucesso.set('');
     this.erro.set('');
     this.acao.set(acao);
     afterNextRender(
       () => {
-        (acao === 'pagamento' ? this.confirmarCampo() : this.motivoCampo())?.nativeElement.focus();
+        (
+          this.confirmarCampo() ??
+          this.motivoCampo() ??
+          this.confirmarBotao()
+        )?.nativeElement.focus();
       },
       { injector: this.injector },
     );
@@ -163,13 +230,20 @@ export class AdminPedidoDetalheComponent {
     event.preventDefault();
     const acao = this.acao();
     const pedido = this.pedido();
-    if (this.enviando() || !acao || !pedido || pedido.situacao !== 'AguardandoPagamento') return;
-    if (!(Date.parse(pedido.prazoPagamentoEmUtc) > Date.now())) {
+    if (this.enviando() || !acao || !pedido) return;
+    if (
+      pedido.situacao === 'AguardandoPagamento' &&
+      !(Date.parse(pedido.prazoPagamentoEmUtc) > Date.now())
+    ) {
       this.tratarConflito('prazo_encerrado');
       return;
     }
 
-    if (acao === 'pagamento' && !this.conferido()) return;
+    if (
+      !this.acoesDisponiveis().includes(acao) ||
+      ('declaracao' in acoes[acao] && !this.conferido())
+    )
+      return;
     const motivo = this.motivo().trim();
     if (acao === 'cancelamento' && (!motivo || motivo.length > 500)) {
       this.motivoInvalido.set(true);
@@ -179,10 +253,15 @@ export class AdminPedidoDetalheComponent {
 
     this.enviando.set(true);
     this.erro.set('');
-    const operacao =
-      acao === 'pagamento'
-        ? this.pedidos.confirmarPagamento(pedido.id)
-        : this.pedidos.cancelar(pedido.id, motivo);
+    const { id } = pedido;
+    const operacoes = {
+      pagamento: () => this.pedidos.confirmarPagamento(id),
+      cancelamento: () => this.pedidos.cancelar(id, motivo),
+      preparacao: () => this.pedidos.iniciarPreparacao(id),
+      retirada: () => this.pedidos.liberarRetirada(id),
+      entrega: () => this.pedidos.confirmarEntrega(id),
+    };
+    const operacao = operacoes[acao]();
     operacao
       .pipe(
         takeUntilDestroyed(this.destroy),
@@ -199,16 +278,11 @@ export class AdminPedidoDetalheComponent {
               pedido: { ...estado.dados.pedido, situacao: resultado.situacao },
             },
           });
-          this.sucesso.set(
-            acao === 'pagamento'
-              ? resultado.repetida
-                ? 'O pagamento já estava confirmado.'
-                : 'Pagamento confirmado.'
-              : resultado.repetida
-                ? 'O pedido já estava cancelado com esse motivo.'
-                : 'Pedido cancelado.',
-          );
+          this.sucesso.set(resultado.repetida ? acoes[acao].repetida : acoes[acao].sucesso);
           this.limparAcao();
+          if (acao === 'preparacao' || acao === 'retirada' || acao === 'entrega') {
+            this.recarregar();
+          }
           this.titulo()?.nativeElement.focus();
         },
         error: (erro: unknown) => {
@@ -242,7 +316,18 @@ export class AdminPedidoDetalheComponent {
       ['prazo_encerrado', 'O prazo de pagamento terminou.'],
       ['estado_incompativel', 'A situação atual do pedido não permite essa operação.'],
       ['motivo_divergente', 'O pedido já foi cancelado com outro motivo.'],
-      ['reservas_inconsistentes', 'Uma divergência de estoque impediu a atualização do pedido.'],
+      [
+        'reservas_inconsistentes',
+        'As reservas do pedido apresentam uma divergência. Verifique a situação antes de tentar novamente.',
+      ],
+      [
+        'lote_inelegivel',
+        'Um lote reservado não está apto para a entrega. Verifique a situação do estoque antes de tentar novamente.',
+      ],
+      [
+        'saldo_insuficiente',
+        'O saldo dos lotes reservados é insuficiente para a entrega. Verifique o estoque antes de tentar novamente.',
+      ],
       ['conflito_concorrencia', 'Outra operação está atualizando este pedido.'],
     ]);
     if (codigo === 'prazo_encerrado') this.prazoEncerradoServidor.set(true);

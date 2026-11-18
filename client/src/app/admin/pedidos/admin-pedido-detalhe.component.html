@@ -126,31 +126,34 @@
           aria-labelledby="pedido-acoes"
         >
           <h2 id="pedido-acoes" class="text-lg font-semibold">Ações do pedido</h2>
-          @if (podeAlterar()) {
+          @if (acoesDisponiveis().length) {
             @if (!acao()) {
               <div class="flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  (click)="abrir('pagamento')"
-                  [disabled]="enviando()"
-                  class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-50"
-                >
-                  Confirmar pagamento
-                </button>
-                <button
-                  type="button"
-                  (click)="abrir('cancelamento')"
-                  [disabled]="enviando()"
-                  class="min-h-11 rounded-lg border border-red-800 px-4 font-semibold text-red-800 focus-visible:outline-2 disabled:opacity-50"
-                >
-                  Cancelar pedido
-                </button>
+                @for (disponivel of acoesDisponiveis(); track disponivel) {
+                  <button
+                    type="button"
+                    (click)="abrir(disponivel)"
+                    [disabled]="enviando()"
+                    class="min-h-11 max-w-full rounded-lg border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                    [class]="
+                      disponivel === 'cancelamento'
+                        ? 'border-red-800 text-red-800 focus-visible:outline-red-800'
+                        : 'border-emerald-800 bg-emerald-800 text-white focus-visible:outline-emerald-800'
+                    "
+                  >
+                    {{ acoes[disponivel].rotulo }}
+                  </button>
+                }
               </div>
-            } @else {
+            } @else if (acao(); as atual) {
+              @let confirmacao = acoes[atual];
               <form (submit)="enviar($event)" [attr.aria-busy]="enviando()" novalidate>
                 <fieldset [disabled]="enviando()" class="grid min-w-0 gap-3">
-                  @if (acao() === 'pagamento') {
-                    <legend class="mb-2 font-semibold">Conferência bancária</legend>
+                  <legend class="mb-2 font-semibold">{{ confirmacao.titulo }}</legend>
+                  @if ('orientacao' in confirmacao) {
+                    <p>{{ confirmacao.orientacao }}</p>
+                  }
+                  @if ('declaracao' in confirmacao) {
                     <label class="flex min-h-11 items-start gap-3">
                       <input
                         #confirmarCampo
@@ -159,13 +162,10 @@
                         (change)="conferido.set(confirmarCampo.checked)"
                         class="mt-1 size-5 shrink-0 accent-emerald-800 focus-visible:outline-2"
                       />
-                      <span
-                        >Conferi que o pagamento deste pedido foi recebido na conta bancária.</span
-                      >
+                      <span>{{ confirmacao.declaracao }}</span>
                     </label>
-                  } @else {
-                    <legend class="mb-2 font-semibold">Confirmação de cancelamento</legend>
-                    <p>Confira o motivo antes de confirmar. Esta ação encerra o pedido.</p>
+                  }
+                  @if (atual === 'cancelamento') {
                     <label for="pedido-motivo" class="font-medium"
                       >Motivo do cancelamento (obrigatório)</label
                     >
@@ -197,12 +197,11 @@
                   <div class="flex flex-wrap gap-3">
                     <button
                       type="submit"
-                      [disabled]="acao() === 'pagamento' && !conferido()"
+                      #confirmarBotao
+                      [disabled]="'declaracao' in confirmacao && !conferido()"
                       class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-50"
                     >
-                      {{
-                        acao() === 'pagamento' ? 'Registrar confirmação' : 'Confirmar cancelamento'
-                      }}
+                      {{ confirmacao.enviar }}
                     </button>
                     <button
                       type="button"
@@ -233,11 +232,8 @@
               @case ('Cancelado') {
                 <p>O pedido foi cancelado.</p>
               }
-              @case ('PagamentoConfirmado') {
-                <p>
-                  O pagamento foi confirmado. O cancelamento por esta tela está disponível apenas
-                  para pedidos não pagos.
-                </p>
+              @case ('Entregue') {
+                <p>A entrega presencial foi registrada.</p>
               }
               @default {
                 <p>As ações de pagamento e cancelamento estão indisponíveis nesta situação.</p>

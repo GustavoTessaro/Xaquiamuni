@@ -64,9 +64,26 @@ export class AdminPedidosService {
     return this.executar(id, 'cancelar', { motivo });
   }
 
+  iniciarPreparacao(id: string): Observable<ResultadoPedidoAdmin> {
+    return this.executar(id, 'iniciar-preparacao', {});
+  }
+
+  liberarRetirada(id: string): Observable<ResultadoPedidoAdmin> {
+    return this.executar(id, 'liberar-retirada', {});
+  }
+
+  confirmarEntrega(id: string): Observable<ResultadoPedidoAdmin> {
+    return this.executar(id, 'confirmar-entrega', { entregaPresencialConfirmada: true });
+  }
+
   private executar(
     id: string,
-    acao: 'confirmar-pagamento' | 'cancelar',
+    acao:
+      | 'confirmar-pagamento'
+      | 'cancelar'
+      | 'iniciar-preparacao'
+      | 'liberar-retirada'
+      | 'confirmar-entrega',
     corpo: object,
   ): Observable<ResultadoPedidoAdmin> {
     return this.csrf.getRequestToken().pipe(
