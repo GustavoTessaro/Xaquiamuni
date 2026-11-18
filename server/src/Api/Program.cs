@@ -2,6 +2,7 @@ using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Catalogo;
 using Xaquiamuni.Api.Estoque;
 using Xaquiamuni.Api.Middleware;
+using Xaquiamuni.Api.Pedidos;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Infraestrutura;
 
@@ -79,7 +80,8 @@ app.Use(async (context, next) =>
                 AdminAuthEndpoints.MeEndpoint,
                 StringComparison.OrdinalIgnoreCase);
 
-    if (isAuthenticationWrite || isCurrentClientRequest)
+    if (isAuthenticationWrite || isCurrentClientRequest
+        || context.Request.Path.StartsWithSegments(PedidosClienteEndpoints.BasePath))
     {
         context.Response.Headers.CacheControl = "no-store";
     }
@@ -103,6 +105,7 @@ app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();
 app.MapAdminEstoqueProdutoAcabadoEndpoints();
 app.MapCatalogoPublicoEndpoints();
+app.MapPedidosClienteEndpoints();
 
 app.Run();
 
