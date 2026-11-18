@@ -11,7 +11,8 @@ public sealed class ReservaProdutoAcabado
         Guid produtoVarianteId,
         Guid loteId,
         int quantidade,
-        DateTimeOffset criadaEmUtc)
+        DateTimeOffset criadaEmUtc,
+        DateTimeOffset expiraEmUtc)
     {
         Id = Guid.NewGuid();
         PedidoId = pedidoId;
@@ -19,7 +20,7 @@ public sealed class ReservaProdutoAcabado
         LoteId = loteId;
         Quantidade = quantidade;
         CriadaEmUtc = criadaEmUtc;
-        ExpiraEmUtc = criadaEmUtc.Add(Prazo);
+        ExpiraEmUtc = expiraEmUtc;
         Estado = EstadoReservaProdutoAcabado.Ativa;
     }
 
@@ -40,21 +41,31 @@ public sealed class ReservaProdutoAcabado
         Guid produtoVarianteId,
         Guid loteId,
         int quantidade,
-        DateTimeOffset criadaEmUtc)
+        DateTimeOffset criadaEmUtc,
+        DateTimeOffset? expiraEmUtc = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(pedidoId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(produtoVarianteId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(loteId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(quantidade);
         ValidarUtc(criadaEmUtc, nameof(criadaEmUtc));
-        if (criadaEmUtc > DateTimeOffset.MaxValue.Subtract(Prazo))
+        if (expiraEmUtc is null && criadaEmUtc > DateTimeOffset.MaxValue.Subtract(Prazo))
         {
             throw new ArgumentOutOfRangeException(
                 nameof(criadaEmUtc),
                 "O prazo da reserva ultrapassa o intervalo de datas suportado.");
         }
 
-        return new ReservaProdutoAcabado(pedidoId, produtoVarianteId, loteId, quantidade, criadaEmUtc);
+        var prazoComum = expiraEmUtc ?? criadaEmUtc.Add(Prazo);
+        ValidarUtc(prazoComum, nameof(expiraEmUtc));
+        if (prazoComum <= criadaEmUtc || prazoComum - criadaEmUtc > Prazo)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(expiraEmUtc),
+                "O prazo deve ser posterior à criação e de no máximo 24 horas.");
+        }
+
+        return new ReservaProdutoAcabado(pedidoId, produtoVarianteId, loteId, quantidade, criadaEmUtc, prazoComum);
     }
 
     public bool EstaAtivaEm(DateTimeOffset instanteUtc)

@@ -255,6 +255,25 @@ public sealed class ReservaProdutoAcabadoTests
     private static ReservaProdutoAcabado CriarReserva() =>
         ReservaProdutoAcabado.Criar(PedidoId, Guid.NewGuid(), Guid.NewGuid(), 2, CriadaEm);
 
+    [Fact]
+    public void Criar_PrazoCompartilhadoPreservaInstanteDeCriacaoERejeitaLimitesInvalidos()
+    {
+        var variante = Guid.NewGuid();
+        var lote = Guid.NewGuid();
+        var prazo = CriadaEm.AddHours(24);
+        var inclusao = CriadaEm.AddHours(4);
+
+        var reserva = ReservaProdutoAcabado.Criar(PedidoId, variante, lote, 1, inclusao, prazo);
+        Assert.Equal(inclusao, reserva.CriadaEmUtc);
+        Assert.Equal(prazo, reserva.ExpiraEmUtc);
+        Assert.Throws<ArgumentOutOfRangeException>("expiraEmUtc", () =>
+            ReservaProdutoAcabado.Criar(PedidoId, variante, lote, 1, prazo, prazo));
+        Assert.Throws<ArgumentOutOfRangeException>("expiraEmUtc", () =>
+            ReservaProdutoAcabado.Criar(PedidoId, variante, lote, 1, CriadaEm, prazo.AddTicks(1)));
+        Assert.Throws<ArgumentException>("expiraEmUtc", () =>
+            ReservaProdutoAcabado.Criar(PedidoId, variante, lote, 1, CriadaEm, prazo.ToOffset(TimeSpan.FromHours(-3))));
+    }
+
     private static (ProdutoVariante Variante, LoteProdutoAcabado Lote, SaldoLoteProdutoAcabado Saldo)
         CriarEstoque(bool varianteAtiva = true, int quantidadeVendavel = 3, int diasDeValidade = 0)
     {

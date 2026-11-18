@@ -9,7 +9,7 @@ using Xaquiamuni.Infraestrutura.Persistencia;
 namespace Xaquiamuni.Tests.Integration;
 
 [Trait("Category", "SqlServerIntegration")]
-public sealed class ReservarProdutoAcabadoSqlServerIntegrationTests
+public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 {
     private static readonly DateTimeOffset Agora = new(2026, 11, 18, 15, 0, 0, TimeSpan.Zero);
     private static readonly DateOnly Hoje = new(2026, 11, 18);
@@ -279,9 +279,10 @@ public sealed class ReservarProdutoAcabadoSqlServerIntegrationTests
             return ProdutoResult.Success(produto);
         });
 
-    private static async Task<ProdutoVariante> CriarVarianteAsync(XaquiamuniDbContext context)
+    private static async Task<ProdutoVariante> CriarVarianteAsync(
+        XaquiamuniDbContext context, string categoriaNome = "Sabonetes")
     {
-        var categoria = Categoria.Criar("Sabonetes", null, 0);
+        var categoria = Categoria.Criar(categoriaNome, null, 0);
         var produto = Produto.Criar("Sabonete", null, categoria,
             [ProdutoVariante.Criar("Padrão", "UN", 10m, padrao: true), ProdutoVariante.Criar("Lavanda", "UN", 10m)]);
         context.Produtos.Add(produto);

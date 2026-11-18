@@ -444,9 +444,11 @@ public sealed class XaquiamuniDbContext
                         + "AND ([ConfirmadaEmUtc] IS NULL OR DATEPART(TZOFFSET, [ConfirmadaEmUtc]) = 0) "
                         + "AND ([EncerradaEmUtc] IS NULL OR DATEPART(TZOFFSET, [EncerradaEmUtc]) = 0)");
                     table.HasCheckConstraint(
-                        "CK_ReservasProdutoAcabado_Prazo_24Horas",
-                        "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 "
-                        + "AND CAST([CriadaEmUtc] AS time(7)) = CAST([ExpiraEmUtc] AS time(7))");
+                        "CK_ReservasProdutoAcabado_Prazo_Ate24Horas",
+                        "[ExpiraEmUtc] > [CriadaEmUtc] AND ("
+                        + "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) < 24 OR ("
+                        + "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 "
+                        + "AND CAST([ExpiraEmUtc] AS time(7)) <= CAST([CriadaEmUtc] AS time(7))))");
                     table.HasCheckConstraint(
                         "CK_ReservasProdutoAcabado_Cronologia_Valid",
                         "([ConfirmadaEmUtc] IS NULL OR ([ConfirmadaEmUtc] >= [CriadaEmUtc] "

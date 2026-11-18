@@ -12,7 +12,8 @@ public enum ReservarProdutoAcabadoStatus
     VarianteInativa,
     SaldoInsuficiente,
     ConflitoIdempotencia,
-    ConflitoConcorrencia
+    ConflitoConcorrencia,
+    PedidoForaDaAlocacao
 }
 
 public sealed record ReservarProdutoAcabadoResult(

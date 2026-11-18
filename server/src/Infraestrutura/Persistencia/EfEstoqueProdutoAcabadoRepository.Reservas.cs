@@ -22,6 +22,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
             await using var transaction = await _dbContext.Database
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken)
                 .ConfigureAwait(false);
+            await AdquirirLockPedidoAsync(input.PedidoId, cancellationToken).ConfigureAwait(false);
             await AdquirirLockVarianteAsync(input.ProdutoVarianteId, cancellationToken).ConfigureAwait(false);
 
             var existentes = await (
@@ -53,6 +54,17 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
             }
 
             var agora = await _dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+            var situacoesDoPedido = await _dbContext.ReservasProdutoAcabado
+                .Where(reserva => reserva.PedidoId == input.PedidoId)
+                .Select(reserva => new { reserva.Estado, reserva.ExpiraEmUtc })
+                .Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+            var situacao = situacoesDoPedido.FirstOrDefault();
+            if (situacoesDoPedido.Count > 1 || (situacao is not null
+                && (situacao.Estado != EstadoReservaProdutoAcabado.Ativa || agora >= situacao.ExpiraEmUtc)))
+            {
+                return new(ReservarProdutoAcabadoStatus.PedidoForaDaAlocacao, []);
+            }
+
             var dataOperacional = _calendario.ObterDataAtual();
             var comprometidoPorLote = _dbContext.ReservasProdutoAcabado
                 .ComprometidasEm(agora)
@@ -87,7 +99,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
 
                 var quantidade = (int)Math.Min(falta, lote.Disponivel);
                 reservas.Add(ReservaProdutoAcabado.Criar(
-                    input.PedidoId, input.ProdutoVarianteId, lote.Id, quantidade, agora));
+                    input.PedidoId, input.ProdutoVarianteId, lote.Id, quantidade, agora, situacao?.ExpiraEmUtc));
                 falta -= quantidade;
                 if (falta == 0)
                 {

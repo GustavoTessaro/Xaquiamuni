@@ -1144,7 +1144,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_ReservasProdutoAcabado_Motivo_Valid", "([Estado] = 2 AND [MotivoEncerramento] IS NOT NULL AND LEN(LTRIM(RTRIM([MotivoEncerramento]))) > 0) OR ([Estado] <> 2 AND [MotivoEncerramento] IS NULL)");
 
-                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Prazo_24Horas", "DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 AND CAST([CriadaEmUtc] AS time(7)) = CAST([ExpiraEmUtc] AS time(7))");
+                            t.HasCheckConstraint("CK_ReservasProdutoAcabado_Prazo_Ate24Horas", "[ExpiraEmUtc] > [CriadaEmUtc] AND (DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) < 24 OR (DATEDIFF_BIG(hour, [CriadaEmUtc], [ExpiraEmUtc]) = 24 AND CAST([ExpiraEmUtc] AS time(7)) <= CAST([CriadaEmUtc] AS time(7))))");
 
                             t.HasCheckConstraint("CK_ReservasProdutoAcabado_Quantidade_Positive", "[Quantidade] > 0");
 
