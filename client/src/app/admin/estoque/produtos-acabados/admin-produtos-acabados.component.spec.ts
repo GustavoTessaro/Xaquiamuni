@@ -429,10 +429,12 @@ describe('AdminProdutosAcabadosComponent', () => {
 
     expect(text).toContain('Produtos prontos para venda');
     expect(text).toContain('Total registrado, incluindo unidades indisponíveis.');
-    expect(text).toContain('Apto para uso conforme as regras do estoque e do lote.');
-    expect(text).toContain('Comprometido com operações, quando houver.');
+    expect(text).toContain('Unidades em condição vendável, em lotes válidos e de variante ativa.');
+    expect(text).toContain('Sem reservas vigentes.');
     expect(text).toContain('Disponível para venda');
-    expect(text).toContain('Unidades liberadas para venda conforme a condição, a validade do lote');
+    expect(text).toContain(
+      'Unidades livres para novas vendas após descontar as reservas de cada lote.',
+    );
     expect(text).toContain('Na condição vendável');
     expect(text.replace(/\s+/g, ' ')).toContain(
       'Pode incluir unidades de lotes vencidos ou inelegíveis, que ficam fora do saldo disponível.',
@@ -459,13 +461,16 @@ describe('AdminProdutosAcabadosComponent', () => {
       quantidadeQuarentena: 2,
       saldoFisico: 5,
       saldoUtilizavel: 0,
+      saldoReservado: 2,
       saldoDisponivel: 0,
     };
     api.consultarPosicao.mockReturnValueOnce(
       of({
         ...criarPosicao(),
         saldoFisico: 11,
-        lotes: [loteInicial, loteVencido],
+        saldoReservado: 3,
+        saldoDisponivel: 4,
+        lotes: [{ ...loteInicial, saldoReservado: 1, saldoDisponivel: 4 }, loteVencido],
       }),
     );
 
@@ -480,13 +485,40 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(indicadores).toEqual(
       new Map([
         ['Saldo físico', '11 un.'],
-        ['Utilizável', '5 un.'],
-        ['Reservado', '0 un.'],
-        ['Disponível para venda', '5 un.'],
+        ['Estoque vendável', '5 un.'],
+        ['Comprometido por reservas', '3 un.'],
+        ['Disponível para venda', '4 un.'],
         ['Na condição vendável', '8 un.'],
         ['Avariado (danificado)', '1 un.'],
         ['Quarentena', '2 un.'],
       ]),
+    );
+    const lotes = root.querySelector('[aria-labelledby="finished-lots-title"]')!;
+    const cartaoVencido = Array.from(lotes.querySelectorAll('li')).find((item) =>
+      item.textContent?.includes(loteVencido.codigo),
+    )!;
+    const indicadoresVencido = new Map(
+      Array.from(cartaoVencido.querySelectorAll('dt'), (label) => [
+        label.textContent?.trim(),
+        label.nextElementSibling?.textContent?.trim(),
+      ]),
+    );
+    expect(indicadoresVencido.get('Comprometido por reservas')).toBe('2 un.');
+    expect(indicadoresVencido.get('Disponível para venda')).toBe('0 un.');
+    expect(cartaoVencido.textContent).toContain('estoque vendável deste lote é insuficiente');
+  });
+
+  it('identifica a falta de saldo para venda quando o físico está todo comprometido', async () => {
+    const api = criarApi();
+    api.consultarPosicao.mockReturnValueOnce(
+      of({
+        ...criarPosicao({ ...loteInicial, saldoReservado: 5, saldoDisponivel: 0 }),
+        situacao: 'SemEstoque',
+      }),
+    );
+    const fixture = await montarComponente(api);
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain(
+      'Sem saldo disponível para venda',
     );
   });
 

@@ -176,6 +176,10 @@ public sealed class AdminEstoqueProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(entry!.Id, entryReplay!.Id);
         Assert.Equal(entry.CodigoLote, entryReplay.CodigoLote);
 
+        var reserva = ReservaProdutoAcabado.Criar(Guid.NewGuid(), variant.Id, entry.LoteId, 1, DateTimeOffset.UtcNow);
+        seedContext.ReservasProdutoAcabado.Add(reserva);
+        await seedContext.SaveChangesAsync();
+
         using var positionResponse = await admin.GetAsync(
             $"{basePath}/variantes/{variant.Id:D}/posicao");
         Assert.Equal(HttpStatusCode.OK, positionResponse.StatusCode);
@@ -183,11 +187,20 @@ public sealed class AdminEstoqueProdutoAcabadoSqlServerIntegrationTests
             .ReadFromJsonAsync<PosicaoProdutoAcabadoAdminResponse>();
         Assert.NotNull(position);
         Assert.Equal(5, position!.SaldoFisico);
-        Assert.Equal(5, position.SaldoDisponivel);
+        Assert.Equal(5, position.SaldoUtilizavel);
+        Assert.Equal(1, position.SaldoReservado);
+        Assert.Equal(4, position.SaldoDisponivel);
         Assert.Equal(2, position.EstoqueMinimo);
 
         var lote = Assert.Single(position.Lotes);
         Assert.Equal(lote.Codigo, entry.CodigoLote);
+        Assert.Equal(1, lote.SaldoReservado);
+        Assert.Equal(4, lote.SaldoDisponivel);
+        using var responseLote = await admin.GetAsync($"{basePath}/variantes/{variant.Id:D}/lotes/{lote.LoteId:D}");
+        Assert.Equal(HttpStatusCode.OK, responseLote.StatusCode);
+        var jsonLote = await responseLote.Content.ReadAsStringAsync();
+        Assert.DoesNotContain("pedidoId", jsonLote, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(reserva.Id.ToString(), jsonLote, StringComparison.OrdinalIgnoreCase);
 
         using var exitRequest = CreateWriteRequest(
             $"{basePath}/variantes/{variant.Id:D}/saidas",

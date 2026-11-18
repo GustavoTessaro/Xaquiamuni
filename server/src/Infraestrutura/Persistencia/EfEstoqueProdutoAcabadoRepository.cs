@@ -1522,39 +1522,10 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
             .SingleOrDefaultAsync(
                 item => item.ProdutoVarianteId == produtoVarianteId,
                 cancellationToken).ConfigureAwait(false);
-        var lotes = await dbContext.LotesProdutoAcabado
-            .AsNoTracking()
-            .Where(item => item.ProdutoVarianteId == produtoVarianteId)
-            .OrderBy(item => item.DataValidade)
-            .ThenBy(item => item.DataFabricacao)
-            .ThenBy(item => item.Codigo)
-            .ThenBy(item => item.Id)
+        var agoraUtc = await dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+        var lotes = await ConsultarLotes(produtoVarianteId, agoraUtc)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var saldos = await dbContext.SaldosProdutoAcabado
-            .AsNoTracking()
-            .Where(item => item.ProdutoVarianteId == produtoVarianteId)
-            .ToListAsync(cancellationToken).ConfigureAwait(false);
-        var versoes = await dbContext.SaldosProdutoAcabado
-            .AsNoTracking()
-            .Where(item => item.ProdutoVarianteId == produtoVarianteId)
-            .Select(item => new
-            {
-                item.LoteId,
-                Versao = EF.Property<byte[]>(item, "Versao")
-            })
-            .ToDictionaryAsync(item => item.LoteId, item => item.Versao, cancellationToken)
-            .ConfigureAwait(false);
-
-        var resumo = ResumoSaldoProdutoAcabado.Calcular(variante, politica, lotes, saldos, dataReferencia);
-        var saldoPorLote = saldos.ToDictionary(item => item.LoteId);
-        var posicoes = lotes
-            .Select(lote => MapearPosicao(
-                lote,
-                saldoPorLote.GetValueOrDefault(lote.Id),
-                versoes.GetValueOrDefault(lote.Id),
-                variante.Ativa,
-                dataReferencia))
-            .ToArray();
+        var posicoes = lotes.Select(lote => MapearPosicao(lote, variante.Ativa, dataReferencia)).ToArray();
 
         return new DetalheEstoqueProdutoAcabadoConsulta(
             politica is null
@@ -1563,7 +1534,7 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
                     politica.ProdutoVarianteId,
                     politica.EstoqueMinimo,
                     politica.PrazoValidadePadraoDias),
-            MapearResumo(produtoVarianteId, variante.Ativa, resumo),
+            MapearResumo(produtoVarianteId, variante.Ativa, politica?.EstoqueMinimo, posicoes),
             posicoes);
     }
 
@@ -1583,29 +1554,41 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
             return null;
         }
 
-        var lote = await dbContext.LotesProdutoAcabado
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.Id == loteId && item.ProdutoVarianteId == produtoVarianteId,
-                cancellationToken).ConfigureAwait(false);
-        if (lote is null)
+        var agoraUtc = await dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+        var lote = await ConsultarLotes(produtoVarianteId, agoraUtc, loteId)
+            .SingleOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+        return lote is null ? null : MapearPosicao(lote, varianteAtiva.Value, dataReferencia);
+    }
+
+    private IQueryable<PosicaoLoteSql> ConsultarLotes(
+        Guid produtoVarianteId, DateTimeOffset agoraUtc, Guid? loteId = null)
+    {
+        var lotes = dbContext.LotesProdutoAcabado.AsNoTracking()
+            .Where(lote => lote.ProdutoVarianteId == produtoVarianteId);
+        var reservas = dbContext.ReservasProdutoAcabado.ComprometidasEm(agoraUtc)
+            .Where(reserva => reserva.ProdutoVarianteId == produtoVarianteId);
+        if (loteId is Guid id)
         {
-            return null;
+            lotes = lotes.Where(lote => lote.Id == id);
+            reservas = reservas.Where(reserva => reserva.LoteId == id);
         }
 
-        var saldo = await dbContext.SaldosProdutoAcabado
-            .AsNoTracking()
-            .SingleOrDefaultAsync(
-                item => item.ProdutoVarianteId == produtoVarianteId && item.LoteId == loteId,
-                cancellationToken).ConfigureAwait(false);
-        var versao = saldo is null
-            ? null
-            : await dbContext.SaldosProdutoAcabado
-                .AsNoTracking()
-                .Where(item => item.ProdutoVarianteId == produtoVarianteId && item.LoteId == loteId)
-                .Select(item => EF.Property<byte[]>(item, "Versao"))
-                .SingleAsync(cancellationToken).ConfigureAwait(false);
-        return MapearPosicao(lote, saldo, versao, varianteAtiva.Value, dataReferencia);
+        var compromissos = reservas.GroupBy(reserva => reserva.LoteId)
+            .Select(grupo => new { LoteId = grupo.Key, Quantidade = grupo.Sum(reserva => (long)reserva.Quantidade) });
+
+        return from lote in lotes
+               join saldo in dbContext.SaldosProdutoAcabado.AsNoTracking()
+                   on new { lote.ProdutoVarianteId, LoteId = lote.Id }
+                   equals new { saldo.ProdutoVarianteId, saldo.LoteId } into saldos
+               from saldo in saldos.DefaultIfEmpty()
+               join compromisso in compromissos on lote.Id equals compromisso.LoteId into reservados
+               from compromisso in reservados.DefaultIfEmpty()
+               orderby lote.DataValidade, lote.DataFabricacao, lote.Codigo, lote.Id
+               select new PosicaoLoteSql(
+                   lote,
+                   saldo,
+                   EF.Property<byte[]>(saldo!, "Versao"),
+                   (long?)compromisso.Quantidade ?? 0);
     }
 
     public async Task<PaginaEstoque<MovimentoProdutoAcabadoConsulta>> ListarMovimentosAsync(
@@ -1695,14 +1678,15 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
     }
 
     private static PosicaoLoteProdutoAcabadoConsulta MapearPosicao(
-        LoteProdutoAcabado lote,
-        SaldoLoteProdutoAcabado? saldo,
-        byte[]? versao,
+        PosicaoLoteSql posicao,
         bool varianteAtiva,
         DateOnly dataReferencia)
     {
+        var (lote, saldo, versao, comprometido) = posicao;
         var valido = lote.EstaValidoEm(dataReferencia);
         var utilizavel = valido ? saldo?.QuantidadeVendavel ?? 0 : 0;
+        var disponivel = varianteAtiva ? (int)Math.Max(0, utilizavel - comprometido) : 0;
+
         return new PosicaoLoteProdutoAcabadoConsulta(
             lote.Id,
             lote.Codigo,
@@ -1718,34 +1702,39 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
             saldo?.QuantidadeQuarentena ?? 0,
             saldo?.QuantidadeFisica ?? 0,
             utilizavel,
-            0,
-            varianteAtiva ? utilizavel : 0);
+            checked((int)comprometido),
+            disponivel);
     }
 
     private static ResumoEstoqueProdutoAcabadoConsulta MapearResumo(
         Guid produtoVarianteId,
         bool varianteAtiva,
-        ResumoSaldoProdutoAcabado resumo)
+        int? estoqueMinimo,
+        IReadOnlyList<PosicaoLoteProdutoAcabadoConsulta> lotes)
     {
-        var situacao = resumo.SaldoDisponivel == 0
+        var disponivel = lotes.Sum(lote => lote.SaldoDisponivel);
+        var situacao = disponivel == 0
             ? SituacaoEstoqueProdutoAcabado.SemEstoque
-            : resumo.EstoqueMinimo is null
+            : estoqueMinimo is null
                 ? SituacaoEstoqueProdutoAcabado.MinimoNaoConfigurado
-                : resumo.SaldoDisponivel <= resumo.EstoqueMinimo.Value
+                : disponivel <= estoqueMinimo.Value
                     ? SituacaoEstoqueProdutoAcabado.AbaixoOuNoMinimo
                     : SituacaoEstoqueProdutoAcabado.Normal;
 
         return new ResumoEstoqueProdutoAcabadoConsulta(
             produtoVarianteId,
             varianteAtiva,
-            resumo.SaldoFisico,
-            resumo.SaldoUtilizavel,
-            resumo.SaldoReservado,
-            resumo.SaldoDisponivel,
-            resumo.EstoqueMinimo,
-            resumo.EstoqueMinimo is not null,
+            lotes.Sum(lote => lote.SaldoFisico),
+            lotes.Sum(lote => lote.SaldoUtilizavel),
+            lotes.Sum(lote => lote.SaldoReservado),
+            disponivel,
+            estoqueMinimo,
+            estoqueMinimo is not null,
             situacao);
     }
+
+    private sealed record PosicaoLoteSql(
+        LoteProdutoAcabado Lote, SaldoLoteProdutoAcabado? Saldo, byte[]? Versao, long Comprometido);
 
     private sealed record MovimentoProdutoAcabadoSql(
         Guid MovimentoId,

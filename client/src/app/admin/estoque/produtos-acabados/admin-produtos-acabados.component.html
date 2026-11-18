@@ -163,21 +163,25 @@
               </dd>
             </div>
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <dt class="text-sm text-slate-600">Utilizável</dt>
+              <dt class="text-sm text-slate-600">Estoque vendável</dt>
               <dd class="mt-1 text-xl font-semibold text-slate-950">
-                {{ position.saldoUtilizavel }} un.
+                {{ position.varianteAtiva ? position.saldoUtilizavel : 0 }} un.
               </dd>
               <dd class="mt-1 text-xs text-slate-600">
-                Apto para uso conforme as regras do estoque e do lote.
+                Unidades em condição vendável, em lotes válidos e de variante ativa.
               </dd>
             </div>
             <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <dt class="text-sm text-slate-600">Reservado</dt>
+              <dt class="text-sm text-slate-600">Comprometido por reservas</dt>
               <dd class="mt-1 text-xl font-semibold text-slate-950">
                 {{ position.saldoReservado }} un.
               </dd>
               <dd class="mt-1 text-xs text-slate-600">
-                Comprometido com operações, quando houver.
+                @if (position.saldoReservado > 0) {
+                  Reservas confirmadas ou ativas dentro do prazo.
+                } @else {
+                  Sem reservas vigentes.
+                }
               </dd>
             </div>
             <div class="rounded-xl border border-emerald-400 bg-emerald-50 p-4">
@@ -186,8 +190,7 @@
                 {{ position.saldoDisponivel }} un.
               </dd>
               <dd class="mt-1 text-xs text-emerald-900">
-                Unidades liberadas para venda conforme a condição, a validade do lote e a situação
-                da variante.
+                Unidades livres para novas vendas após descontar as reservas de cada lote.
               </dd>
             </div>
           </dl>
@@ -662,7 +665,7 @@
                 </select>
                 @if (transferenciaForm.controls.loteId.value) {
                   <p class="mt-1 text-xs text-slate-500">
-                    Disponível na origem:
+                    Quantidade registrada na origem:
                     {{
                       saldoDaCondicao(
                         transferenciaForm.controls.loteId.value,
@@ -850,7 +853,7 @@
                   </div>
                   <dl class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
                     <div>
-                      <dt class="text-slate-500">Vendável</dt>
+                      <dt class="text-slate-500">Na condição vendável</dt>
                       <dd class="font-medium">{{ lote.quantidadeVendavel }} un.</dd>
                     </div>
                     <div>
@@ -866,14 +869,25 @@
                       <dd class="font-medium">{{ lote.saldoFisico }} un.</dd>
                     </div>
                     <div>
-                      <dt class="text-slate-500">Utilizável</dt>
-                      <dd class="font-medium">{{ lote.saldoUtilizavel }} un.</dd>
+                      <dt class="text-slate-500">Estoque vendável</dt>
+                      <dd class="font-medium">
+                        {{ position.varianteAtiva ? lote.saldoUtilizavel : 0 }} un.
+                      </dd>
                     </div>
                     <div>
-                      <dt class="text-slate-500">Disponível</dt>
+                      <dt class="text-slate-500">Comprometido por reservas</dt>
+                      <dd class="font-medium">{{ lote.saldoReservado }} un.</dd>
+                    </div>
+                    <div>
+                      <dt class="font-semibold text-emerald-900">Disponível para venda</dt>
                       <dd class="font-medium">{{ lote.saldoDisponivel }} un.</dd>
                     </div>
                   </dl>
+                  @if (lote.saldoReservado > (position.varianteAtiva ? lote.saldoUtilizavel : 0)) {
+                    <p class="mt-2 text-sm text-amber-900">
+                      Atenção: o estoque vendável deste lote é insuficiente para as reservas.
+                    </p>
+                  }
                   @if (contagemConcluidaLoteId() === lote.loteId) {
                     <p
                       class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"

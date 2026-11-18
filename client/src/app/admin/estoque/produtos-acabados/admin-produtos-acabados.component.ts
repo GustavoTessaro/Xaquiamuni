@@ -1230,7 +1230,7 @@ export class AdminProdutosAcabadosComponent {
   protected rotuloSituacao(situacao: SituacaoEstoqueProdutoAcabado): string {
     switch (situacao) {
       case 'SemEstoque':
-        return 'Sem estoque';
+        return 'Sem saldo disponível para venda';
       case 'AbaixoOuNoMinimo':
         return 'Abaixo ou no mínimo';
       case 'Normal':
