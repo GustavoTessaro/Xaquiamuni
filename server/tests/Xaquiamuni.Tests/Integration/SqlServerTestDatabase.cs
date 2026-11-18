@@ -35,6 +35,11 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         _connectionString = connectionString;
     }
 
+    internal string NomeBanco => _databaseCreated
+        ? _databaseName : throw new InvalidOperationException("The isolated database is unavailable.");
+    internal string ConexaoIsolada => _databaseCreated
+        ? _connectionString : throw new InvalidOperationException("The isolated database is unavailable.");
+
     public IServiceProvider Services => _scope?.ServiceProvider
         ?? throw new InvalidOperationException("The SQL Server test database is not initialized.");
     public Guid? RegistrationTransactionIdAtBegin => _emailOutboxTransactionProbe.TransactionIdAtBegin;
@@ -47,7 +52,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         IDataProtectionProvider? dataProtectionProvider = null,
         IInterceptor? dbContextInterceptor = null)
     {
-        var databaseName = $"Xaquiamuni_IntegrationTest_{Guid.NewGuid():N}";
+        var databaseName = $"{AlvoSqlE2E.Prefixo}{Guid.NewGuid():N}";
         var masterConnectionString = new SqlConnectionStringBuilder
         {
             DataSource = @".\SQLEXPRESS",
@@ -139,7 +144,14 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
                     SqlConnection.ClearPool(connection);
                 }
 
-                await DropCreatedDatabaseAsync(_databaseName).ConfigureAwait(false);
+                try
+                {
+                    await DropCreatedDatabaseAsync(_databaseName).ConfigureAwait(false);
+                }
+                catch (Exception exception)
+                {
+                    throw new InvalidOperationException($"Could not drop isolated database {_databaseName}.", exception);
+                }
                 _databaseCreated = false;
             }
         }
@@ -210,6 +222,18 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         _serviceProvider = services.BuildServiceProvider(validateScopes: true);
         _scope = _serviceProvider.CreateAsyncScope();
         var dbContext = Services.GetRequiredService<XaquiamuniDbContext>();
+        var alvo = new AlvoSqlE2E(NomeBanco);
+        alvo.ValidarConfiguracao(dbContext.Database.GetConnectionString() ?? "");
+        await dbContext.Database.OpenConnectionAsync().ConfigureAwait(false);
+        try
+        {
+            await alvo.ValidarConexaoAbertaAsync(dbContext.Database.GetDbConnection()).ConfigureAwait(false);
+        }
+        finally
+        {
+            await dbContext.Database.CloseConnectionAsync().ConfigureAwait(false);
+        }
+
         if (targetMigration is null)
         {
             await dbContext.Database.MigrateAsync().ConfigureAwait(false);
@@ -237,20 +261,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         await using var connection = new SqlConnection(masterConnectionString);
         await connection.OpenAsync().ConfigureAwait(false);
 
-        await using (var instanceCommand = connection.CreateCommand())
-        {
-            instanceCommand.CommandText = """
-                SELECT CONVERT(nvarchar(128), SERVERPROPERTY('InstanceName')),
-                       CONVERT(nvarchar(128), SERVERPROPERTY('ServerName'));
-                """;
-            await using var reader = await instanceCommand.ExecuteReaderAsync().ConfigureAwait(false);
-            if (!await reader.ReadAsync().ConfigureAwait(false)
-                || !string.Equals(reader.GetString(0), ExpectedInstance, StringComparison.OrdinalIgnoreCase)
-                || !reader.GetString(1).EndsWith(@"\SQLEXPRESS", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("SQL Server connection is not the local .\\SQLEXPRESS instance.");
-            }
-        }
+        await ValidarInstanciaMasterAsync(connection).ConfigureAwait(false);
 
         await using (var existenceCommand = connection.CreateCommand())
         {
@@ -272,6 +283,23 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         await createCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
+    private static async Task ValidarInstanciaMasterAsync(SqlConnection connection)
+    {
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT CONVERT(nvarchar(128), SERVERPROPERTY('InstanceName')),
+                   CONVERT(nvarchar(128), SERVERPROPERTY('MachineName')), DB_NAME();
+            """;
+        await using var reader = await command.ExecuteReaderAsync().ConfigureAwait(false);
+        if (!await reader.ReadAsync().ConfigureAwait(false) || reader.IsDBNull(0) || reader.IsDBNull(1)
+            || !string.Equals(reader.GetString(0), ExpectedInstance, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(reader.GetString(1), Environment.MachineName, StringComparison.OrdinalIgnoreCase)
+            || reader.GetString(2) != "master")
+        {
+            throw new InvalidOperationException("The SQL Server connection is not master on the local SQLEXPRESS instance.");
+        }
+    }
+
     private static async Task DropCreatedDatabaseAsync(string databaseName)
     {
         var masterConnectionString = new SqlConnectionStringBuilder
@@ -286,6 +314,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
 
         await using var connection = new SqlConnection(masterConnectionString);
         await connection.OpenAsync().ConfigureAwait(false);
+        await ValidarInstanciaMasterAsync(connection).ConfigureAwait(false);
         await using var command = connection.CreateCommand();
         var quotedName = QuoteIdentifier(databaseName);
         command.CommandText = $"""
