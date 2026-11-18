@@ -39,6 +39,13 @@ public static class AdminPedidosEndpoints
             .ProducesValidationProblem().Produces(401).Produces(403).Produces(404)
             .ProducesProblem(409).ProducesProblem(413).ProducesProblem(415);
 
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/iniciar-preparacao", IniciarPreparacaoAsync)
+            .WithName("IniciarPreparacaoAdmin"));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/liberar-retirada", LiberarRetiradaAsync)
+            .WithName("LiberarRetiradaAdmin"));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/confirmar-entrega", ConfirmarEntregaAsync)
+            .WithName("ConfirmarEntregaAdmin"));
+
         return endpoints;
     }
 
@@ -174,6 +181,99 @@ public static class AdminPedidosEndpoints
                 Conflito("motivo_divergente", "O pedido já foi cancelado com outro motivo."),
             EncerrarPedidoStatus.ReservasInconsistentes => ReservasInconsistentes(),
             EncerrarPedidoStatus.ConflitoConcorrencia => ConflitoConcorrencia(),
+            _ => Falha(),
+        };
+    }
+
+    private static RouteHandlerBuilder ConfigurarComandoOperacional(RouteHandlerBuilder rota) =>
+        rota.RequireXaquiamuniAntiforgery().Produces<ResultadoPedidoAdminResponse>()
+            .ProducesValidationProblem().Produces(401).Produces(403).Produces(404)
+            .ProducesProblem(409).ProducesProblem(413).ProducesProblem(415);
+
+    private static Task<IResult> IniciarPreparacaoAsync(
+        HttpContext context, Guid pedidoId, PrepararPedidoCompra preparar, CancellationToken cancellationToken) =>
+        PrepararAsync(context, pedidoId, preparar.IniciarPreparacaoAsync, SituacaoPedido.EmPreparacao, cancellationToken);
+
+    private static Task<IResult> LiberarRetiradaAsync(
+        HttpContext context, Guid pedidoId, PrepararPedidoCompra preparar, CancellationToken cancellationToken) =>
+        PrepararAsync(context, pedidoId, preparar.LiberarParaRetiradaAsync, SituacaoPedido.ProntoParaRetirada, cancellationToken);
+
+    private static async Task<IResult> PrepararAsync(
+        HttpContext context, Guid pedidoId, Func<Guid, Guid, CancellationToken, Task<PrepararPedidoStatus>> executar,
+        SituacaoPedido destino, CancellationToken cancellationToken)
+    {
+        if (!TentarObterAdministrador(context, out var administradorId))
+        {
+            return Results.Unauthorized();
+        }
+        if (pedidoId == Guid.Empty)
+        {
+            return Invalido("pedidoId", "Informe um identificador de pedido válido.");
+        }
+
+        var (_, erro) = await LerComandoAsync<AvancarPreparacaoAdminRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+        if (erro is not null)
+        {
+            return erro;
+        }
+
+        var resultado = await executar(pedidoId, administradorId, cancellationToken).ConfigureAwait(false);
+        return resultado switch
+        {
+            PrepararPedidoStatus.Sucesso or PrepararPedidoStatus.Repetida =>
+                Atualizado(pedidoId, destino, resultado == PrepararPedidoStatus.Repetida),
+            PrepararPedidoStatus.DadosInvalidos => Invalido("pedidoId", "Identificador de pedido inválido."),
+            PrepararPedidoStatus.AdministradorNaoAutorizado => Results.Forbid(),
+            PrepararPedidoStatus.PedidoNaoEncontrado => Results.NotFound(),
+            PrepararPedidoStatus.EstadoIncompativel =>
+                Conflito("estado_incompativel", "A situação atual do pedido não permite essa operação."),
+            PrepararPedidoStatus.ReservasInconsistentes => ReservasInconsistentes(),
+            PrepararPedidoStatus.ConflitoConcorrencia => ConflitoConcorrencia(),
+            _ => Falha(),
+        };
+    }
+
+    private static async Task<IResult> ConfirmarEntregaAsync(
+        HttpContext context, Guid pedidoId, ConfirmarEntregaPedido confirmar, CancellationToken cancellationToken)
+    {
+        if (!TentarObterAdministrador(context, out var administradorId))
+        {
+            return Results.Unauthorized();
+        }
+        if (pedidoId == Guid.Empty)
+        {
+            return Invalido("pedidoId", "Informe um identificador de pedido válido.");
+        }
+
+        var (comando, erro) = await LerComandoAsync<ConfirmarEntregaAdminRequest>(context.Request, cancellationToken)
+            .ConfigureAwait(false);
+        if (erro is not null)
+        {
+            return erro;
+        }
+        if (comando?.EntregaPresencialConfirmada != true)
+        {
+            return Invalido("entregaPresencialConfirmada", "Confirme que a entrega presencial ocorreu.");
+        }
+
+        var resultado = await confirmar.ExecuteAsync(pedidoId, administradorId, comando.EntregaPresencialConfirmada,
+            cancellationToken).ConfigureAwait(false);
+        return resultado.Status switch
+        {
+            ConfirmarEntregaPedidoStatus.Entregue or ConfirmarEntregaPedidoStatus.Repetida =>
+                Atualizado(pedidoId, SituacaoPedido.Entregue, resultado.Status == ConfirmarEntregaPedidoStatus.Repetida),
+            ConfirmarEntregaPedidoStatus.DadosInvalidos => Invalido("pedidoId", "Identificador de pedido inválido."),
+            ConfirmarEntregaPedidoStatus.AdministradorNaoAutorizado => Results.Forbid(),
+            ConfirmarEntregaPedidoStatus.PedidoNaoEncontrado => Results.NotFound(),
+            ConfirmarEntregaPedidoStatus.EstadoIncompativel =>
+                Conflito("estado_incompativel", "A situação atual do pedido não permite confirmar a entrega."),
+            ConfirmarEntregaPedidoStatus.ReservasInconsistentes => ReservasInconsistentes(),
+            ConfirmarEntregaPedidoStatus.LoteInelegivel =>
+                Conflito("lote_inelegivel", "Há estoque reservado vencido ou inelegível para entrega."),
+            ConfirmarEntregaPedidoStatus.SaldoInsuficiente =>
+                Conflito("saldo_insuficiente", "O estoque disponível nos lotes reservados é insuficiente para a entrega."),
+            ConfirmarEntregaPedidoStatus.ConflitoConcorrencia => ConflitoConcorrencia(),
             _ => Falha(),
         };
     }
