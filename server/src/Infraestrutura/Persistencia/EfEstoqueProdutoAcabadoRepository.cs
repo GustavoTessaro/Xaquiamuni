@@ -8,7 +8,7 @@ using Xaquiamuni.Dominio.Estoque;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRepository
+public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRepository
 {
     private readonly XaquiamuniDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
@@ -50,8 +50,8 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
             .ConfigureAwait(false);
         try
         {
-            await AdquirirLockAsync(
-                $"finished-variant:{input.ProdutoVarianteId:D}",
+            await AdquirirLockVarianteAsync(
+                input.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
             var variante = await _dbContext.ProdutoVariantes
                 .SingleOrDefaultAsync(
@@ -183,8 +183,8 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                     .ConfigureAwait(false);
             }
 
-            await AdquirirLockAsync(
-                $"finished-variant:{input.ProdutoVarianteId:D}",
+            await AdquirirLockVarianteAsync(
+                input.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
 
             if (input.Tipo is not (TipoMovimentoProdutoAcabado.EstoqueInicial
@@ -493,8 +493,8 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                 return OperacaoProdutoAcabadoResult.Success(existente, repetida: true);
             }
 
-            await AdquirirLockAsync(
-                $"finished-variant:{input.ProdutoVarianteId:D}",
+            await AdquirirLockVarianteAsync(
+                input.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
 
             var variante = await _dbContext.ProdutoVariantes
@@ -665,6 +665,13 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                     transaction,
                     OperacaoProdutoAcabadoStatus.OperacaoInvalida,
                     exception.Message).ConfigureAwait(false);
+            }
+
+            if (await ReduzEstoqueComprometidoAsync(movimento, cancellationToken).ConfigureAwait(false))
+            {
+                return await ReverterOperacaoComFalhaAsync(
+                    transaction, OperacaoProdutoAcabadoStatus.SaldoInsuficiente, MensagemEstoqueComprometido)
+                    .ConfigureAwait(false);
             }
 
             _dbContext.MovimentosProdutoAcabado.Add(movimento);
@@ -839,8 +846,8 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                 return ContarProdutoAcabadoResult.Success(movimentosExistentes, repetida: true);
             }
 
-            await AdquirirLockAsync(
-                $"finished-variant:{input.ProdutoVarianteId:D}",
+            await AdquirirLockVarianteAsync(
+                input.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
 
             var variante = await _dbContext.ProdutoVariantes
@@ -887,6 +894,15 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                     transaction,
                     OperacaoProdutoAcabadoStatus.ConflitoConcorrencia,
                     "A posição mudou desde a leitura da contagem; atualize o saldo e repita.")
+                    .ConfigureAwait(false);
+            }
+
+            if (await ReduzEstoqueComprometidoAsync(
+                    variante.Id, lote.Id, saldo.QuantidadeVendavel, input.QuantidadeVendavel, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return await ReverterContagemComFalhaAsync(
+                    transaction, OperacaoProdutoAcabadoStatus.SaldoInsuficiente, MensagemEstoqueComprometido)
                     .ConfigureAwait(false);
             }
 
@@ -1099,8 +1115,8 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                     .ConfigureAwait(false);
             }
 
-            await AdquirirLockAsync(
-                $"finished-variant:{original.ProdutoVarianteId:D}",
+            await AdquirirLockVarianteAsync(
+                original.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
 
             var lote = await _dbContext.LotesProdutoAcabado
@@ -1188,6 +1204,13 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
                     exception.Message).ConfigureAwait(false);
             }
 
+            if (await ReduzEstoqueComprometidoAsync(estorno, cancellationToken).ConfigureAwait(false))
+            {
+                return await ReverterEstornoComFalhaAsync(
+                    transaction, OperacaoProdutoAcabadoStatus.SaldoInsuficiente, MensagemEstoqueComprometido)
+                    .ConfigureAwait(false);
+            }
+
             _dbContext.MovimentosProdutoAcabado.Add(estorno);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -1258,6 +1281,9 @@ public sealed class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoAcabadoRe
         _dbContext.ChangeTracker.Clear();
         return EstornarMovimentoProdutoAcabadoResult.Failure(status, erro);
     }
+
+    private Task AdquirirLockVarianteAsync(Guid varianteId, CancellationToken cancellationToken) =>
+        AdquirirLockAsync($"finished-variant:{varianteId:D}", cancellationToken);
 
     private async Task AdquirirLockAsync(string resource, CancellationToken cancellationToken)
     {

@@ -147,7 +147,22 @@ public sealed class EfProdutoRepository : IProdutoRepository
                     result = await operacao(session, cancellationToken).ConfigureAwait(false);
                     if (result.Status == ProdutoStatus.Success)
                     {
+                        var variantesDesativadas = _dbContext.ChangeTracker.Entries<ProdutoVariante>()
+                            .Where(entry => entry.State == EntityState.Modified
+                                && entry.Property(variante => variante.Ativa).OriginalValue && !entry.Entity.Ativa)
+                            .Select(entry => entry.Entity.Id)
+                            .ToArray();
                         await SaveChangesWithUniqueSwitchesAsync(cancellationToken).ConfigureAwait(false);
+
+                        // O UPDATE mantém o bloqueio exclusivo da variante até o fim da transação.
+                        if (variantesDesativadas.Length > 0
+                            && await PossuiReservasComprometidasAsync(variantesDesativadas, cancellationToken)
+                                .ConfigureAwait(false))
+                        {
+                            return await RollbackWithResultAsync(
+                                ProdutoResult.Conflict("Não é possível desativar uma variante com reservas comerciais comprometidas."),
+                                transaction).ConfigureAwait(false);
+                        }
                     }
                 }
                 catch (DbUpdateConcurrencyException)
@@ -203,6 +218,14 @@ public sealed class EfProdutoRepository : IProdutoRepository
                 }
             }
         }
+    }
+
+    private async Task<bool> PossuiReservasComprometidasAsync(Guid[] variantes, CancellationToken cancellationToken)
+    {
+        var agora = await _dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
+        return await _dbContext.ReservasProdutoAcabado.ComprometidasEm(agora)
+            .AnyAsync(reserva => variantes.Contains(reserva.ProdutoVarianteId), cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static async Task<ProdutoMutationExecutionResult> RollbackWithResultAsync(
