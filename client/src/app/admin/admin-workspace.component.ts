@@ -3,7 +3,7 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 
-export type AdminWorkspacePage = 'overview' | 'categories' | 'products' | 'stock';
+export type AdminWorkspacePage = 'overview' | 'categories' | 'products' | 'stock' | 'orders';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

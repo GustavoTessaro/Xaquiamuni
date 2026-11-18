@@ -1,0 +1,254 @@
+<app-admin-workspace activePage="orders">
+  <section
+    class="min-w-0 space-y-5 rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-6"
+    aria-labelledby="pedido-titulo"
+  >
+    <a
+      routerLink="/admin/pedidos"
+      queryParamsHandling="preserve"
+      class="inline-flex min-h-11 items-center rounded text-sm font-semibold text-emerald-800 underline focus-visible:outline-2"
+      >Voltar aos pedidos</a
+    >
+    <h1
+      id="pedido-titulo"
+      #titulo
+      tabindex="-1"
+      class="text-2xl font-semibold text-slate-900 focus-visible:outline-2"
+    >
+      Detalhe do pedido
+    </h1>
+    @if (sucesso()) {
+      <p role="status" class="rounded-lg bg-emerald-50 p-3 text-emerald-950">{{ sucesso() }}</p>
+    }
+    @if (erro()) {
+      <p role="alert" class="rounded-lg border border-red-200 p-3 text-red-900">{{ erro() }}</p>
+    }
+    @let detalhe = estado();
+    @switch (detalhe.tipo) {
+      @case ('carregando') {
+        <p role="status">Carregando pedido…</p>
+      }
+      @case ('erro') {
+        @if (detalhe.status === 401 || detalhe.status === 403) {
+          <p role="alert">
+            {{
+              detalhe.status === 401
+                ? 'Sua sessão expirou.'
+                : 'Você não tem acesso a este pedido ou operação.'
+            }}
+          </p>
+          <a
+            routerLink="/admin/login"
+            class="inline-flex min-h-11 items-center font-semibold text-emerald-800 underline focus-visible:outline-2"
+            >Entrar no painel</a
+          >
+        } @else if (detalhe.status === 404) {
+          <p role="alert">Pedido não encontrado.</p>
+        } @else {
+          <p role="alert">Não foi possível carregar o pedido.</p>
+          <button
+            type="button"
+            (click)="recarregar()"
+            class="min-h-11 rounded-lg border border-emerald-800 px-3 font-semibold text-emerald-800 focus-visible:outline-2"
+          >
+            Tentar novamente
+          </button>
+        }
+      }
+      @case ('pronto') {
+        @let pedido = detalhe.dados.pedido;
+        <dl class="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
+          <div class="min-w-0">
+            <dt class="font-semibold">Identificador</dt>
+            <dd class="wrap-anywhere">{{ pedido.id }}</dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Situação</dt>
+            <dd>{{ situacoes[pedido.situacao] }}</dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Criação</dt>
+            <dd>
+              <time [attr.datetime]="pedido.criadoEmUtc">{{
+                pedido.criadoEmUtc | date: 'dd/MM/yyyy HH:mm'
+              }}</time>
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Prazo de pagamento</dt>
+            <dd>
+              <time [attr.datetime]="pedido.prazoPagamentoEmUtc">{{
+                pedido.prazoPagamentoEmUtc | date: 'dd/MM/yyyy HH:mm'
+              }}</time>
+            </dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Modalidade</dt>
+            <dd>Retirada local</dd>
+          </div>
+          <div>
+            <dt class="font-semibold">Horários</dt>
+            <dd>Horário local</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="font-semibold">Cliente</dt>
+            <dd class="wrap-anywhere">{{ detalhe.dados.cliente.nome }}</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="font-semibold">E-mail</dt>
+            <dd class="wrap-anywhere">
+              {{ detalhe.dados.cliente.email || 'E-mail não informado' }}
+            </dd>
+          </div>
+        </dl>
+        <section class="space-y-3" aria-labelledby="pedido-itens">
+          <h2 id="pedido-itens" class="text-lg font-semibold">Itens</h2>
+          <ul class="divide-y divide-slate-200 rounded-xl border border-slate-200 px-4">
+            @for (item of pedido.itens; track item.produtoVarianteId) {
+              <li class="flex flex-wrap justify-between gap-2 py-3">
+                <div class="min-w-0 wrap-anywhere">
+                  <p class="font-semibold">{{ item.nomeProduto }} · {{ item.nomeVariante }}</p>
+                  <p class="text-sm">
+                    Quantidade: {{ item.quantidade }} ·
+                    {{ formatarPreco(item.precoUnitarioCentavos) }} por unidade
+                  </p>
+                </div>
+                <strong class="wrap-anywhere">{{ formatarPreco(item.subtotalCentavos) }}</strong>
+              </li>
+            }
+          </ul>
+          <p class="wrap-anywhere font-semibold">
+            Total definitivo: {{ formatarPreco(pedido.totalCentavos) }}
+          </p>
+        </section>
+        <section
+          class="space-y-3 rounded-xl border border-slate-200 p-4"
+          aria-labelledby="pedido-acoes"
+        >
+          <h2 id="pedido-acoes" class="text-lg font-semibold">Ações do pedido</h2>
+          @if (podeAlterar()) {
+            @if (!acao()) {
+              <div class="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  (click)="abrir('pagamento')"
+                  [disabled]="enviando()"
+                  class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-50"
+                >
+                  Confirmar pagamento
+                </button>
+                <button
+                  type="button"
+                  (click)="abrir('cancelamento')"
+                  [disabled]="enviando()"
+                  class="min-h-11 rounded-lg border border-red-800 px-4 font-semibold text-red-800 focus-visible:outline-2 disabled:opacity-50"
+                >
+                  Cancelar pedido
+                </button>
+              </div>
+            } @else {
+              <form (submit)="enviar($event)" [attr.aria-busy]="enviando()" novalidate>
+                <fieldset [disabled]="enviando()" class="grid min-w-0 gap-3">
+                  @if (acao() === 'pagamento') {
+                    <legend class="mb-2 font-semibold">Conferência bancária</legend>
+                    <label class="flex min-h-11 items-start gap-3">
+                      <input
+                        #confirmarCampo
+                        type="checkbox"
+                        [checked]="conferido()"
+                        (change)="conferido.set(confirmarCampo.checked)"
+                        class="mt-1 size-5 shrink-0 accent-emerald-800 focus-visible:outline-2"
+                      />
+                      <span
+                        >Conferi que o pagamento deste pedido foi recebido na conta bancária.</span
+                      >
+                    </label>
+                  } @else {
+                    <legend class="mb-2 font-semibold">Confirmação de cancelamento</legend>
+                    <p>Confira o motivo antes de confirmar. Esta ação encerra o pedido.</p>
+                    <label for="pedido-motivo" class="font-medium"
+                      >Motivo do cancelamento (obrigatório)</label
+                    >
+                    <textarea
+                      #motivoCampo
+                      id="pedido-motivo"
+                      required
+                      maxlength="500"
+                      rows="3"
+                      [value]="motivo()"
+                      (input)="atualizarMotivo(motivoCampo.value)"
+                      [attr.aria-invalid]="motivoInvalido() ? 'true' : null"
+                      [attr.aria-describedby]="
+                        motivoInvalido()
+                          ? 'pedido-motivo-ajuda pedido-motivo-erro'
+                          : 'pedido-motivo-ajuda'
+                      "
+                      class="w-full rounded-lg border border-slate-400 p-2 focus-visible:outline-2"
+                    ></textarea>
+                    <p id="pedido-motivo-ajuda" class="text-sm text-slate-600">
+                      Até 500 caracteres.
+                    </p>
+                    @if (motivoInvalido()) {
+                      <p role="alert" id="pedido-motivo-erro" class="text-red-900">
+                        Informe um motivo válido para o cancelamento.
+                      </p>
+                    }
+                  }
+                  <div class="flex flex-wrap gap-3">
+                    <button
+                      type="submit"
+                      [disabled]="acao() === 'pagamento' && !conferido()"
+                      class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:opacity-50"
+                    >
+                      {{
+                        acao() === 'pagamento' ? 'Registrar confirmação' : 'Confirmar cancelamento'
+                      }}
+                    </button>
+                    <button
+                      type="button"
+                      (click)="fechar()"
+                      class="min-h-11 rounded px-3 underline focus-visible:outline-2"
+                    >
+                      Voltar sem alterar
+                    </button>
+                  </div>
+                </fieldset>
+              </form>
+            }
+          } @else {
+            @switch (pedido.situacao) {
+              @case ('AguardandoPagamento') {
+                <p>O prazo de pagamento terminou. Atualize o pedido para consultar a situação.</p>
+                <button
+                  type="button"
+                  (click)="recarregar()"
+                  class="min-h-11 underline focus-visible:outline-2"
+                >
+                  Atualizar pedido
+                </button>
+              }
+              @case ('Expirado') {
+                <p>O pedido expirou após o fim do prazo de pagamento.</p>
+              }
+              @case ('Cancelado') {
+                <p>O pedido foi cancelado.</p>
+              }
+              @case ('PagamentoConfirmado') {
+                <p>
+                  O pagamento foi confirmado. O cancelamento por esta tela está disponível apenas
+                  para pedidos não pagos.
+                </p>
+              }
+              @default {
+                <p>As ações de pagamento e cancelamento estão indisponíveis nesta situação.</p>
+              }
+            }
+          }
+          @if (enviando()) {
+            <p role="status">Atualizando pedido…</p>
+          }
+        </section>
+      }
+    }
+  </section>
+</app-admin-workspace>

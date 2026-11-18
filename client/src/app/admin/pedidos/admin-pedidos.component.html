@@ -1,0 +1,118 @@
+<app-admin-workspace activePage="orders">
+  <section
+    class="min-w-0 space-y-5 rounded-2xl border border-emerald-950/10 bg-white p-4 shadow-sm sm:p-6"
+    aria-labelledby="pedidos-titulo"
+  >
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <h1 id="pedidos-titulo" class="text-2xl font-semibold text-slate-900">Pedidos</h1>
+      <div class="grid gap-1">
+        <label for="pedidos-situacao" class="text-sm font-medium">Filtrar por situação</label>
+        <select
+          id="pedidos-situacao"
+          #filtro
+          (change)="filtrar(filtro.value)"
+          class="min-h-11 rounded-lg border border-slate-400 bg-white px-3 focus-visible:outline-2 focus-visible:outline-emerald-800"
+        >
+          <option value="" [selected]="!filtros().situacao">Todos</option>
+          @for (opcao of situacoes | keyvalue; track opcao.key) {
+            <option [value]="opcao.key" [selected]="filtros().situacao === opcao.key">
+              {{ opcao.value }}
+            </option>
+          }
+        </select>
+      </div>
+    </div>
+    @let lista = estado();
+    @switch (lista.tipo) {
+      @case ('carregando') {
+        <p role="status">Carregando pedidos…</p>
+      }
+      @case ('erro') {
+        <div class="space-y-2">
+          @if (lista.status === 401 || lista.status === 403) {
+            <p role="alert">
+              {{
+                lista.status === 401 ? 'Sua sessão expirou.' : 'Você não tem acesso aos pedidos.'
+              }}
+            </p>
+            <a
+              routerLink="/admin/login"
+              class="inline-flex min-h-11 items-center font-semibold text-emerald-800 underline focus-visible:outline-2"
+              >Entrar no painel</a
+            >
+          } @else {
+            <p role="alert">Não foi possível carregar os pedidos.</p>
+            <button
+              type="button"
+              (click)="recarregar()"
+              class="min-h-11 rounded-lg border border-emerald-800 px-3 font-semibold text-emerald-800 focus-visible:outline-2"
+            >
+              Tentar novamente
+            </button>
+          }
+        </div>
+      }
+      @case ('pronto') {
+        @if (lista.dados.itens.length === 0) {
+          <p role="status">Nenhum pedido encontrado.</p>
+          @if (lista.dados.totalPaginas > 0) {
+            <button
+              type="button"
+              (click)="mudarPagina(1)"
+              class="min-h-11 underline focus-visible:outline-2"
+            >
+              Voltar à primeira página
+            </button>
+          }
+        } @else {
+          <ul class="grid gap-3" aria-label="Pedidos encontrados">
+            @for (pedido of lista.dados.itens; track pedido.id) {
+              <li
+                class="grid min-w-0 gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_auto]"
+              >
+                <div class="min-w-0">
+                  <p class="font-semibold wrap-anywhere">{{ pedido.nomeCliente }}</p>
+                  <a
+                    [routerLink]="['/admin/pedidos', pedido.id]"
+                    queryParamsHandling="preserve"
+                    class="inline-flex min-h-11 items-center text-sm wrap-anywhere text-emerald-800 underline focus-visible:outline-2"
+                  >
+                    <span><span class="sr-only">Ver pedido </span>{{ pedido.id }}</span>
+                  </a>
+                </div>
+                <div>
+                  <p>{{ situacoes[pedido.situacao] }}</p>
+                  <time class="text-sm text-slate-600" [attr.datetime]="pedido.criadoEmUtc">{{
+                    pedido.criadoEmUtc | date: 'dd/MM/yyyy HH:mm'
+                  }}</time>
+                </div>
+                <strong class="wrap-anywhere">{{ formatarPreco(pedido.totalCentavos) }}</strong>
+              </li>
+            }
+          </ul>
+          <nav aria-label="Paginação dos pedidos" class="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              (click)="mudarPagina(lista.dados.pagina - 1)"
+              [disabled]="lista.dados.pagina <= 1"
+              class="min-h-11 rounded-lg border px-3 focus-visible:outline-2 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <p aria-live="polite">
+              Página {{ lista.dados.pagina }} de {{ lista.dados.totalPaginas }}
+            </p>
+            <button
+              type="button"
+              (click)="mudarPagina(lista.dados.pagina + 1)"
+              [disabled]="lista.dados.pagina >= lista.dados.totalPaginas"
+              class="min-h-11 rounded-lg border px-3 focus-visible:outline-2 disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </nav>
+        }
+      }
+    }
+  </section>
+</app-admin-workspace>

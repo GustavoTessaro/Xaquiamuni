@@ -12,6 +12,22 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
   {
+    path: 'admin/pedidos/:pedidoId',
+    loadComponent: () =>
+      import('./admin/pedidos/admin-pedido-detalhe.component').then(
+        (module) => module.AdminPedidoDetalheComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
+    path: 'admin/pedidos',
+    loadComponent: () =>
+      import('./admin/pedidos/admin-pedidos.component').then(
+        (module) => module.AdminPedidosComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/estoque/insumos/operacoes',
     loadComponent: () =>
       import('./admin/estoque/operacoes/admin-operacao-insumo.component').then(

@@ -58,6 +58,17 @@
         Visão geral
       </a>
       <a
+        routerLink="/admin/pedidos"
+        [attr.aria-current]="activePage() === 'orders' ? 'page' : null"
+        [class]="
+          activePage() === 'orders'
+            ? 'mt-1 flex min-h-11 items-center rounded-xl bg-emerald-50 px-4 text-sm font-semibold text-emerald-900 focus-visible:outline-2'
+            : 'mt-1 flex min-h-11 items-center rounded-xl px-4 text-sm text-slate-600 hover:bg-emerald-50 focus-visible:outline-2 focus-visible:outline-emerald-800'
+        "
+      >
+        Pedidos
+      </a>
+      <a
         routerLink="/admin/produtos"
         [attr.aria-current]="activePage() === 'products' ? 'page' : null"
         [class]="
