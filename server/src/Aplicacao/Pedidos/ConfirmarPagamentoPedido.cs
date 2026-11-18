@@ -48,13 +48,7 @@ public sealed class ConfirmarPagamentoPedido(IConfirmarPagamentoPedidoRepository
         }
 
         var estadoEsperado = repeticao ? EstadoReservaProdutoAcabado.Confirmada : EstadoReservaProdutoAcabado.Ativa;
-        var quantidades = reservas.GroupBy(reserva => reserva.ProdutoVarianteId)
-            .ToDictionary(grupo => grupo.Key, grupo => grupo.Sum(reserva => (long)reserva.Quantidade));
-        if (pedido.Itens.Count == 0 || quantidades.Count != pedido.Itens.Count
-            || pedido.Itens.Any(item => quantidades.GetValueOrDefault(item.ProdutoVarianteId) != item.Quantidade)
-            || reservas.Any(reserva => reserva.PedidoId != pedido.Id || reserva.Estado != estadoEsperado
-                || reserva.CriadaEmUtc != pedido.CriadoEmUtc || reserva.ExpiraEmUtc != pedido.PrazoPagamentoEmUtc
-                || reserva.ConfirmadaEmUtc != pedido.PagamentoConfirmadoEmUtc))
+        if (!IntegridadeReservasPedido.Correspondem(pedido, reservas, estadoEsperado))
         {
             return ConfirmarPagamentoPedidoStatus.ReservasInconsistentes;
         }
