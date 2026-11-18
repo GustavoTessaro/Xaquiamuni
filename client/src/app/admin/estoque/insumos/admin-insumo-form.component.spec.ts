@@ -94,6 +94,34 @@ describe('AdminInsumoFormComponent', () => {
     vi.unstubAllGlobals();
   });
 
+  it('groups existing routine, consultation, and exceptional stock actions', () => {
+    routeId = 'insumo-1';
+    render();
+
+    const nav = root().querySelector('nav[aria-label="Ações do insumo"]');
+    expect(nav).not.toBeNull();
+    expect(nav?.querySelector('#stock-supply-routine-title')?.textContent).toContain(
+      'Rotina de estoque',
+    );
+    expect(nav?.querySelector('#stock-supply-check-title')?.textContent).toContain(
+      'Conferir e consultar',
+    );
+    expect(nav?.querySelector('#stock-supply-exception-title')?.textContent).toContain(
+      'Perdas e descartes',
+    );
+    for (const label of [
+      'Registrar entrada',
+      'Registrar saída',
+      'Fazer contagem',
+      'Posição e histórico',
+      'Registrar perda ou descarte',
+    ]) {
+      expect(nav?.textContent).toContain(label);
+    }
+    expect(nav?.textContent).toContain('Registre materiais recebidos ou usados.');
+    expect(root().querySelector('#stock-supply-routine-title')?.closest('section')).toBeTruthy();
+  });
+
   it('validates required names and creates cadastro without adding stock', () => {
     render();
     clickButton('Cadastrar insumo');

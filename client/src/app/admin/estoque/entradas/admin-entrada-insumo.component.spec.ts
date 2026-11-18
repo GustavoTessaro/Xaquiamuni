@@ -311,10 +311,12 @@ describe('AdminEntradaInsumoComponent', () => {
     expect(secondCall?.[2]).toBe(firstKey);
     expect(secondCall?.[1]).toEqual(firstRequest);
     expect(root.textContent).toContain('Entrada registrada');
+    expect(root.textContent).toContain('Código para consulta no histórico');
+    expect(root.querySelector('details code')?.textContent).toBe('movement-1');
     expect(api.obterParaEntrada).toHaveBeenCalledTimes(2);
   });
 
-  it('distinguishes an idempotency conflict and keeps the operation locked for reconciliation', async () => {
+  it('explains a conflicting attempt without offering an unsafe retry', async () => {
     const api = criarApi(detalheBase);
     api.registrarEntrada.mockReturnValueOnce(
       throwError(
@@ -330,8 +332,11 @@ describe('AdminEntradaInsumoComponent', () => {
     setInput(harness, '#stock-entry-quantity', '2');
     click(harness, 'button[type="submit"]');
     clickText(harness, 'Confirmar entrada');
-    expect(harness.routeNativeElement?.textContent).toContain('Conflito de idempotência');
-    expect(harness.routeNativeElement?.textContent).toContain('reconcilie o histórico');
+    expect(harness.routeNativeElement?.textContent).toContain('Verifique a tentativa anterior');
+    expect(harness.routeNativeElement?.textContent).toContain(
+      'confira o histórico antes de iniciar outra entrada',
+    );
+    expect(harness.routeNativeElement?.textContent).not.toContain('idempotência');
     expect(
       Array.from(harness.routeNativeElement?.querySelectorAll('button') ?? []).some((button) =>
         button.textContent?.includes('Tentar novamente'),

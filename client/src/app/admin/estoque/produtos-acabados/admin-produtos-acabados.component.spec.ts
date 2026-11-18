@@ -240,6 +240,29 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Quantidade de referência para alertar sobre necessidade de reposição.');
   });
 
+  it('groups routine and exceptional actions and explains when to use them', async () => {
+    const fixture = await montarComponente(criarApi());
+    const root = fixture.nativeElement as HTMLElement;
+    const routine = root.querySelector('#finished-routine-actions-title')?.closest('section');
+    const exceptional = root.querySelector('#finished-exception-actions-title')?.closest('section');
+
+    expect(routine?.textContent).toContain('Registrar entrada');
+    expect(routine?.textContent).toContain('Registrar saída');
+    expect(routine?.textContent).toContain('Registre unidades que chegaram ou saíram do estoque.');
+    expect(exceptional?.textContent).toContain('Registrar perda');
+    expect(exceptional?.textContent).toContain('Registrar descarte');
+    expect(exceptional?.textContent).toContain('Mudar condição do lote');
+    expect(exceptional?.textContent).toContain(
+      'Registre perdas, descartes ou alterações no estado das unidades.',
+    );
+    expect(root.textContent).toContain('use “Conferir estoque” no cartão do lote');
+    for (const button of root.querySelectorAll<HTMLButtonElement>(
+      '#finished-routine-actions-title ~ div button, #finished-exception-actions-title ~ div button',
+    )) {
+      expect(button.className).toContain('focus-visible:outline');
+    }
+  });
+
   it('identifica lotes por datas e saldo nos seletores de movimentação e histórico', async () => {
     const fixture = await montarComponente(criarApi());
     const root = fixture.nativeElement as HTMLElement;
@@ -273,7 +296,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(saidaOption?.textContent).toContain('físico 6 un.');
     expect(saidaOption?.textContent).toContain(loteInicial.codigo);
 
-    clicar(fixture, 'Transferir condição');
+    clicar(fixture, 'Mudar condição do lote');
     const transferenciaOption = root.querySelector<HTMLOptionElement>(
       '#finished-transfer-lot option[value="lot-1"]',
     );
@@ -574,12 +597,12 @@ describe('AdminProdutosAcabadosComponent', () => {
     clicar(fixture, 'Confirmar contagem');
     await estabilizar(fixture);
 
-    expect(root.textContent).toContain('Atualize o snapshot quando estiver pronta');
+    expect(root.textContent).toContain('Atualize os dados quando estiver pronta');
     expect(api.registrarContagem.mock.calls[0]?.[1]?.versaoSaldoEsperada).toBe('AQIDBAUG');
     expect(api.consultarLote).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(root.querySelector('[role="alert"]'));
 
-    clicar(fixture, 'Atualizar snapshot mantendo os valores digitados');
+    clicar(fixture, 'Atualizar dados mantendo os valores digitados');
     await estabilizar(fixture);
     expect(root.querySelector<HTMLInputElement>('#count-vendavel')?.value).toBe('4');
     expect(root.querySelector<HTMLInputElement>('#count-damaged')?.value).toBe('2');
@@ -604,7 +627,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     });
   });
 
-  it('não oferece recarga de snapshot para conflito de idempotência', async () => {
+  it('does not offer a data refresh for an unrelated key conflict', async () => {
     const api = criarApi();
     api.registrarContagem.mockReturnValueOnce(
       throwError(
@@ -621,8 +644,8 @@ describe('AdminProdutosAcabadosComponent', () => {
     clicar(fixture, 'Confirmar contagem');
     await estabilizar(fixture);
 
-    expect(root.textContent).toContain('associada a outro conteúdo');
-    expect(root.textContent).not.toContain('Atualizar snapshot mantendo os valores digitados');
+    expect(root.textContent).toContain('associada a dados diferentes');
+    expect(root.textContent).not.toContain('Atualizar dados mantendo os valores digitados');
   });
 
   it('reutiliza a chave após falha de rede e recriação do componente, limpando após sucesso', async () => {
@@ -643,7 +666,9 @@ describe('AdminProdutosAcabadosComponent', () => {
     const stored = sessionStorage.getItem(sessionStorage.key(0)!);
     expect(stored).toContain(originalKey);
     expect(stored).not.toContain('Recebimento reservado');
-    expect(root.textContent).toContain('A chave foi preservada');
+    expect(root.textContent).toContain('Não foi possível confirmar o resultado');
+    expect(root.textContent).not.toContain('idempotência');
+    expect(root.textContent).not.toContain('payload');
 
     fixture.destroy();
     TestBed.resetTestingModule();

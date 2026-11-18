@@ -395,7 +395,7 @@ export class AdminEntradaInsumoComponent {
     const idempotencyKey = this.criarChaveIdempotencia();
     if (!idempotencyKey) {
       this.erroEntrada.set(
-        'Não foi possível gerar uma chave segura para a operação. Recarregue a página.',
+        'Não foi possível preparar a operação com segurança. Recarregue a página.',
       );
       return;
     }
@@ -575,7 +575,7 @@ export class AdminEntradaInsumoComponent {
     } catch (error) {
       if (error instanceof SyntaxError) {
         this.erroRecuperacaoPendente.set(
-          'Não foi possível recuperar uma tentativa de entrada pendente. Reconcilie o estoque antes de registrar outra.',
+          'Não foi possível ler uma tentativa anterior. Confira a posição e o histórico antes de registrar outra entrada.',
         );
         return;
       }
@@ -583,7 +583,7 @@ export class AdminEntradaInsumoComponent {
     }
     if (!this.ehOperacaoPendente(parsed)) {
       this.erroRecuperacaoPendente.set(
-        'A tentativa pendente está inválida. Reconcilie o estoque antes de registrar outra entrada.',
+        'A tentativa anterior não pôde ser recuperada. Confira a posição e o histórico antes de registrar outra entrada.',
       );
       return;
     }
@@ -594,14 +594,14 @@ export class AdminEntradaInsumoComponent {
     if (parsed.atorId !== actorId) {
       this.etapa.set('conflito');
       this.erroEntrada.set(
-        'Há uma entrada pendente iniciada por outra conta ADMIN. Entre com a conta original e reconcilie a operação antes de iniciar outra.',
+        'Há uma entrada pendente iniciada por outra pessoa. Entre com a conta usada para iniciar a tentativa antes de continuar.',
       );
       return;
     }
     if (parsed.state === 'conflito') {
       this.etapa.set('conflito');
       this.erroEntrada.set(
-        'A API informou conflito de idempotência. A chave foi preservada; reconcilie o histórico antes de iniciar outra entrada.',
+        'Esta tentativa está associada a dados diferentes. Não tente novamente; confira o histórico antes de iniciar outra entrada.',
       );
       return;
     }
@@ -610,14 +610,14 @@ export class AdminEntradaInsumoComponent {
     this.chavePendente.set(incerta);
     if (!this.salvarOperacaoPendente(incerta)) {
       this.erroRecuperacaoPendente.set(
-        'Não foi possível preservar o estado da tentativa pendente. Não registre outra entrada até reconciliar o estoque.',
+        'Não foi possível salvar a tentativa neste navegador. Confira a posição e o histórico antes de registrar outra entrada.',
       );
       this.etapa.set('conflito');
       return;
     }
     this.etapa.set('incerta');
     this.erroEntrada.set(
-      'O resultado da tentativa anterior não foi confirmado. Reenvie os mesmos dados usando a mesma chave.',
+      'O resultado da tentativa anterior não foi confirmado. Confira o histórico antes de decidir; se tentar novamente, use os mesmos dados.',
     );
   }
 
@@ -876,7 +876,7 @@ export class AdminEntradaInsumoComponent {
           this.erroEntrada.set(
             cleared
               ? ''
-              : 'A entrada foi confirmada, mas o navegador não conseguiu limpar o marcador local. Reconcilie esta confirmação antes de registrar outra entrada.',
+              : 'A entrada foi registrada, mas não foi possível limpar o aviso salvo neste navegador. Confira o histórico antes de iniciar outra entrada.',
           );
           this.atualizarSaldoDepoisDaEntrada(operation.insumoId);
         },
@@ -893,13 +893,13 @@ export class AdminEntradaInsumoComponent {
       this.etapa.set(saved ? 'incerta' : 'conflito');
       if (!saved) {
         this.erroRecuperacaoPendente.set(
-          'O resultado não foi confirmado e o navegador não conseguiu preservar a tentativa. Reconcilie o estoque antes de registrar outra entrada.',
+          'Não foi possível confirmar a entrada nem salvar a tentativa neste navegador. Confira o histórico antes de registrar outra entrada.',
         );
         this.erroEntrada.set(this.erroRecuperacaoPendente());
         return;
       }
       this.erroEntrada.set(
-        'Não foi possível confirmar se a entrada foi registrada. Os dados e a chave foram preservados; tente novamente sem alterar a operação.',
+        'Não foi possível confirmar se a entrada foi registrada. A tentativa foi preservada; confira o histórico antes de decidir e não altere os dados se tentar novamente.',
       );
       return;
     }
@@ -915,7 +915,7 @@ export class AdminEntradaInsumoComponent {
       this.resumo.set(conflict.resumo);
       this.etapa.set('conflito');
       this.erroEntrada.set(
-        'A API recusou a chave porque ela está associada a outro conteúdo. A chave foi preservada; reconcilie o histórico antes de iniciar outra entrada.',
+        'Esta tentativa está associada a dados diferentes. Não tente novamente; confira o histórico antes de iniciar outra entrada.',
       );
       return;
     }
@@ -926,7 +926,7 @@ export class AdminEntradaInsumoComponent {
       this.resumo.set(conflict.resumo);
       this.etapa.set('conflito');
       this.erroEntrada.set(
-        'A API rejeitou a operação, mas o navegador não conseguiu limpar a tentativa preservada. Reconcilie o estoque antes de registrar outra entrada.',
+        'A entrada não foi aceita e o navegador não conseguiu limpar a tentativa salva. Confira a posição e o histórico antes de registrar outra entrada.',
       );
       return;
     }
@@ -983,10 +983,10 @@ export class AdminEntradaInsumoComponent {
   private mensagemErroEntrada(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 400) {
-        return 'A API rejeitou os dados da entrada. Revise quantidade, unidade, custo e dados do lote.';
+        return 'Não foi possível registrar a entrada. Confira a quantidade, a unidade, o custo e os dados do lote.';
       }
       if (error.status === 403) {
-        return 'A operação foi bloqueada por autorização ou antifalsificação. Os dados foram mantidos.';
+        return 'A entrada foi bloqueada por segurança ou falta de permissão. Os dados foram mantidos.';
       }
       if (error.status === 404) {
         return 'O insumo ou lote não foi encontrado. Atualize os dados antes de tentar novamente.';
@@ -994,7 +994,7 @@ export class AdminEntradaInsumoComponent {
       if (error.status === 409) {
         const detail = this.detalheErroApi(error).toLowerCase();
         if (detail.includes('inelegível') || detail.includes('elegível')) {
-          return 'O lote não está elegível para aquisição. Verifique a validade e o bloqueio ou selecione outro lote.';
+          return 'Este lote não pode receber uma entrada. Confira a validade e o bloqueio ou selecione outro lote.';
         }
         if (detail.includes('estoque inicial')) {
           return 'O estoque inicial só pode abrir uma posição sem saldo ou histórico. Para uma posição existente, registre uma aquisição.';
@@ -1002,7 +1002,7 @@ export class AdminEntradaInsumoComponent {
         if (detail.includes('inativo')) {
           return 'O insumo está inativo e não pode receber novas entradas.';
         }
-        return 'A operação conflita com o estado atual do estoque. Atualize o insumo e revise os dados.';
+        return 'O estoque mudou desde a consulta. Atualize os dados do insumo antes de tentar novamente.';
       }
     }
     return 'Não foi possível registrar a entrada. Os dados digitados foram preservados.';

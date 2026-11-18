@@ -20,28 +20,54 @@
         </p>
       </div>
       @if (insumoId) {
-        <nav class="flex flex-wrap gap-2" aria-label="Operações de estoque">
-          <a
-            [routerLink]="['/admin/estoque/insumos/operacoes']"
-            [queryParams]="{ insumoId, acao: 'SaidaManual' }"
-            class="inline-flex min-h-10 items-center rounded-lg bg-emerald-900 px-3 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+        <nav class="grid min-w-0 flex-1 gap-3 sm:grid-cols-2" aria-label="Ações do estoque">
+          <section
+            class="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4"
+            aria-labelledby="stock-consult-routine-title"
           >
-            Registrar saída
-          </a>
-          <a
-            [routerLink]="['/admin/estoque/insumos/operacoes']"
-            [queryParams]="{ insumoId, acao: 'Perda' }"
-            class="inline-flex min-h-10 items-center rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 hover:bg-orange-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-800"
+            <h2 id="stock-consult-routine-title" class="text-sm font-semibold text-slate-900">
+              Uso e conferência
+            </h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Registre materiais usados ou confira as quantidades.
+            </p>
+            <div class="mt-3 flex flex-wrap gap-2">
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId, acao: 'SaidaManual' }"
+                class="inline-flex min-h-10 items-center rounded-lg bg-emerald-900 px-3 text-sm font-semibold text-white hover:bg-emerald-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+              >
+                Registrar saída
+              </a>
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId, acao: 'Contagem' }"
+                class="inline-flex min-h-10 items-center rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-800"
+              >
+                Fazer contagem
+              </a>
+            </div>
+          </section>
+          <section
+            class="rounded-xl border border-orange-100 bg-orange-50/50 p-4"
+            aria-labelledby="stock-consult-exception-title"
           >
-            Registrar perda ou descarte
-          </a>
-          <a
-            [routerLink]="['/admin/estoque/insumos/operacoes']"
-            [queryParams]="{ insumoId, acao: 'Contagem' }"
-            class="inline-flex min-h-10 items-center rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 hover:bg-sky-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-800"
-          >
-            Fazer contagem
-          </a>
+            <h2 id="stock-consult-exception-title" class="text-sm font-semibold text-slate-900">
+              Perdas e descartes
+            </h2>
+            <p class="mt-1 text-sm text-slate-600">
+              Use quando o material não puder mais ser aproveitado.
+            </p>
+            <div class="mt-3">
+              <a
+                [routerLink]="['/admin/estoque/insumos/operacoes']"
+                [queryParams]="{ insumoId, acao: 'Perda' }"
+                class="inline-flex min-h-10 items-center rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-800"
+              >
+                Registrar perda ou descarte
+              </a>
+            </div>
+          </section>
         </nav>
       }
     </header>

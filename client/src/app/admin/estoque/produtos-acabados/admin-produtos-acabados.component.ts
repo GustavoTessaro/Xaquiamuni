@@ -205,8 +205,8 @@ export class AdminProdutosAcabadosComponent {
     { value: 'Perda', label: 'Perda' },
     { value: 'Descarte', label: 'Descarte' },
     { value: 'AjusteInventario', label: 'Ajuste de inventário' },
-    { value: 'TransferenciaCondicao', label: 'Transferência entre condições' },
-    { value: 'Estorno', label: 'Estorno' },
+    { value: 'TransferenciaCondicao', label: 'Mudança de condição' },
+    { value: 'Estorno', label: 'Correção de movimentação' },
   ];
 
   protected readonly produtoSelecionado = computed(() => {
@@ -502,7 +502,9 @@ export class AdminProdutosAcabadosComponent {
       (value.condicaoOrigem === 'Vendavel' && value.condicaoDestino === 'Danificada') ||
       (value.condicaoOrigem === 'Danificada' && value.condicaoDestino === 'Vendavel');
     if (!permitidas) {
-      this.erroMovimentacao.set('Esta transferência entre condições não é permitida.');
+      this.erroMovimentacao.set(
+        'Esta mudança de condição não é permitida. Confira as condições escolhidas.',
+      );
       return;
     }
 
@@ -866,7 +868,7 @@ export class AdminProdutosAcabadosComponent {
       } catch (error) {
         if (error instanceof SyntaxError) {
           this.erroMovimentacao.set(
-            'A tentativa anterior não pôde ser validada. Reconcilie o histórico antes de continuar.',
+            'Não foi possível ler a tentativa anterior salva no navegador. Confira o histórico antes de continuar.',
           );
           return null;
         }
@@ -880,7 +882,7 @@ export class AdminProdutosAcabadosComponent {
         parsed.fingerprint !== fingerprint
       ) {
         this.erroMovimentacao.set(
-          'A tentativa anterior não pôde ser validada. Reconcilie o histórico antes de continuar.',
+          'A tentativa anterior não corresponde a esta operação. Confira o histórico antes de continuar; nada foi enviado.',
         );
         return null;
       }
@@ -897,7 +899,7 @@ export class AdminProdutosAcabadosComponent {
     const key = this.operacaoPendenteStore.criarChaveIdempotencia();
     if (!key) {
       this.erroMovimentacao.set(
-        'Não foi possível gerar uma chave segura; a operação não foi enviada.',
+        'Não foi possível preparar a operação com segurança; ela não foi enviada.',
       );
       return null;
     }
@@ -982,8 +984,8 @@ export class AdminProdutosAcabadosComponent {
       const armazenada = this.operacaoPendenteStore.salvar(pending.storageKey, incerta);
       this.erroMovimentacao.set(
         armazenada
-          ? 'O resultado não foi confirmado. A chave foi preservada; reenvie exatamente os mesmos dados.'
-          : 'O resultado não foi confirmado. A chave continua válida; reconcilie o histórico antes de iniciar outra operação.',
+          ? 'Não foi possível confirmar o resultado. Confira o histórico antes de decidir; se tentar novamente, use exatamente os mesmos dados.'
+          : 'Não foi possível confirmar o resultado nem salvar a tentativa no navegador. Confira a posição e o histórico antes de iniciar outra operação.',
       );
       return;
     }
@@ -993,7 +995,7 @@ export class AdminProdutosAcabadosComponent {
   private limparOperacaoConfirmada(storageKey: string): void {
     if (!this.operacaoPendenteStore.remover(storageKey)) {
       this.sucessoMovimentacao.set(
-        'Movimentação registrada. A chave pendente não pôde ser limpa; repetir os mesmos dados continuará protegido contra duplicação.',
+        'Movimentação registrada. Não foi possível limpar a tentativa salva no navegador; confira o histórico antes de repetir qualquer operação.',
       );
     }
   }
@@ -1026,22 +1028,22 @@ export class AdminProdutosAcabadosComponent {
         case 409: {
           const detail = typeof error.error?.detail === 'string' ? error.error.detail : '';
           if (/idempot|chave/i.test(detail)) {
-            return 'A chave já foi associada a outro conteúdo. A tentativa permanece preservada; reconcilie o histórico.';
+            return 'Esta tentativa está associada a dados diferentes. Não tente novamente; confira o histórico antes de iniciar outra operação.';
           }
           if (acao === 'contagem') {
             this.conflitoContagemVersao.set(true);
-            return 'O estoque mudou durante a conferência. Atualize o snapshot quando estiver pronta; os valores digitados serão mantidos.';
+            return 'O estoque mudou durante a conferência. Atualize os dados antes de conferir novamente; os valores digitados serão mantidos.';
           }
           if (/já possui estorno|já foi estornado/i.test(detail)) {
-            return 'Este movimento já foi estornado.';
+            return 'Esta movimentação já foi corrigida.';
           }
           if (/movimentos posteriores/i.test(detail)) {
-            return 'Existem movimentos posteriores que impedem o estorno.';
+            return 'Há movimentações mais recentes; confira o histórico antes de tentar corrigir esta movimentação.';
           }
           if (/saldo atual não permite|saldo insuficiente/i.test(detail)) {
-            return 'O saldo atual não permite este estorno.';
+            return 'O saldo atual não permite esta correção. Atualize a posição e confira o histórico.';
           }
-          return 'Conflito de estoque ou idempotência. Atualize a posição antes de tentar novamente.';
+          return 'O estoque foi alterado durante a operação. Atualize a posição e confira o histórico antes de tentar novamente.';
         }
       }
     }
@@ -1201,7 +1203,9 @@ export class AdminProdutosAcabadosComponent {
       return 'Data indisponível';
     }
     return new Intl.DateTimeFormat('pt-BR', {
-      dateStyle: 'short',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
       timeStyle: 'short',
     }).format(date);
   }

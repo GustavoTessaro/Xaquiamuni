@@ -341,7 +341,7 @@ export class AdminOperacaoInsumoComponent {
     }
     const key = this.operacaoPendenteStore.criarChaveIdempotencia();
     if (!key) {
-      this.erro.set('Não foi possível gerar uma chave segura. Recarregue a página.');
+      this.erro.set('Não foi possível preparar a operação com segurança. Recarregue a página.');
       return;
     }
     const pending: OperacaoPendente = {
@@ -376,7 +376,7 @@ export class AdminOperacaoInsumoComponent {
     }
     if (!this.removerOperacao()) {
       this.erro.set(
-        'Não foi possível encerrar a tentativa recusada. Reconcilie o estoque antes de continuar.',
+        'Não foi possível encerrar a tentativa anterior. Confira o histórico antes de continuar.',
       );
       return;
     }
@@ -472,7 +472,7 @@ export class AdminOperacaoInsumoComponent {
       case 'Contagem':
         return 'Contagem física';
       case 'Estorno':
-        return 'Estorno';
+        return 'Correção de movimentação';
     }
   }
 
@@ -485,7 +485,7 @@ export class AdminOperacaoInsumoComponent {
       case 'AjusteInventario':
         return 'Ajuste de inventário';
       case 'Estorno':
-        return 'Estorno';
+        return 'Correção de movimentação';
       default:
         return this.rotuloAcao(tipo);
     }
@@ -509,6 +509,14 @@ export class AdminOperacaoInsumoComponent {
     return position.elegivel ? 'Elegível' : 'Vencido ou inelegível';
   }
 
+  protected formatarDataCivil(value: string | null): string {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      return 'Não informada';
+    }
+    const [year, month, day] = value.split('-');
+    return `${day}/${month}/${year}`;
+  }
+
   private carregarMovimentoOriginal(insumoId: string, movimentoId: string): void {
     this.buscandoMovimento.set(true);
     this.insumosService
@@ -521,7 +529,7 @@ export class AdminOperacaoInsumoComponent {
         next: (movement) => {
           this.movimentoOriginal.set(movement);
           if (movement.tipo === 'Estorno') {
-            this.erro.set('Um movimento de estorno não pode ser estornado novamente.');
+            this.erro.set('Uma movimentação de correção não pode ser corrigida novamente.');
           } else {
             this.form.controls.acao.setValue('Estorno');
           }
@@ -553,13 +561,13 @@ export class AdminOperacaoInsumoComponent {
               : result;
           this.mensagemSucesso.set(
             movement
-              ? `Operação confirmada. Movimento ${movement.id} registrado.`
+              ? 'Operação confirmada e registrada no histórico.'
               : 'Contagem confirmada sem diferença; nenhum movimento foi criado.',
           );
           this.etapa.set('sucesso');
           if (!this.removerOperacao()) {
             this.erro.set(
-              'A operação foi confirmada, mas a tentativa não pôde ser removida do armazenamento local. Reconcilie antes de iniciar outra.',
+              'A operação foi confirmada, mas não foi possível apagar a tentativa salva neste navegador. Confira o histórico antes de iniciar outra operação.',
             );
             return;
           }
@@ -630,7 +638,7 @@ export class AdminOperacaoInsumoComponent {
         this.operacaoPendente.set(pending);
         this.etapa.set('conflito');
         this.erro.set(
-          'A API rejeitou a operação, mas o navegador não conseguiu limpar a tentativa salva. Reconcilie o estoque antes de continuar.',
+          'O sistema recusou a operação, mas o navegador não conseguiu remover a tentativa salva. Confira o histórico antes de tentar novamente.',
         );
         return;
       }
@@ -655,7 +663,7 @@ export class AdminOperacaoInsumoComponent {
     if (!this.salvarOperacao(pending)) {
       this.etapa.set('conflito');
       this.erro.set(
-        'Não foi possível preservar a chave e os dados da tentativa. Não repita a operação; reconcilie o histórico.',
+        'Não foi possível salvar a tentativa neste navegador. Não repita a operação; confira a posição e o histórico antes de continuar.',
       );
       return;
     }
@@ -665,13 +673,13 @@ export class AdminOperacaoInsumoComponent {
     this.erro.set(
       conflict
         ? this.mensagemConflito(error, operation.resumo.acao)
-        : 'Não foi possível confirmar o resultado. Reenvie manualmente os mesmos dados usando a mesma chave; não altere o payload.',
+        : 'Não foi possível confirmar o resultado. Confira o histórico antes de decidir; se tentar novamente, use os mesmos dados.',
     );
   }
 
   private mensagemConflito(error: unknown, action: AcaoOperacao): string {
     if (!(error instanceof HttpErrorResponse)) {
-      return 'A operação conflitou com outra alteração. Reconcilie o estoque antes de continuar.';
+      return 'Outra alteração ocorreu ao mesmo tempo. Atualize a posição e confira o histórico antes de continuar.';
     }
     const detail =
       typeof error.error === 'string' ? error.error : JSON.stringify(error.error ?? '');
@@ -679,16 +687,16 @@ export class AdminOperacaoInsumoComponent {
       return 'O saldo atual não permite esta operação. Atualize a posição e revise a quantidade.';
     }
     if (/LoteInelegivel|lote.*inelegível/i.test(detail)) {
-      return 'O lote não está elegível para saída manual. Atualize a posição; perdas ou descartes seguem as regras da API.';
+      return 'Este lote não está disponível para saída. Atualize a posição; perdas e descartes têm ações próprias.';
     }
     if (/MovimentoJaEstornado|já possui estorno|já foi estornado/i.test(detail)) {
-      return 'Este movimento já foi estornado. Atualize o histórico antes de continuar.';
+      return 'Esta movimentação já foi corrigida. Atualize o histórico antes de continuar.';
     }
     if (/idempot|chave/i.test(detail)) {
-      return 'A chave foi associada a outro conteúdo. A tentativa permanece bloqueada; reconcilie o histórico.';
+      return 'Esta tentativa está associada a dados diferentes. Não tente novamente; confira o histórico antes de iniciar outra operação.';
     }
     if (action === 'Contagem') {
-      return 'O saldo mudou desde a conferência. Atualize a posição e faça uma nova contagem antes de enviar.';
+      return 'O saldo mudou desde a conferência. Atualize a posição e faça uma nova contagem antes de registrar o resultado.';
     }
     return 'O estoque mudou durante a operação. Atualize a posição e verifique o histórico.';
   }
@@ -725,7 +733,7 @@ export class AdminOperacaoInsumoComponent {
     } catch (error) {
       if (error instanceof SyntaxError) {
         this.erroPendente.set(
-          'A tentativa anterior não pôde ser recuperada. Reconcilie o estoque antes de registrar outra operação.',
+          'A tentativa anterior não pôde ser recuperada. Confira a posição e o histórico antes de registrar outra operação.',
         );
         return;
       }
@@ -733,7 +741,7 @@ export class AdminOperacaoInsumoComponent {
     }
     if (!this.ehOperacaoPendente(parsed)) {
       this.erroPendente.set(
-        'A tentativa pendente está inválida. Reconcilie o estoque antes de registrar outra operação.',
+        'A tentativa anterior não pôde ser lida. Confira a posição e o histórico antes de registrar outra operação.',
       );
       return;
     }
@@ -748,17 +756,17 @@ export class AdminOperacaoInsumoComponent {
       );
       this.erro.set(
         parsed.atorId !== actorId
-          ? 'Há uma operação pendente iniciada por outra conta ADMIN. Entre com a conta original para reconciliar.'
+          ? 'Há uma operação pendente iniciada por outra pessoa. Entre com a conta usada para iniciar a tentativa antes de continuar.'
           : this.podeRecontar()
             ? 'A posição mudou desde a leitura da contagem. Atualize o saldo e faça uma nova conferência.'
-            : 'A API informou um conflito. A chave foi preservada; reconcilie o histórico antes de iniciar outra operação.',
+            : 'Esta tentativa não pode ser repetida com segurança. Confira o histórico antes de iniciar outra operação.',
       );
       return;
     }
     const uncertain = { ...parsed, state: 'incerta' as const };
     if (!this.salvarOperacao(uncertain)) {
       this.erroPendente.set(
-        'Não foi possível preservar o estado da tentativa pendente. Reconcilie o estoque antes de continuar.',
+        'Não foi possível salvar a tentativa neste navegador. Confira a posição e o histórico antes de continuar.',
       );
       return;
     }
@@ -850,9 +858,9 @@ export class AdminOperacaoInsumoComponent {
     }
     if (action === 'Estorno') {
       if (!this.movimentoOriginal() || this.movimentoOriginal()?.tipo === 'Estorno') {
-        return 'O movimento não está disponível ou não é elegível para estorno.';
+        return 'A movimentação selecionada não pode ser corrigida.';
       }
-      return this.form.controls.motivo.value.trim() ? null : 'Informe o motivo do estorno.';
+      return this.form.controls.motivo.value.trim() ? null : 'Informe o motivo da correção.';
     }
 
     const quantity = this.form.controls.quantidade.value.trim();
@@ -980,7 +988,7 @@ export class AdminOperacaoInsumoComponent {
         return 'Sua sessão expirou. Entre novamente.';
       }
       if (error.status === 403) {
-        return 'Sua conta não tem autorização ADMIN para esta operação.';
+        return 'Sua conta não tem permissão para esta operação.';
       }
       if (error.status === 404) {
         return 'O insumo ou movimento não foi encontrado.';
@@ -989,7 +997,7 @@ export class AdminOperacaoInsumoComponent {
         return this.mensagemValidacao(error);
       }
       if (error.status === 0 || error.status >= 500) {
-        return 'Não foi possível conectar à API. Verifique a conexão e tente novamente.';
+        return 'Não foi possível conectar ao sistema. Verifique sua conexão e tente novamente.';
       }
     }
     return 'Não foi possível concluir a solicitação. Tente novamente.';
@@ -1002,6 +1010,6 @@ export class AdminOperacaoInsumoComponent {
     if (typeof error.error?.detail === 'string') {
       return error.error.detail;
     }
-    return 'A API rejeitou os dados. Revise quantidade, unidade, lote e motivo.';
+    return 'Não foi possível registrar a operação. Confira a quantidade, a unidade, o lote e o motivo.';
   }
 }

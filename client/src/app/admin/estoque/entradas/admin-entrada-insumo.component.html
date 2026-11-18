@@ -22,7 +22,7 @@
         Registrar entrada de insumo
       </h1>
       <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-        Registre o estoque inicial ou uma aquisição. O saldo só muda após confirmação da API.
+        Registre o estoque inicial ou uma aquisição. O saldo só muda após a confirmação do sistema.
       </p>
     </header>
 
@@ -68,7 +68,7 @@
       >
         <div>
           <h2 class="text-lg font-semibold text-amber-950">
-            {{ etapa() === 'incerta' ? 'Confirmação pendente' : 'Conflito de idempotência' }}
+            {{ etapa() === 'incerta' ? 'Confirmação pendente' : 'Verifique a tentativa anterior' }}
           </h2>
           <p class="mt-1 text-sm leading-6 text-amber-900">{{ erroEntrada() }}</p>
         </div>
@@ -141,9 +141,14 @@
             </p>
           }
           @if (movimento(); as item) {
-            <p class="mt-1 text-sm text-emerald-900">
-              Referência do movimento: <span class="font-mono">{{ item.id }}</span>
-            </p>
+            <details class="mt-2 text-sm text-emerald-900">
+              <summary
+                class="min-h-10 cursor-pointer font-medium underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+              >
+                Código para consulta no histórico
+              </summary>
+              <code class="mt-1 block break-all">{{ item.id }}</code>
+            </details>
           }
         </div>
 
@@ -197,7 +202,9 @@
           class="inline-flex min-h-11 items-center justify-center rounded-xl border border-emerald-800 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
         >
           {{
-            chavePendente() ? 'Reconcilie a operação antes de continuar' : 'Registrar outra entrada'
+            chavePendente()
+              ? 'Verifique a tentativa pendente antes de continuar'
+              : 'Registrar outra entrada'
           }}
         </button>
       </section>
@@ -231,7 +238,7 @@
                 Revise a entrada antes de registrar
               </h2>
               <p class="mt-1 text-sm leading-6 text-slate-600">
-                O saldo não será alterado até a API confirmar esta operação.
+                O saldo só será alterado após a confirmação do sistema.
               </p>
             </div>
             <dl class="grid gap-4 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
@@ -712,7 +719,7 @@
         <div>
           <h2 class="text-lg font-semibold text-slate-900">Selecione um insumo ativo</h2>
           <p class="mt-1 text-sm text-slate-600">
-            A busca e a paginação são aplicadas pela API; insumos inativos não recebem entradas.
+            Consulte os resultados por página. Insumos inativos não recebem entradas.
           </p>
         </div>
 

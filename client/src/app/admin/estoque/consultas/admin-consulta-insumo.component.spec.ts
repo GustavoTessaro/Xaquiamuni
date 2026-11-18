@@ -113,6 +113,23 @@ describe('AdminConsultaInsumoComponent', () => {
     expect(api.listarMovimentacoes.mock.calls.length).toBe(1);
   });
 
+  it('groups routine operations separately from exceptional losses and discards', async () => {
+    const harness = await renderConsulta(criarApi(posicaoAgregada));
+    const root = harness.routeNativeElement!;
+    const nav = root.querySelector('nav[aria-label="Ações do estoque"]');
+
+    expect(nav?.querySelector('#stock-consult-routine-title')?.textContent).toContain(
+      'Uso e conferência',
+    );
+    expect(nav?.querySelector('#stock-consult-exception-title')?.textContent).toContain(
+      'Perdas e descartes',
+    );
+    expect(nav?.textContent).toContain('Registrar saída');
+    expect(nav?.textContent).toContain('Fazer contagem');
+    expect(nav?.textContent).toContain('Registrar perda ou descarte');
+    expect(nav?.textContent).toContain('Registre materiais usados ou confira as quantidades.');
+  });
+
   it('shows multiple lots with physical and usable balances and civil dates', async () => {
     const api = criarApi({
       resumo: { ...resumoBase, controlaLote: true, saldoFisico: '14', saldoUtilizavel: '4' },

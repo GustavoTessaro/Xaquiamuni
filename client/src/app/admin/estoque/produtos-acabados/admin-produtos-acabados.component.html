@@ -190,7 +190,7 @@
         >
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 id="finished-movement-title" class="text-lg font-semibold text-emerald-950">
-              Movimentações administrativas
+              Ações de estoque
             </h2>
             @if (acaoMovimentacao() && acaoMovimentacao() !== 'Contagem') {
               <button
@@ -203,48 +203,80 @@
               </button>
             }
           </div>
-          <div class="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              (click)="abrirMovimentacao('Entrada')"
-              [disabled]="enviandoMovimentacao()"
-              class="min-h-10 rounded-lg bg-emerald-800 px-3 text-sm font-semibold text-white"
+          <div class="mt-4 grid gap-3 md:grid-cols-2">
+            <section
+              class="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4"
+              aria-labelledby="finished-routine-actions-title"
             >
-              Registrar entrada
-            </button>
-            <button
-              type="button"
-              (click)="abrirMovimentacao('Saida')"
-              [disabled]="enviandoMovimentacao()"
-              class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900"
+              <h3 id="finished-routine-actions-title" class="text-sm font-semibold text-slate-900">
+                Entradas e saídas
+              </h3>
+              <p class="mt-1 text-sm text-slate-600">
+                Registre unidades que chegaram ou saíram do estoque.
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  (click)="abrirMovimentacao('Entrada')"
+                  [disabled]="enviandoMovimentacao()"
+                  class="min-h-10 rounded-lg bg-emerald-800 px-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+                >
+                  Registrar entrada
+                </button>
+                <button
+                  type="button"
+                  (click)="abrirMovimentacao('Saida')"
+                  [disabled]="enviandoMovimentacao()"
+                  class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+                >
+                  Registrar saída
+                </button>
+              </div>
+            </section>
+            <section
+              class="rounded-xl border border-orange-100 bg-orange-50/50 p-4"
+              aria-labelledby="finished-exception-actions-title"
             >
-              Registrar saída
-            </button>
-            <button
-              type="button"
-              (click)="abrirMovimentacao('Perda')"
-              [disabled]="enviandoMovimentacao()"
-              class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900"
-            >
-              Registrar perda
-            </button>
-            <button
-              type="button"
-              (click)="abrirMovimentacao('Descarte')"
-              [disabled]="enviandoMovimentacao()"
-              class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900"
-            >
-              Registrar descarte
-            </button>
-            <button
-              type="button"
-              (click)="abrirMovimentacao('Transferencia')"
-              [disabled]="enviandoMovimentacao()"
-              class="min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900"
-            >
-              Transferir condição
-            </button>
+              <h3
+                id="finished-exception-actions-title"
+                class="text-sm font-semibold text-slate-900"
+              >
+                Perdas e mudanças de condição
+              </h3>
+              <p class="mt-1 text-sm text-slate-600">
+                Registre perdas, descartes ou alterações no estado das unidades.
+              </p>
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  (click)="abrirMovimentacao('Perda')"
+                  [disabled]="enviandoMovimentacao()"
+                  class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-900"
+                >
+                  Registrar perda
+                </button>
+                <button
+                  type="button"
+                  (click)="abrirMovimentacao('Descarte')"
+                  [disabled]="enviandoMovimentacao()"
+                  class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-900"
+                >
+                  Registrar descarte
+                </button>
+                <button
+                  type="button"
+                  (click)="abrirMovimentacao('Transferencia')"
+                  [disabled]="enviandoMovimentacao()"
+                  class="min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-900"
+                >
+                  Mudar condição do lote
+                </button>
+              </div>
+            </section>
           </div>
+          <p class="mt-3 text-sm text-slate-600">
+            Para conferir as quantidades, use “Conferir estoque” no cartão do lote.
+          </p>
 
           @if (sucessoMovimentacao() && !contagemConcluidaLoteId()) {
             <p
@@ -547,6 +579,10 @@
                   }
                 </select>
               </div>
+              <p class="text-sm text-slate-600 sm:col-span-2">
+                Use para corrigir a condição das unidades deste lote, por exemplo, entre vendável,
+                danificada ou quarentena.
+              </p>
               <div>
                 <label for="finished-transfer-quantity" class="block text-sm font-semibold"
                   >Quantidade inteira</label
@@ -627,7 +663,7 @@
                 [disabled]="enviandoMovimentacao()"
                 class="sm:col-span-2 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
               >
-                {{ enviandoMovimentacao() ? 'Transferindo...' : 'Confirmar transferência' }}
+                {{ enviandoMovimentacao() ? 'Salvando...' : 'Confirmar mudança' }}
               </button>
             </form>
           }
@@ -639,7 +675,7 @@
                 [formGroup]="estornoForm"
                 (ngSubmit)="confirmarEstorno()"
               >
-                <h3 class="font-semibold text-amber-950">Confirmar estorno compensatório</h3>
+                <h3 class="font-semibold text-amber-950">Corrigir uma movimentação</h3>
                 <dl class="mt-3 grid gap-2 sm:grid-cols-2 text-sm">
                   <div>
                     <dt class="text-slate-500">Movimento</dt>
@@ -659,11 +695,11 @@
                   </div>
                 </dl>
                 <p class="mt-3 text-sm text-amber-950">
-                  Este estorno criará uma nova movimentação compensatória. O histórico original será
-                  preservado.
+                  Esta correção registra uma nova movimentação inversa. O registro original será
+                  mantido no histórico.
                 </p>
                 <label for="reverse-reason" class="mt-4 block text-sm font-semibold"
-                  >Motivo do estorno</label
+                  >Motivo da correção</label
                 >
                 <input
                   id="reverse-reason"
@@ -676,7 +712,7 @@
                   [disabled]="enviandoMovimentacao()"
                   class="mt-4 min-h-11 rounded-xl bg-amber-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
                 >
-                  {{ enviandoMovimentacao() ? 'Estornando...' : 'Confirmar estorno' }}
+                  {{ enviandoMovimentacao() ? 'Corrigindo...' : 'Confirmar correção' }}
                 </button>
               </form>
             }
@@ -1191,16 +1227,16 @@
                             </p>
                             @if (conflitoContagemVersao()) {
                               <p class="mt-3 text-sm font-medium text-amber-900" role="status">
-                                O estoque mudou durante a conferência. Atualize o snapshot quando
+                                O estoque mudou durante a conferência. Atualize os dados quando
                                 estiver pronta; as quantidades e o motivo digitados serão mantidos.
                               </p>
                               <button
                                 type="button"
                                 (click)="recarregarContagemParaNovoSnapshot()"
                                 [disabled]="enviandoMovimentacao() || carregando()"
-                                class="mt-3 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900 disabled:opacity-60"
+                                class="mt-3 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-900 disabled:opacity-60"
                               >
-                                Atualizar snapshot mantendo os valores digitados
+                                Atualizar dados mantendo os valores digitados
                               </button>
                             }
                           </section>
@@ -1408,7 +1444,7 @@
                   }
                   @if (movimento.movimentoOriginalId) {
                     <p class="mt-1 text-sm text-slate-700">
-                      Estorno do movimento {{ movimento.movimentoOriginalId }}
+                      Correção do movimento {{ movimento.movimentoOriginalId }}
                     </p>
                   }
                   @if (movimento.tipo !== 'Estorno') {
@@ -1420,8 +1456,8 @@
                     >
                       {{
                         movimentoJaEstornado(movimento)
-                          ? 'Movimento já estornado'
-                          : 'Estornar movimentação'
+                          ? 'Movimentação já corrigida'
+                          : 'Corrigir movimentação'
                       }}
                     </button>
                   }

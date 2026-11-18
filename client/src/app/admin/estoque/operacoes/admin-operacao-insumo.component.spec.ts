@@ -189,7 +189,7 @@ describe('AdminOperacaoInsumoComponent', () => {
     const lotOption = harness.routeNativeElement?.querySelector<HTMLOptionElement>(
       'select[formControlName="loteId"] option[value="lote-bloqueado"]',
     );
-    expect(lotOption?.textContent).toContain('Validade 2026-12-01');
+    expect(lotOption?.textContent).toContain('Validade 01/12/2026');
     expect(lotOption?.textContent).toContain('Bloqueado');
     expect(lotOption?.textContent).toContain('Lote bloqueado');
     clickText(harness, 'Revisar operação');
@@ -326,6 +326,8 @@ describe('AdminOperacaoInsumoComponent', () => {
     expect(harness.routeNativeElement?.textContent).toContain(
       'Não foi possível confirmar o resultado',
     );
+    expect(harness.routeNativeElement?.textContent).not.toContain('payload');
+    expect(harness.routeNativeElement?.textContent).not.toContain('idempotência');
     expect(sessionStorage.getItem('xaquiamuni:estoque:operacao:pendente')).not.toBeNull();
     clickText(harness, 'Reenviar a mesma operação');
     expect(api.registrarSaida).toHaveBeenCalledTimes(2);
@@ -379,15 +381,15 @@ describe('AdminOperacaoInsumoComponent', () => {
     expect(harness.routeNativeElement?.textContent).toContain('Ajuste de inventário');
     expect(harness.routeNativeElement?.textContent).not.toContain('AjusteInventario');
     setInput(harness, '[formControlName="motivo"]', 'Correção');
-    clickText(harness, 'Revisar estorno');
-    clickText(harness, 'Confirmar operação');
+    clickText(harness, 'Revisar correção');
+    clickText(harness, 'Confirmar correção');
     expect(api.estornarMovimento).toHaveBeenCalledWith(
       'insumo-1',
       'movement-1',
       { motivo: 'Correção', observacao: null },
       expect.any(String),
     );
-    expect(harness.routeNativeElement?.textContent).toContain('já foi estornado');
+    expect(harness.routeNativeElement?.textContent).toContain('já foi corrigida');
     expect(api.listarMovimentacoes).not.toHaveBeenCalled();
   });
 
@@ -397,6 +399,35 @@ describe('AdminOperacaoInsumoComponent', () => {
 
     expect(text).toContain('Matéria-prima');
     expect(text).not.toContain('MateriaPrima');
+  });
+
+  it('formats the selected lot expiry date in Brazilian day/month/year order', async () => {
+    const detail: AdminInsumoDetalhe = {
+      ...detalheBase,
+      resumo: { ...resumoBase, controlaLote: true },
+    };
+    const stock: AdminPosicaoInsumoPrecisa = {
+      ...posicaoAgregada,
+      resumo: { ...posicaoAgregada.resumo, controlaLote: true },
+      posicoes: [
+        {
+          ...posicaoAgregada.posicoes[0]!,
+          loteId: 'lote-1',
+          identificacaoLote: 'Lote artesanal',
+          dataValidade: '2027-01-02',
+        },
+      ],
+    };
+    const harness = await renderOperation(
+      criarApi(detail, stock),
+      '/admin/estoque/insumos/operacoes?insumoId=insumo-1&acao=SaidaManual',
+    );
+    const option = harness.routeNativeElement?.querySelector<HTMLOptionElement>(
+      'select[formControlName="loteId"] option[value="lote-1"]',
+    );
+
+    expect(option?.textContent).toContain('Validade 02/01/2027');
+    expect(option?.textContent).toContain('Lote artesanal');
   });
 
   it('declares both operation routes as ADMIN-protected and keeps the static operations path before :id', () => {
