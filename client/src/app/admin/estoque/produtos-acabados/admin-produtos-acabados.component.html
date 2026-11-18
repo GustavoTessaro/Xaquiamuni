@@ -180,36 +180,44 @@
                 Comprometido com operações, quando houver.
               </dd>
             </div>
-            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <dt class="text-sm text-emerald-900">Saldo disponível</dt>
-              <dd class="mt-1 text-xl font-semibold text-emerald-950">
+            <div class="rounded-xl border border-emerald-400 bg-emerald-50 p-4">
+              <dt class="text-sm font-semibold text-emerald-900">Disponível para venda</dt>
+              <dd class="mt-1 text-2xl font-semibold text-emerald-950">
                 {{ position.saldoDisponivel }} un.
               </dd>
               <dd class="mt-1 text-xs text-emerald-900">
-                Liberado para venda conforme as regras atuais.
+                Unidades liberadas para venda conforme a condição, a validade do lote e a situação
+                da variante.
               </dd>
             </div>
           </dl>
 
-          <div class="mt-4 grid gap-3 sm:grid-cols-3">
+          <dl class="mt-4 grid gap-3 sm:grid-cols-3">
             <div class="rounded-xl border border-slate-200 p-3">
-              <p class="text-xs font-medium text-slate-500">Vendável</p>
-              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalVendavel() }} un.</p>
-              <p class="mt-1 text-xs text-slate-600">Produto em condições de venda.</p>
+              <dt class="text-xs font-medium text-slate-600">Na condição vendável</dt>
+              <dd class="mt-1 text-base font-semibold text-slate-900">{{ totalVendavel() }} un.</dd>
+              <dd class="mt-1 text-xs text-slate-600">
+                Pode incluir unidades de lotes vencidos ou inelegíveis, que ficam fora do saldo
+                disponível.
+              </dd>
             </div>
             <div class="rounded-xl border border-slate-200 p-3">
-              <p class="text-xs font-medium text-slate-500">Avariado (danificado)</p>
-              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalDanificada() }} un.</p>
-              <p class="mt-1 text-xs text-slate-600">Com problema e indisponível para venda.</p>
+              <dt class="text-xs font-medium text-slate-500">Avariado (danificado)</dt>
+              <dd class="mt-1 text-base font-semibold text-slate-900">
+                {{ totalDanificada() }} un.
+              </dd>
+              <dd class="mt-1 text-xs text-slate-600">Com problema e indisponível para venda.</dd>
             </div>
             <div class="rounded-xl border border-slate-200 p-3">
-              <p class="text-xs font-medium text-slate-500">Quarentena</p>
-              <p class="mt-1 text-base font-semibold text-slate-900">{{ totalQuarentena() }} un.</p>
-              <p class="mt-1 text-xs text-slate-600">
+              <dt class="text-xs font-medium text-slate-500">Quarentena</dt>
+              <dd class="mt-1 text-base font-semibold text-slate-900">
+                {{ totalQuarentena() }} un.
+              </dd>
+              <dd class="mt-1 text-xs text-slate-600">
                 Separado temporariamente e indisponível para venda.
-              </p>
+              </dd>
             </div>
-          </div>
+          </dl>
 
           <div class="mt-4">
             <p class="text-sm text-slate-700">

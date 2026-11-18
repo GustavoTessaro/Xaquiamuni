@@ -338,14 +338,63 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(text).toContain('Total registrado, incluindo unidades indisponíveis.');
     expect(text).toContain('Apto para uso conforme as regras do estoque e do lote.');
     expect(text).toContain('Comprometido com operações, quando houver.');
-    expect(text).toContain('Liberado para venda conforme as regras atuais.');
-    expect(text).toContain('Produto em condições de venda.');
+    expect(text).toContain('Disponível para venda');
+    expect(text).toContain('Unidades liberadas para venda conforme a condição, a validade do lote');
+    expect(text).toContain('Na condição vendável');
+    expect(text.replace(/\s+/g, ' ')).toContain(
+      'Pode incluir unidades de lotes vencidos ou inelegíveis, que ficam fora do saldo disponível.',
+    );
     expect(text).toContain('Com problema e indisponível para venda.');
     expect(text).toContain('Separado temporariamente e indisponível para venda.');
     expect(text).toContain(
       'Grupo identificado de unidades com informações de fabricação e validade.',
     );
     expect(text).toContain('Quantidade de referência para alertar sobre necessidade de reposição.');
+  });
+
+  it('separa a quantidade na condição vendável do saldo disponível quando há lote vencido', async () => {
+    const api = criarApi();
+    const loteVencido: LoteProdutoAcabado = {
+      ...loteInicial,
+      loteId: 'lot-vencido',
+      codigo: 'PA-20261001-VENCIDO',
+      dataFabricacao: '2026-10-01',
+      dataValidade: '2026-10-31',
+      valido: false,
+      quantidadeVendavel: 3,
+      quantidadeDanificada: 0,
+      quantidadeQuarentena: 2,
+      saldoFisico: 5,
+      saldoUtilizavel: 0,
+      saldoDisponivel: 0,
+    };
+    api.consultarPosicao.mockReturnValueOnce(
+      of({
+        ...criarPosicao(),
+        saldoFisico: 11,
+        lotes: [loteInicial, loteVencido],
+      }),
+    );
+
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const indicadores = new Map(
+      Array.from(
+        root.querySelectorAll('[aria-labelledby="finished-position-title"] > dl dt'),
+        (label) => [label.textContent?.trim(), label.nextElementSibling?.textContent?.trim()],
+      ),
+    );
+    expect(indicadores).toEqual(
+      new Map([
+        ['Saldo físico', '11 un.'],
+        ['Utilizável', '5 un.'],
+        ['Reservado', '0 un.'],
+        ['Disponível para venda', '5 un.'],
+        ['Na condição vendável', '8 un.'],
+        ['Avariado (danificado)', '1 un.'],
+        ['Quarentena', '2 un.'],
+      ]),
+    );
   });
 
   it('groups routine and exceptional actions and explains when to use them', async () => {
