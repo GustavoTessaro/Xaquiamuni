@@ -34,6 +34,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICicloReservasPr
 
             var reservasDoPedido = _dbContext.ReservasProdutoAcabado.Where(reserva => reserva.PedidoId == pedidoId);
             var variantes = await BloquearPedidoEVariantesAsync(pedidoId, cancellationToken).ConfigureAwait(false);
+            // Pedidos persistidos exigem a transição comercial e das reservas na mesma transação.
+            if (await PedidoComercialExisteAsync(pedidoId, cancellationToken).ConfigureAwait(false))
+            {
+                return TransicaoReservasStatus.EstadoIncompativel;
+            }
+
             if (variantes.Count == 0)
             {
                 return TransicaoReservasStatus.ReservasNaoEncontradas;
@@ -68,6 +74,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICicloReservasPr
             _dbContext.ChangeTracker.Clear();
         }
     }
+
+    private Task<bool> PedidoComercialExisteAsync(Guid pedidoId, CancellationToken cancellationToken) =>
+        _dbContext.Pedidos.AnyAsync(pedido => pedido.Id == pedidoId, cancellationToken);
 
     private Task AdquirirLockPedidoAsync(Guid pedidoId, CancellationToken cancellationToken) =>
         AdquirirLockAsync($"finished-order:{pedidoId:D}", cancellationToken);

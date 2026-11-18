@@ -22,6 +22,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IConsumirReserva
             await using var transaction = await _dbContext.Database
                 .BeginTransactionAsync(IsolationLevel.ReadCommitted, cancellationToken).ConfigureAwait(false);
             var variantes = await BloquearPedidoEVariantesAsync(pedidoId, cancellationToken).ConfigureAwait(false);
+            // A entrega de um pedido comercial deve coordenar estado e baixa na mesma transação.
+            if (await PedidoComercialExisteAsync(pedidoId, cancellationToken).ConfigureAwait(false))
+            {
+                return new(ConsumirReservasStatus.EstadoIncompativel, []);
+            }
+
             if (variantes.Count == 0)
             {
                 return new(ConsumirReservasStatus.ReservasNaoEncontradas, []);
