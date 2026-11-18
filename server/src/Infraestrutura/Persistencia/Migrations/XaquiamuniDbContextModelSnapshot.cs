@@ -330,6 +330,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("Id")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ChaveIdempotencia")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid>("ClienteId")
                         .HasColumnType("uniqueidentifier");
 
@@ -383,6 +386,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("rowversion");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "ChaveIdempotencia")
+                        .IsUnique()
+                        .HasFilter("[ChaveIdempotencia] IS NOT NULL");
 
                     b.HasIndex("ClienteId", "CriadoEmUtc");
 

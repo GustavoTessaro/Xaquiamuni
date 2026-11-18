@@ -46,10 +46,11 @@ public sealed class Pedido
     public Guid? EncerradoPorId { get; private set; }
     public string? MotivoCancelamento { get; private set; }
 
-    public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens)
+    public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens, Guid? pedidoId = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(clienteId, Guid.Empty);
         ArgumentNullException.ThrowIfNull(itens);
+        ArgumentOutOfRangeException.ThrowIfEqual(pedidoId, Guid.Empty);
         ValidarUtc(criadoEmUtc, nameof(criadoEmUtc));
         if (criadoEmUtc > DateTimeOffset.MaxValue.Subtract(PrazoPagamentoCompra.Duracao))
         {
@@ -58,7 +59,7 @@ public sealed class Pedido
 
         var pedido = new Pedido
         {
-            Id = Guid.NewGuid(),
+            Id = pedidoId ?? Guid.NewGuid(),
             ClienteId = clienteId,
             CriadoEmUtc = criadoEmUtc,
             PrazoPagamentoEmUtc = criadoEmUtc.Add(PrazoPagamentoCompra.Duracao),

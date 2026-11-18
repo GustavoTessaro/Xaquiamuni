@@ -65,6 +65,9 @@ internal static class PedidoMapping
             pedido.HasMany(entity => entity.Itens).WithOne().HasForeignKey(item => item.PedidoId)
                 .OnDelete(DeleteBehavior.Restrict);
             pedido.Navigation(entity => entity.Itens).HasField("_itens").UsePropertyAccessMode(PropertyAccessMode.Field);
+            pedido.Property<Guid?>("ChaveIdempotencia");
+            pedido.HasIndex("ClienteId", "ChaveIdempotencia").IsUnique()
+                .HasFilter("[ChaveIdempotencia] IS NOT NULL");
             pedido.HasIndex(entity => new { entity.ClienteId, entity.CriadoEmUtc });
             pedido.HasIndex(entity => new { entity.Situacao, entity.PrazoPagamentoEmUtc });
         });

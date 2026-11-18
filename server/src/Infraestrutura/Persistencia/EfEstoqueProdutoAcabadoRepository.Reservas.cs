@@ -39,6 +39,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
                     : new(ReservarProdutoAcabadoStatus.ConflitoIdempotencia, []);
             }
 
+            if (await _dbContext.Pedidos.AnyAsync(pedido => pedido.Id == input.PedidoId, cancellationToken)
+                    .ConfigureAwait(false))
+            {
+                return new(ReservarProdutoAcabadoStatus.PedidoForaDaAlocacao, []);
+            }
+
             // A proteção da linha dura até o commit e serializa a alocação com a inativação no catálogo.
             var variante = await _dbContext.Database.SqlQuery<bool>($"""
                 SELECT [Ativa] AS [Value] FROM [ProdutoVariantes] WITH (HOLDLOCK, INDEX([PK_ProdutoVariantes]))
@@ -65,49 +71,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
                 return new(ReservarProdutoAcabadoStatus.PedidoForaDaAlocacao, []);
             }
 
-            var dataOperacional = _calendario.ObterDataAtual();
-            var comprometidoPorLote = _dbContext.ReservasProdutoAcabado
-                .ComprometidasEm(agora)
-                .Where(reserva => reserva.ProdutoVarianteId == input.ProdutoVarianteId)
-                .GroupBy(reserva => reserva.LoteId)
-                .Select(grupo => new { LoteId = grupo.Key, Quantidade = grupo.Sum(reserva => (long)reserva.Quantidade) });
-
-            var lotes = await (
-                from lote in _dbContext.LotesProdutoAcabado
-                join saldo in _dbContext.SaldosProdutoAcabado
-                    on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
-                join comprometido in comprometidoPorLote on lote.Id equals comprometido.LoteId into compromissos
-                from comprometido in compromissos.DefaultIfEmpty()
-                where lote.ProdutoVarianteId == input.ProdutoVarianteId
-                    && lote.DataValidade >= dataOperacional && saldo.QuantidadeVendavel > 0
-                orderby lote.DataValidade, lote.Codigo
-                select new
-                {
-                    lote.Id,
-                    Disponivel = saldo.QuantidadeVendavel - ((long?)comprometido.Quantidade ?? 0)
-                }
-            ).ToListAsync(cancellationToken).ConfigureAwait(false);
-
-            var reservas = new List<ReservaProdutoAcabado>();
-            var falta = input.Quantidade;
-            foreach (var lote in lotes)
-            {
-                if (lote.Disponivel <= 0)
-                {
-                    continue;
-                }
-
-                var quantidade = (int)Math.Min(falta, lote.Disponivel);
-                reservas.Add(ReservaProdutoAcabado.Criar(
-                    input.PedidoId, input.ProdutoVarianteId, lote.Id, quantidade, agora, situacao?.ExpiraEmUtc));
-                falta -= quantidade;
-                if (falta == 0)
-                {
-                    break;
-                }
-            }
-
-            if (falta != 0)
+            var reservas = await PlanejarAlocacoesAsync(input, agora, situacao?.ExpiraEmUtc,
+                _calendario.ObterDataAtual(), cancellationToken).ConfigureAwait(false);
+            if (reservas.Count == 0)
             {
                 return new(ReservarProdutoAcabadoStatus.SaldoInsuficiente, []);
             }
@@ -129,6 +95,58 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
         {
             _dbContext.ChangeTracker.Clear();
         }
+    }
+
+    // O chamador det?m os locks de pedido e variante durante o planejamento e a grava??o.
+    private async Task<List<ReservaProdutoAcabado>> PlanejarAlocacoesAsync(
+        ReservarProdutoAcabadoInput input,
+        DateTimeOffset agora,
+        DateTimeOffset? expiraEmUtc,
+        DateOnly dataOperacional,
+        CancellationToken cancellationToken)
+    {
+        var comprometidoPorLote = _dbContext.ReservasProdutoAcabado
+            .ComprometidasEm(agora)
+            .Where(reserva => reserva.ProdutoVarianteId == input.ProdutoVarianteId)
+            .GroupBy(reserva => reserva.LoteId)
+            .Select(grupo => new { LoteId = grupo.Key, Quantidade = grupo.Sum(reserva => (long)reserva.Quantidade) });
+
+        var lotes = await (
+            from lote in _dbContext.LotesProdutoAcabado
+            join saldo in _dbContext.SaldosProdutoAcabado
+                on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
+            join comprometido in comprometidoPorLote on lote.Id equals comprometido.LoteId into compromissos
+            from comprometido in compromissos.DefaultIfEmpty()
+            where lote.ProdutoVarianteId == input.ProdutoVarianteId
+                && lote.DataValidade >= dataOperacional && saldo.QuantidadeVendavel > 0
+            orderby lote.DataValidade, lote.Codigo
+            select new
+            {
+                lote.Id,
+                Disponivel = saldo.QuantidadeVendavel - ((long?)comprometido.Quantidade ?? 0)
+            }
+        ).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+        var reservas = new List<ReservaProdutoAcabado>();
+        var falta = input.Quantidade;
+        foreach (var lote in lotes)
+        {
+            if (lote.Disponivel <= 0)
+            {
+                continue;
+            }
+
+            var quantidade = (int)Math.Min(falta, lote.Disponivel);
+            reservas.Add(ReservaProdutoAcabado.Criar(
+                input.PedidoId, input.ProdutoVarianteId, lote.Id, quantidade, agora, expiraEmUtc));
+            falta -= quantidade;
+            if (falta == 0)
+            {
+                break;
+            }
+        }
+
+        return falta == 0 ? reservas : [];
     }
 
     private Task<bool> ReduzEstoqueComprometidoAsync(

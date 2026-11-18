@@ -13,6 +13,7 @@ using Xaquiamuni.Aplicacao.Catalogo.Publico;
 using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Aplicacao.Outbox;
+using Xaquiamuni.Aplicacao.Pedidos;
 using Xaquiamuni.Aplicacao.Seguranca;
 using Xaquiamuni.Infraestrutura.Autenticacao;
 using Xaquiamuni.Infraestrutura.Identidade;
@@ -60,6 +61,8 @@ public static class DependencyInjection
         services.AddScoped<IEstoqueInsumoConsultaRepository, EfEstoqueInsumoConsultaRepository>();
         services.AddScoped<IConsultarEstoqueInsumo, ConsultarEstoqueInsumo>();
         services.AddScoped<IRegistrarEntradaInsumo, RegistrarEntradaInsumo>();
+        services.AddScoped<ICriarPedidoCompraRepository, EfEstoqueProdutoAcabadoRepository>();
+        services.AddScoped<CriarPedidoCompra>();
         services.AddScoped<IEstoqueProdutoAcabadoRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IReservaProdutoAcabadoRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IReservarProdutoAcabado, ReservarProdutoAcabado>();

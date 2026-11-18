@@ -1,6 +1,6 @@
 namespace Xaquiamuni.Dominio.Entidades;
 
-// Os dados comerciais devem ser obtidos pelo futuro caso de uso a partir do catálogo.
+// Os dados comerciais devem ser obtidos pelo caso de uso a partir do catálogo.
 public sealed record DadosItemPedido(
     Guid ProdutoId,
     Guid ProdutoVarianteId,

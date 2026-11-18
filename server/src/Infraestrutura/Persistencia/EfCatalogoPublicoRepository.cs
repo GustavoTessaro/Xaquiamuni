@@ -95,7 +95,7 @@ public sealed class EfCatalogoPublicoRepository(
         new(produto, produto.Variantes.Where(variante => disponiveis.Contains(variante.Id))
             .Select(variante => variante.Id).ToHashSet());
 
-    private static IQueryable<Produto> FiltrarProdutosVisiveis(IQueryable<Produto> produtos) =>
+    internal static IQueryable<Produto> FiltrarProdutosVisiveis(IQueryable<Produto> produtos) =>
         produtos.Where(produto =>
             produto.Publicado
             && produto.Categoria.Ativa
