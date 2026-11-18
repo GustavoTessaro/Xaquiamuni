@@ -278,7 +278,7 @@ public static class AdminPedidosEndpoints
         };
     }
 
-    private static async Task<(T? Comando, IResult? Erro)> LerComandoAsync<T>(
+    internal static async Task<(T? Comando, IResult? Erro)> LerComandoAsync<T>(
         HttpRequest request, CancellationToken cancellationToken) where T : class
     {
         if (!request.HasJsonContentType())

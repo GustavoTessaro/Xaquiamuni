@@ -276,6 +276,38 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ClientePerfis", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ConfiguracaoPixManual", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<string>("ChavePix")
+                        .IsRequired()
+                        .HasMaxLength(77)
+                        .HasColumnType("nvarchar(77)");
+
+                    b.Property<string>("InstrucoesAdicionais")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("NomeRecebedor")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
+                    b.Property<int>("TipoChave")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConfiguracoesPixManual", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ConfiguracoesPixManual_Singleton", "[Id] = 1");
+
+                            t.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3)");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ItemPedido", b =>
                 {
                     b.Property<Guid>("Id")

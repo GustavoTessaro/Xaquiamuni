@@ -21,6 +21,8 @@ public sealed class XaquiamuniDbContext
     }
 
     public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
+    public DbSet<ConfiguracaoPixManual> ConfiguracoesPixManual => Set<ConfiguracaoPixManual>();
+
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<ItemPedido> ItensPedido => Set<ItemPedido>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
@@ -72,6 +74,18 @@ public sealed class XaquiamuniDbContext
     {
         base.OnModelCreating(builder);
         PedidoMapping.Configurar(builder);
+        builder.Entity<ConfiguracaoPixManual>(pix =>
+        {
+            pix.ToTable("ConfiguracoesPixManual", tabela =>
+            {
+                tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Singleton", "[Id] = 1");
+                tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3)");
+            });
+            pix.Property(p => p.Id).ValueGeneratedNever();
+            pix.Property(p => p.ChavePix).HasMaxLength(ConfiguracaoPixManual.ChaveMaxLength);
+            pix.Property(p => p.NomeRecebedor).HasMaxLength(ConfiguracaoPixManual.NomeMaxLength);
+            pix.Property(p => p.InstrucoesAdicionais).HasMaxLength(ConfiguracaoPixManual.InstrucoesMaxLength);
+        });
 
         builder.Entity<XaquiamuniUser>()
             .HasIndex(user => user.NormalizedEmail)
