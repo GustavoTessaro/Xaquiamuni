@@ -1,12 +1,21 @@
+import { createInterface } from 'node:readline';
+import { validarJornada } from './chrome-compra-jornada.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-let input = '';
-for await (const chunk of process.stdin) input += chunk;
-const { origin, pinSpki, chromePath, profile, cliente, admin } = JSON.parse(input);
+const linhas = createInterface({ input: process.stdin, crlfDelay: Infinity });
+const mensagens = linhas[Symbol.asyncIterator]();
+const dados = JSON.parse((await mensagens.next()).value);
+const { origin, pinSpki, chromePath, profile, cliente, admin } = dados;
+async function checkpoint(etapa, id = '') {
+  console.log(`@checkpoint ${etapa} ${id}`);
+  const resposta = await mensagens.next();
+  if (resposta.done) throw new Error('Executor encerrou o checkpoint: ' + etapa);
+  return JSON.parse(resposta.value);
+}
 const chrome = spawn(chromePath, [
   '--headless=new', '--remote-debugging-port=0',
   '--user-data-dir=' + profile, '--no-first-run', '--no-default-browser-check',
@@ -42,6 +51,7 @@ try {
   const pending = new Map();
   let externos = 0;
   const respostas = new Map();
+  const compras = new Map();
   call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
@@ -61,6 +71,10 @@ try {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
       if (!local) externos++;
+      if (local && request.method === 'POST' && new URL(request.url).pathname === '/api/pedidos') {
+        const chave = Object.entries(request.headers).find(([nome]) => nome.toLowerCase() === 'idempotency-key')?.[1];
+        compras.set(data.sessionId, { chave, corpo: request.postData });
+      }
       void call(local ? 'Fetch.continueRequest' : 'Fetch.failRequest',
         local ? { requestId } : { requestId, errorReason: 'BlockedByClient' }, data.sessionId)
         .catch(() => {});
@@ -100,9 +114,16 @@ try {
       } catch { return false; }
     })()`), true);
     assert.equal(await ev('fetch("/health").then(r => r.status)'), 200);
-    return { ev, sessionId };
+    return { ev, sessionId, compra: () => compras.get(sessionId), ir: async destino => {
+      const resultado = await call('Page.navigate', { url: origin + destino }, sessionId);
+      if (resultado.errorText) throw new Error('Falha de navega??o na jornada');
+    } };
   }
 
+  if (dados.seed) {
+    await validarJornada({ ...dados, abrir, waitFor, checkpoint, call });
+    assert.equal(externos, 0);
+  } else {
   const c = await abrir('/login');
   const a = await abrir('/admin/login');
   async function login(browser, credenciais, prefixo) {
@@ -145,10 +166,13 @@ try {
   assert.equal(await a.ev('fetch("/api/admin/auth/me").then(r => r.status)'), 200);
   assert.equal(externos, 0);
   console.log('Chrome: Angular, HTTPS/WebCrypto/localStorage, CLIENTE/ADMIN, cookies isolados, CSRF, leituras 200 e acesso administrativo 403; zero chamadas externas.');
+  }
 } catch (erro) {
   console.error(erro.message);
   process.exitCode = 1;
 } finally {
+  linhas.close();
+  process.stdin.pause();
   if (call && socket?.readyState === WebSocket.OPEN) await call('Browser.close').catch(() => {});
   socket?.close();
   if (await Promise.race([closed.then(() => false), delay(1500, true, { ref: false })])) {

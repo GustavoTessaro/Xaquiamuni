@@ -36,7 +36,13 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
 
     [ChromeCompraFact]
     [Trait("Category", "SqlServerIntegration")]
-    public async Task SmokeChromeUsaAngularApiSqlReaisComSessoesSeparadas()
+    public Task SmokeChromeUsaAngularApiSqlReaisComSessoesSeparadas() => ExecutarChromeAsync(jornada: false);
+
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public Task JornadaChromeCompraRetiradaComConciliacao() => ExecutarChromeAsync(jornada: true);
+
+    private async Task ExecutarChromeAsync(bool jornada)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -57,22 +63,28 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
             {
                 nomeBanco = db.NomeBanco;
                 conexaoMaster = new SqlConnectionStringBuilder(db.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
-                await using (var host = new HostE2ECompra(db, dist, temporario))
+                var relogio = jornada ? new RelogioJornadaCompra() : null;
+                await using (var host = new HostE2ECompra(db, dist, temporario, relogio))
                 {
                     endereco = new Uri(host.Origin);
                     Assert.Equal("https", endereco.Scheme);
                     Assert.True(endereco.IsLoopback);
                     Assert.DoesNotContain(host.Services.GetServices<IHostedService>(), worker =>
                         worker is ExpiracaoPedidosBackgroundService or EmailOutboxBackgroundService);
-                    var cliente = await host.CriarContaAsync(XaquiamuniRoles.Cliente);
                     var admin = await host.CriarContaAsync(XaquiamuniRoles.Administrador);
-                    var resultado = await RodarChromeAsync(script, new
+                    var cliente = jornada
+                        ? new ContaE2E(Guid.Empty, $"e2e-{Guid.NewGuid():N}@example.test", $"E2e!{Guid.NewGuid():N}a1")
+                        : await host.CriarContaAsync(XaquiamuniRoles.Cliente);
+                    var fluxo = relogio is null ? null : new JornadaCompraE2E(host, relogio, admin.Id, cliente.Email);
+                    var outroCliente = jornada ? await host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
+                    var seed = fluxo is null ? null : await fluxo.SemearAsync();
+                    await RodarChromeAsync(script, new
                     {
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
-                    });
-                    output.WriteLine(resultado);
-                    Assert.Empty(host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens);
+                        outroCliente, seed,
+                    }, fluxo);
+                    Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }
 
                 using var socket = new TcpClient();
@@ -95,7 +107,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         }
     }
 
-    private static async Task<string> RodarChromeAsync(string script, object parametros)
+    private async Task RodarChromeAsync(string script, object parametros, JornadaCompraE2E? fluxo)
     {
         var start = new ProcessStartInfo("node")
         {
@@ -105,22 +117,52 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         };
         start.ArgumentList.Add(script);
         using var processo = Process.Start(start) ?? throw new InvalidOperationException("Não foi possível iniciar o executor Chrome.");
-        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(80));
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(fluxo is null ? 80 : 180));
         try
         {
-            var stdout = processo.StandardOutput.ReadToEndAsync(limite.Token);
             var stderr = processo.StandardError.ReadToEndAsync(limite.Token);
-            await processo.StandardInput.WriteAsync(JsonSerializer.Serialize(parametros));
-            processo.StandardInput.Close();
+            await processo.StandardInput.WriteLineAsync(JsonSerializer.Serialize(parametros));
+            await processo.StandardInput.FlushAsync(limite.Token);
+            string? linha;
+            while ((linha = await processo.StandardOutput.ReadLineAsync(limite.Token)) is not null)
+            {
+                if (fluxo is not null && linha.StartsWith("@checkpoint ", StringComparison.Ordinal))
+                {
+                    var partes = linha.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                    var etapa = partes[1];
+                    output.WriteLine($"Checkpoint: {etapa}");
+                    object resposta = true;
+                    if (etapa == "email")
+                    {
+                        resposta = await fluxo.CapturarConfirmacaoAsync(limite.Token);
+                    }
+                    else
+                    {
+                        await fluxo.ConferirAsync(etapa, Guid.Parse(partes[2]), limite.Token);
+                    }
+                    await processo.StandardInput.WriteLineAsync(JsonSerializer.Serialize(resposta));
+                    await processo.StandardInput.FlushAsync(limite.Token);
+                }
+                else
+                {
+                    output.WriteLine(linha);
+                }
+            }
             await processo.WaitForExitAsync(limite.Token);
             if (processo.ExitCode != 0)
             {
-                throw new InvalidOperationException("Falha no smoke Chrome: " + await stderr);
+                throw new InvalidOperationException("Falha no Chrome: " + await stderr);
             }
-            return await stdout;
         }
         finally
         {
+            processo.StandardInput.Close();
+            if (!processo.HasExited)
+            {
+                using var limpeza = new CancellationTokenSource(TimeSpan.FromSeconds(4));
+                try { await processo.WaitForExitAsync(limpeza.Token); }
+                catch (OperationCanceledException) when (!processo.HasExited) { processo.Kill(entireProcessTree: true); }
+            }
             if (!processo.HasExited)
             {
                 processo.Kill(entireProcessTree: true);

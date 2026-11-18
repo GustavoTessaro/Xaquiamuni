@@ -35,7 +35,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     private readonly WebApplicationFactory<Program> _factory;
     private readonly X509Certificate2 _certificado;
 
-    public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario)
+    public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -86,7 +86,11 @@ internal sealed class HostE2ECompra : IAsyncDisposable
             {
                 services.RemoveAll<IDbContextOptionsConfiguration<XaquiamuniDbContext>>();
                 services.AddDbContext<XaquiamuniDbContext>(options =>
-                    options.UseSqlServer(banco.ConexaoIsolada).AddInterceptors(alvo));
+                {
+                    options.UseSqlServer(banco.ConexaoIsolada).AddInterceptors(alvo);
+                    if (relogio is not null) options.AddInterceptors(relogio);
+                });
+                services.AddScoped<EmailConfirmationOutboxProcessor>();
                 for (var i = services.Count - 1; i >= 0; i--)
                 {
                     var descriptor = services[i];
