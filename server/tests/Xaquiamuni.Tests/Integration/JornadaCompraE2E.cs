@@ -30,13 +30,13 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
     private DateTimeOffset? _retirada;
     private DateTimeOffset? _entrega;
 
-    internal async Task<object> SemearAsync()
+    internal async Task<object> SemearAsync(string nomeProduto = "Sabonete E2E", string nomeCategoria = "Artesanais E2E")
     {
         await using var scope = host.Services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<XaquiamuniDbContext>();
-        var categoria = Categoria.Criar("Artesanais E2E", null, 0);
-        var produto = Produto.CriarSimples("Sabonete E2E", null, categoria, "UN", 13.90m);
+        var categoria = Categoria.Criar(nomeCategoria, null, 0);
+        var produto = Produto.CriarSimples(nomeProduto, null, categoria, "UN", 13.90m);
         var variante = Assert.Single(produto.Variantes);
         using var bitmap = new SKBitmap(64, 64);
         bitmap.Erase(SKColors.ForestGreen);

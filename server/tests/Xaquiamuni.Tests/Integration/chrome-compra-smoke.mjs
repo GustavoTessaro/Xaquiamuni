@@ -155,6 +155,45 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
+  if (dados.demonstracao) {
+    await c.ir('/produtos');
+    await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes('Sabonete demonstração')
+      && document.querySelector('main')?.textContent.includes('Vela demonstração')
+      && [...document.querySelectorAll('main img')].filter(i => i.src.includes('/conteudo') && i.naturalWidth > 0).length >= 2`),
+      'Catálogo sintético com duas imagens');
+    await a.ir('/admin/pedidos');
+    await waitFor(() => a.ev("document.querySelector('main h1')?.textContent.trim() === 'Pedidos'"), 'Painel administrativo');
+    assert.equal(await a.ev(`fetch('/api/admin/configuracoes/pix-manual').then(async r =>
+      r.ok && (await r.json()).instrucoesAdicionais.includes('Não faça transferências.'))`), true);
+    const novo = await abrir('/cadastro');
+    const registrado = await novo.ev(`(() => {
+      const senha = 'E2e!' + crypto.randomUUID() + 'a1';
+      const campos = {
+        nomeCompleto: 'Cliente sintético', cpf: '52998224725', telefone: '11912345678',
+        email: 'demo-' + crypto.randomUUID() + '@example.test', senha, confirmacaoSenha: senha,
+        cep: '95000000', uf: 'RS', cidade: 'Caxias do Sul', bairro: 'Bairro de teste',
+        logradouro: 'Rua de teste', numero: '100',
+      };
+      for (const [nome, valor] of Object.entries(campos)) {
+        const campo = document.querySelector('[formControlName="' + nome + '"]');
+        if (!campo) return false;
+        campo.value = valor;
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.querySelector('form button[type=submit]').click();
+      return true;
+    })()`);
+    assert.equal(registrado, true);
+    await waitFor(() => novo.ev("document.querySelector('main')?.textContent.includes('Cadastro realizado com sucesso')"),
+      'Cadastro Angular da demonstração');
+    const link = new URL(await checkpoint('email'));
+    assert.equal(link.origin, origin);
+    await novo.ir(link.pathname + link.search + link.hash);
+    await waitFor(() => novo.ev("document.querySelector('main')?.textContent.includes('E-mail confirmado')"),
+      'Confirmação pelo e-mail capturado localmente');
+    console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');
+  }
+
   const cookies = [];
   for (const { sessionId } of [c, a]) {
     const { cookies: armazenados } = await call('Network.getCookies', { urls: [origin] }, sessionId);

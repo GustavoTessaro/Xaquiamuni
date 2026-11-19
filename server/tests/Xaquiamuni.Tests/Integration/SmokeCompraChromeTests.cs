@@ -46,6 +46,48 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
     [Trait("Category", "SqlServerIntegration")]
     public Task JornadaChromePixManualComConciliacao() => ExecutarChromeAsync(jornada: true, pixManual: true);
 
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public async Task DemonstracaoIniciaAFrioComCatalogoEEncerra()
+    {
+        string nomeBanco;
+        string conexaoMaster;
+        string temporario;
+        Uri endereco;
+        await using (var demo = await AmbienteDemonstracao.CriarAsync(DemonstracaoLocal.CaminhoAngular()))
+        {
+            nomeBanco = demo.NomeBanco;
+            conexaoMaster = new SqlConnectionStringBuilder(demo.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
+            temporario = demo.Temporario;
+            endereco = new Uri(demo.Host.Origin);
+            Assert.True(endereco.IsLoopback);
+            Assert.Equal("https", endereco.Scheme);
+            Assert.DoesNotContain(demo.Host.Services.GetServices<IHostedService>(), worker =>
+                worker is ExpiracaoPedidosBackgroundService or EmailOutboxBackgroundService);
+            Assert.Null(await demo.ProximaConfirmacaoAsync(CancellationToken.None));
+            var script = Path.Combine(EncontrarRepositorio(), "server", "tests", "Xaquiamuni.Tests", "Integration", "chrome-compra-smoke.mjs");
+            await RodarChromeAsync(script, new
+            {
+                origin = demo.Host.Origin, pinSpki = demo.Host.PinSpki, chromePath = DemonstracaoLocal.CaminhoChrome(),
+                profile = Path.Combine(temporario, "chrome-validacao"), cliente = demo.Cliente, admin = demo.Admin,
+                demonstracao = true,
+            }, null, demo);
+        }
+
+        Assert.False(Directory.Exists(temporario));
+        using var socket = new TcpClient();
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+        await Assert.ThrowsAsync<SocketException>(async () =>
+            await socket.ConnectAsync(endereco.Host, endereco.Port, limite.Token));
+        await using var master = new SqlConnection(conexaoMaster);
+        await master.OpenAsync();
+        await using var comando = master.CreateCommand();
+        comando.CommandText = "SELECT CASE WHEN DB_ID(@banco) IS NULL THEN 0 ELSE 1 END;";
+        comando.Parameters.AddWithValue("@banco", nomeBanco);
+        Assert.Equal(0, await comando.ExecuteScalarAsync());
+        output.WriteLine("Demonstração encerrada: HTTPS indisponível, banco e diretório removidos.");
+    }
+
     private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false)
     {
         var repo = EncontrarRepositorio();
@@ -111,7 +153,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         }
     }
 
-    private async Task RodarChromeAsync(string script, object parametros, JornadaCompraE2E? fluxo)
+    private async Task RodarChromeAsync(string script, object parametros, JornadaCompraE2E? fluxo, AmbienteDemonstracao? demo = null)
     {
         var start = new ProcessStartInfo("node")
         {
@@ -130,7 +172,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
             string? linha;
             while ((linha = await processo.StandardOutput.ReadLineAsync(limite.Token)) is not null)
             {
-                if (fluxo is not null && linha.StartsWith("@checkpoint ", StringComparison.Ordinal))
+                if ((fluxo is not null || demo is not null) && linha.StartsWith("@checkpoint ", StringComparison.Ordinal))
                 {
                     var partes = linha.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     var etapa = partes[1];
@@ -138,11 +180,14 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                     object resposta = true;
                     if (etapa == "email")
                     {
-                        resposta = await fluxo.CapturarConfirmacaoAsync(limite.Token);
+                        resposta = demo is not null
+                            ? await demo.ProximaConfirmacaoAsync(limite.Token)
+                                ?? throw new InvalidOperationException("Confirmação local não capturada.")
+                            : await fluxo!.CapturarConfirmacaoAsync(limite.Token);
                     }
                     else
                     {
-                        await fluxo.ConferirAsync(etapa, Guid.Parse(partes[2]), limite.Token);
+                        await fluxo!.ConferirAsync(etapa, Guid.Parse(partes[2]), limite.Token);
                     }
                     await processo.StandardInput.WriteLineAsync(JsonSerializer.Serialize(resposta));
                     await processo.StandardInput.FlushAsync(limite.Token);

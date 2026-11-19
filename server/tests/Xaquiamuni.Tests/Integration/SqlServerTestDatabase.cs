@@ -19,6 +19,12 @@ using Xaquiamuni.Infraestrutura.Seguranca;
 
 namespace Xaquiamuni.Tests.Integration;
 
+internal sealed class SqlServerTestCleanupException(string banco, Exception inner)
+    : InvalidOperationException($"Could not drop isolated database {banco}.", inner)
+{
+    internal string Banco { get; } = banco;
+}
+
 public sealed class SqlServerTestDatabase : IAsyncDisposable
 {
     private const string ExpectedInstance = "SQLEXPRESS";
@@ -150,7 +156,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
                 }
                 catch (Exception exception)
                 {
-                    throw new InvalidOperationException($"Could not drop isolated database {_databaseName}.", exception);
+                    throw new SqlServerTestCleanupException(_databaseName, exception);
                 }
                 _databaseCreated = false;
             }
