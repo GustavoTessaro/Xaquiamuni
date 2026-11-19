@@ -1142,6 +1142,45 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ItemReceitaProducao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NomeInsumo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<string>("UnidadeBase")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid>("VersaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InsumoId");
+
+                    b.HasIndex("VersaoId", "InsumoId")
+                        .IsUnique();
+
+                    b.ToTable("ItensReceitaProducao", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ItensReceitaProducao_Quantidade", "[Quantidade] > 0 AND ([UnidadeBase] IN ('Grama','Mililitro') OR ([UnidadeBase] = 'Unidade' AND [Quantidade] = FLOOR([Quantidade])))");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1510,6 +1549,81 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                             t.HasCheckConstraint("CK_PoliticasEstoqueProdutoVariante_EstoqueMinimo_NonNegative", "[EstoqueMinimo] IS NULL OR [EstoqueMinimo] >= 0");
 
                             t.HasCheckConstraint("CK_PoliticasEstoqueProdutoVariante_PrazoValidade_NonNegative", "[PrazoValidadePadraoDias] IS NULL OR [PrazoValidadePadraoDias] >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("AtualizadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AtualizadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Token")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoVarianteId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ReceitasProducao_VarianteAtiva")
+                        .HasFilter("[Ativa] = 1");
+
+                    b.ToTable("ReceitasProducao", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Numero")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("ReceitaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Rendimento")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReceitaId", "Numero")
+                        .IsUnique();
+
+                    b.ToTable("ReceitasProducaoVersoes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ReceitasProducaoVersoes_Positiva", "[Numero] > 0 AND [Rendimento] > 0");
                         });
                 });
 
@@ -2182,6 +2296,21 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("EstoqueMinimo");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ItemReceitaProducao", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", null)
+                        .WithMany("Itens")
+                        .HasForeignKey("VersaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", null)
@@ -2467,6 +2596,26 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasConstraintName("FK_PoliticasEstoqueProdutoVariante_ProdutoVariantes_ProdutoVarianteId");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducao", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", "Variante")
+                        .WithMany()
+                        .HasForeignKey("ProdutoVarianteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Variante");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.ReceitaProducao", null)
+                        .WithMany("Versoes")
+                        .HasForeignKey("ReceitaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReservaProdutoAcabado", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", null)
@@ -2585,6 +2734,16 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
                 {
                     b.Navigation("Componentes");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducao", b =>
+                {
+                    b.Navigation("Versoes");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", b =>
+                {
+                    b.Navigation("Itens");
                 });
 #pragma warning restore 612, 618
         }

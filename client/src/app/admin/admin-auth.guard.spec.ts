@@ -93,7 +93,7 @@ describe('adminAuthGuard', () => {
     expect(harness.routeNativeElement?.textContent).toContain('Bem-vinda à administração');
   });
 
-  it.each(['/admin/categorias', '/admin/fornecedores', '/admin/compras'])('protects %s and redirects a session without access', async (url) => {
+  it.each(['/admin/categorias', '/admin/fornecedores', '/admin/compras', '/admin/receitas'])('protects %s and redirects a session without access', async (url) => {
     await TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
