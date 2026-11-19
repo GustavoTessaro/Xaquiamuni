@@ -48,7 +48,13 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
 
     [ChromeCompraFact]
     [Trait("Category", "SqlServerIntegration")]
-    public async Task DemonstracaoIniciaAFrioComCatalogoEEncerra()
+    public Task DemonstracaoIniciaAFrioComCatalogoEEncerra() => ExecutarDemonstracaoAsync(cnpj: false);
+
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public Task DemonstracaoPixCnpjEHistoricoAteEntrega() => ExecutarDemonstracaoAsync(cnpj: true);
+
+    private async Task ExecutarDemonstracaoAsync(bool cnpj)
     {
         string nomeBanco;
         string conexaoMaster;
@@ -66,12 +72,13 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                 worker is ExpiracaoPedidosBackgroundService or EmailOutboxBackgroundService);
             Assert.Null(await demo.ProximaConfirmacaoAsync(CancellationToken.None));
             var script = Path.Combine(EncontrarRepositorio(), "server", "tests", "Xaquiamuni.Tests", "Integration", "chrome-compra-smoke.mjs");
+            var outroCliente = cnpj ? await demo.Host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
             await RodarChromeAsync(script, new
             {
                 origin = demo.Host.Origin, pinSpki = demo.Host.PinSpki, chromePath = DemonstracaoLocal.CaminhoChrome(),
                 profile = Path.Combine(temporario, "chrome-validacao"), cliente = demo.Cliente, admin = demo.Admin,
-                demonstracao = true,
-            }, null, demo);
+                demonstracao = true, pixCnpj = cnpj, seed = cnpj ? demo.ProdutoPrincipal : null, outroCliente,
+            }, cnpj ? demo.Jornada : null, demo);
         }
 
         Assert.False(Directory.Exists(temporario));

@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 
-export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente, admin, outroCliente, seed, pixManual, origin }) {
-  const c = await abrir('/cadastro');
+export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente, admin, outroCliente, seed, pixManual, pixCnpj, origin }) {
+  const c = await abrir(pixCnpj ? '/login' : '/cadastro');
   const a = await abrir('/admin/login');
   let etapa = 'cadastro';
   const pronto = (b, expr, nome) => waitFor(() => b.ev(expr), nome);
   const tem = (b, texto) => pronto(b,
     'document.querySelector("main")?.textContent.includes(' + JSON.stringify(texto) + ')', texto);
-  async function clicar(b, texto) {
+  async function clicar(b, texto, seletor = 'main button, main a') {
     await pronto(b, `(() => {
-      const alvo = [...document.querySelectorAll('main button, main a')].find(
+      const alvo = [...document.querySelectorAll(${JSON.stringify(seletor)})].find(
         e => e.textContent.trim() === ${JSON.stringify(texto)} && !e.disabled);
       if (!alvo) return false;
       alvo.click();
@@ -95,19 +95,68 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     assert.deepEqual([r.body?.situacao, r.body?.pix], ['pagamento_indisponivel', null]);
   }
 
+  const cnpjNormalizado = '00ABC34501DE56';
+  const nomeRecebedorCnpj = 'Recebedor sintético da demonstração';
+  async function configurarCnpj() {
+    const config = '/api/admin/configuracoes/pix-manual';
+    const tela = '/admin/configuracoes/pix-manual';
+    const dados = { tipoChave: 'Cnpj', chavePix: '00.abc.345/01de-56',
+      nomeRecebedor: nomeRecebedorCnpj, instrucoesAdicionais: 'Simulação. Não faça transferências.' };
+    await a.ir(tela);
+    await pronto(a, 'document.querySelector("#pix-tipo")?.value === "Email"', 'PIX inicial da demonstração');
+    assert.equal((await api(c, config, 'PUT', JSON.stringify(dados))).status, 403);
+    assert.equal((await api(a, config, 'PUT', JSON.stringify(dados), null, false)).status, 400);
+    await a.ev(`(() => {
+      const tipo = document.querySelector('#pix-tipo');
+      tipo.value = 'Cnpj';
+      tipo.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    const { tipoChave, ...campos } = dados;
+    await preencher(a, campos);
+    await clicar(a, 'Salvar configuração');
+    await tem(a, 'Configuração PIX salva.');
+    const persistido = await api(a, config);
+    assert.equal(persistido.status, 200);
+    assert.match(persistido.cache ?? '', /\bno-store\b/i);
+    assert.ok(persistido.body.tipoChave === tipoChave && persistido.body.chavePix === cnpjNormalizado,
+      'API deve retornar CNPJ sem pontuação e com zeros à esquerda');
+    await a.ir(tela);
+    await pronto(a, `document.querySelector('#pix-tipo')?.value === 'Cnpj'
+      && document.querySelector('#pix-chave')?.value === ${JSON.stringify(cnpjNormalizado)}`, 'CNPJ após recarregar configuração');
+    console.log('PIX CNPJ: cadastro formatado, normalização, zeros à esquerda, recarga, ADMIN e CSRF conferidos.');
+  }
+
+  async function verHistorico(id, situacao) {
+    await c.ir('/produtos');
+    await clicar(c, 'Meus pedidos', 'header .store-account__link');
+    const link = `app-meus-pedidos a[href^="/pedidos/${id}"]`;
+    await pronto(c, `(() => {
+      const item = document.querySelector(${JSON.stringify(link)})?.closest('li');
+      return location.pathname === '/pedidos' && item?.textContent.includes(${JSON.stringify(situacao)})
+        && item.textContent.includes('27,80');
+    })()`, 'Pedido e situação no histórico');
+    const pagina = await api(c, '/api/pedidos?pagina=1');
+    assert.deepEqual([pagina.status, pagina.body?.totalItens, pagina.body?.itens?.[0]?.id], [200, 1, id]);
+    await c.ev('document.querySelector(' + JSON.stringify(link) + ').click()');
+    await pronto(c, 'location.pathname === ' + JSON.stringify('/pedidos/' + id), 'Detalhe a partir do histórico');
+    await tem(c, situacao);
+  }
+
   try {
-    await preencher(c, {
-      nomeCompleto: 'Cliente sintético', cpf: '52998224725', telefone: '11912345678',
-      email: cliente.Email, senha: cliente.Senha, confirmacaoSenha: cliente.Senha,
-      cep: '95000000', uf: 'RS', cidade: 'Caxias do Sul', bairro: 'Bairro de teste',
-      logradouro: 'Rua de teste', numero: '100',
-    });
-    await enviarFormulario(c);
-    await tem(c, 'Cadastro realizado com sucesso');
-    etapa = 'confirmação de e-mail';
-    await c.ir(await checkpoint('email'));
-    await tem(c, 'E-mail confirmado');
-    await c.ir('/login');
+    if (!pixCnpj) {
+      await preencher(c, {
+        nomeCompleto: 'Cliente sintético', cpf: '52998224725', telefone: '11912345678',
+        email: cliente.Email, senha: cliente.Senha, confirmacaoSenha: cliente.Senha,
+        cep: '95000000', uf: 'RS', cidade: 'Caxias do Sul', bairro: 'Bairro de teste',
+        logradouro: 'Rua de teste', numero: '100',
+      });
+      await enviarFormulario(c);
+      await tem(c, 'Cadastro realizado com sucesso');
+      etapa = 'confirmação de e-mail';
+      await c.ir(await checkpoint('email'));
+      await tem(c, 'E-mail confirmado');
+      await c.ir('/login');
+    }
     etapa = 'logins e isolamento';
     await entrar(c, cliente);
     await entrar(a, admin, true);
@@ -117,6 +166,10 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       assert.equal(cookies.some(cookie => cookie.name === '__Host-Xaquiamuni.Auth' && cookie.secure && cookie.httpOnly && cookie.sameSite === 'Lax'), true);
     }
 
+    if (pixCnpj) {
+      etapa = 'configuração CNPJ';
+      await configurarCnpj();
+    }
     etapa = 'catálogo e carrinho';
     await estoque(7, 0, 7);
     await c.ir('/produtos');
@@ -234,6 +287,40 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       console.log('PIX: ausência, cadastro, atualização, recarga, CSRF, valor, prazo local, no-store e retry conferidos.');
     }
 
+    if (pixCnpj) {
+      etapa = 'histórico e PIX CNPJ';
+      const antes = (await api(c, '/api/pedidos/' + id)).body;
+      const enviosAntes = c.compra().total;
+      await verHistorico(id, 'Aguardando pagamento');
+      await tem(c, nomeRecebedorCnpj);
+      const pix = await api(c, '/api/pedidos/' + id + '/pagamento');
+      assert.deepEqual([pix.status, pix.body?.valorCentavos, pix.body?.prazoPagamentoEmUtc],
+        [200, '2780', antes.prazoPagamentoEmUtc]);
+      assert.ok(pix.body.pix.tipoChave === 'Cnpj' && pix.body.pix.chavePix === cnpjNormalizado
+        && pix.body.pix.nomeRecebedor === nomeRecebedorCnpj, 'Instruções CNPJ incompatíveis');
+      assert.equal(await c.ev(`(() => {
+        const painel = document.querySelector('app-pedido-pix');
+        const prazo = document.querySelector('main time');
+        const data = new Date(${JSON.stringify(antes.prazoPagamentoEmUtc)});
+        const pad = v => String(v).padStart(2, '0');
+        const local = pad(data.getDate()) + '/' + pad(data.getMonth() + 1) + '/' + data.getFullYear()
+          + ' ' + pad(data.getHours()) + ':' + pad(data.getMinutes());
+        return ['27,80', 'CNPJ', ${JSON.stringify(cnpjNormalizado)}].every(v => painel.textContent.includes(v))
+          && prazo.dateTime === ${JSON.stringify(antes.prazoPagamentoEmUtc)} && prazo.textContent.trim() === local;
+      })()`), true);
+      await call('Browser.grantPermissions', { origin, browserContextId: c.browserContextId,
+        permissions: ['clipboardReadWrite', 'clipboardSanitizedWrite'] });
+      await call('Page.bringToFront', {}, c.sessionId);
+      await clicar(c, 'Copiar chave PIX');
+      await tem(c, 'Chave PIX copiada.');
+      assert.ok(await c.ev('navigator.clipboard.readText().then(v => v === ' + JSON.stringify(cnpjNormalizado) + ')'),
+        'A área de transferência deve conter o CNPJ completo');
+      assert.equal(c.compra().total, enviosAntes);
+      await checkpoint('pedido', id);
+      await estoque(7, 2, 5);
+      console.log('Meus pedidos: detalhe reencontrado, valor e prazo conferidos, CNPJ copiado e nenhum novo POST.');
+    }
+
     etapa = 'painel e pagamento';
     await a.ir('/admin/pedidos');
     await pronto(a, `(() => {
@@ -247,7 +334,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     await tem(a, 'Pagamento confirmado.');
     await checkpoint('pagamento', id);
     await estoque(7, 2, 5);
-    if (pixManual) {
+    if (pixManual || pixCnpj) {
       etapa = 'PIX após pagamento manual';
       await c.ir(caminho);
       await verificarPixInativo(id);
@@ -283,6 +370,22 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     const outro = await abrir('/login');
     await entrar(outro, outroCliente);
     assert.equal((await api(outro, '/api/pedidos/' + id)).status, 404);
+
+    if (pixCnpj) {
+      etapa = 'histórico entregue e isolamento';
+      const enviosAntes = c.compra().total;
+      await verHistorico(id, 'Entregue');
+      await verificarPixInativo(id);
+      assert.equal(c.compra().total, enviosAntes);
+      const alheio = await api(outro, '/api/pedidos/' + id + '/pagamento');
+      assert.equal(alheio.status, 404);
+      await outro.ir('/produtos');
+      await clicar(outro, 'Meus pedidos', 'header .store-account__link');
+      await tem(outro, 'Você ainda não tem pedidos.');
+      assert.equal(await outro.ev('!document.querySelector("app-meus-pedidos ul")'), true);
+      console.log('Meus pedidos: Entregue após baixa única, PIX oculto e nenhum pedido visível para outro cliente.');
+      return;
+    }
 
     if (pixManual) {
       etapa = 'PIX de pedido alheio e pedido cancelado';

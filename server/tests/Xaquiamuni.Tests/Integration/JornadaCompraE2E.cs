@@ -94,7 +94,7 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
         var ids = reservas.Select(r => (Guid?)r.Id).ToArray();
         var movimentos = await db.MovimentosProdutoAcabado.AsNoTracking()
             .Where(m => ids.Contains(m.ReservaProdutoAcabadoId)).ToListAsync(token);
-        var saldos = await db.SaldosProdutoAcabado.AsNoTracking().ToListAsync(token);
+        var saldos = await db.SaldosProdutoAcabado.AsNoTracking().Where(s => _lotes.Contains(s.LoteId)).ToListAsync(token);
         Assert.Equal(TimeSpan.Zero, pedido.CriadoEmUtc.Offset);
         Assert.Equal(pedido.CriadoEmUtc.AddHours(24), pedido.PrazoPagamentoEmUtc);
         Assert.All(reservas, r => Assert.Equal(pedido.PrazoPagamentoEmUtc, r.ExpiraEmUtc));
@@ -193,12 +193,12 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
             Assert.Equal(0, saldos.Single(s => s.LoteId == _lotes[0]).QuantidadeFisica);
             Assert.Equal(1, saldos.Single(s => s.LoteId == _lotes[1]).QuantidadeFisica);
             Assert.Equal(4, saldos.Single(s => s.LoteId == _lotes[2]).QuantidadeFisica);
-            Assert.Equal(5, await db.MovimentosProdutoAcabado.CountAsync(token));
+            Assert.Equal(5, await db.MovimentosProdutoAcabado.CountAsync(m => _lotes.Contains(m.LoteId), token));
             return;
         }
 
         Assert.Empty(movimentos);
-        Assert.Equal(3, await db.MovimentosProdutoAcabado.CountAsync(token));
+        Assert.Equal(3, await db.MovimentosProdutoAcabado.CountAsync(m => _lotes.Contains(m.LoteId), token));
         Assert.Equal(7, saldos.Sum(s => s.QuantidadeFisica));
         Assert.All(reservas, r => Assert.Equal(situacao == SituacaoPedido.AguardandoPagamento
             ? EstadoReservaProdutoAcabado.Ativa : EstadoReservaProdutoAcabado.Confirmada, r.Estado));

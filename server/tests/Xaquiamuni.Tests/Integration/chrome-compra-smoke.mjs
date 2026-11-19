@@ -74,7 +74,8 @@ try {
       if (!local) externos++;
       if (local && request.method === 'POST' && new URL(request.url).pathname === '/api/pedidos') {
         const chave = Object.entries(request.headers).find(([nome]) => nome.toLowerCase() === 'idempotency-key')?.[1];
-        compras.set(data.sessionId, { chave, corpo: request.postData });
+        compras.set(data.sessionId, { chave, corpo: request.postData,
+          total: (compras.get(data.sessionId)?.total ?? 0) + 1 });
       }
       const falhaPix = local && request.method === 'GET'
         && new URL(request.url).pathname === falhasPix.get(data.sessionId);

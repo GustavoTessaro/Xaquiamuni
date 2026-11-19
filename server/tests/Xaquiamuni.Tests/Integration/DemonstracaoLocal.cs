@@ -190,6 +190,8 @@ internal sealed class AmbienteDemonstracao(
     internal ContaE2E Cliente { get; } = cliente;
     internal string NomeBanco => banco.NomeBanco;
     internal string ConexaoIsolada => banco.ConexaoIsolada;
+    internal required JornadaCompraE2E Jornada { get; init; }
+    internal required object ProdutoPrincipal { get; init; }
 
     internal static async Task<AmbienteDemonstracao> CriarAsync(string angular)
     {
@@ -203,15 +205,20 @@ internal sealed class AmbienteDemonstracao(
             var admin = await host.CriarContaAsync(XaquiamuniRoles.Administrador);
             var cliente = await host.CriarContaAsync(XaquiamuniRoles.Cliente);
             var dados = new JornadaCompraE2E(host, new RelogioJornadaCompra(), admin.Id, cliente.Email);
-            await dados.SemearAsync("Sabonete demonstração", "Sabonetes demonstração");
-            await dados.SemearAsync("Vela demonstração", "Velas demonstração");
+            var produtoPrincipal = await dados.SemearAsync("Sabonete demonstração", "Sabonetes demonstração");
+            await new JornadaCompraE2E(host, new RelogioJornadaCompra(), admin.Id, cliente.Email)
+                .SemearAsync("Vela demonstração", "Velas demonstração");
 
             await using var scope = host.Services.CreateAsyncScope();
             scope.ServiceProvider.GetRequiredService<IOptions<EmailConfirmationEmailOptions>>().Value.PublicFrontendBaseUrl = host.Origin;
             var pix = ConfiguracaoPixManual.Criar(TipoChavePixManual.Email, "pix-demonstracao@example.invalid",
                 "Xaquiamuni Demonstração", "SIMULAÇÃO PARA O TCC. Não faça transferências.");
             await scope.ServiceProvider.GetRequiredService<IPagamentoPixManual>().SalvarAsync(pix, CancellationToken.None);
-            return new AmbienteDemonstracao(banco, host, temporario, admin, cliente);
+            return new AmbienteDemonstracao(banco, host, temporario, admin, cliente)
+            {
+                Jornada = dados,
+                ProdutoPrincipal = produtoPrincipal,
+            };
         }
         catch (Exception inicio)
         {
