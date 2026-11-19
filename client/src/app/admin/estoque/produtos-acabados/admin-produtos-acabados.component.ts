@@ -227,6 +227,15 @@ export class AdminProdutosAcabadosComponent {
     { value: 'Estorno', label: 'Correção de movimentação' },
   ];
 
+  protected readonly produtoId = signal(
+    inject(ActivatedRoute).snapshot.paramMap.get('produtoId') ?? '',
+  );
+  protected readonly produtosParaSelecao = computed(() =>
+    this.produtoId()
+      ? this.produtos().filter((produto) => produto.id === this.produtoId())
+      : this.produtos(),
+  );
+
   protected readonly produtoSelecionado = computed(() => {
     const selectedVariant = this.varianteId();
     return (
@@ -315,6 +324,7 @@ export class AdminProdutosAcabadosComponent {
         },
       });
     this.route.paramMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      this.produtoId.set(params.get('produtoId') ?? '');
       const selected = params.get('varianteId') ?? '';
       if (selected === this.varianteId()) {
         return;
@@ -370,7 +380,9 @@ export class AdminProdutosAcabadosComponent {
   }
 
   protected selecionarVariante(varianteId: string): void {
-    void this.router.navigate(['/admin/estoque/produtos-acabados', varianteId]);
+    void this.router.navigate(['/admin/estoque/produtos-acabados', varianteId], {
+      queryParamsHandling: 'preserve',
+    });
   }
 
   private recarregarVarianteAposOperacao(): void {

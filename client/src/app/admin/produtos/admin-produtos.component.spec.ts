@@ -404,6 +404,21 @@ describe('AdminProdutosComponent', () => {
     expect(listarProdutos).toHaveBeenCalledOnce();
   });
 
+  it('abre diretamente o estoque da variante única', () => {
+    clickButton('Estoque de Vela de Lavanda');
+    expect(navigateByUrl).toHaveBeenCalledWith('/admin/estoque/produtos-acabados/candle-default');
+  });
+
+  it('abre a seleção de variantes do produto com os filtros da listagem', () => {
+    setField('product-search', 'Sabonete');
+    setField('category-filter', 'soaps');
+    clickButton('Publicados');
+    clickButton('Estoque de Sabonete de Lavanda');
+    expect(navigateByUrl).toHaveBeenCalledWith(
+      '/admin/produtos/soap/estoque?busca=Sabonete&categoriaId=soaps&publicacao=published',
+    );
+  });
+
   it('preserves search and filters when opening the gallery', () => {
     setField('product-search', 'Sabonete');
     setField('category-filter', 'soaps');

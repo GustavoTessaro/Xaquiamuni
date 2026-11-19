@@ -106,6 +106,14 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/produtos/:produtoId/estoque',
+    loadComponent: () =>
+      import('./admin/estoque/produtos-acabados/admin-produtos-acabados.component').then(
+        (module) => module.AdminProdutosAcabadosComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/produtos/:produtoId/fotos',
     loadComponent: () =>
       import('./admin/produtos/admin-produto-imagens.component').then(

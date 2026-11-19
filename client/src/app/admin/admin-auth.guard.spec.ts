@@ -49,6 +49,23 @@ describe('adminAuthGuard', () => {
     expect(getCurrentSession).toHaveBeenCalledOnce();
   });
 
+  it.each([
+    '/admin/produtos/produto-1/estoque',
+    '/admin/estoque/produtos-acabados',
+    '/admin/estoque/produtos-acabados/variante-1',
+  ])('protege a rota de estoque %s', async (url) => {
+    TestBed.configureTestingModule({
+      providers: [
+        provideRouter(routes),
+        { provide: AdminAuthService, useValue: { getCurrentSession } },
+      ],
+    });
+    const harness = await RouterTestingHarness.create();
+    await harness.navigateByUrl(url, AdminLoginComponent);
+    expect(TestBed.inject(Router).url).toBe('/admin/login');
+    expect(getCurrentSession).toHaveBeenCalledOnce();
+  });
+
   it('allows a session confirmed by the protected administrative endpoint', async () => {
     getCurrentSession.mockReturnValue(
       of({
@@ -279,7 +296,7 @@ describe('adminAuthGuard', () => {
     await harness.navigateByUrl('/admin/estoque/insumos', AdminInsumosComponent);
     expect(TestBed.inject(Router).url).toBe('/admin/estoque/insumos');
     expect(harness.routeNativeElement?.textContent).toContain('Insumos para produção');
-    expect(harness.routeNativeElement?.textContent).toContain('Produtos prontos para venda');
+    expect(harness.routeNativeElement?.textContent).not.toContain('Produtos prontos para venda');
 
     await harness.navigateByUrl(
       '/admin/estoque/insumos/insumo-1/consultas',
@@ -360,32 +377,17 @@ describe('AdminWorkspaceComponent stock navigation', () => {
     }
   });
 
-  it('selects only the products-finished link on its index and variant routes', async () => {
+  it('does not advertise the legacy finished-stock routes in the workspace', async () => {
     const harness = await renderAdminWorkspace('/admin/estoque/produtos-acabados');
-    expectStockLinks(harness, 'produtos-acabados');
-
+    expectStockLinks(harness, null);
     await harness.navigateByUrl(
       '/admin/estoque/produtos-acabados/variante-1',
       AdminWorkspaceNavigationTestPage,
     );
-    await settleAdminWorkspace(harness);
-    expectStockLinks(harness, 'produtos-acabados');
+    expectStockLinks(harness, null);
   });
 
-  it('selects a stock link after Angular navigation without a page reload', async () => {
-    const harness = await renderAdminWorkspace('/admin/estoque/insumos/novo');
-    const finishedGoodsLink = getStockLinks(harness).produtosAcabados;
-
-    finishedGoodsLink.click();
-    await vi.waitFor(() =>
-      expect(TestBed.inject(Router).url).toBe('/admin/estoque/produtos-acabados'),
-    );
-    await settleAdminWorkspace(harness);
-
-    expectStockLinks(harness, 'produtos-acabados');
-  });
-
-  it('does not select either stock link on other ADMIN pages', async () => {
+  it('does not select the insumos link on other ADMIN pages', async () => {
     const harness = await renderAdminWorkspace('/admin');
     await settleAdminWorkspace(harness);
     expectStockLinks(harness, null);
@@ -413,28 +415,11 @@ async function settleAdminWorkspace(harness: RouterTestingHarness): Promise<void
   harness.fixture.detectChanges();
 }
 
-function getStockLinks(harness: RouterTestingHarness): {
-  insumos: HTMLAnchorElement;
-  produtosAcabados: HTMLAnchorElement;
-} {
-  const root = harness.routeNativeElement;
-  const insumos = root?.querySelector<HTMLAnchorElement>('a[href="/admin/estoque/insumos"]');
-  const produtosAcabados = root?.querySelector<HTMLAnchorElement>(
-    'a[href="/admin/estoque/produtos-acabados"]',
-  );
-  if (!insumos || !produtosAcabados) {
-    throw new Error('Links dos estoques não encontrados no workspace ADMIN.');
-  }
-  return { insumos, produtosAcabados };
-}
-
-function expectStockLinks(
-  harness: RouterTestingHarness,
-  active: 'insumos' | 'produtos-acabados' | null,
-): void {
-  const links = getStockLinks(harness);
-  expectSelectedLink(links.insumos, active === 'insumos');
-  expectSelectedLink(links.produtosAcabados, active === 'produtos-acabados');
+function expectStockLinks(harness: RouterTestingHarness, active: 'insumos' | null): void {
+  const root = harness.routeNativeElement!;
+  const insumos = root.querySelector<HTMLAnchorElement>('a[href="/admin/estoque/insumos"]')!;
+  expectSelectedLink(insumos, active === 'insumos');
+  expect(root.querySelector('nav a[href="/admin/estoque/produtos-acabados"]')).toBeNull();
 }
 
 function expectSelectedLink(link: HTMLAnchorElement, selected: boolean): void {

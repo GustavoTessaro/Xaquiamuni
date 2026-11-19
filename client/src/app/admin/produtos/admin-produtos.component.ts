@@ -485,6 +485,18 @@ export class AdminProdutosComponent {
   }
 
   protected abrirGaleriaFotos(produtoId: string): void {
+    this.navegarComFiltros(['/admin/produtos', produtoId, 'fotos']);
+  }
+
+  protected abrirEstoque(produto: AdminProduto): void {
+    const destino =
+      produto.variantes.length === 1
+        ? ['/admin/estoque/produtos-acabados', produto.variantes[0].id]
+        : ['/admin/produtos', produto.id, 'estoque'];
+    this.navegarComFiltros(destino);
+  }
+
+  private navegarComFiltros(segmentos: string[]): void {
     const parametros = new URLSearchParams();
     const busca = this.busca().trim();
     if (busca) {
@@ -498,7 +510,7 @@ export class AdminProdutosComponent {
     }
     const query = parametros.toString();
     void this.router.navigateByUrl(
-      `/admin/produtos/${encodeURIComponent(produtoId)}/fotos${query ? `?${query}` : ''}`,
+      `${segmentos.map((segmento, indice) => (indice === 0 ? segmento : encodeURIComponent(segmento))).join('/')}${query ? `?${query}` : ''}`,
     );
   }
 

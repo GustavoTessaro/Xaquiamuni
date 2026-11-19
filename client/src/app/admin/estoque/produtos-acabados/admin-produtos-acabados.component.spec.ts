@@ -1,6 +1,6 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
+import { ActivatedRoute, Router, convertToParamMap, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AdminAuthService } from '../../../core/admin-auth/admin-auth.service';
@@ -109,8 +109,11 @@ async function montarComponente(
   atorId = 'actor-1',
   varianteSelecionada = true,
   listar = () => of([produto]),
+  produtoId?: string,
 ): Promise<ComponentFixture<AdminProdutosAcabadosComponent>> {
-  const params = convertToParamMap(varianteSelecionada ? { varianteId: 'variant-1' } : {});
+  const params = convertToParamMap(
+    varianteSelecionada ? { varianteId: 'variant-1' } : { produtoId },
+  );
   await TestBed.configureTestingModule({
     imports: [AdminProdutosAcabadosComponent],
     providers: [
@@ -134,6 +137,37 @@ async function montarComponente(
   fixture.detectChanges();
   return fixture;
 }
+
+it('restringe a seleção ao produto da URL e abre a variante mantendo os filtros', async () => {
+  const outro = { ...produto, id: 'outro-produto', nome: 'Outro produto' };
+  const alvo = {
+    ...produto,
+    variantes: [
+      ...produto.variantes,
+      { ...produto.variantes[0], id: 'variant-2', identificacao: 'Lavanda 200 g' },
+    ],
+  };
+  const api = criarApi();
+  const fixture = await montarComponente(
+    api,
+    'actor-1',
+    false,
+    () => of([alvo, outro]),
+    produto.id,
+  );
+  const root = fixture.nativeElement as HTMLElement;
+  expect(root.textContent).toContain('Lavanda 100 g');
+  expect(root.textContent).not.toContain('Outro produto');
+  expect(root.querySelector('main a[href="/admin/produtos"]')?.textContent).toContain(
+    'Voltar para Produtos',
+  );
+  expect(api.consultarPosicao).not.toHaveBeenCalled();
+  const navigate = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+  clicar(fixture, 'Lavanda 200 g');
+  expect(navigate).toHaveBeenCalledWith(['/admin/estoque/produtos-acabados', 'variant-2'], {
+    queryParamsHandling: 'preserve',
+  });
+});
 
 function clicar(fixture: ComponentFixture<AdminProdutosAcabadosComponent>, texto: string): void {
   const root = fixture.nativeElement as HTMLElement;
@@ -427,7 +461,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     const fixture = await montarComponente(criarApi());
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
 
-    expect(text).toContain('Produtos prontos para venda');
+    expect(text).toContain('Estoque do produto');
     expect(text).toContain('Total registrado, incluindo unidades indisponíveis.');
     expect(text).toContain('Unidades em condição vendável, em lotes válidos e de variante ativa.');
     expect(text).toContain('Sem reservas vigentes.');

@@ -1,13 +1,20 @@
-<app-admin-workspace activePage="stock">
+<app-admin-workspace activePage="products">
   <div class="space-y-6">
     <header>
       <p class="text-sm font-semibold uppercase tracking-wide text-emerald-800">Estoque</p>
       <h1 class="mt-1 text-2xl font-bold tracking-tight text-emerald-950 sm:text-3xl">
-        Produtos prontos para venda
+        {{ produtoId() || varianteId() ? 'Estoque do produto' : 'Produtos prontos para venda' }}
       </h1>
       <p class="mt-2 text-sm text-slate-600">
         Consulte os saldos, lotes e movimentações de cada produto e variante.
       </p>
+      <a
+        routerLink="/admin/produtos"
+        queryParamsHandling="preserve"
+        class="inline-flex min-h-11 items-center text-sm font-semibold text-emerald-800 underline focus-visible:outline-2"
+      >
+        Voltar para Produtos
+      </a>
     </header>
 
     @if (erro()) {
@@ -45,23 +52,26 @@
         <h2 id="finished-goods-selection-title" class="text-lg font-semibold text-emerald-950">
           Selecionar produto e variante
         </h2>
-        @if (produtos().length === 0) {
+        @if (produtosParaSelecao().length === 0) {
           <p
             class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
           >
-            Nenhum produto cadastrado.
+            {{ produtoId() ? 'Produto não encontrado.' : 'Nenhum produto cadastrado.' }}
           </p>
         } @else {
           <div class="mt-4 grid gap-3 lg:grid-cols-2">
-            @for (produto of produtos(); track produto.id) {
+            @for (produto of produtosParaSelecao(); track produto.id) {
               <article class="rounded-xl border border-slate-200 p-4">
                 <h3 class="font-semibold text-slate-900">{{ produto.nome }}</h3>
+                @if (!produto.variantes.length) {
+                  <p class="mt-2 text-sm text-slate-600">Nenhuma variante cadastrada.</p>
+                }
                 <div class="mt-3 flex flex-wrap gap-2">
                   @for (variante of produto.variantes; track variante.id) {
                     <button
                       type="button"
                       (click)="selecionarVariante(variante.id)"
-                      class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50"
+                      class="min-h-11 max-w-full break-words rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 hover:bg-emerald-50 focus-visible:outline-2"
                       [attr.aria-label]="
                         'Consultar ' + produto.nome + ' — ' + variante.identificacao
                       "
@@ -80,12 +90,17 @@
       </section>
     } @else {
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <a
-          routerLink="/admin/estoque/produtos-acabados"
-          class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline"
-        >
-          Selecionar outra variante
-        </a>
+        @if (produtoSelecionado(); as produto) {
+          @if (produto.variantes.length > 1) {
+            <a
+              [routerLink]="['/admin/produtos', produto.id, 'estoque']"
+              queryParamsHandling="preserve"
+              class="inline-flex min-h-11 items-center text-sm font-semibold text-emerald-800 underline focus-visible:outline-2"
+            >
+              Selecionar outra variante
+            </a>
+          }
+        }
         @if (produtoSelecionado() && varianteSelecionada()) {
           <p class="text-sm text-slate-600">
             <strong class="text-slate-900">{{ produtoSelecionado()!.nome }}</strong>
