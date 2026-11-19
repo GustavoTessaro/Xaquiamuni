@@ -918,6 +918,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("ChaveCriacao")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ChaveRecebimento")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CriadoEmUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -936,10 +939,21 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("nchar(64)")
                         .IsFixedLength();
 
+                    b.Property<string>("ImpressaoRecebimento")
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
                     b.Property<string>("NomeFornecedor")
                         .IsRequired()
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
+
+                    b.Property<DateTimeOffset?>("RecebidaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("RecebidaPorId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Situacao")
                         .IsRequired()
@@ -963,6 +977,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasDatabaseName("UX_ComprasMateriasPrimas_Criacao");
 
                     b.HasIndex("DataCompra", "Id");
+
+                    b.HasIndex("RecebidaPorId", "ChaveRecebimento")
+                        .IsUnique()
+                        .HasFilter("[RecebidaPorId] IS NOT NULL AND [ChaveRecebimento] IS NOT NULL");
 
                     b.ToTable("ComprasMateriasPrimas", (string)null);
                 });
@@ -995,6 +1013,36 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_ContagensSemDiferencaProdutoAcabado_Timestamp_Utc", "DATEPART(TZOFFSET, [RegistradoEmUtc]) = 0");
                         });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.EntradaRecebimentoCompra", b =>
+                {
+                    b.Property<Guid>("ComponenteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CompraId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LinhaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("MovimentoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("int");
+
+                    b.HasKey("ComponenteId");
+
+                    b.HasIndex("LinhaId");
+
+                    b.HasIndex("MovimentoId")
+                        .IsUnique();
+
+                    b.HasIndex("CompraId", "Ordem")
+                        .IsUnique();
+
+                    b.ToTable("EntradasRecebimentoCompra", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
@@ -2033,6 +2081,33 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasOne("Xaquiamuni.Dominio.Entidades.Fornecedor", null)
                         .WithMany()
                         .HasForeignKey("FornecedorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.EntradaRecebimentoCompra", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.ComponenteCompraMateriaPrima", null)
+                        .WithMany()
+                        .HasForeignKey("ComponenteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", null)
+                        .WithMany()
+                        .HasForeignKey("CompraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", null)
+                        .WithMany()
+                        .HasForeignKey("LinhaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

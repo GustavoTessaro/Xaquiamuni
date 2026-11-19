@@ -9,7 +9,7 @@ using Xaquiamuni.Dominio.Estoque;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
+public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 {
     private readonly XaquiamuniDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
@@ -502,184 +502,18 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
             await AdquirirLockAsync($"stock-supply:{input.InsumoId:D}", cancellationToken)
                 .ConfigureAwait(false);
-            var insumo = await _dbContext.InsumosEstoque
-                .Include(item => item.FormasCompra)
-                .SingleOrDefaultAsync(item => item.Id == input.InsumoId, cancellationToken)
+            var resultado = await AplicarEntradaAsync(input, chaveIdempotencia, fingerprint, cancellationToken)
                 .ConfigureAwait(false);
-            if (insumo is null)
+            if (!resultado.Sucesso)
             {
-                return await ReverterComFalhaAsync(
-                    transaction,
-                    RegistrarEntradaInsumoStatus.InsumoNaoEncontrado,
-                    "O insumo informado não existe.").ConfigureAwait(false);
-            }
-
-            if (!insumo.Ativo)
-            {
-                return await ReverterComFalhaAsync(
-                    transaction,
-                    RegistrarEntradaInsumoStatus.InsumoInativo,
-                    "Insumos inativos não recebem novas entradas.").ConfigureAwait(false);
-            }
-
-            var validacao = ValidarTipoQuantidadeEObservacao(input);
-            if (validacao is not null)
-            {
-                return await ReverterComFalhaAsync(
-                    transaction,
-                    RegistrarEntradaInsumoStatus.EntradaInvalida,
-                    validacao).ConfigureAwait(false);
-            }
-
-            var conversao = ResolverQuantidade(insumo, input, out var quantidadeBase, out var erroQuantidade);
-            if (erroQuantidade is not null || quantidadeBase is null)
-            {
-                return await ReverterComFalhaAsync(
-                    transaction,
-                    RegistrarEntradaInsumoStatus.EntradaInvalida,
-                    erroQuantidade ?? "A quantidade informada é inválida.").ConfigureAwait(false);
-            }
-
-            LoteInsumo? lote = null;
-            var loteCriado = false;
-            if (!insumo.ControlaLote)
-            {
-                if (input.LoteId is not null
-                    || input.IdentificacaoNovoLote is not null
-                    || input.DataEntradaNovoLote is not null
-                    || input.DataValidadeNovoLote is not null
-                    || input.FornecedorNovoLote is not null
-                    || input.NovoLoteBloqueado)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.EntradaInvalida,
-                        "Insumos sem controle por lote não aceitam dados de lote.").ConfigureAwait(false);
-                }
-            }
-            else if (input.LoteId is Guid loteId)
-            {
-                if (input.IdentificacaoNovoLote is not null
-                    || input.DataEntradaNovoLote is not null
-                    || input.DataValidadeNovoLote is not null
-                    || input.FornecedorNovoLote is not null
-                    || input.NovoLoteBloqueado)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.EntradaInvalida,
-                        "Informe um lote existente ou os dados de um novo lote, não ambos.")
-                        .ConfigureAwait(false);
-                }
-
-                lote = await _dbContext.LotesInsumo.SingleOrDefaultAsync(
-                        item => item.Id == loteId && item.InsumoId == insumo.Id,
-                        cancellationToken)
+                return await ReverterComFalhaAsync(transaction, resultado.Status, resultado.Erro!)
                     .ConfigureAwait(false);
-                if (lote is null)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.LoteNaoEncontrado,
-                        "O lote não existe para este insumo.").ConfigureAwait(false);
-                }
             }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(input.IdentificacaoNovoLote)
-                    || input.DataEntradaNovoLote is null)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.EntradaInvalida,
-                        "Um novo lote exige identificação e data de entrada.").ConfigureAwait(false);
-                }
-
-                try
-                {
-                    lote = LoteInsumo.Criar(
-                        insumo,
-                        input.IdentificacaoNovoLote,
-                        input.DataEntradaNovoLote.Value,
-                        input.DataValidadeNovoLote,
-                        input.FornecedorNovoLote,
-                        input.NovoLoteBloqueado);
-                    loteCriado = true;
-                }
-                catch (ArgumentException exception)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.EntradaInvalida,
-                        exception.Message).ConfigureAwait(false);
-                }
-            }
-
-            if (input.Tipo == TipoMovimentoInsumo.Aquisicao
-                && lote is not null
-                && !lote.EstaElegivelEm(_calendario.ObterDataAtual()))
-            {
-                return await ReverterComFalhaAsync(
-                    transaction,
-                    RegistrarEntradaInsumoStatus.LoteInelegivel,
-                    "Aquisições ordinárias exigem lote elegível na data de registro.").ConfigureAwait(false);
-            }
-
-            var custo = CustoAquisicaoInsumo.Criar(input.CustoTotal, quantidadeBase);
-            var loteIdSelecionado = lote?.Id;
-            var saldo = await _dbContext.SaldosInsumo.SingleOrDefaultAsync(
-                    item => item.InsumoId == insumo.Id && item.LoteId == loteIdSelecionado,
-                    cancellationToken)
-                .ConfigureAwait(false);
-            if (saldo is null)
-            {
-                saldo = SaldoInsumo.CriarZero(insumo, lote);
-                _dbContext.SaldosInsumo.Add(saldo);
-            }
-
-            if (input.Tipo == TipoMovimentoInsumo.EstoqueInicial)
-            {
-                var existeHistorico = await _dbContext.MovimentosInsumo.AnyAsync(
-                    movimento => movimento.InsumoId == insumo.Id
-                        && movimento.LoteId == loteIdSelecionado,
-                    cancellationToken).ConfigureAwait(false);
-                if (existeHistorico || saldo.QuantidadeFisica.ValorBase != 0m)
-                {
-                    return await ReverterComFalhaAsync(
-                        transaction,
-                        RegistrarEntradaInsumoStatus.EntradaInvalida,
-                        "O estoque inicial somente pode abrir uma posição sem saldo ou movimentos anteriores.")
-                        .ConfigureAwait(false);
-                }
-            }
-
-            if (loteCriado)
-            {
-                _dbContext.LotesInsumo.Add(lote!);
-            }
-
-            var movement = MovimentoInsumo.CriarEntrada(
-                insumo,
-                lote,
-                input.ResponsavelId,
-                input.Tipo,
-                input.QuantidadeOriginal,
-                input.UnidadeOriginal,
-                conversao,
-                quantidadeBase,
-                saldo.QuantidadeFisica,
-                custo,
-                input.Observacao,
-                _timeProvider.GetUtcNow(),
-                chaveIdempotencia,
-                fingerprint);
-            insumo.AplicarMovimento(saldo, movement);
-            _dbContext.MovimentosInsumo.Add(movement);
 
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             _dbContext.ChangeTracker.Clear();
-            return RegistrarEntradaInsumoResult.Success(movement);
+            return resultado;
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -1174,6 +1008,12 @@ public sealed class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
             await AdquirirLockAsync($"stock-supply:{original.InsumoId:D}", cancellationToken)
                 .ConfigureAwait(false);
+            if (await _dbContext.EntradasRecebimentoCompra.AnyAsync(entrada => entrada.MovimentoId == original.Id, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(transaction, OperacaoEstoqueInsumoStatus.MovimentoVinculadoCompra,
+                    "Entradas vinculadas a compras não podem ser estornadas avulsamente.").ConfigureAwait(false);
+            }
             var insumo = await _dbContext.InsumosEstoque
                 .SingleOrDefaultAsync(item => item.Id == original.InsumoId, cancellationToken)
                 .ConfigureAwait(false);

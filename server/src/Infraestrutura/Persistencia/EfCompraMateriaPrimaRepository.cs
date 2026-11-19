@@ -61,7 +61,7 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
         var compra = await Detalhes().SingleOrDefaultAsync(c => c.Id == id, ct);
         if (compra is null) return new(CompraMateriaPrimaStatus.Ausente);
         if (compra.Situacao != SituacaoCompraMateriaPrima.Rascunho)
-            return new(CompraMateriaPrimaStatus.Conflito, Erro: "Compras canceladas não podem ser editadas.");
+            return new(CompraMateriaPrimaStatus.Conflito, Erro: "Apenas rascunhos podem ser editados.");
         if (compra.Versao != input.Versao) return Conflito();
 
         try
@@ -83,6 +83,8 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
         if (compra is null) return new(CompraMateriaPrimaStatus.Ausente);
         if (compra.Situacao == SituacaoCompraMateriaPrima.Cancelada)
             return new(CompraMateriaPrimaStatus.Repetida, compra);
+        if (compra.Situacao != SituacaoCompraMateriaPrima.Rascunho)
+            return new(CompraMateriaPrimaStatus.Conflito, Erro: "Apenas rascunhos podem ser cancelados.");
         if (compra.Versao != versao) return Conflito();
         compra.Cancelar(autor, relogio.GetUtcNow());
         return await GravarAsync(compra, ct);

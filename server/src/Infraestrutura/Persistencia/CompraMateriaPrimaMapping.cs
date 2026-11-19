@@ -18,9 +18,23 @@ internal static class CompraMateriaPrimaMapping
             compra.Property(c => c.ImpressaoCriacao).HasMaxLength(64).IsFixedLength();
             compra.HasIndex(c => new { c.CriadoPorId, c.ChaveCriacao }).IsUnique()
                 .HasDatabaseName("UX_ComprasMateriasPrimas_Criacao");
+            compra.Property(c => c.ImpressaoRecebimento).HasMaxLength(64).IsFixedLength();
+            compra.HasIndex(c => new { c.RecebidaPorId, c.ChaveRecebimento }).IsUnique()
+                .HasFilter("[RecebidaPorId] IS NOT NULL AND [ChaveRecebimento] IS NOT NULL");
             compra.HasIndex(c => new { c.DataCompra, c.Id });
             compra.HasOne<Fornecedor>().WithMany().HasForeignKey(c => c.FornecedorId).OnDelete(DeleteBehavior.Restrict);
             compra.HasMany(c => c.Linhas).WithOne().HasForeignKey("CompraId").IsRequired().OnDelete(DeleteBehavior.Cascade);
+        });
+        model.Entity<EntradaRecebimentoCompra>(entrada =>
+        {
+            entrada.ToTable("EntradasRecebimentoCompra");
+            entrada.HasKey(e => e.ComponenteId);
+            entrada.HasIndex(e => e.MovimentoId).IsUnique();
+            entrada.HasIndex(e => new { e.CompraId, e.Ordem }).IsUnique();
+            entrada.HasOne<CompraMateriaPrima>().WithMany().HasForeignKey(e => e.CompraId).OnDelete(DeleteBehavior.Restrict);
+            entrada.HasOne<LinhaCompraMateriaPrima>().WithMany().HasForeignKey(e => e.LinhaId).OnDelete(DeleteBehavior.Restrict);
+            entrada.HasOne<ComponenteCompraMateriaPrima>().WithMany().HasForeignKey(e => e.ComponenteId).OnDelete(DeleteBehavior.Restrict);
+            entrada.HasOne<MovimentoInsumo>().WithMany().HasForeignKey(e => e.MovimentoId).OnDelete(DeleteBehavior.Restrict);
         });
         model.Entity<LinhaCompraMateriaPrima>(linha =>
         {

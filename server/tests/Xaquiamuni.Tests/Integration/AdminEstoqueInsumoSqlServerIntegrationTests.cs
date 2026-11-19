@@ -23,7 +23,7 @@ using Xaquiamuni.Infraestrutura.Persistencia;
 namespace Xaquiamuni.Tests.Integration;
 
 [Trait("Category", "SqlServerIntegration")]
-public sealed class AdminEstoqueInsumoSqlServerIntegrationTests
+public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
 {
     private static readonly Guid AdminId = Guid.Parse("cd4d0df3-43be-4e42-9ba9-a8da1d03ef29");
     private static readonly DateOnly DataOperacional = new(2026, 11, 16);

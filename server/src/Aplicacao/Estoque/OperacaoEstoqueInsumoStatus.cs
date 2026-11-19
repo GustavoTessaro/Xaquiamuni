@@ -12,5 +12,6 @@ public enum OperacaoEstoqueInsumoStatus
     MovimentoNaoEncontrado,
     MovimentoJaEstornado,
     ConflitoIdempotencia,
-    ConflitoConcorrencia
+    ConflitoConcorrencia,
+    MovimentoVinculadoCompra
 }

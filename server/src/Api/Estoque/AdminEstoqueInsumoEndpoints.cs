@@ -683,6 +683,7 @@ public static class AdminEstoqueInsumoEndpoints
             OperacaoEstoqueInsumoStatus.LoteInelegivel
                 or OperacaoEstoqueInsumoStatus.SaldoInsuficiente
                 or OperacaoEstoqueInsumoStatus.MovimentoJaEstornado
+                or OperacaoEstoqueInsumoStatus.MovimentoVinculadoCompra
                 or OperacaoEstoqueInsumoStatus.ConflitoIdempotencia
                 or OperacaoEstoqueInsumoStatus.ConflitoConcorrencia => Conflict(result.Erro),
             _ => throw new ArgumentOutOfRangeException(nameof(result), "Unsupported stock operation result.")

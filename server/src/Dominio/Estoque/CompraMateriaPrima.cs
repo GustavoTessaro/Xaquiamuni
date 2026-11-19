@@ -2,7 +2,7 @@ using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Dominio.Estoque;
 
-public enum SituacaoCompraMateriaPrima { Rascunho, Cancelada }
+public enum SituacaoCompraMateriaPrima { Rascunho, Cancelada, Recebida }
 
 public sealed class CompraMateriaPrima
 {
@@ -18,6 +18,10 @@ public sealed class CompraMateriaPrima
     public DateTimeOffset CriadoEmUtc { get; private set; }
     public DateTimeOffset AtualizadoEmUtc { get; private set; }
     public DateTimeOffset? CanceladoEmUtc { get; private set; }
+    public DateTimeOffset? RecebidaEmUtc { get; private set; }
+    public Guid? RecebidaPorId { get; private set; }
+    public Guid? ChaveRecebimento { get; private set; }
+    public string? ImpressaoRecebimento { get; private set; }
     public Guid Versao { get; private set; }
     public Guid ChaveCriacao { get; private set; }
     public string ImpressaoCriacao { get; private set; } = null!;
@@ -68,6 +72,23 @@ public sealed class CompraMateriaPrima
             throw new InvalidOperationException("Apenas rascunhos podem ser cancelados.");
         Situacao = SituacaoCompraMateriaPrima.Cancelada;
         CanceladoEmUtc = agora.ToUniversalTime();
+        Atualizar(autor, agora);
+    }
+
+    public void ConfirmarRecebimento(Guid autor, Guid chave, string impressao, DateTimeOffset agora)
+    {
+        if (Situacao != SituacaoCompraMateriaPrima.Rascunho)
+            throw new InvalidOperationException("Apenas rascunhos podem ser recebidos.");
+        if (autor == Guid.Empty || chave == Guid.Empty || string.IsNullOrWhiteSpace(impressao) ||
+            _linhas.Count == 0 || _linhas.Any(linha => linha.Componentes.Count == 0 ||
+                linha.Componentes.Any(c => c.Quantidade <= 0 || c.QuantidadeBase <= 0)))
+            throw new ArgumentException("O recebimento exige responsável, chave e componentes válidos.");
+
+        Situacao = SituacaoCompraMateriaPrima.Recebida;
+        RecebidaEmUtc = agora.ToUniversalTime();
+        RecebidaPorId = autor;
+        ChaveRecebimento = chave;
+        ImpressaoRecebimento = impressao;
         Atualizar(autor, agora);
     }
 
@@ -145,6 +166,12 @@ public sealed class ComponenteCompraMateriaPrima
             QuantidadeBase = quantidadeBase.ValorBase, UnidadeBase = quantidadeBase.UnidadeBase
         };
     }
+
+    public ResultadoConversaoCompraInsumo? ReconstituirConversao() =>
+        ApresentacaoId is Guid apresentacao && Fator is decimal fator
+            ? new ResultadoConversaoCompraInsumo(InsumoId, apresentacao, NomeApresentacao!, Quantidade,
+                QuantidadeEstoque.Criar(fator, UnidadeBase), QuantidadeEstoque.Criar(QuantidadeBase, UnidadeBase))
+            : null;
 
     public ComponenteCompraMateriaPrima CopiarSnapshot(int ordem)
     {

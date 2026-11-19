@@ -19,6 +19,7 @@ public static class AdminComprasMateriasPrimasEndpoints
         group.MapPost("", CriarAsync).RequireXaquiamuniAntiforgery();
         group.MapPut("/{id:guid}", EditarAsync).RequireXaquiamuniAntiforgery();
         group.MapPost("/{id:guid}/cancelar", CancelarAsync).RequireXaquiamuniAntiforgery();
+        group.MapPost("/{id:guid}/receber", ReceberAsync).RequireXaquiamuniAntiforgery();
     }
 
     private static async Task<IResult> ListarAsync(string? busca, string? situacao,
@@ -28,7 +29,7 @@ public static class AdminComprasMateriasPrimasEndpoints
         if (situacao is not null)
         {
             if (!Enum.TryParse<SituacaoCompraMateriaPrima>(situacao, out var valor) || valor.ToString() != situacao)
-                return Invalida("Informe Rascunho ou Cancelada como situação.");
+                return Invalida("Informe Rascunho, Cancelada ou Recebida como situação.");
             filtro = valor;
         }
         if (busca?.Length > 120) return Invalida("A busca deve ter até 120 caracteres.");
@@ -65,6 +66,31 @@ public static class AdminComprasMateriasPrimasEndpoints
         return Mapear(await compras.CancelarAsync(id, input.Versao, autor, ct));
     }
 
+    private static async Task<IResult> ReceberAsync(Guid id, ReceberCompraMateriaPrimaInput input, HttpContext context,
+        IReceberCompraMateriaPrima recebimento, CancellationToken ct)
+    {
+        if (!Autor(context, out var autor)) return Results.Forbid();
+        if (!Guid.TryParse(context.Request.Headers["Idempotency-Key"].ToString(), out var chave) || chave == Guid.Empty)
+            return Invalida("Informe uma chave de idempotência válida.");
+
+        var resultado = await recebimento.ReceberAsync(id, autor, chave, input, ct);
+        return resultado.Status switch
+        {
+            CompraMateriaPrimaStatus.Sucesso or CompraMateriaPrimaStatus.Repetida => Results.Ok(new
+            {
+                compraId = resultado.Compra!.Id,
+                situacao = resultado.Compra.Situacao.ToString(),
+                versao = resultado.Compra.Versao,
+                recebidaEmUtc = resultado.Compra.RecebidaEmUtc,
+                recebidaPorId = resultado.Compra.RecebidaPorId,
+                entradas = resultado.Entradas!.Select(e => new { e.LinhaId, e.ComponenteId, e.MovimentoId })
+            }),
+            CompraMateriaPrimaStatus.Ausente => Results.NotFound(),
+            CompraMateriaPrimaStatus.Conflito => Results.Problem(statusCode: 409, detail: resultado.Erro),
+            _ => Invalida(resultado.Erro ?? "Confira os dados do recebimento.")
+        };
+    }
+
     private static IResult Mapear(CompraMateriaPrimaResult result, bool criar = false) => result.Status switch
     {
         CompraMateriaPrimaStatus.Sucesso when criar => Results.Created($"{Rota}/{result.Compra!.Id}", RespostaDetalhe(result.Compra)),
@@ -83,7 +109,7 @@ public static class AdminComprasMateriasPrimasEndpoints
     private static ResumoCompra RespostaResumo(CompraMateriaPrima c) =>
         new(c.Id, c.FornecedorId, c.NomeFornecedor, c.DataCompra, c.Situacao.ToString(), DecimalTexto(c.Total));
     private static DetalheCompra RespostaDetalhe(CompraMateriaPrima c) =>
-        new(RespostaResumo(c), c.Versao, c.CriadoEmUtc, c.AtualizadoEmUtc, c.CanceladoEmUtc,
+        new(RespostaResumo(c), c.Versao, c.CriadoEmUtc, c.AtualizadoEmUtc, c.CanceladoEmUtc, c.RecebidaEmUtc, c.RecebidaPorId,
             c.Linhas.OrderBy(l => l.Ordem).Select(l => new LinhaCompra(l.Kit, DecimalTexto(l.Quantidade)!,
                 DecimalTexto(l.ValorTotal), l.Componentes.OrderBy(i => i.Ordem).Select(i => new ComponenteCompra(
                     i.Id, i.InsumoId, i.NomeInsumo, i.ApresentacaoId, i.NomeApresentacao, DecimalTexto(i.Quantidade)!,
@@ -95,7 +121,8 @@ public static class AdminComprasMateriasPrimasEndpoints
     public sealed record ResumoCompra(Guid Id, Guid FornecedorId, string NomeFornecedor, DateOnly DataCompra,
         string Situacao, string? Total);
     public sealed record DetalheCompra(ResumoCompra Resumo, Guid Versao, DateTimeOffset CriadoEmUtc,
-        DateTimeOffset AtualizadoEmUtc, DateTimeOffset? CanceladoEmUtc, IReadOnlyList<LinhaCompra> Linhas);
+        DateTimeOffset AtualizadoEmUtc, DateTimeOffset? CanceladoEmUtc, DateTimeOffset? RecebidaEmUtc,
+        Guid? RecebidaPorId, IReadOnlyList<LinhaCompra> Linhas);
     public sealed record LinhaCompra(string? Kit, string Quantidade, string? ValorTotal, IReadOnlyList<ComponenteCompra> Componentes);
     public sealed record ComponenteCompra(Guid Id, Guid InsumoId, string NomeInsumo, Guid? ApresentacaoId,
         string? NomeApresentacao, string Quantidade, string? Fator, string QuantidadeBase, string UnidadeBase);

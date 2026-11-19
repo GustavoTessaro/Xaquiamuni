@@ -42,6 +42,37 @@ public sealed class CompraMateriaPrimaTests
     }
 
     [Fact]
+    public void RecebimentoRegistraAuditoriaEEncerraRascunho()
+    {
+        var fornecedor = Fornecedor.Criar("Vale", null, null, null, Agora);
+        var insumo = InsumoEstoque.Criar("Ervas", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+        var linha = LinhaCompraMateriaPrima.Criar(0, null, 2, null,
+            [ComponenteCompraMateriaPrima.Criar(0, insumo, null, 2)]);
+        var criador = Guid.NewGuid();
+        var recebedor = Guid.NewGuid();
+        var chave = Guid.NewGuid();
+        var compra = CompraMateriaPrima.Criar(fornecedor, new(2026, 11, 19), [linha], criador, Guid.NewGuid(), "criação", Agora);
+        var versao = compra.Versao;
+        var horario = Agora.AddHours(2).ToOffset(TimeSpan.FromHours(-3));
+        compra.ConfirmarRecebimento(recebedor, chave, "recebimento", horario);
+        Assert.Equal(SituacaoCompraMateriaPrima.Recebida, compra.Situacao);
+        Assert.Equal(recebedor, compra.RecebidaPorId);
+        Assert.Equal(horario.ToUniversalTime(), compra.RecebidaEmUtc);
+        Assert.Equal(TimeSpan.Zero, compra.RecebidaEmUtc!.Value.Offset);
+        Assert.Equal(chave, compra.ChaveRecebimento);
+        Assert.Equal(criador, compra.CriadoPorId);
+        Assert.Equal("Vale", compra.NomeFornecedor);
+        Assert.NotEqual(versao, compra.Versao);
+        Assert.Null(compra.Total);
+        Assert.Throws<InvalidOperationException>(() => compra.ConfirmarRecebimento(recebedor, chave, "recebimento", horario));
+        Assert.Throws<InvalidOperationException>(() => compra.Cancelar(recebedor, horario));
+
+        var cancelada = CompraMateriaPrima.Criar(fornecedor, compra.DataCompra, [linha], criador, Guid.NewGuid(), "criação", Agora);
+        cancelada.Cancelar(criador, horario);
+        Assert.Throws<InvalidOperationException>(() => cancelada.ConfirmarRecebimento(recebedor, chave, "recebimento", horario));
+    }
+
+    [Fact]
     public void RejeitaInativosQuantidadesInvalidasEArredondamentoSilencioso()
     {
         var material = InsumoEstoque.Criar("Frascos", TipoInsumoEstoque.Embalagem, UnidadeFisicaEstoque.Unidade);

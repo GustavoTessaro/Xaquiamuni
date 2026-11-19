@@ -60,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<IConsultarCatalogoPublico, ConsultarCatalogoPublico>();
         services.AddScoped<IGerenciarImagensProduto, GerenciarImagensProduto>();
         services.AddScoped<IEstoqueInsumoRepository, EfEstoqueInsumoRepository>();
+        services.AddScoped<IReceberCompraMateriaPrima, EfEstoqueInsumoRepository>();
         services.AddScoped<IAdministrarInsumoEstoque, AdministrarInsumoEstoque>();
         services.AddScoped<IEstoqueInsumoConsultaRepository, EfEstoqueInsumoConsultaRepository>();
         services.AddScoped<IConsultarEstoqueInsumo, ConsultarEstoqueInsumo>();
