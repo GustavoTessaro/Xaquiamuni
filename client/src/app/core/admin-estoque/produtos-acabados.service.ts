@@ -237,6 +237,19 @@ export class ProdutosAcabadosService {
     );
   }
 
+  registrarSaidaAutomatica(
+    varianteId: string,
+    request: { quantidade: number; motivo: string },
+    idempotencyKey: string,
+  ): Observable<{ movimentoIds: string[]; repetida: boolean }> {
+    return this.withWriteCsrf(
+      `${this.basePath}/variantes/${encodeURIComponent(varianteId)}/saidas-automaticas`,
+      'POST',
+      request,
+      idempotencyKey,
+    );
+  }
+
   registrarSaida(
     varianteId: string,
     request: SaidaProdutoAcabadoRequest,

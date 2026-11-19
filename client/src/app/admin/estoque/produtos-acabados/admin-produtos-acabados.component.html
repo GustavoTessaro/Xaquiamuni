@@ -327,7 +327,7 @@
                 }
               }
             </h3>
-            @if (acaoMovimentacao() !== 'Estorno') {
+            @if (acaoMovimentacao() !== 'Estorno' && acaoMovimentacao() !== 'Saida') {
               <p class="mt-1 text-sm text-slate-600">
                 Informe o lote correspondente às unidades desta operação.
               </p>
@@ -493,11 +493,84 @@
             </form>
           }
 
-          @if (
-            acaoMovimentacao() === 'Saida' ||
-            acaoMovimentacao() === 'Perda' ||
-            acaoMovimentacao() === 'Descarte'
-          ) {
+          @if (acaoMovimentacao() === 'Saida') {
+            <form
+              class="mt-4 grid gap-4 sm:grid-cols-2"
+              [formGroup]="saidaForm"
+              (ngSubmit)="registrarSaidaAutomatica()"
+            >
+              <p id="finished-auto-available" class="text-sm text-slate-700 sm:col-span-2">
+                Saldo disponível para saída: <strong>{{ position.saldoDisponivel }} un.</strong>
+              </p>
+              <div>
+                <label for="finished-auto-quantity" class="block text-sm font-semibold"
+                  >Quantidade</label
+                >
+                <input
+                  id="finished-auto-quantity"
+                  type="number"
+                  min="1"
+                  max="2147483647"
+                  step="1"
+                  required
+                  formControlName="quantidade"
+                  [attr.aria-invalid]="
+                    saidaForm.controls.quantidade.touched && saidaForm.controls.quantidade.invalid
+                      ? 'true'
+                      : null
+                  "
+                  [attr.aria-describedby]="
+                    saidaForm.controls.quantidade.touched && saidaForm.controls.quantidade.invalid
+                      ? 'finished-auto-available finished-auto-quantity-error'
+                      : 'finished-auto-available'
+                  "
+                  class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (
+                  saidaForm.controls.quantidade.touched && saidaForm.controls.quantidade.invalid
+                ) {
+                  <p id="finished-auto-quantity-error" class="mt-1 text-sm text-red-800">
+                    Informe uma quantidade inteira e positiva.
+                  </p>
+                }
+              </div>
+              <div>
+                <label for="finished-auto-reason" class="block text-sm font-semibold">Motivo</label>
+                <input
+                  id="finished-auto-reason"
+                  type="text"
+                  required
+                  maxlength="120"
+                  formControlName="motivo"
+                  [attr.aria-invalid]="
+                    saidaForm.controls.motivo.touched && saidaForm.controls.motivo.invalid
+                      ? 'true'
+                      : null
+                  "
+                  [attr.aria-describedby]="
+                    saidaForm.controls.motivo.touched && saidaForm.controls.motivo.invalid
+                      ? 'finished-auto-reason-error'
+                      : null
+                  "
+                  class="mt-1 min-h-11 w-full rounded-xl border border-slate-300 px-3"
+                />
+                @if (saidaForm.controls.motivo.touched && saidaForm.controls.motivo.invalid) {
+                  <p id="finished-auto-reason-error" class="mt-1 text-sm text-red-800">
+                    Informe o motivo da saída.
+                  </p>
+                }
+              </div>
+              <button
+                type="submit"
+                [disabled]="enviandoMovimentacao()"
+                class="min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white focus-visible:outline-2 disabled:opacity-60 sm:col-span-2"
+              >
+                {{ enviandoMovimentacao() ? 'Registrando...' : 'Confirmar saída' }}
+              </button>
+            </form>
+          }
+
+          @if (acaoMovimentacao() === 'Perda' || acaoMovimentacao() === 'Descarte') {
             <form
               class="mt-5 grid gap-4 sm:grid-cols-2"
               [formGroup]="operacaoForm"
@@ -513,7 +586,6 @@
                   (change)="selecionarTipoOperacao($event)"
                   class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
                 >
-                  <option value="SaidaManual">Saída manual</option>
                   <option value="Perda">Perda</option>
                   <option value="Descarte">Descarte</option>
                 </select>
@@ -545,13 +617,9 @@
                   formControlName="condicaoOrigem"
                   class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
                 >
-                  @if (operacaoForm.controls.tipo.value === 'SaidaManual') {
-                    <option value="Vendavel">Vendável</option>
-                  } @else {
-                    <option value="Vendavel">Vendável</option>
-                    <option value="Danificada">Danificada</option>
-                    <option value="Quarentena">Quarentena</option>
-                  }
+                  <option value="Vendavel">Vendável</option>
+                  <option value="Danificada">Danificada</option>
+                  <option value="Quarentena">Quarentena</option>
                 </select>
               </div>
               <div>

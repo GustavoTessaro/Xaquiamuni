@@ -95,6 +95,7 @@ function criarApi() {
         of({ id: 'movement-1' }),
     ),
     registrarSaida: vi.fn(() => of({ id: 'movement-2' })),
+    registrarSaidaAutomatica: vi.fn(() => of({ movimentoIds: ['movement-2'], repetida: false })),
     transferir: vi.fn(() => of({ id: 'movement-3' })),
     registrarContagem: vi.fn(
       (_varianteId: string, _request: ContagemProdutoAcabadoRequest, _key: string) =>
@@ -639,6 +640,29 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(root.querySelector('#finished-routine-actions-title')).not.toBeNull();
   });
 
+  it('registra saída sem selecionar lote e atualiza a posição e o histórico', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+
+    clicar(fixture, 'Registrar saída');
+    expect(root.querySelector('#finished-operation-lot')).toBeNull();
+    expect(root.querySelector('#finished-auto-available')?.textContent).toContain('5');
+    preencher(fixture, '#finished-auto-quantity', '2');
+    preencher(fixture, '#finished-auto-reason', 'Uso interno');
+    clicar(fixture, 'Confirmar saída');
+
+    await vi.waitFor(() => expect(api.registrarSaidaAutomatica).toHaveBeenCalledTimes(1));
+    expect(api.registrarSaidaAutomatica).toHaveBeenCalledWith(
+      'variant-1',
+      { quantidade: 2, motivo: 'Uso interno' },
+      expect.any(String),
+    );
+    expect(api.registrarSaida).not.toHaveBeenCalled();
+    expect(api.consultarPosicao).toHaveBeenCalledTimes(2);
+    expect(api.listarMovimentacoes).toHaveBeenCalledTimes(2);
+  });
+
   it('identifica lotes por datas e saldo nos seletores de movimentação e histórico', async () => {
     const fixture = await montarComponente(criarApi());
     const root = fixture.nativeElement as HTMLElement;
@@ -665,7 +689,8 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(entradaOption?.textContent).toContain(loteInicial.codigo);
 
     clicar(fixture, 'Cancelar operação');
-    clicar(fixture, 'Registrar saída');
+    root.querySelector('#finished-exception-actions-title')!.closest('details')!.open = true;
+    clicar(fixture, 'Registrar perda');
     const saidaOption = root.querySelector<HTMLOptionElement>(
       '#finished-operation-lot option[value="lot-1"]',
     );

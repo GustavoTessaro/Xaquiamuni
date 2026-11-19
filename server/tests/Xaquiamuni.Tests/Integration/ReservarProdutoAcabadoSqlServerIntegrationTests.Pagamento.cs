@@ -198,12 +198,16 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     {
         var cliente = await CriarClienteCompraAsync(context);
         var (produto, padrao, alternativa) = await CriarProdutoCompravelAsync(context);
-        await EntrarAsync(context, padrao.Id, 1);
+        // A entrega consulta o relógio SQL. Mantenha as validades do fixture
+        // à frente da data de execução e preserve a ordem FEFO dos dois lotes.
+        var dataSql = DateOnly.FromDateTime((await LerUtcSqlAsync(context)).UtcDateTime);
+        var referenciaValidade = dataSql > Hoje ? dataSql : Hoje;
+        await EntrarAsync(context, padrao.Id, 1, validade: referenciaValidade.AddDays(10));
         var itens = new List<ItemCompraInput> { new(produto.Id, padrao.Id, 1) };
         if (variosLotes)
         {
-            await EntrarAsync(context, alternativa.Id, 1, validade: Hoje);
-            await EntrarAsync(context, alternativa.Id, 1);
+            await EntrarAsync(context, alternativa.Id, 1, validade: referenciaValidade.AddDays(1));
+            await EntrarAsync(context, alternativa.Id, 1, validade: referenciaValidade.AddDays(10));
             itens.Add(new(produto.Id, alternativa.Id, 2));
         }
         var resultado = await Compra(context).ExecuteAsync(new(cliente, Guid.NewGuid(), itens));

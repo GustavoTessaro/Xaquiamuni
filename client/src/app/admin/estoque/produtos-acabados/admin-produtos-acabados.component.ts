@@ -129,8 +129,20 @@ export class AdminProdutosAcabadosComponent {
       validators: [Validators.maxLength(500)],
     }),
   });
+  protected readonly saidaForm = new FormGroup({
+    quantidade: new FormControl<number | null>(null, [
+      Validators.required,
+      Validators.min(1),
+      Validators.max(2_147_483_647),
+      Validators.pattern(/^\d+$/),
+    ]),
+    motivo: new FormControl('', {
+      nonNullable: true,
+      validators: [Validators.required, Validators.maxLength(120), Validators.pattern(/\S/)],
+    }),
+  });
   protected readonly operacaoForm = new FormGroup({
-    tipo: new FormControl<'SaidaManual' | 'Perda' | 'Descarte'>('SaidaManual', {
+    tipo: new FormControl<'Perda' | 'Descarte'>('Perda', {
       nonNullable: true,
     }),
     loteId: new FormControl('', { nonNullable: true, validators: [Validators.required] }),
@@ -459,9 +471,7 @@ export class AdminProdutosAcabadosComponent {
     this.sucessoMovimentacao.set('');
     this.erroMovimentacao.set('');
     this.contagemConcluidaLoteId.set(null);
-    if (acao === 'Saida') {
-      this.operacaoForm.controls.tipo.setValue('SaidaManual');
-    } else if (acao === 'Perda') {
+    if (acao === 'Perda') {
       this.operacaoForm.controls.tipo.setValue('Perda');
     } else if (acao === 'Descarte') {
       this.operacaoForm.controls.tipo.setValue('Descarte');
@@ -485,7 +495,7 @@ export class AdminProdutosAcabadosComponent {
       return;
     }
     const tipo = select.value;
-    if (tipo === 'SaidaManual' || tipo === 'Perda' || tipo === 'Descarte') {
+    if (tipo === 'Perda' || tipo === 'Descarte') {
       this.operacaoForm.controls.tipo.setValue(tipo);
     }
   }
@@ -530,6 +540,25 @@ export class AdminProdutosAcabadosComponent {
     };
     this.executarMovimentacao('entrada', request, (idempotencyKey) =>
       this.produtosAcabadosService.registrarEntrada(varianteId, request, idempotencyKey),
+    );
+  }
+
+  protected registrarSaidaAutomatica(): void {
+    const varianteId = this.varianteId();
+    const { quantidade, motivo } = this.saidaForm.getRawValue();
+    if (
+      !varianteId ||
+      quantidade === null ||
+      this.saidaForm.invalid ||
+      this.enviandoMovimentacao()
+    ) {
+      this.saidaForm.markAllAsTouched();
+      return;
+    }
+
+    const request = { quantidade, motivo: motivo.trim() };
+    this.executarMovimentacao('saida-automatica', request, (chave) =>
+      this.produtosAcabadosService.registrarSaidaAutomatica(varianteId, request, chave),
     );
   }
 
@@ -881,6 +910,9 @@ export class AdminProdutosAcabadosComponent {
             tap(() => {
               this.sucessoMovimentacao.set('Movimentação registrada com sucesso.');
               this.limparOperacaoConfirmada(pending.storageKey);
+              if (acao === 'saida-automatica') {
+                this.saidaForm.reset();
+              }
               if (acao === 'contagem') {
                 this.contagemConcluidaLoteId.set(this.contagemLoteCapturado());
                 this.limparContagem();
@@ -1099,6 +1131,16 @@ export class AdminProdutosAcabadosComponent {
           return 'Variante ou lote não encontrado.';
         case 409: {
           const detail = typeof error.error?.detail === 'string' ? error.error.detail : '';
+          if (acao === 'saida-automatica') {
+            if (/saldo disponível insuficiente/i.test(detail)) {
+              return 'Saldo disponível insuficiente. Atualize a posição e confira a quantidade.';
+            }
+            if (/já foi usada/i.test(detail)) {
+              return 'A chave desta tentativa já foi usada. Confira o histórico antes de iniciar outra saída.';
+            }
+            if (/variante está inativa/i.test(detail)) return 'A variante está inativa.';
+            return 'O estoque mudou durante a saída. Atualize a posição e reenvie os mesmos dados.';
+          }
           if (/idempot|chave/i.test(detail)) {
             return 'Esta tentativa está associada a dados diferentes. Não tente novamente; confira o histórico antes de iniciar outra operação.';
           }

@@ -72,6 +72,14 @@ public static class AdminEstoqueProdutoAcabadoEndpoints
             .ProducesProblem(404)
             .ProducesProblem(409);
 
+        group.MapPost("/variantes/{varianteId:guid}/saidas-automaticas", RegistrarSaidaAutomaticaAsync)
+            .RequireXaquiamuniAntiforgery()
+            .Produces<SaidaAutomaticaProdutoAcabadoAdminResponse>(201)
+            .Produces<SaidaAutomaticaProdutoAcabadoAdminResponse>(200)
+            .ProducesValidationProblem(400)
+            .ProducesProblem(404)
+            .ProducesProblem(409);
+
         group.MapPost("/variantes/{varianteId:guid}/transferencias", TransferirAsync)
             .RequireXaquiamuniAntiforgery()
             .Produces<MovimentoProdutoAcabadoAdminResponse>(201)
@@ -328,6 +336,31 @@ public static class AdminEstoqueProdutoAcabadoEndpoints
             : Results.Created(
                 $"{BasePath}/variantes/{varianteId:D}/movimentacoes/{response.Id:D}",
                 response);
+    }
+
+    private static async Task<IResult> RegistrarSaidaAutomaticaAsync(
+        Guid varianteId, SaidaAutomaticaProdutoAcabadoAdminRequest? request, HttpContext context,
+        IRegistrarSaidaAutomaticaProdutoAcabado registrar, CancellationToken cancellationToken)
+    {
+        if (ValidateRouteIdentifiers(varianteId) is { } validation) return validation;
+        if (request is null) return ValidationError("Os dados da operação são obrigatórios.");
+        if (!TryGetResponsavel(context, out var responsavelId)) return Results.Unauthorized();
+
+        var result = await registrar.RegistrarSaidaAutomaticaAsync(
+            new(varianteId, responsavelId, request.Quantidade, request.Motivo,
+                context.Request.Headers["Idempotency-Key"].ToString()), cancellationToken);
+        if (result.Status != OperacaoProdutoAcabadoStatus.Sucesso)
+            return result.Status switch
+            {
+                OperacaoProdutoAcabadoStatus.OperacaoInvalida => ValidationError(result.Erro),
+                OperacaoProdutoAcabadoStatus.VarianteNaoEncontrada => ResourceNotFound(),
+                _ => Conflict(result.Erro),
+            };
+
+        var response = new SaidaAutomaticaProdutoAcabadoAdminResponse(
+            result.Movimentos.Select(m => m.Id).ToArray(), result.Repetida);
+        return result.Repetida ? Results.Ok(response)
+            : Results.Created($"{BasePath}/variantes/{varianteId:D}/movimentacoes/{response.MovimentoIds[0]:D}", response);
     }
 
     private static async Task<IResult> RegistrarSaidaAsync(
@@ -856,6 +889,11 @@ public sealed record EntradaProdutoAcabadoAdminRequest
     public string? Motivo { get; init; }
     public string? Observacao { get; init; }
 }
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SaidaAutomaticaProdutoAcabadoAdminRequest(int Quantidade, string? Motivo);
+
+public sealed record SaidaAutomaticaProdutoAcabadoAdminResponse(IReadOnlyList<Guid> MovimentoIds, bool Repetida);
 
 public sealed record SaidaProdutoAcabadoAdminRequest
 {
