@@ -1,7 +1,11 @@
+import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
+  afterNextRender,
   ChangeDetectionStrategy,
   Component,
+  ElementRef,
+  Injector,
   DestroyRef,
   computed,
   inject,
@@ -9,8 +13,10 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
-import { EMPTY, Observable, expand, finalize, forkJoin, map, of, reduce } from 'rxjs';
+import { Router, RouterLink } from '@angular/router';
+import { EMPTY, Observable, expand, finalize, forkJoin, map, of, reduce, switchMap } from 'rxjs';
+import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
+import { OperacaoPendenteStore } from '../../core/admin-estoque/operacao-pendente.store';
 import {
   AdminFormaCompraPrecisa,
   AdminResumoInsumoPreciso,
@@ -20,11 +26,16 @@ import {
   CompraInput,
   ComprasMateriasPrimasService,
   DetalheCompra,
+  ReceberCompraInput,
   ResumoCompra,
 } from '../../core/compras-materias-primas.service';
 import { Fornecedor, FornecedoresService } from '../../core/fornecedores.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { decimalEscalado, decimalTexto, exibirReais } from './compra-decimais';
+
+import { dataCivilValida, lerRecebimento, RecebimentoPendente } from './recebimento-pendente';
+
+type PoliticaValidade = { controlaLote: boolean; validadeObrigatoria: boolean };
 
 type Snapshot = DetalheCompra['linhas'][number]['componentes'][number];
 interface ItemEditor {
@@ -54,7 +65,7 @@ const maximo = 999_999_999_999_999_999n;
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AdminWorkspaceComponent, FormsModule],
+  imports: [AdminWorkspaceComponent, FormsModule, DatePipe, RouterLink],
   templateUrl: './admin-compras-materias-primas.component.html',
 })
 export class AdminComprasMateriasPrimasComponent {
@@ -63,6 +74,38 @@ export class AdminComprasMateriasPrimasComponent {
   private readonly insumosApi = inject(InsumosService);
   private readonly destroy = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly auth = inject(AdminAuthService);
+  private readonly storage = inject(OperacaoPendenteStore);
+  private readonly elemento = inject<ElementRef<HTMLElement>>(ElementRef);
+  private readonly injector = inject(Injector);
+  protected readonly administrador = signal<string | null>(null);
+  protected readonly revisao = signal<DetalheCompra | null>(null);
+  protected readonly politicas = signal<Record<string, PoliticaValidade> | null>(null);
+  protected readonly validades = signal<Record<string, string>>({});
+  protected readonly pendente = signal<RecebimentoPendente | null>(null);
+  protected readonly podeReenviar = signal(false);
+  protected readonly validadesValidas = computed(() => {
+    const compra = this.revisao();
+    const politicas = this.politicas();
+    if (!compra || !politicas) return false;
+    const validades = this.validades();
+    return (
+      compra.linhas.length > 0 &&
+      compra.linhas.every(
+        (linha) =>
+          linha.componentes.length > 0 &&
+          linha.componentes.every((item) => {
+            const politica = politicas[item.insumoId];
+            const valor = validades[item.id];
+            return (
+              !!politica &&
+              (!politica.controlaLote ||
+                (valor ? dataCivilValida(valor) : !politica.validadeObrigatoria))
+            );
+          }),
+      )
+    );
+  });
 
   protected readonly compras = signal<ResumoCompra[]>([]);
   protected readonly fornecedores = signal<Fornecedor[]>([]);
@@ -92,6 +135,27 @@ export class AdminComprasMateriasPrimasComponent {
 
   constructor() {
     this.carregar();
+    this.auth
+      .getCurrentSession()
+      .pipe(takeUntilDestroyed(this.destroy))
+      .subscribe({
+        next: (sessao) => {
+          this.administrador.set(sessao?.userId ?? null);
+          if (!sessao) return;
+          try {
+            const pendente = lerRecebimento(this.storage.ler(this.chaveStorage(sessao.userId)));
+            if (pendente) {
+              this.pendente.set(pendente);
+              this.conferirPendente();
+            }
+          } catch {
+            // A listagem permanece utilizável quando o armazenamento está bloqueado.
+          }
+        },
+        error: () => {
+          /* A consulta de sessão pode ser repetida ao entrar novamente. */
+        },
+      });
   }
 
   protected carregar(): void {
@@ -106,7 +170,12 @@ export class AdminComprasMateriasPrimasComponent {
         finalize(() => this.carregando.set(false)),
       )
       .subscribe({
-        next: (compras) => this.compras.set(compras),
+        next: (compras) => {
+          const confirmado = this.revisao()?.resumo;
+          this.compras.set(
+            compras.map((compra) => (compra.id === confirmado?.id ? confirmado : compra)),
+          );
+        },
         error: (erro: unknown) => {
           this.falhaLista.set(true);
           this.erro.set(this.mensagem(erro, 'Não foi possível carregar as compras.'));
@@ -125,12 +194,24 @@ export class AdminComprasMateriasPrimasComponent {
   }
 
   protected consultar(id: string): void {
+    if (this.pendente()?.compraId === id) {
+      this.conferirPendente();
+      return;
+    }
     this.abrir(
-      forkJoin({
-        detalhe: this.api.obter(id),
-        fornecedores: this.fornecedoresApi.listar(),
-        insumos: this.listarInsumos(),
-      }),
+      this.api
+        .obter(id)
+        .pipe(
+          switchMap((detalhe) =>
+            detalhe.resumo.situacao !== 'Rascunho'
+              ? of({ detalhe, fornecedores: [], insumos: [] })
+              : forkJoin({
+                  detalhe: of(detalhe),
+                  fornecedores: this.fornecedoresApi.listar(),
+                  insumos: this.listarInsumos(),
+                }),
+          ),
+        ),
     );
   }
 
@@ -169,6 +250,10 @@ export class AdminComprasMateriasPrimasComponent {
       )
       .subscribe({
         next: ({ detalhe, fornecedores, insumos }) => {
+          if (detalhe && detalhe.resumo.situacao !== 'Rascunho') {
+            this.exibirRevisao(detalhe);
+            return;
+          }
           this.fornecedores.set(fornecedores.filter((f) => f.ativo));
           this.insumos.set(insumos);
           this.tentativa = null;
@@ -209,6 +294,228 @@ export class AdminComprasMateriasPrimasComponent {
       });
   }
 
+  protected editarAposConferencia(id: string): void {
+    if (this.ocupado() || (this.pendente() && !this.podeReenviar())) return;
+    this.limparPendente();
+    this.revisao.set(null);
+    this.consultar(id);
+  }
+
+  protected iniciarRecebimento(id: string): void {
+    if (this.ocupado()) return;
+    if (this.pendente()) {
+      this.conferirPendente();
+      return;
+    }
+    this.ocupado.set(true);
+    this.erro.set('');
+    this.sucesso.set('');
+    this.api
+      .obter(id)
+      .pipe(
+        switchMap((compra) => {
+          if (compra.resumo.situacao !== 'Rascunho') return of({ compra, politicas: null });
+          const ids = [
+            ...new Set(compra.linhas.flatMap((l) => l.componentes.map((item) => item.insumoId))),
+          ];
+          if (!ids.length) return of({ compra, politicas: null });
+          return forkJoin(
+            ids.map((insumoId) =>
+              this.insumosApi.obterParaEntrada(insumoId).pipe(
+                map(
+                  ({ resumo }) =>
+                    [
+                      insumoId,
+                      {
+                        controlaLote: resumo.controlaLote,
+                        validadeObrigatoria: resumo.validadeObrigatoria,
+                      },
+                    ] as const,
+                ),
+              ),
+            ),
+          ).pipe(map((dados) => ({ compra, politicas: Object.fromEntries(dados) })));
+        }),
+        takeUntilDestroyed(this.destroy),
+        finalize(() => this.ocupado.set(false)),
+      )
+      .subscribe({
+        next: ({ compra, politicas }) => {
+          this.exibirRevisao(compra);
+          this.politicas.set(politicas);
+          if (!politicas && compra.resumo.situacao === 'Rascunho')
+            this.erro.set('A compra não tem materiais para receber.');
+        },
+        error: (erro) =>
+          this.erro.set(
+            this.mensagem(
+              erro,
+              'Não foi possível consultar a compra e as regras de validade. Tente novamente.',
+            ),
+          ),
+      });
+  }
+
+  protected selecionarValidade(id: string, valor: string): void {
+    this.validades.update((validades) => ({ ...validades, [id]: valor }));
+  }
+
+  protected confirmarRecebimento(): void {
+    if (this.ocupado()) return;
+    const compra = this.revisao();
+    if (!compra || compra.resumo.situacao !== 'Rascunho') return;
+    const pendente = this.pendente();
+    if (pendente) {
+      if (this.podeReenviar() && pendente.compraId === compra.resumo.id)
+        this.enviarRecebimento(pendente, compra, true);
+      return;
+    }
+    if (!this.validadesValidas()) {
+      this.erro.set('Confira as validades obrigatórias e informe datas válidas.');
+      return;
+    }
+    const ator = this.administrador();
+    const chave = this.storage.criarChaveIdempotencia();
+    if (!ator || !chave) {
+      this.erro.set(
+        'Não foi possível preparar uma tentativa segura. Entre novamente ou use outro navegador.',
+      );
+      return;
+    }
+    const politicas = this.politicas()!;
+    const validades = this.validades();
+    const corpo: ReceberCompraInput = {
+      versao: compra.versao,
+      validades: compra.linhas.flatMap((linha) =>
+        linha.componentes
+          .filter((item) => politicas[item.insumoId].controlaLote && validades[item.id])
+          .map((item) => ({ componenteId: item.id, dataValidade: validades[item.id] })),
+      ),
+    };
+    const tentativa = { compraId: compra.resumo.id, chave, corpo };
+    if (!this.storage.salvar(this.chaveStorage(ator), tentativa)) {
+      this.erro.set(
+        'O navegador não permitiu guardar a tentativa. Habilite o armazenamento da sessão e tente novamente.',
+      );
+      return;
+    }
+    this.pendente.set(tentativa);
+    this.enviarRecebimento(tentativa, compra, false);
+  }
+
+  protected conferirPendente(): void {
+    const pendente = this.pendente();
+    if (!pendente || this.ocupado()) return;
+    this.ocupado.set(true);
+    this.podeReenviar.set(false);
+    this.erro.set('');
+    this.api
+      .obter(pendente.compraId)
+      .pipe(
+        takeUntilDestroyed(this.destroy),
+        finalize(() => this.ocupado.set(false)),
+      )
+      .subscribe({
+        next: (compra) => {
+          this.exibirRevisao(compra);
+          if (compra.resumo.situacao === 'Recebida') {
+            this.limparPendente();
+            this.sucesso.set('Compra recebida. O estoque foi atualizado.');
+          } else if (
+            compra.resumo.situacao !== 'Rascunho' ||
+            compra.versao !== pendente.corpo.versao
+          ) {
+            this.limparPendente();
+            this.erro.set('A compra foi alterada. A tentativa anterior não pode ser reenviada.');
+          } else {
+            this.validades.set(
+              Object.fromEntries(
+                pendente.corpo.validades.map((v) => [v.componenteId, v.dataValidade]),
+              ),
+            );
+            this.podeReenviar.set(true);
+          }
+        },
+        error: (erro) => {
+          if (erro instanceof HttpErrorResponse && erro.status === 404) this.limparPendente();
+          this.erro.set(
+            this.mensagem(
+              erro,
+              'Não foi possível conferir a situação. A tentativa foi preservada.',
+            ),
+          );
+        },
+      });
+  }
+
+  private enviarRecebimento(
+    pendente: RecebimentoPendente,
+    compra: DetalheCompra,
+    reenvio: boolean,
+  ): void {
+    this.ocupado.set(true);
+    this.podeReenviar.set(false);
+    this.erro.set('');
+    this.sucesso.set('');
+    this.api
+      .receber(pendente.compraId, pendente.corpo, pendente.chave)
+      .pipe(
+        takeUntilDestroyed(this.destroy),
+        finalize(() => this.ocupado.set(false)),
+      )
+      .subscribe({
+        next: (resultado) => {
+          this.limparPendente();
+          this.exibirRevisao({
+            ...compra,
+            resumo: { ...compra.resumo, situacao: resultado.situacao },
+            versao: resultado.versao,
+            recebidaEmUtc: resultado.recebidaEmUtc,
+            recebidaPorId: resultado.recebidaPorId,
+          });
+          this.sucesso.set('Compra recebida. O estoque foi atualizado.');
+        },
+        error: (erro) => {
+          const status = erro instanceof HttpErrorResponse ? erro.status : 0;
+          if ((status === 400 && !reenvio) || status === 404) this.limparPendente();
+          this.erro.set(
+            this.mensagem(
+              erro,
+              status === 409
+                ? 'O recebimento está em conflito. Confira a situação antes de reenviar.'
+                : 'Não foi possível confirmar o resultado. Confira a situação antes de reenviar.',
+            ),
+          );
+        },
+      });
+  }
+
+  private exibirRevisao(compra: DetalheCompra): void {
+    this.editor.set(null);
+    this.confirmarCancelamento.set(false);
+    this.revisao.set(compra);
+    this.validades.set({});
+    this.politicas.set(null);
+    this.compras.update((lista) =>
+      lista.map((item) => (item.id === compra.resumo.id ? compra.resumo : item)),
+    );
+    afterNextRender(
+      () => this.elemento.nativeElement.querySelector<HTMLElement>('#recebimento-titulo')?.focus(),
+      { injector: this.injector },
+    );
+  }
+
+  private chaveStorage(ator: string): string {
+    return `xaquiamuni:compras:recebimento:v1:${ator}`;
+  }
+
+  private limparPendente(): void {
+    const ator = this.administrador();
+    if (ator) this.storage.remover(this.chaveStorage(ator));
+    this.pendente.set(null);
+    this.podeReenviar.set(false);
+  }
+
   protected fechar(): void {
     if (this.tentativa?.incerta) {
       this.erro.set(
@@ -217,6 +524,7 @@ export class AdminComprasMateriasPrimasComponent {
       return;
     }
     this.editor.set(null);
+    this.revisao.set(null);
     this.erro.set('');
   }
 
@@ -435,7 +743,10 @@ export class AdminComprasMateriasPrimasComponent {
 
   private mensagem(erro: unknown, padrao: string): string {
     if (erro instanceof HttpErrorResponse) {
-      if (erro.status === 401) void this.router.navigateByUrl('/admin/login');
+      if (erro.status === 401) {
+        void this.router.navigateByUrl('/admin/login');
+        return 'Sua sessão expirou. Entre novamente.';
+      }
       if (erro.status === 403) return 'Acesso negado ou sessão inválida. Entre novamente.';
       if (erro.status === 404) return 'Compra não encontrada. Atualize a listagem.';
       const detalhe =

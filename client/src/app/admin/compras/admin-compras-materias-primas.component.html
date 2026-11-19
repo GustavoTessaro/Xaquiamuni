@@ -4,7 +4,7 @@
       <h1 id="compras-titulo" class="text-2xl font-semibold text-slate-900">
         Compras de matérias-primas
       </h1>
-      @if (!editor()) {
+      @if (!editor() && !revisao()) {
         <button
           type="button"
           (click)="novo()"
@@ -25,7 +25,170 @@
       <p role="status">Aguarde…</p>
     }
 
-    @if (editor(); as compra) {
+    @if (revisao(); as detalhe) {
+      <section class="space-y-4" aria-labelledby="recebimento-titulo" [attr.aria-busy]="ocupado()">
+        <header class="rounded-xl border border-slate-200 bg-white p-4">
+          <h2
+            id="recebimento-titulo"
+            tabindex="-1"
+            class="text-lg font-semibold focus-visible:outline-2"
+          >
+            {{
+              detalhe.resumo.situacao === 'Rascunho'
+                ? 'Revisar recebimento'
+                : 'Compra ' + detalhe.resumo.situacao.toLowerCase()
+            }}
+          </h2>
+          <p class="mt-1 [overflow-wrap:anywhere]">{{ detalhe.resumo.nomeFornecedor }}</p>
+          <p class="text-sm">
+            Data da compra: {{ detalhe.resumo.dataCompra.split('-').reverse().join('/') }} ·
+            {{ detalhe.resumo.situacao }}
+          </p>
+          @if (detalhe.recebidaEmUtc) {
+            <p class="text-sm">
+              Recebimento: {{ detalhe.recebidaEmUtc | date: 'dd/MM/yyyy HH:mm' }}
+            </p>
+          }
+          @if (detalhe.recebidaPorId) {
+            <p class="text-sm">
+              Responsável:
+              {{ detalhe.recebidaPorId === administrador() ? 'Você' : 'Outro administrador' }}
+            </p>
+          }
+          @if (detalhe.resumo.situacao === 'Rascunho') {
+            <p class="mt-2 text-sm text-slate-700">
+              Confira os dados salvos. Confirmar adicionará todos os materiais ao estoque.
+            </p>
+          }
+        </header>
+        <form (ngSubmit)="confirmarRecebimento()" class="space-y-4">
+          @for (linha of detalhe.linhas; track $index) {
+            <article
+              class="min-w-0 rounded-xl border border-slate-200 bg-white p-4 [overflow-wrap:anywhere]"
+            >
+              @if (linha.kit) {
+                <h3 class="font-semibold">
+                  {{ linha.kit }} · {{ linha.quantidade.replace('.', ',') }} kit(s)
+                </h3>
+              }
+              <p class="text-sm">
+                {{ linha.kit ? 'Valor do kit' : 'Valor do material' }}:
+                {{ formatarValor(linha.valorTotal) }}
+              </p>
+              <ul class="mt-2 space-y-3">
+                @for (item of linha.componentes; track item.id) {
+                  <li class="border-t border-slate-200 pt-2">
+                    <p class="font-medium">{{ item.nomeInsumo }}</p>
+                    <p class="text-sm text-slate-700">
+                      @if (item.nomeApresentacao) {
+                        {{ item.quantidade.replace('.', ',') }} × {{ item.nomeApresentacao }} ·
+                      }
+                      {{ item.quantidadeBase.replace('.', ',') }}
+                      {{
+                        item.unidadeBase === 'Grama'
+                          ? 'g'
+                          : item.unidadeBase === 'Mililitro'
+                            ? 'ml'
+                            : 'un'
+                      }}
+                    </p>
+                    @if (detalhe.resumo.situacao === 'Recebida') {
+                      <a
+                        [routerLink]="['/admin/estoque/insumos', item.insumoId, 'consultas']"
+                        [attr.aria-label]="'Ver estoque e histórico de ' + item.nomeInsumo"
+                        class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+                        >Ver estoque e histórico</a
+                      >
+                    } @else if (pendente()) {
+                      @if (validades()[item.id]; as validade) {
+                        <p class="text-sm">
+                          Validade: {{ validade.split('-').reverse().join('/') }}
+                        </p>
+                      }
+                    } @else if (politicas()?.[item.insumoId]; as politica) {
+                      @if (politica.controlaLote) {
+                        <label class="mt-2 block max-w-xs text-sm font-medium">
+                          Validade de {{ item.nomeInsumo }} ({{
+                            politica.validadeObrigatoria ? 'obrigatória' : 'opcional'
+                          }})
+                          <input
+                            type="date"
+                            [required]="politica.validadeObrigatoria"
+                            [disabled]="ocupado()"
+                            [value]="validades()[item.id] ?? ''"
+                            (input)="selecionarValidade(item.id, $any($event.target).value)"
+                            class="mt-1 block min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                          />
+                        </label>
+                      }
+                    }
+                  </li>
+                }
+              </ul>
+            </article>
+          }
+          <p class="rounded-lg bg-emerald-50 p-3 font-semibold text-emerald-950">
+            Total da compra: {{ formatarValor(detalhe.resumo.total) }}
+          </p>
+          @if (detalhe.resumo.situacao === 'Rascunho' && pendente()) {
+            <p role="status">
+              {{
+                podeReenviar()
+                  ? 'A compra ainda está em rascunho. Você pode reenviar a tentativa anterior.'
+                  : 'Há uma tentativa pendente. Confira a situação da compra antes de reenviar.'
+              }}
+            </p>
+          }
+          <div class="flex flex-wrap gap-3">
+            @if (detalhe.resumo.situacao === 'Rascunho') {
+              @if (pendente() && !podeReenviar()) {
+                <button
+                  type="button"
+                  (click)="conferirPendente()"
+                  [disabled]="ocupado()"
+                  class="min-h-11 rounded-xl border border-emerald-800 px-4 text-emerald-900 focus-visible:outline-2"
+                >
+                  Conferir situação
+                </button>
+              } @else if (podeReenviar() || politicas()) {
+                <button
+                  type="submit"
+                  [disabled]="ocupado() || (!podeReenviar() && !validadesValidas())"
+                  class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+                >
+                  {{ podeReenviar() ? 'Reenviar tentativa' : 'Confirmar e atualizar estoque' }}
+                </button>
+              }
+            }
+            @if (
+              detalhe.resumo.situacao === 'Rascunho' &&
+              (podeReenviar() || (!pendente() && !politicas()))
+            ) {
+              <button
+                type="button"
+                (click)="editarAposConferencia(detalhe.resumo.id)"
+                [disabled]="ocupado()"
+                class="min-h-11 px-2 underline focus-visible:outline-2"
+              >
+                {{
+                  podeReenviar()
+                    ? 'Descartar tentativa e abrir rascunho'
+                    : 'Abrir rascunho atualizado'
+                }}
+              </button>
+            }
+            <button
+              type="button"
+              (click)="fechar()"
+              [disabled]="ocupado()"
+              class="min-h-11 px-2 underline focus-visible:outline-2"
+            >
+              Voltar à lista
+            </button>
+          </div>
+        </form>
+      </section>
+    } @else if (editor(); as compra) {
       <form
         (ngSubmit)="salvar(compra)"
         class="space-y-4"
@@ -296,6 +459,14 @@
           @if (compra.id && !compra.cancelada && !confirmarCancelamento()) {
             <button
               type="button"
+              (click)="iniciarRecebimento(compra.id)"
+              [disabled]="ocupado()"
+              class="min-h-11 rounded-lg border border-emerald-800 px-3 font-medium text-emerald-900 focus-visible:outline-2"
+            >
+              Confirmar recebimento
+            </button>
+            <button
+              type="button"
               (click)="confirmarCancelamento.set(true)"
               [disabled]="ocupado()"
               class="min-h-11 px-2 font-medium text-red-800 underline focus-visible:outline-2"
@@ -333,6 +504,16 @@
         Tentar novamente
       </button>
     } @else {
+      @if (pendente()) {
+        <button
+          type="button"
+          (click)="conferirPendente()"
+          [disabled]="ocupado()"
+          class="min-h-11 underline focus-visible:outline-2"
+        >
+          Conferir recebimento pendente
+        </button>
+      }
       <div class="grid gap-3 sm:grid-cols-2">
         <label class="min-w-0 text-sm font-medium"
           >Buscar por fornecedor
@@ -353,6 +534,7 @@
           >
             <option value="">Todas</option>
             <option>Rascunho</option>
+            <option>Recebida</option>
             <option>Cancelada</option>
           </select>
         </label>

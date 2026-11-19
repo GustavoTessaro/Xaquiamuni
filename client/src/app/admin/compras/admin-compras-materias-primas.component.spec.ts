@@ -1,10 +1,13 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
+import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { InsumosService } from '../../core/admin-estoque/insumos.service';
 import {
   ComprasMateriasPrimasService,
   DetalheCompra,
+  RecebimentoCompra,
   ResumoCompra,
 } from '../../core/compras-materias-primas.service';
 import { FornecedoresService } from '../../core/fornecedores.service';
@@ -44,18 +47,81 @@ const detalhe: DetalheCompra = {
   ],
 };
 
-async function montar() {
+const compraId = '09000000-0000-4000-8000-000000000001';
+const versao = '09000000-0000-4000-8000-000000000002';
+const componenteId = '09000000-0000-4000-8000-000000000003';
+const ator = 'admin-teste';
+const storageKey = 'xaquiamuni:compras:recebimento:v1:' + ator;
+const rascunho: DetalheCompra = {
+  ...detalhe,
+  resumo: { ...resumo, id: compraId },
+  versao,
+  linhas: [
+    {
+      ...detalhe.linhas[0],
+      componentes: [{ ...detalhe.linhas[0].componentes[0], id: componenteId }],
+    },
+    {
+      kit: 'Ervas juntas',
+      quantidade: '1',
+      valorTotal: '10',
+      componentes: [
+        {
+          ...detalhe.linhas[0].componentes[0],
+          id: 'kit-1',
+          insumoId: 'i2',
+          nomeInsumo: 'Alecrim',
+          nomeApresentacao: null,
+          quantidade: '3',
+          quantidadeBase: '3',
+          unidadeBase: 'Grama',
+        },
+        {
+          ...detalhe.linhas[0].componentes[0],
+          id: 'kit-2',
+          insumoId: 'i3',
+          nomeInsumo: 'Guiné',
+          nomeApresentacao: null,
+          quantidade: '1',
+          quantidadeBase: '1',
+          unidadeBase: 'Grama',
+        },
+      ],
+    },
+  ],
+};
+const recebida: DetalheCompra = {
+  ...rascunho,
+  resumo: { ...rascunho.resumo, situacao: 'Recebida' },
+  recebidaPorId: ator,
+  recebidaEmUtc: '2026-11-19T15:00:00Z',
+};
+const resultado: RecebimentoCompra = {
+  compraId,
+  situacao: 'Recebida',
+  versao,
+  recebidaPorId: ator,
+  recebidaEmUtc: '2026-11-19T15:00:00Z',
+  entradas: [],
+};
+
+beforeEach(() => sessionStorage.clear());
+afterEach(() => sessionStorage.clear());
+
+async function montar(atual = detalhe) {
   const compras = {
     listar: vi.fn(() =>
-      of([resumo, { ...resumo, id: 'c2', situacao: 'Cancelada', nomeFornecedor: 'Vidros' }]),
+      of([atual.resumo, { ...resumo, id: 'c2', situacao: 'Cancelada', nomeFornecedor: 'Vidros' }]),
     ),
-    obter: vi.fn(() => of(detalhe)),
+    obter: vi.fn(() => of(atual)),
+    receber: vi.fn(() => of(resultado)),
     salvar: vi.fn(() => of(detalhe)),
     cancelar: vi.fn(() => of(detalhe)),
   };
   TestBed.configureTestingModule({
     providers: [
       provideRouter([]),
+      { provide: AdminAuthService, useValue: { getCurrentSession: () => of({ userId: ator }) } },
       { provide: ComprasMateriasPrimasService, useValue: compras },
       {
         provide: FornecedoresService,
@@ -80,8 +146,9 @@ async function montar() {
                 { insumoId: 'i2', nome: 'Alecrim', unidadeBase: 'Grama' },
               ],
             }),
-          obterParaEntrada: () =>
+          obterParaEntrada: (id: string) =>
             of({
+              resumo: { controlaLote: id !== 'i3', validadeObrigatoria: id === 'i1' },
               formasCompra: [
                 {
                   id: 'a1',
@@ -186,6 +253,135 @@ describe('Compras de matérias-primas', () => {
     );
     expect(root.textContent).toContain('Rascunho salvo.');
   });
+
+  it('revisa kit e material, valida datas e evita confirmação duplicada', async () => {
+    const { root, compras, clicar, preencher } = await montar(rascunho);
+    await clicar('Abrir compra');
+    await clicar('Confirmar recebimento');
+    expect(root.textContent).toContain('Ervas juntas');
+    expect(root.textContent).toContain('Valor do kit: R$ 10,00');
+    expect(root.textContent).toMatch(/Alecrim\s+3 g/);
+    expect(root.querySelectorAll('input[type=date]')).toHaveLength(2);
+    expect(
+      root.querySelector('input[type=date][required]')?.closest('label')?.textContent,
+    ).toContain('Extrato');
+    const botao = () =>
+      [...root.querySelectorAll('button')].find(
+        (b) => b.textContent.trim() === 'Confirmar e atualizar estoque',
+      )!;
+    expect(botao().disabled).toBe(true);
+    await preencher('input[type=date][required]', '2026-12-20');
+    expect(botao().disabled).toBe(false);
+
+    const resposta = new Subject<RecebimentoCompra>();
+    compras.receber.mockReturnValue(resposta);
+    const form = botao().form!;
+    await clicar('Confirmar e atualizar estoque');
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    expect(compras.receber).toHaveBeenCalledTimes(1);
+    expect(compras.receber).toHaveBeenCalledWith(
+      compraId,
+      {
+        versao,
+        validades: [{ componenteId, dataValidade: '2026-12-20' }],
+      },
+      expect.stringMatching(/^[0-9a-f-]{36}$/),
+    );
+    expect(root.textContent).not.toContain('O estoque foi atualizado.');
+    resposta.next(resultado);
+    resposta.complete();
+    await vi.waitFor(() => expect(root.textContent).toContain('O estoque foi atualizado.'));
+    expect(sessionStorage.getItem(storageKey)).toBeNull();
+    expect(root.textContent).toContain('Responsável: Você');
+    expect(root.querySelector('a[href="/admin/estoque/insumos/i1/consultas"]')).not.toBeNull();
+    expect(root.textContent).not.toContain('Salvar rascunho');
+  });
+
+  it.each(['Recebida', 'Cancelada'] as const)('abre %s somente para consulta', async (situacao) => {
+    const { root, compras, clicar } = await montar({
+      ...recebida,
+      resumo: { ...recebida.resumo, situacao },
+    });
+    await clicar('Abrir compra');
+    expect(root.textContent).toContain(situacao);
+    for (const acao of [
+      'Salvar rascunho',
+      'Cancelar compra',
+      'Confirmar recebimento',
+      'Confirmar e atualizar estoque',
+    ])
+      expect(root.textContent).not.toContain(acao);
+    expect(compras.receber).not.toHaveBeenCalled();
+  });
+
+  it.each([400, 404, 409])(
+    'apresenta a resposta %s e bloqueia reenvio de versão desatualizada',
+    async (status) => {
+      const { root, compras, clicar, preencher } = await montar(rascunho);
+      await clicar('Abrir compra');
+      await clicar('Confirmar recebimento');
+      await preencher('input[type=date][required]', '2026-12-20');
+      const mensagem =
+        status === 400
+          ? 'Validade inválida'
+          : status === 404
+            ? 'Compra não encontrada'
+            : 'Versão desatualizada';
+      compras.receber.mockReturnValueOnce(
+        throwError(
+          () =>
+            new HttpErrorResponse({
+              status,
+              error: { detail: mensagem, errors: { compra: [mensagem] } },
+            }),
+        ),
+      );
+      await clicar('Confirmar e atualizar estoque');
+      expect(root.querySelector('[role=alert]')?.textContent).toContain(mensagem);
+      expect(root.textContent).not.toContain('O estoque foi atualizado.');
+      if (status === 409) {
+        expect(root.textContent).not.toContain('Reenviar tentativa');
+        compras.obter.mockReturnValueOnce(of({ ...rascunho, versao: compraId }));
+        await clicar('Conferir situação');
+        expect(root.textContent).not.toContain('Reenviar tentativa');
+        expect(root.textContent).toContain('Abrir rascunho atualizado');
+        expect(sessionStorage.getItem(storageKey)).toBeNull();
+      }
+    },
+  );
+
+  it('persiste a tentativa após falha de rede', async () => {
+    const { root, compras, clicar, preencher } = await montar(rascunho);
+    await clicar('Abrir compra');
+    await clicar('Confirmar recebimento');
+    await preencher('input[type=date][required]', '2026-12-20');
+    compras.receber.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+    await clicar('Confirmar e atualizar estoque');
+    const [, corpo, chave] = compras.receber.mock.calls[0] as unknown as [string, object, string];
+    expect(JSON.parse(sessionStorage.getItem(storageKey)!)).toEqual({ compraId, corpo, chave });
+    expect(root.textContent).toContain('Confira a situação');
+    expect(root.textContent).not.toContain('O estoque foi atualizado.');
+  });
+
+  it.each([rascunho, recebida])(
+    'recupera tentativa consultando o servidor antes de decidir',
+    async (atual) => {
+      const chave = '09000000-0000-4000-8000-000000000004';
+      const corpo = { versao, validades: [{ componenteId, dataValidade: '2026-12-20' }] };
+      sessionStorage.setItem(storageKey, JSON.stringify({ compraId, corpo, chave }));
+      const { root, compras, clicar } = await montar(atual);
+      expect(compras.obter).toHaveBeenCalledWith(compraId);
+      expect(compras.receber).not.toHaveBeenCalled();
+      if (atual === recebida) {
+        expect(root.textContent).toContain('O estoque foi atualizado.');
+        expect(sessionStorage.getItem(storageKey)).toBeNull();
+      } else {
+        expect(root.textContent).toContain('20/12/2026');
+        await clicar('Reenviar tentativa');
+        expect(compras.receber).toHaveBeenCalledExactlyOnceWith(compraId, corpo, chave);
+      }
+    },
+  );
 
   it('preserva centavos grandes e rejeita arredondamento implícito', () => {
     expect(exibirReais(decimalEscalado('9999999999999999,99', 2, 16)!)).toBe(

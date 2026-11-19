@@ -9,7 +9,7 @@ export interface ResumoCompra {
   fornecedorId: string;
   nomeFornecedor: string;
   dataCompra: string;
-  situacao: 'Rascunho' | 'Cancelada';
+  situacao: 'Rascunho' | 'Recebida' | 'Cancelada';
   total: string | null;
 }
 
@@ -35,6 +35,8 @@ export interface CompraInput {
 export interface DetalheCompra {
   resumo: ResumoCompra;
   versao: string;
+  recebidaEmUtc?: string | null;
+  recebidaPorId?: string | null;
   linhas: Array<{
     kit: string | null;
     quantidade: string;
@@ -50,6 +52,20 @@ export interface DetalheCompra {
       }
     >;
   }>;
+}
+
+export interface ReceberCompraInput {
+  versao: string;
+  validades: Array<{ componenteId: string; dataValidade: string }>;
+}
+
+export interface RecebimentoCompra {
+  compraId: string;
+  situacao: 'Recebida';
+  versao: string;
+  recebidaEmUtc: string;
+  recebidaPorId: string;
+  entradas: Array<{ linhaId: string; componenteId: string; movimentoId: string }>;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -79,6 +95,20 @@ export class ComprasMateriasPrimasService {
             });
       }),
     );
+  }
+
+  receber(id: string, corpo: ReceberCompraInput, chave: string) {
+    return this.csrf
+      .getRequestToken()
+      .pipe(
+        switchMap(({ requestToken }) =>
+          this.http.post<RecebimentoCompra>(
+            `${this.rota}/${encodeURIComponent(id)}/receber`,
+            corpo,
+            { headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave } },
+          ),
+        ),
+      );
   }
 
   cancelar(id: string, versao: string) {
