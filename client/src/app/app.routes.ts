@@ -129,6 +129,11 @@ export const routes: Routes = [
       ),
     canActivate: [adminAuthGuard],
   },
+  {
+    path: 'admin/fornecedores',
+    loadComponent: () => import('./admin/fornecedores/admin-fornecedores.component').then((module) => module.AdminFornecedoresComponent),
+    canActivate: [adminAuthGuard],
+  },
   { path: 'admin/categorias', component: AdminCategoriasComponent, canActivate: [adminAuthGuard] },
   { path: 'admin', component: AdminDashboardComponent, canActivate: [adminAuthGuard] },
   { path: 'confirm-email', component: ConfirmEmailComponent },

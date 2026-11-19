@@ -124,21 +124,21 @@ describe('AdminInsumoFormComponent', () => {
 
   it('validates required names and creates cadastro without adding stock', () => {
     render();
-    clickButton('Cadastrar insumo');
+    clickButton('Cadastrar material');
     expect(text()).toContain('Informe o nome do insumo.');
     expect(criar).not.toHaveBeenCalled();
 
     setField('stock-supply-name', 'Base glicerinada');
     setSelect('stock-supply-base-unit', 'Unidade');
     setField('stock-supply-minimum', '0.5');
-    clickButton('Cadastrar insumo');
+    clickButton('Cadastrar material');
     expect(text()).toContain('Para unidade inteira, o estoque mínimo deve ser um número inteiro.');
     expect(criar).not.toHaveBeenCalled();
 
     setField('stock-supply-name', ' Base glicerinada ');
     setSelect('stock-supply-base-unit', 'Grama');
     setField('stock-supply-minimum', '0.125');
-    clickButton('Cadastrar insumo');
+    clickButton('Cadastrar material');
 
     expect(criar).toHaveBeenCalledOnce();
     expect(criar).toHaveBeenCalledWith({

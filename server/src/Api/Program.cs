@@ -102,6 +102,7 @@ app.MapXaquiamuniCsrfEndpoint();
 app.MapXaquiamuniAuthEndpoints();
 app.MapXaquiamuniAdminAuthEndpoints();
 app.MapAdminCategoriaEndpoints();
+app.MapAdminFornecedorEndpoints();
 app.MapAdminProdutoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();

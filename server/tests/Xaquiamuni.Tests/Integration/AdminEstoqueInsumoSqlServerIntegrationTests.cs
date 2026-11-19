@@ -94,6 +94,63 @@ public sealed class AdminEstoqueInsumoSqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task AdminFornecedores_PersisteCadastroEdicaoEInativacaoComAdminECsrf()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        using var factory = CreateFactory(database);
+        const string path = "/api/admin/fornecedores";
+        using var anonimo = CreateClient(factory);
+        using var cliente = CreateClient(factory, XaquiamuniRoles.Cliente);
+        using var admin = CreateClient(factory, XaquiamuniRoles.Administrador);
+        using var semSessao = await anonimo.GetAsync(path);
+        using var proibido = await cliente.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Unauthorized, semSessao.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, proibido.StatusCode);
+
+        using var semCsrf = await admin.PostAsJsonAsync(path, new { nome = "Vale" });
+        Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
+        var csrf = await GetCsrfAsync(admin);
+        async Task<HttpResponseMessage> Enviar(HttpMethod metodo, string url, object corpo)
+        {
+            using var request = new HttpRequestMessage(metodo, url) { Content = JsonContent.Create(corpo) };
+            AddAntiforgery(request, csrf);
+            return await admin.SendAsync(request);
+        }
+
+        using var invalido = await Enviar(HttpMethod.Post, path, new { nome = " " });
+        Assert.Equal(HttpStatusCode.BadRequest, invalido.StatusCode);
+        using var criado = await Enviar(HttpMethod.Post, path, new { nome = " Ervas  do Vale " });
+        Assert.Equal(HttpStatusCode.Created, criado.StatusCode);
+        var url = Assert.IsType<Uri>(criado.Headers.Location).ToString();
+        using var duplicado = await Enviar(HttpMethod.Post, path, new { nome = "ERVAS DO VALE" });
+        Assert.Equal(HttpStatusCode.Conflict, duplicado.StatusCode);
+        using var editado = await Enviar(HttpMethod.Put, url, new
+        {
+            nome = "Ervas da Serra", telefone = "+55 (11) 90000-0000", email = "teste@example.test",
+            observacoes = "Entrega semanal"
+        });
+        Assert.Equal(HttpStatusCode.OK, editado.StatusCode);
+        using var inativado = await Enviar(HttpMethod.Patch, url + "/status", new { ativo = false });
+        Assert.Equal(HttpStatusCode.OK, inativado.StatusCode);
+        using var detalhe = await admin.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, detalhe.StatusCode);
+        using var json = JsonDocument.Parse(await detalhe.Content.ReadAsStringAsync());
+        Assert.False(json.RootElement.GetProperty("ativo").GetBoolean());
+        Assert.Equal("Ervas da Serra", json.RootElement.GetProperty("nome").GetString());
+        Assert.Empty((await admin.GetFromJsonAsync<JsonElement[]>(path + "?ativo=true"))!);
+        Assert.Single((await admin.GetFromJsonAsync<JsonElement[]>(path + "?busca=serra&ativo=false"))!);
+
+        await using var db = database.CreateVerificationContext();
+        var persistido = await db.Fornecedores.SingleAsync();
+        Assert.Equal("teste@example.test", persistido.Email);
+        Assert.Equal("Entrega semanal", persistido.Observacoes);
+        Assert.False(persistido.Ativo);
+        Assert.Equal(TimeSpan.Zero, persistido.CriadoEmUtc.Offset);
+        Assert.True(persistido.AtualizadoEmUtc >= persistido.CriadoEmUtc);
+        Assert.False(await db.MovimentosInsumo.AnyAsync());
+    }
+
+    [SqlServerIntegrationFact]
     public async Task AdminStockWrites_UseAuthenticatedActor_PreserveSnapshotsAndRejectStaleCounts()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();

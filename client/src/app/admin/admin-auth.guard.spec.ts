@@ -93,7 +93,7 @@ describe('adminAuthGuard', () => {
     expect(harness.routeNativeElement?.textContent).toContain('Bem-vinda à administração');
   });
 
-  it('protects the categories route and redirects a session without access', async () => {
+  it.each(['/admin/categorias', '/admin/fornecedores'])('protects %s and redirects a session without access', async (url) => {
     await TestBed.configureTestingModule({
       providers: [
         provideRouter(routes),
@@ -109,7 +109,7 @@ describe('adminAuthGuard', () => {
     }).compileComponents();
 
     const harness = await RouterTestingHarness.create();
-    await harness.navigateByUrl('/admin/categorias', AdminLoginComponent);
+    await harness.navigateByUrl(url, AdminLoginComponent);
 
     expect(TestBed.inject(Router).url).toBe('/admin/login');
     expect(getCurrentSession).toHaveBeenCalledOnce();
@@ -291,11 +291,11 @@ describe('adminAuthGuard', () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/admin/estoque/insumos/novo', AdminInsumoFormComponent);
     expect(TestBed.inject(Router).url).toBe('/admin/estoque/insumos/novo');
-    expect(harness.routeNativeElement?.textContent).toContain('Novo insumo');
+    expect(harness.routeNativeElement?.textContent).toContain('Novo material');
 
     await harness.navigateByUrl('/admin/estoque/insumos', AdminInsumosComponent);
     expect(TestBed.inject(Router).url).toBe('/admin/estoque/insumos');
-    expect(harness.routeNativeElement?.textContent).toContain('Insumos para produção');
+    expect(harness.routeNativeElement?.textContent).toContain('Matérias-primas');
     expect(harness.routeNativeElement?.textContent).not.toContain('Produtos prontos para venda');
 
     await harness.navigateByUrl(

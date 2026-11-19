@@ -132,7 +132,7 @@ export class AdminInsumoFormComponent {
   protected readonly erroForma = signal('');
   protected readonly mensagemForma = signal('');
   protected readonly formasEmAtualizacao = signal<ReadonlySet<string>>(new Set());
-  protected readonly titulo = computed(() => (this.editando ? 'Detalhe do insumo' : 'Novo insumo'));
+  protected readonly titulo = computed(() => (this.editando ? 'Detalhe do material' : 'Novo material'));
 
   protected readonly form = new FormGroup<InsumoControls>(
     {

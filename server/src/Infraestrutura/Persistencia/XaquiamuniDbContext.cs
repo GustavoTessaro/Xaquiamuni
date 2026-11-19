@@ -26,6 +26,7 @@ public sealed class XaquiamuniDbContext
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<ItemPedido> ItensPedido => Set<ItemPedido>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
+    public DbSet<Fornecedor> Fornecedores => Set<Fornecedor>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Produto> Produtos => Set<Produto>();
     public DbSet<ProdutoVariante> ProdutoVariantes => Set<ProdutoVariante>();
@@ -73,6 +74,17 @@ public sealed class XaquiamuniDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.Entity<Fornecedor>(fornecedor =>
+        {
+            fornecedor.ToTable("Fornecedores");
+            fornecedor.HasKey(f => f.Id);
+            fornecedor.Property(f => f.Nome).HasMaxLength(Fornecedor.NomeMax).IsRequired();
+            fornecedor.Property(f => f.NomeNormalizado).HasMaxLength(Fornecedor.NomeMax).IsRequired();
+            fornecedor.Property(f => f.Telefone).HasMaxLength(Fornecedor.TelefoneMax);
+            fornecedor.Property(f => f.Email).HasMaxLength(Fornecedor.EmailMax);
+            fornecedor.Property(f => f.Observacoes).HasMaxLength(Fornecedor.ObservacoesMax);
+            fornecedor.HasIndex(f => f.NomeNormalizado).IsUnique().HasDatabaseName("UX_Fornecedores_NomeNormalizado");
+        });
         PedidoMapping.Configurar(builder);
         builder.Entity<ConfiguracaoPixManual>(pix =>
         {

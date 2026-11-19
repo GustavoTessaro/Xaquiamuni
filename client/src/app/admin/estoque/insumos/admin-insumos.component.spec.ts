@@ -81,7 +81,7 @@ describe('AdminInsumosComponent', () => {
     render();
 
     expect(listar).toHaveBeenCalledWith({ pagina: 1, itensPorPagina: 20 });
-    expect(text()).toContain('Insumos para produção');
+    expect(text()).toContain('Matérias-primas');
     expect(text()).toContain('Total registrado, incluindo quantidades indisponíveis.');
     expect(text()).toContain('Quantidade liberada para utilização.');
     expect(text()).toContain('Referência para alertar sobre necessidade de reposição.');
