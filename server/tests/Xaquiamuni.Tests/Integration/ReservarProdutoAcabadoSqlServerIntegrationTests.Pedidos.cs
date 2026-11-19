@@ -223,7 +223,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         return id;
     }
 
-    private static async Task<(Produto Produto, ProdutoVariante Padrao, ProdutoVariante Alternativa)> CriarProdutoCompravelAsync(
+    internal static async Task<(Produto Produto, ProdutoVariante Padrao, ProdutoVariante Alternativa)> CriarProdutoCompravelAsync(
         XaquiamuniDbContext context, decimal preco = 11.99m)
     {
         var categoria = Categoria.Criar("Artesanais", null, 0);
