@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Xaquiamuni.Dominio.Entidades;
 
-public enum TipoChavePixManual { Aleatoria = 1, Email = 2, Telefone = 3 }
+public enum TipoChavePixManual { Aleatoria = 1, Email = 2, Telefone = 3, Cnpj = 4 }
 
 public sealed class ConfiguracaoPixManual
 {
@@ -24,6 +24,8 @@ public sealed class ConfiguracaoPixManual
     {
         if (!Enum.IsDefined(tipoChave)) throw new ArgumentException("Selecione um tipo de chave aceito.", nameof(tipoChave));
         var chave = chavePix?.Trim();
+        if (tipoChave == TipoChavePixManual.Cnpj && chave is not null)
+            chave = NormalizarCnpj(chave);
         if (chave is not { Length: > 0 and <= ChaveMaxLength } || !ChaveValida(tipoChave, chave))
             throw new ArgumentException("Informe uma chave no formato do tipo selecionado.", nameof(chavePix));
         var nome = nomeRecebedor?.Trim();
@@ -48,6 +50,31 @@ public sealed class ConfiguracaoPixManual
         TipoChavePixManual.Email => chave.All(c => c is >= '!' and <= '~')
             && MailAddress.TryCreate(chave, out var email) && email.Address == chave && email.Host.Contains('.'),
         TipoChavePixManual.Telefone => Regex.IsMatch(chave, @"\A\+[1-9][0-9]{1,14}\z"),
+        TipoChavePixManual.Cnpj => true, // O formato e os dígitos já foram validados na normalização.
         _ => false,
     };
+
+    private static string? NormalizarCnpj(string chave)
+    {
+        if (!Regex.IsMatch(chave, @"\A(?:[A-Za-z0-9]{12}[0-9]{2}|[A-Za-z0-9]{2}\.[A-Za-z0-9]{3}\.[A-Za-z0-9]{3}/[A-Za-z0-9]{4}-[0-9]{2})\z"))
+            return null;
+
+        var cnpj = chave.Replace(".", "").Replace("/", "").Replace("-", "").ToUpperInvariant();
+        if (cnpj == "00000000000000"
+            || cnpj[12] - '0' != CalcularDigito(cnpj.AsSpan(0, 12))
+            || cnpj[13] - '0' != CalcularDigito(cnpj.AsSpan(0, 13)))
+            return null;
+
+        return cnpj;
+    }
+
+    private static int CalcularDigito(ReadOnlySpan<char> baseCnpj)
+    {
+        var soma = 0;
+        for (var i = 0; i < baseCnpj.Length; i++)
+            soma += (baseCnpj[^(i + 1)] - '0') * (2 + i % 8);
+
+        var resto = soma % 11;
+        return resto < 2 ? 0 : 11 - resto;
+    }
 }

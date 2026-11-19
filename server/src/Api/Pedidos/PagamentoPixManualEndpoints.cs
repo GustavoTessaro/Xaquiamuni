@@ -38,7 +38,7 @@ public static class PagamentoPixManualEndpoints
         if (!Enum.TryParse<TipoChavePixManual>(comando!.TipoChave, ignoreCase: true, out var tipo)
             || !string.Equals(tipo.ToString(), comando.TipoChave, StringComparison.OrdinalIgnoreCase))
         {
-            return Invalido("tipoChave", "Selecione Aleatoria, Email ou Telefone.");
+            return Invalido("tipoChave", "Selecione Aleatoria, Email, Telefone ou Cnpj.");
         }
 
         ConfiguracaoPixManual configuracao;

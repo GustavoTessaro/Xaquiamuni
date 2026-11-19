@@ -55,6 +55,7 @@ describe('AdminPixComponent', () => {
       'Aleatoria',
       'Email',
       'Telefone',
+      'Cnpj',
     ]);
 
     preencher('#pix-tipo', 'Telefone', 'change');
@@ -89,6 +90,38 @@ describe('AdminPixComponent', () => {
       instrucoesAdicionais: 'Instrução de teste',
     });
     atualizacao.flush(atualizacao.request.body);
+  });
+
+  it('aceita CNPJ formatado, valida os dígitos e exibe a chave normalizada da API', () => {
+    const fixture = TestBed.createComponent(AdminPixComponent);
+    http.expectOne({ method: 'GET', url }).flush(dados);
+    fixture.detectChanges();
+    const view: HTMLElement = fixture.nativeElement;
+    const tipo = view.querySelector<HTMLSelectElement>('#pix-tipo')!;
+    const chave = view.querySelector<HTMLInputElement>('#pix-chave')!;
+    const salvar = () => view.querySelector('form')!.dispatchEvent(new Event('submit'));
+    tipo.value = 'Cnpj';
+    tipo.dispatchEvent(new Event('change'));
+    chave.value = '12.ABC.345/01DE-36';
+    chave.dispatchEvent(new Event('input'));
+    salvar();
+    fixture.detectChanges();
+    expect(view.querySelector('#pix-chave-erro')?.textContent).toContain('dígitos verificadores');
+    http.expectNone('/api/auth/csrf');
+
+    chave.value = '12.abc.345/01de-35';
+    chave.dispatchEvent(new Event('input'));
+    salvar();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
+    const put = http.expectOne({ method: 'PUT', url });
+    expect(put.request.body).toEqual({
+      ...dados,
+      tipoChave: 'Cnpj',
+      chavePix: '12.abc.345/01de-35',
+    });
+    put.flush({ ...dados, tipoChave: 'Cnpj', chavePix: '12ABC34501DE35' });
+    fixture.detectChanges();
+    expect(chave.value).toBe('12ABC34501DE35');
   });
 
   it('carrega valores existentes e não replica dados de erros de validação', () => {

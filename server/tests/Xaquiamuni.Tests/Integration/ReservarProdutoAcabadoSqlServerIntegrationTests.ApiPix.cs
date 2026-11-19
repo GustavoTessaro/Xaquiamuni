@@ -12,7 +12,16 @@ namespace Xaquiamuni.Tests.Integration;
 public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 {
     [SqlServerIntegrationFact]
-    public async Task ApiPixAutorizaConfiguracaoEExplicaAusenciaOuEncerramentoSemAlterarPedido()
+    public Task ApiPixAutorizaConfiguracaoEExplicaAusenciaOuEncerramentoSemAlterarPedido() =>
+        VerificarApiPixAsync(new("Email", "recebimento@example.test", "Loja de teste", null),
+            "loja@example.test", "loja@example.test");
+
+    [SqlServerIntegrationFact]
+    public Task ApiPixCnpjNormalizaEPreservaAutorizacaoCsrfETitularidade() =>
+        VerificarApiPixAsync(new("Cnpj", "99.999.999/9999-62", "Loja de teste", null),
+            "12.abc.345/01de-35", "12ABC34501DE35");
+
+    private static async Task VerificarApiPixAsync(SalvarPixManualRequest dto, string novaChave, string chaveNormalizada)
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();
         await using var context = database.CreateVerificationContext();
@@ -53,7 +62,6 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal("configuracao_ausente", semConfig.RootElement.GetProperty("situacao").GetString());
         Assert.Equal(System.Text.Json.JsonValueKind.Null, semConfig.RootElement.GetProperty("pix").ValueKind);
 
-        var dto = new SalvarPixManualRequest("Email", "recebimento@example.test", "Loja de teste", null);
         using var anonimoPut = await SalvarPixAsync(anonimo, dto);
         using var clientePut = await SalvarPixAsync(cliente, dto);
         using var semCsrf = await SalvarPixAsync(admin, dto);
@@ -79,15 +87,21 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 
         using var criado = await SalvarPixAsync(admin, dto, token);
         Assert.Equal(HttpStatusCode.OK, criado.StatusCode);
-        var versaoAtual = dto with { ChavePix = "loja@example.test", InstrucoesAdicionais = "Confira o nome antes de pagar." };
+        if (dto.TipoChave == "Cnpj")
+        {
+            using var criadoJson = await LerJsonPedidosAsync(criado);
+            Assert.Equal("99999999999962", criadoJson.RootElement.GetProperty("chavePix").GetString());
+        }
+        var versaoAtual = dto with { ChavePix = novaChave, InstrucoesAdicionais = "Confira o nome antes de pagar." };
         using var atualizado = await SalvarPixAsync(admin, versaoAtual, token);
         Assert.Equal(HttpStatusCode.OK, atualizado.StatusCode);
         Assert.True(atualizado.Headers.CacheControl?.NoStore);
-        Assert.Equal(versaoAtual.ChavePix, (await context.ConfiguracoesPixManual.AsNoTracking().SingleAsync()).ChavePix);
+        Assert.Equal(chaveNormalizada, (await context.ConfiguracoesPixManual.AsNoTracking().SingleAsync()).ChavePix);
 
         using var consultaAdmin = await admin.GetAsync(PagamentoPixManualEndpoints.AdminPath);
         using var consultaAdminJson = await LerJsonPedidosAsync(consultaAdmin);
-        Assert.Equal(versaoAtual.ChavePix, consultaAdminJson.RootElement.GetProperty("chavePix").GetString());
+        Assert.Equal(chaveNormalizada, consultaAdminJson.RootElement.GetProperty("chavePix").GetString());
+        Assert.Equal(dto.TipoChave, consultaAdminJson.RootElement.GetProperty("tipoChave").GetString());
         using var disponivel = await cliente.GetAsync(url);
         using var json = await LerJsonPedidosAsync(disponivel);
         Assert.Equal(HttpStatusCode.OK, disponivel.StatusCode);
@@ -96,7 +110,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(pedido.TotalCentavos.ToString(), json.RootElement.GetProperty("valorCentavos").GetString());
         Assert.Equal(pedido.PrazoPagamentoEmUtc, json.RootElement.GetProperty("prazoPagamentoEmUtc").GetDateTimeOffset());
         var pix = json.RootElement.GetProperty("pix");
-        Assert.Equal(versaoAtual.ChavePix, pix.GetProperty("chavePix").GetString());
+        Assert.Equal(chaveNormalizada, pix.GetProperty("chavePix").GetString());
+        Assert.Equal(dto.TipoChave, pix.GetProperty("tipoChave").GetString());
         Assert.Equal(versaoAtual.NomeRecebedor, pix.GetProperty("nomeRecebedor").GetString());
         Assert.Equal(versaoAtual.InstrucoesAdicionais, pix.GetProperty("instrucoesAdicionais").GetString());
         Assert.False(pix.TryGetProperty("id", out _));

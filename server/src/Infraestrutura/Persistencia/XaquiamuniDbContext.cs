@@ -79,7 +79,7 @@ public sealed class XaquiamuniDbContext
             pix.ToTable("ConfiguracoesPixManual", tabela =>
             {
                 tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Singleton", "[Id] = 1");
-                tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3)");
+                tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3, 4)");
             });
             pix.Property(p => p.Id).ValueGeneratedNever();
             pix.Property(p => p.ChavePix).HasMaxLength(ConfiguracaoPixManual.ChaveMaxLength);

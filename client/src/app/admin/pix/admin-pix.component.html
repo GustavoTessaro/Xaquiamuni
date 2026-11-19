@@ -85,13 +85,24 @@
                 "
               />
               <p id="pix-chave-ajuda" class="text-sm">
-                Use o formato da chave escolhida. Para telefone, inclua o sinal + e o código do
-                país.
+                @if (formulario.controls.tipoChave.value === 'Cnpj') {
+                  Informe os 14 caracteres do CNPJ, com ou sem pontuação. Os dois últimos são
+                  números.
+                } @else {
+                  Use o formato da chave escolhida. Para telefone, inclua o sinal + e o código do
+                  país.
+                }
               </p>
               @if (
                 enviado() && (formulario.hasError('chave') || formulario.controls.chavePix.invalid)
               ) {
-                <p id="pix-chave-erro">Informe uma chave válida com até 77 caracteres.</p>
+                <p id="pix-chave-erro">
+                  {{
+                    formulario.controls.tipoChave.value === 'Cnpj'
+                      ? 'Confira os caracteres e os dígitos verificadores do CNPJ.'
+                      : 'Informe uma chave válida com até 77 caracteres.'
+                  }}
+                </p>
               }
             </div>
             <div class="grid gap-1">

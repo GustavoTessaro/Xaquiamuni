@@ -304,7 +304,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         {
                             t.HasCheckConstraint("CK_ConfiguracoesPixManual_Singleton", "[Id] = 1");
 
-                            t.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3)");
+                            t.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3, 4)");
                         });
                 });
 

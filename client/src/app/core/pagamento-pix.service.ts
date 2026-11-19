@@ -7,6 +7,7 @@ export const tiposChavePix = {
   Aleatoria: 'Aleatória',
   Email: 'E-mail',
   Telefone: 'Telefone',
+  Cnpj: 'CNPJ',
 };
 
 export interface DadosPix {

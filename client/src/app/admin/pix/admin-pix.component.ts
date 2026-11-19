@@ -12,7 +12,27 @@ import {
 } from '../../core/pagamento-pix.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 
-const formatos: Record<DadosPix['tipoChave'], RegExp> = {
+function cnpjValido(chave: string): boolean {
+  const formato =
+    /^(?:[A-Za-z0-9]{12}[0-9]{2}|[A-Za-z0-9]{2}\.[A-Za-z0-9]{3}\.[A-Za-z0-9]{3}\/[A-Za-z0-9]{4}-[0-9]{2})$/;
+  if (!formato.test(chave)) return false;
+  const cnpj = chave.replace(/[.\/-]/g, '').toUpperCase();
+  if (cnpj === '00000000000000') return false;
+
+  const digito = (base: string) => {
+    let soma = 0;
+    for (let i = 0; i < base.length; i++) {
+      soma += (base.charCodeAt(base.length - 1 - i) - 48) * (2 + (i % 8));
+    }
+    const resto = soma % 11;
+    return resto < 2 ? 0 : 11 - resto;
+  };
+  return (
+    Number(cnpj[12]) === digito(cnpj.slice(0, 12)) && Number(cnpj[13]) === digito(cnpj.slice(0, 13))
+  );
+}
+
+const formatos: Record<Exclude<DadosPix['tipoChave'], 'Cnpj'>, RegExp> = {
   Aleatoria: /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i,
   Email: /^(?=[!-~]+$)[^@]+@[^@.]+(?:\.[^@.]+)+$/,
   Telefone: /^\+[1-9][0-9]{1,14}$/,
@@ -62,11 +82,14 @@ export class AdminPixComponent {
       validators: (grupo) => {
         const { tipoChave, chavePix } = grupo.getRawValue();
         const chave = chavePix.trim();
-        return Object.hasOwn(formatos, tipoChave) &&
-          formatos[tipoChave as DadosPix['tipoChave']].test(chave) &&
-          chave !== '00000000-0000-0000-0000-000000000000'
-          ? null
-          : { chave: true };
+        const valido =
+          tipoChave === 'Cnpj'
+            ? cnpjValido(chave)
+            : tipoChave &&
+              Object.hasOwn(formatos, tipoChave) &&
+              formatos[tipoChave as keyof typeof formatos].test(chave) &&
+              chave !== '00000000-0000-0000-0000-000000000000';
+        return valido ? null : { chave: true };
       },
     },
   );
