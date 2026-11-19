@@ -845,6 +845,128 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ComponenteCompraMateriaPrima", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ApresentacaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<decimal?>("Fator")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LinhaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NomeApresentacao")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("NomeInsumo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal>("QuantidadeBase")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<string>("UnidadeBase")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ApresentacaoId");
+
+                    b.HasIndex("InsumoId");
+
+                    b.HasIndex("LinhaId");
+
+                    b.ToTable("ComponentesCompraMateriaPrima", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AtualizadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AtualizadoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset?>("CanceladoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("ChaveCriacao")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CriadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("DataCompra")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("FornecedorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ImpressaoCriacao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("NomeFornecedor")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("Situacao")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<decimal?>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<Guid>("Versao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FornecedorId");
+
+                    b.HasIndex("CriadoPorId", "ChaveCriacao")
+                        .IsUnique()
+                        .HasDatabaseName("UX_ComprasMateriasPrimas_Criacao");
+
+                    b.HasIndex("DataCompra", "Id");
+
+                    b.ToTable("ComprasMateriasPrimas", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ContagemSemDiferencaProdutoAcabado", b =>
                 {
                     b.Property<Guid>("ResponsavelId")
@@ -970,6 +1092,37 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_InsumosEstoque_ValidadeRequerLote", "[ValidadeObrigatoria] = 0 OR [ControlaLote] = 1");
                         });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CompraId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Kit")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<int>("Ordem")
+                        .HasColumnType("int");
+
+                    b.Property<decimal>("Quantidade")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("decimal(18,6)");
+
+                    b.Property<decimal?>("ValorTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CompraId");
+
+                    b.ToTable("LinhasCompraMateriaPrima", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteInsumo", b =>
@@ -1855,6 +2008,35 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("Variante");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ComponenteCompraMateriaPrima", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("ApresentacaoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
+                        .WithMany()
+                        .HasForeignKey("InsumoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", null)
+                        .WithMany("Componentes")
+                        .HasForeignKey("LinhaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Fornecedor", null)
+                        .WithMany()
+                        .HasForeignKey("FornecedorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.InsumoEstoque", null)
@@ -1923,6 +2105,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
 
                     b.Navigation("EstoqueMinimo");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", null)
+                        .WithMany("Linhas")
+                        .HasForeignKey("CompraId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LoteInsumo", b =>
@@ -2306,9 +2497,19 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("CaracteristicaValores");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", b =>
+                {
+                    b.Navigation("Linhas");
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.InsumoEstoque", b =>
                 {
                     b.Navigation("FormasCompra");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.LinhaCompraMateriaPrima", b =>
+                {
+                    b.Navigation("Componentes");
                 });
 #pragma warning restore 612, 618
         }

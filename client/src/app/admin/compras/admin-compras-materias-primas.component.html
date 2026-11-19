@@ -1,0 +1,394 @@
+<app-admin-workspace activePage="purchases">
+  <section class="space-y-5" aria-labelledby="compras-titulo">
+    <header class="flex flex-wrap items-center justify-between gap-3">
+      <h1 id="compras-titulo" class="text-2xl font-semibold text-slate-900">
+        Compras de matérias-primas
+      </h1>
+      @if (!editor()) {
+        <button
+          type="button"
+          (click)="novo()"
+          [disabled]="carregando() || ocupado()"
+          class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+        >
+          Nova compra
+        </button>
+      }
+    </header>
+    @if (erro()) {
+      <p role="alert" class="rounded-lg bg-red-50 p-3 text-red-900">{{ erro() }}</p>
+    }
+    @if (sucesso()) {
+      <p role="status" class="text-emerald-900">{{ sucesso() }}</p>
+    }
+    @if (ocupado()) {
+      <p role="status">Aguarde…</p>
+    }
+
+    @if (editor(); as compra) {
+      <form
+        (ngSubmit)="salvar(compra)"
+        class="space-y-4"
+        aria-labelledby="compra-titulo"
+        novalidate
+      >
+        <div class="rounded-xl border border-slate-200 bg-white p-4">
+          <h2 id="compra-titulo" class="font-semibold">
+            {{
+              compra.cancelada ? 'Compra cancelada' : compra.id ? 'Editar rascunho' : 'Nova compra'
+            }}
+          </h2>
+          <p class="mt-1 text-sm text-slate-700">Salvar o rascunho não atualiza o estoque.</p>
+        </div>
+        <fieldset
+          [disabled]="ocupado() || compra.cancelada"
+          class="grid min-w-0 gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2"
+        >
+          <label class="block min-w-0 font-medium"
+            >Fornecedor
+            <select
+              required
+              name="fornecedor"
+              [(ngModel)]="compra.fornecedorId"
+              class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+            >
+              <option value="">Selecione</option>
+              @if (compra.fornecedorOriginal; as original) {
+                @if (!temFornecedor(original.fornecedorId)) {
+                  <option [value]="original.fornecedorId">
+                    {{ original.nomeFornecedor }} (cadastro inativo)
+                  </option>
+                }
+              }
+              @for (f of fornecedores(); track f.id) {
+                <option [value]="f.id">{{ f.nome }}</option>
+              }
+            </select>
+          </label>
+          <label class="block min-w-0 font-medium"
+            >Data da compra
+            <input
+              required
+              type="date"
+              name="data"
+              [(ngModel)]="compra.data"
+              class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+            />
+          </label>
+        </fieldset>
+
+        @for (linha of compra.linhas; track linha; let n = $index) {
+          <fieldset
+            [disabled]="ocupado() || compra.cancelada"
+            class="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-4"
+          >
+            <legend class="px-1 font-semibold">
+              {{ linha.tipo === 'kit' ? 'Kit misto' : 'Material' }} {{ n + 1 }}
+            </legend>
+            <div class="grid gap-3 sm:grid-cols-2">
+              @if (linha.tipo === 'kit') {
+                <label class="min-w-0 text-sm font-medium sm:col-span-2"
+                  >Nome do kit
+                  <input
+                    required
+                    maxlength="120"
+                    [name]="'kit-' + n"
+                    [attr.name]="'kit-' + n"
+                    [(ngModel)]="linha.kit"
+                    class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                  />
+                </label>
+                <label class="min-w-0 text-sm font-medium"
+                  >Quantidade de kits
+                  <input
+                    required
+                    inputmode="numeric"
+                    maxlength="12"
+                    [name]="'kit-qtd-' + n"
+                    [attr.name]="'kit-qtd-' + n"
+                    [(ngModel)]="linha.quantidade"
+                    class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                  />
+                </label>
+              }
+              <label class="min-w-0 text-sm font-medium"
+                >Valor total da linha (R$)
+                <input
+                  inputmode="decimal"
+                  maxlength="19"
+                  [name]="'valor-' + n"
+                  [attr.name]="'valor-' + n"
+                  [(ngModel)]="linha.valor"
+                  placeholder="Não informado"
+                  class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                />
+              </label>
+            </div>
+            @if (linha.tipo === 'kit') {
+              <p class="text-sm text-slate-700">
+                Informe a quantidade comprada de cada material, somando todos os kits desta linha. O
+                preço do kit fica registrado no conjunto.
+              </p>
+            }
+            @for (item of linha.itens; track item; let j = $index) {
+              <div class="grid gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-2">
+                <label class="min-w-0 text-sm font-medium"
+                  >Matéria-prima
+                  <select
+                    required
+                    [name]="'material-' + n + '-' + j"
+                    [attr.name]="'material-' + n + '-' + j"
+                    [ngModel]="item.insumoId"
+                    (ngModelChange)="trocarMaterial(item, $event)"
+                    class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                  >
+                    <option value="">Selecione</option>
+                    @if (item.snapshot; as snapshot) {
+                      @if (!temInsumo(snapshot.insumoId)) {
+                        <option [value]="snapshot.insumoId">
+                          {{ snapshot.nomeInsumo }} (cadastro inativo)
+                        </option>
+                      }
+                    }
+                    @for (insumo of insumos(); track insumo.insumoId) {
+                      <option [value]="insumo.insumoId">{{ insumo.nome }}</option>
+                    }
+                  </select>
+                </label>
+                <label class="min-w-0 text-sm font-medium"
+                  >Apresentação
+                  <select
+                    [name]="'forma-' + n + '-' + j"
+                    [attr.name]="'forma-' + n + '-' + j"
+                    [(ngModel)]="item.apresentacaoId"
+                    [disabled]="!item.insumoId || carregandoFormas().has(item.insumoId)"
+                    class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                  >
+                    <option value="">
+                      Unidade-base{{ unidade(item) ? ' (' + unidade(item) + ')' : '' }}
+                    </option>
+                    @if (item.snapshot; as s) {
+                      @if (
+                        s.insumoId === item.insumoId &&
+                        s.apresentacaoId &&
+                        !temForma(item.insumoId, s.apresentacaoId)
+                      ) {
+                        <option [value]="s.apresentacaoId">
+                          {{ s.nomeApresentacao }} (registrada)
+                        </option>
+                      }
+                    }
+                    @for (forma of formas()[item.insumoId] ?? []; track forma.id) {
+                      <option [value]="forma.id">{{ forma.nome }}</option>
+                    }
+                  </select>
+                </label>
+                @if (carregandoFormas().has(item.insumoId)) {
+                  <p role="status" class="text-sm sm:col-span-2">Carregando apresentações…</p>
+                } @else if (falhasFormas().has(item.insumoId)) {
+                  <button
+                    type="button"
+                    (click)="carregarFormas(item.insumoId)"
+                    class="min-h-11 text-left underline focus-visible:outline-2 sm:col-span-2"
+                  >
+                    Não foi possível carregar apresentações. Tentar novamente
+                  </button>
+                }
+                <label class="min-w-0 text-sm font-medium">
+                  {{
+                    item.apresentacaoId
+                      ? 'Quantidade de embalagens'
+                      : 'Quantidade' + (unidade(item) ? ' (' + unidade(item) + ')' : '')
+                  }}
+                  <input
+                    required
+                    inputmode="decimal"
+                    maxlength="19"
+                    [name]="'qtd-' + n + '-' + j"
+                    [attr.name]="'qtd-' + n + '-' + j"
+                    [(ngModel)]="item.quantidade"
+                    class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+                  />
+                </label>
+                @if (conversao(item); as equivalente) {
+                  <p class="self-end text-sm text-slate-700" aria-live="polite">
+                    {{ equivalente }}
+                  </p>
+                }
+                @if (linha.tipo === 'kit' && !compra.cancelada && linha.itens.length > 2) {
+                  <button
+                    type="button"
+                    (click)="linha.itens.splice(j, 1)"
+                    [attr.aria-label]="'Remover material ' + (j + 1) + ' da linha ' + (n + 1)"
+                    class="min-h-11 justify-self-start text-red-800 underline focus-visible:outline-2"
+                  >
+                    Remover material
+                  </button>
+                }
+              </div>
+            }
+            @if (!compra.cancelada) {
+              <div class="flex flex-wrap gap-4">
+                @if (linha.tipo === 'kit' && linha.itens.length < 30) {
+                  <button
+                    type="button"
+                    (click)="linha.itens.push(novoItem())"
+                    class="min-h-11 font-medium text-emerald-900 underline focus-visible:outline-2"
+                  >
+                    Adicionar material ao kit
+                  </button>
+                }
+                @if (compra.linhas.length > 1) {
+                  <button
+                    type="button"
+                    (click)="compra.linhas.splice(n, 1)"
+                    [attr.aria-label]="'Remover linha ' + (n + 1)"
+                    class="min-h-11 text-red-800 underline focus-visible:outline-2"
+                  >
+                    Remover linha
+                  </button>
+                }
+              </div>
+            }
+          </fieldset>
+        }
+        @if (!compra.cancelada && compra.linhas.length < 50) {
+          <div class="flex flex-wrap gap-2">
+            <button
+              type="button"
+              (click)="compra.linhas.push(novaLinha('material'))"
+              [disabled]="ocupado()"
+              class="min-h-11 rounded-lg border border-emerald-800 px-3 font-medium text-emerald-900 focus-visible:outline-2"
+            >
+              Adicionar material
+            </button>
+            <button
+              type="button"
+              (click)="compra.linhas.push(novaLinha('kit'))"
+              [disabled]="ocupado()"
+              class="min-h-11 rounded-lg border border-emerald-800 px-3 font-medium text-emerald-900 focus-visible:outline-2"
+            >
+              Adicionar kit misto
+            </button>
+          </div>
+        }
+        <p class="rounded-lg bg-emerald-50 p-3 font-semibold text-emerald-950">
+          Total da compra: {{ total(compra.linhas) }}
+        </p>
+        <div class="flex flex-wrap items-center gap-3">
+          @if (!compra.cancelada) {
+            <button
+              type="submit"
+              [disabled]="ocupado()"
+              class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
+            >
+              Salvar rascunho
+            </button>
+          }
+          <button
+            type="button"
+            (click)="fechar()"
+            [disabled]="ocupado()"
+            class="min-h-11 px-2 underline focus-visible:outline-2"
+          >
+            Voltar à lista
+          </button>
+          @if (compra.id && !compra.cancelada && !confirmarCancelamento()) {
+            <button
+              type="button"
+              (click)="confirmarCancelamento.set(true)"
+              [disabled]="ocupado()"
+              class="min-h-11 px-2 font-medium text-red-800 underline focus-visible:outline-2"
+            >
+              Cancelar compra
+            </button>
+          }
+        </div>
+        @if (confirmarCancelamento()) {
+          <div class="rounded-xl border border-red-200 bg-red-50 p-3">
+            <p>Cancelar esta compra? Ela permanecerá no histórico.</p>
+            <button
+              type="button"
+              (click)="cancelar(compra)"
+              [disabled]="ocupado()"
+              class="mr-4 min-h-11 font-semibold text-red-800 underline focus-visible:outline-2"
+            >
+              Confirmar cancelamento
+            </button>
+            <button
+              type="button"
+              (click)="confirmarCancelamento.set(false)"
+              [disabled]="ocupado()"
+              class="min-h-11 underline focus-visible:outline-2"
+            >
+              Voltar
+            </button>
+          </div>
+        }
+      </form>
+    } @else if (carregando()) {
+      <p role="status">Carregando compras…</p>
+    } @else if (falhaLista()) {
+      <button type="button" (click)="carregar()" class="min-h-11 underline focus-visible:outline-2">
+        Tentar novamente
+      </button>
+    } @else {
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="min-w-0 text-sm font-medium"
+          >Buscar por fornecedor
+          <input
+            type="search"
+            maxlength="120"
+            [ngModel]="busca()"
+            (ngModelChange)="busca.set($event)"
+            class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+          />
+        </label>
+        <label class="min-w-0 text-sm font-medium"
+          >Situação
+          <select
+            [ngModel]="filtro()"
+            (ngModelChange)="filtro.set($event)"
+            class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
+          >
+            <option value="">Todas</option>
+            <option>Rascunho</option>
+            <option>Cancelada</option>
+          </select>
+        </label>
+      </div>
+      @if (!visiveis().length) {
+        <p role="status">
+          {{ busca() || filtro() ? 'Nenhuma compra encontrada.' : 'Nenhuma compra cadastrada.' }}
+        </p>
+      } @else {
+        <ul class="grid gap-3">
+          @for (item of visiveis(); track item.id) {
+            <li
+              class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4"
+            >
+              <div class="min-w-0 [overflow-wrap:anywhere]">
+                <h2 class="font-semibold">{{ item.nomeFornecedor }}</h2>
+                <p class="text-sm">
+                  {{ item.dataCompra.split('-').reverse().join('/') }} · {{ item.situacao }} ·
+                  {{ formatarValor(item.total) }}
+                </p>
+              </div>
+              <button
+                type="button"
+                (click)="consultar(item.id)"
+                [disabled]="ocupado()"
+                [attr.aria-label]="
+                  'Abrir compra de ' + item.nomeFornecedor + ' de ' + item.dataCompra
+                "
+                class="min-h-11 rounded-lg border border-slate-400 px-3 focus-visible:outline-2 focus-visible:outline-emerald-800"
+              >
+                Abrir compra
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    }
+  </section>
+</app-admin-workspace>

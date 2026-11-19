@@ -130,6 +130,13 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/compras',
+    loadComponent: () => import('./admin/compras/admin-compras-materias-primas.component').then(
+      (module) => module.AdminComprasMateriasPrimasComponent,
+    ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/fornecedores',
     loadComponent: () => import('./admin/fornecedores/admin-fornecedores.component').then((module) => module.AdminFornecedoresComponent),
     canActivate: [adminAuthGuard],

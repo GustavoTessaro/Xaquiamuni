@@ -4,7 +4,7 @@ import { finalize } from 'rxjs';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 
 export type AdminWorkspacePage =
-  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers';
+  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,

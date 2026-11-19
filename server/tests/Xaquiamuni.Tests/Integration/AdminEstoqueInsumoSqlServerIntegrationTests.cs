@@ -94,6 +94,132 @@ public sealed class AdminEstoqueInsumoSqlServerIntegrationTests
     }
 
     [SqlServerIntegrationFact]
+    public async Task ComprasMateriasPrimas_RascunhoProtegidoComSnapshotsEConcorrenciaSemMovimentarEstoque()
+    {
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        using var factory = CreateFactory(database);
+        const string path = "/api/admin/compras-materias-primas";
+        using var anonimo = CreateClient(factory);
+        using var cliente = CreateClient(factory, XaquiamuniRoles.Cliente);
+        using var admin = CreateClient(factory, XaquiamuniRoles.Administrador);
+        using var semSessao = await anonimo.GetAsync(path);
+        using var proibido = await cliente.GetAsync(path);
+        Assert.Equal(HttpStatusCode.Unauthorized, semSessao.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, proibido.StatusCode);
+        using var semCsrf = await admin.PostAsJsonAsync(path, new { });
+        Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
+        var csrf = await GetCsrfAsync(admin);
+
+        var fornecedor = Xaquiamuni.Dominio.Entidades.Fornecedor.Criar("Ervas do Vale", null, null, null, DateTimeOffset.UtcNow);
+        var extrato = InsumoEstoque.Criar("Extrato", TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Mililitro);
+        var frasco = extrato.AdicionarFormaCompra("Frasco 100 ml", 100, UnidadeFisicaEstoque.Mililitro);
+        var ervas = new[] { "Arruda Macho", "Arruda Fêmea", "Alecrim", "Alevante", "Espada de São Jorge", "Guiné", "Comigo-ninguém-pode" }
+            .Select(n => InsumoEstoque.Criar(n, TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama)).ToArray();
+        await using (var db = database.CreateVerificationContext())
+        {
+            db.Fornecedores.Add(fornecedor);
+            db.InsumosEstoque.Add(extrato);
+            db.InsumosEstoque.AddRange(ervas);
+            await db.SaveChangesAsync();
+        }
+
+        var data = new DateOnly(2026, 11, 19);
+        var chave = Guid.NewGuid();
+        Xaquiamuni.Aplicacao.Estoque.CompraMateriaPrimaInput Montar(Guid? versao = null, Guid? snapshot = null,
+            decimal? preco = 23.45m, Guid? apresentacao = null) =>
+            new(fornecedor.Id, data, [
+                new(null, 2, 0, [new(extrato.Id, apresentacao ?? frasco.Id, 2, snapshot)]),
+                new("Sete ervas", 1, preco, ervas.Select((e, i) =>
+                    new Xaquiamuni.Aplicacao.Estoque.ComponenteCompraInput(e.Id, null, i + 0.5m, null)).ToArray())
+            ], versao);
+        async Task<HttpResponseMessage> Enviar(HttpMethod metodo, string url, object corpo, Guid? key = null)
+        {
+            using var request = new HttpRequestMessage(metodo, url) { Content = JsonContent.Create(corpo) };
+            AddAntiforgery(request, csrf);
+            if (key.HasValue) request.Headers.Add("Idempotency-Key", key.ToString());
+            return await admin.SendAsync(request);
+        }
+
+        using var formaInvalida = await Enviar(HttpMethod.Post, path, Montar(apresentacao: Guid.NewGuid()), Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, formaInvalida.StatusCode);
+
+        var gravacoes = await Task.WhenAll(Enviar(HttpMethod.Post, path, Montar(), chave), Enviar(HttpMethod.Post, path, Montar(), chave));
+        using var primeira = Assert.Single(gravacoes, r => r.StatusCode == HttpStatusCode.Created);
+        using var repetida = Assert.Single(gravacoes, r => r.StatusCode == HttpStatusCode.OK);
+        var url = Assert.IsType<Uri>(primeira.Headers.Location).ToString();
+        var criado = await primeira.Content.ReadFromJsonAsync<JsonElement>();
+        var replay = await repetida.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(criado.GetProperty("resumo").GetProperty("id").GetGuid(), replay.GetProperty("resumo").GetProperty("id").GetGuid());
+        Assert.Equal("23.45", criado.GetProperty("resumo").GetProperty("total").GetString());
+        var linhas = criado.GetProperty("linhas");
+        Assert.Equal("0", linhas[0].GetProperty("valorTotal").GetString());
+        var item = linhas[0].GetProperty("componentes")[0];
+        Assert.Equal("200", item.GetProperty("quantidadeBase").GetString());
+        Assert.Equal(7, linhas[1].GetProperty("componentes").GetArrayLength());
+        Assert.False(linhas[1].GetProperty("componentes")[0].TryGetProperty("valorTotal", out _));
+        using var chaveDivergente = await Enviar(HttpMethod.Post, path, Montar(preco: 25m), chave);
+        Assert.Equal(HttpStatusCode.Conflict, chaveDivergente.StatusCode);
+
+        var versao = criado.GetProperty("versao").GetGuid();
+        var snapshot = item.GetProperty("id").GetGuid();
+        await using (var db = database.CreateVerificationContext())
+        {
+            var material = await db.InsumosEstoque.Include(i => i.FormasCompra).SingleAsync(i => i.Id == extrato.Id);
+            material.AtualizarFormaCompra(frasco.Id, "Frasco 125 ml", 125, UnidadeFisicaEstoque.Mililitro);
+            var f = await db.Fornecedores.SingleAsync();
+            f.Editar("Outro nome", null, null, null, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+
+        var edicoes = await Task.WhenAll(
+            Enviar(HttpMethod.Put, url, Montar(versao, snapshot, null)),
+            Enviar(HttpMethod.Put, url, Montar(versao, snapshot, null)));
+        using var sucesso = Assert.Single(edicoes, r => r.StatusCode == HttpStatusCode.OK);
+        using var obsoleta = Assert.Single(edicoes, r => r.StatusCode == HttpStatusCode.Conflict);
+        var editado = await sucesso.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(JsonValueKind.Null, editado.GetProperty("resumo").GetProperty("total").ValueKind);
+        Assert.Equal("Ervas do Vale", editado.GetProperty("resumo").GetProperty("nomeFornecedor").GetString());
+        Assert.Equal("Frasco 100 ml", editado.GetProperty("linhas")[0].GetProperty("componentes")[0].GetProperty("nomeApresentacao").GetString());
+
+        await using (var db = database.CreateVerificationContext())
+        {
+            var material = await db.InsumosEstoque.SingleAsync(i => i.Id == extrato.Id);
+            material.DefinirAtivo(false);
+            await db.SaveChangesAsync();
+        }
+        using var materialInativo = await Enviar(HttpMethod.Post, path, Montar(), Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, materialInativo.StatusCode);
+        await using (var db = database.CreateVerificationContext())
+        {
+            var f = await db.Fornecedores.SingleAsync();
+            f.DefinirAtivo(false, DateTimeOffset.UtcNow);
+            await db.SaveChangesAsync();
+        }
+        using var fornecedorInativo = await Enviar(HttpMethod.Post, path, Montar(), Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.BadRequest, fornecedorInativo.StatusCode);
+        var novaVersao = editado.GetProperty("versao").GetGuid();
+        var novoSnapshot = editado.GetProperty("linhas")[0].GetProperty("componentes")[0].GetProperty("id").GetGuid();
+        using var preservar = await Enviar(HttpMethod.Put, url, Montar(novaVersao, novoSnapshot, 25m));
+        Assert.Equal(HttpStatusCode.OK, preservar.StatusCode);
+        var versaoFinal = (await preservar.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("versao").GetGuid();
+        using var cancelada = await Enviar(HttpMethod.Post, url + "/cancelar", new { versao = versaoFinal });
+        Assert.Equal(HttpStatusCode.OK, cancelada.StatusCode);
+        using var cancelamentoRepetido = await Enviar(HttpMethod.Post, url + "/cancelar", new { versao = versaoFinal });
+        Assert.Equal(HttpStatusCode.OK, cancelamentoRepetido.StatusCode);
+        using var edicaoCancelada = await Enviar(HttpMethod.Put, url, Montar(versaoFinal, novoSnapshot));
+        Assert.Equal(HttpStatusCode.Conflict, edicaoCancelada.StatusCode);
+        using var detalhe = await admin.GetAsync(url);
+        Assert.Equal(HttpStatusCode.OK, detalhe.StatusCode);
+        Assert.Single((await admin.GetFromJsonAsync<JsonElement[]>(path + "?situacao=Cancelada&busca=Vale"))!);
+
+        await using var verificacao = database.CreateVerificationContext();
+        Assert.Equal(1, await verificacao.ComprasMateriasPrimas.CountAsync());
+        Assert.False(await verificacao.SaldosInsumo.AnyAsync());
+        Assert.False(await verificacao.MovimentosInsumo.AnyAsync());
+        Assert.False(await verificacao.LotesInsumo.AnyAsync());
+    }
+
+    [SqlServerIntegrationFact]
     public async Task AdminFornecedores_PersisteCadastroEdicaoEInativacaoComAdminECsrf()
     {
         await using var database = await SqlServerTestDatabase.CreateAsync();

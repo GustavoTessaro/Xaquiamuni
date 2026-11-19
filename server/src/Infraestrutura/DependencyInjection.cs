@@ -50,6 +50,7 @@ public static class DependencyInjection
             .ValidateOnStart();
         services.AddSingleton<ICalendarioOperacionalEstoque, CalendarioOperacionalEstoque>();
         services.AddScoped<IClienteRepository, ClienteRepository>();
+        services.AddScoped<IGerenciarComprasMateriaPrima, EfCompraMateriaPrimaRepository>();
         services.AddScoped<IGerenciarFornecedores, EfFornecedorRepository>();
         services.AddScoped<ICategoriaRepository, EfCategoriaRepository>();
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();

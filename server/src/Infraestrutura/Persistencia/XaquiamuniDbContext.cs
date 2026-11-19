@@ -26,6 +26,7 @@ public sealed class XaquiamuniDbContext
     public DbSet<Pedido> Pedidos => Set<Pedido>();
     public DbSet<ItemPedido> ItensPedido => Set<ItemPedido>();
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
+    public DbSet<CompraMateriaPrima> ComprasMateriasPrimas => Set<CompraMateriaPrima>();
     public DbSet<Fornecedor> Fornecedores => Set<Fornecedor>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
     public DbSet<Produto> Produtos => Set<Produto>();
@@ -74,6 +75,7 @@ public sealed class XaquiamuniDbContext
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+        builder.MapearComprasMateriasPrimas();
         builder.Entity<Fornecedor>(fornecedor =>
         {
             fornecedor.ToTable("Fornecedores");
