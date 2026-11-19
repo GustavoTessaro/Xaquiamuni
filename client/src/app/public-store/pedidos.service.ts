@@ -39,6 +39,19 @@ export interface PedidoCliente {
   itens: ItemPedido[];
 }
 
+export type ResumoPedidoCliente = Pick<
+  PedidoCliente,
+  'id' | 'situacao' | 'criadoEmUtc' | 'prazoPagamentoEmUtc' | 'totalCentavos'
+>;
+
+export interface PaginaPedidosCliente {
+  itens: ResumoPedidoCliente[];
+  pagina: number;
+  itensPorPagina: number;
+  totalItens: number;
+  totalPaginas: number;
+}
+
 export function uuidValido(valor: unknown): valor is string {
   return (
     typeof valor === 'string' &&
@@ -113,6 +126,10 @@ export class PedidosService {
           return pedido;
         }),
       );
+  }
+
+  listar(pagina: number) {
+    return this.http.get<PaginaPedidosCliente>(url, { params: { pagina } }).pipe(timeout(30_000));
   }
 
   consultar(id: string) {

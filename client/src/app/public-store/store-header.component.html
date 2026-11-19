@@ -51,7 +51,7 @@
       @if (sessionLoading()) {
         <span class="store-account__status" role="status">Verificando conta...</span>
       } @else if (session()) {
-        <a class="store-account__link" routerLink="/login">Minha conta</a>
+        <a class="store-account__link" routerLink="/pedidos">Meus pedidos</a>
         <button
           type="button"
           class="store-account__logout"
@@ -135,10 +135,10 @@
         </nav>
       </details>
       <a routerLink="/" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
-      <a routerLink="/login" (click)="closeNavigation()">{{
-        session() ? 'Minha conta' : 'Entrar'
-      }}</a>
-      @if (!session()) {
+      @if (session()) {
+        <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
+      } @else {
+        <a routerLink="/login" (click)="closeNavigation()">Entrar</a>
         <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
       }
     </nav>

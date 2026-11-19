@@ -139,6 +139,13 @@ export const routes: Routes = [
           import('./public-store/checkout.component').then((module) => module.CheckoutComponent),
       },
       {
+        path: 'pedidos',
+        loadComponent: () =>
+          import('./public-store/meus-pedidos.component').then(
+            (module) => module.MeusPedidosComponent,
+          ),
+      },
+      {
         path: 'pedidos/:id',
         loadComponent: () =>
           import('./public-store/pedido-confirmacao.component').then(

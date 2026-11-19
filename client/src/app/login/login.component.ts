@@ -8,12 +8,7 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import {
-  FormControl,
-  FormGroup,
-  ReactiveFormsModule,
-  Validators,
-} from '@angular/forms';
+import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, TimeoutError, finalize, interval } from 'rxjs';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
@@ -59,7 +54,9 @@ export class LoginComponent implements OnDestroy {
   }
   protected get destinoCompra(): string[] | null {
     const pedido = this.route.snapshot.queryParamMap.get('pedido');
-    return this.retornoCheckout ? ['/checkout'] : uuidValido(pedido) ? ['/pedidos', pedido] : null;
+    if (this.retornoCheckout) return ['/checkout'];
+    if (uuidValido(pedido)) return ['/pedidos', pedido];
+    return this.route.snapshot.queryParamMap.get('retorno') === 'pedidos' ? ['/pedidos'] : null;
   }
 
   private pendingConfirmationEmail: string | null = null;
@@ -79,12 +76,10 @@ export class LoginComponent implements OnDestroy {
 
   constructor(private readonly authService: AuthService) {
     this.checkSession('initial');
-    this.form.valueChanges
-      .pipe(takeUntilDestroyed())
-      .subscribe(() => {
-        this.successMessage.set('');
-        this.errorMessage.set('');
-      });
+    this.form.valueChanges.pipe(takeUntilDestroyed()).subscribe(() => {
+      this.successMessage.set('');
+      this.errorMessage.set('');
+    });
   }
 
   protected fieldInvalid(control: FormControl<string>): boolean {
@@ -111,7 +106,8 @@ export class LoginComponent implements OnDestroy {
 
     const { email, senha } = this.form.getRawValue();
     this.signingIn.set(true);
-    this.authService.login(email, senha)
+    this.authService
+      .login(email, senha)
       .pipe(finalize(() => this.signingIn.set(false)))
       .subscribe({
         next: () => {
@@ -133,17 +129,14 @@ export class LoginComponent implements OnDestroy {
 
   protected resendConfirmationEmail(): void {
     const email = this.pendingConfirmationEmail;
-    if (
-      !email
-      || this.resendingConfirmation()
-      || this.retryRemainingSeconds() > 0
-    ) {
+    if (!email || this.resendingConfirmation() || this.retryRemainingSeconds() > 0) {
       return;
     }
 
     this.confirmationResendFeedback.set(null);
     this.resendingConfirmation.set(true);
-    this.authService.reenviarConfirmacaoEmail(email)
+    this.authService
+      .reenviarConfirmacaoEmail(email)
       .pipe(
         takeUntilDestroyed(this.destroyRef),
         finalize(() => {
@@ -153,11 +146,13 @@ export class LoginComponent implements OnDestroy {
         }),
       )
       .subscribe({
-        next: () => this.confirmationResendFeedback.set({
-          kind: 'success',
-          message: 'Solicitação recebida. Se houver uma conta elegível, enviaremos um e-mail de confirmação. '
-            + 'Verifique também a caixa de entrada e a pasta de spam.',
-        }),
+        next: () =>
+          this.confirmationResendFeedback.set({
+            kind: 'success',
+            message:
+              'Solicitação recebida. Se houver uma conta elegível, enviaremos um e-mail de confirmação. ' +
+              'Verifique também a caixa de entrada e a pasta de spam.',
+          }),
         error: (error: unknown) => this.handleConfirmationResendError(error),
       });
   }
@@ -180,13 +175,12 @@ export class LoginComponent implements OnDestroy {
 
     this.errorMessage.set('');
     this.signingOut.set(true);
-    this.authService.logout()
+    this.authService
+      .logout()
       .pipe(finalize(() => this.signingOut.set(false)))
       .subscribe({
         next: () => this.checkSession('logout'),
-        error: () => this.errorMessage.set(
-          'Não foi possível encerrar a sessão. Tente novamente.',
-        ),
+        error: () => this.errorMessage.set('Não foi possível encerrar a sessão. Tente novamente.'),
       });
   }
 
@@ -220,10 +214,12 @@ export class LoginComponent implements OnDestroy {
     }
 
     const body: unknown = error.error;
-    return typeof body === 'object'
-      && body !== null
-      && 'code' in body
-      && body.code === 'EMAIL_NOT_CONFIRMED';
+    return (
+      typeof body === 'object' &&
+      body !== null &&
+      'code' in body &&
+      body.code === 'EMAIL_NOT_CONFIRMED'
+    );
   }
 
   private handleLoginError(error: unknown): void {
@@ -333,7 +329,8 @@ export class LoginComponent implements OnDestroy {
     this.checkingSession.set(true);
     this.sessionError.set('');
     this.successMessage.set('');
-    this.authService.obterSessao()
+    this.authService
+      .obterSessao()
       .pipe(finalize(() => this.checkingSession.set(false)))
       .subscribe({
         next: (session) => {
@@ -344,9 +341,7 @@ export class LoginComponent implements OnDestroy {
           if (purpose === 'login' && session) {
             this.successMessage.set('Login realizado com sucesso.');
           } else if (purpose === 'login' && !session) {
-            this.errorMessage.set(
-              'Não foi possível confirmar a sessão. Tente entrar novamente.',
-            );
+            this.errorMessage.set('Não foi possível confirmar a sessão. Tente entrar novamente.');
           } else if (purpose === 'logout' && session) {
             this.errorMessage.set(
               'Não foi possível confirmar o encerramento da sessão. Tente novamente.',
@@ -356,9 +351,7 @@ export class LoginComponent implements OnDestroy {
           }
         },
         error: () => {
-          this.sessionError.set(
-            'Não foi possível verificar sua sessão. Tente novamente.',
-          );
+          this.sessionError.set('Não foi possível verificar sua sessão. Tente novamente.');
           if (purpose === 'login') {
             this.errorMessage.set(
               'Não foi possível confirmar a sessão. Tente verificar novamente.',

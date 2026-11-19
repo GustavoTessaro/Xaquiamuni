@@ -36,9 +36,10 @@ describe('StoreHeaderComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
-    expect(element.textContent).toContain('Minha conta');
+    expect(element.textContent).toContain('Meus pedidos');
     const accountLink = element.querySelector('.store-account__link') as HTMLAnchorElement;
-    expect(accountLink.getAttribute('href')).toBe('/login');
+    expect(accountLink.getAttribute('href')).toBe('/pedidos');
+    expect(element.querySelector('.store-mobile-nav a[href="/pedidos"]')).not.toBeNull();
     expect(element.querySelector('.store-account__logout')?.textContent).toContain('Sair');
     expect(element.querySelector('.store-account__register')).toBeNull();
     expect(logout).not.toHaveBeenCalled();

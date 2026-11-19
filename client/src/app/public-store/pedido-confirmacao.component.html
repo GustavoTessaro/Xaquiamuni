@@ -50,5 +50,8 @@
     }
     <button class="principal" type="button" (click)="tentarNovamente()">Consultar novamente</button>
   }
-  <a routerLink="/produtos">Continuar comprando</a>
+  <nav class="paginacao-pedidos" aria-label="Navegação do pedido">
+    <a routerLink="/pedidos" queryParamsHandling="preserve">Voltar a Meus pedidos</a>
+    <a routerLink="/produtos">Continuar comprando</a>
+  </nav>
 </section>

@@ -50,6 +50,19 @@ h2 {
   padding-top: 0.75rem;
 }
 
+.paginacao-pedidos {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 1rem;
+}
+
+.paginacao-pedidos a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+
 .instrucoes-pix {
   white-space: pre-wrap;
 }

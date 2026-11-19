@@ -1,0 +1,70 @@
+<section class="compra" aria-labelledby="meus-pedidos-titulo">
+  <h1 id="meus-pedidos-titulo">Meus pedidos</h1>
+  @let atual = estado();
+  @switch (atual.tipo) {
+    @case ('carregando') {
+      <p role="status">Consultando seus pedidos…</p>
+    }
+    @case ('sessao') {
+      <p role="alert">Entre na sua conta para consultar seus pedidos.</p>
+      <a routerLink="/login" [queryParams]="{ retorno: 'pedidos' }">Entrar</a>
+    }
+    @case ('proibido') {
+      <p role="alert">Esta conta não tem acesso aos pedidos da loja.</p>
+    }
+    @case ('falha') {
+      <p role="alert" class="aviso">Não foi possível consultar seus pedidos agora.</p>
+      <button class="principal" type="button" (click)="tentarNovamente()">Tentar novamente</button>
+    }
+    @case ('sucesso') {
+      @if (atual.dados.totalItens === 0) {
+        <p>Você ainda não tem pedidos.</p>
+      } @else if (atual.dados.itens.length === 0) {
+        <p>Não há pedidos nesta página.</p>
+        <a routerLink="/pedidos">Voltar à primeira página</a>
+      } @else {
+        <ul class="painel linhas" aria-label="Histórico de pedidos">
+          @for (pedido of atual.dados.itens; track pedido.id) {
+            <li>
+              <div>
+                <h2>
+                  <a
+                    [routerLink]="['/pedidos', pedido.id]"
+                    [queryParams]="{ pagina: atual.dados.pagina }"
+                  >
+                    Pedido {{ pedido.id }}
+                  </a>
+                </h2>
+                <p>
+                  <time [attr.datetime]="pedido.criadoEmUtc">
+                    {{ pedido.criadoEmUtc | date: 'dd/MM/yyyy HH:mm' }}
+                  </time>
+                </p>
+                <p>{{ situacoes[pedido.situacao] }}</p>
+              </div>
+              <strong>{{ reais(pedido.totalCentavos) }}</strong>
+            </li>
+          }
+        </ul>
+        @if (atual.dados.totalPaginas > 1) {
+          <nav aria-label="Paginação dos pedidos" class="paginacao-pedidos">
+            <span role="status"
+              >Página {{ atual.dados.pagina }} de {{ atual.dados.totalPaginas }}</span
+            >
+            @if (atual.dados.pagina > 1) {
+              <a routerLink="/pedidos" [queryParams]="{ pagina: atual.dados.pagina - 1 }"
+                >Anterior</a
+              >
+            }
+            @if (atual.dados.pagina < atual.dados.totalPaginas) {
+              <a routerLink="/pedidos" [queryParams]="{ pagina: atual.dados.pagina + 1 }"
+                >Próxima</a
+              >
+            }
+          </nav>
+        }
+      }
+      <a routerLink="/produtos">Continuar comprando</a>
+    }
+  }
+</section>
