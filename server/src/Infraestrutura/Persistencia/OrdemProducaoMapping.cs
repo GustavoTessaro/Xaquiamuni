@@ -13,6 +13,13 @@ internal static class OrdemProducaoMapping
             ordem.ToTable("OrdensProducao", t =>
                 t.HasCheckConstraint("CK_OrdensProducao_Valida",
                     "[QuantidadePlanejada] > 0 AND (([Situacao] = 'EmAndamento' AND [EncerradaEmUtc] IS NULL AND [EncerradaPorId] IS NULL) OR ([Situacao] IN ('Concluida', 'Cancelada') AND [EncerradaEmUtc] IS NOT NULL AND [EncerradaPorId] IS NOT NULL))"));
+            ordem.Property(o => o.Versao).HasDefaultValueSql("NEWID()").IsConcurrencyToken();
+            ordem.Property(o => o.ImpressaoConclusao).HasMaxLength(64).IsFixedLength();
+            ordem.HasIndex(o => new { o.EncerradaPorId, o.ChaveConclusao }).IsUnique()
+                .HasFilter("[EncerradaPorId] IS NOT NULL AND [ChaveConclusao] IS NOT NULL");
+            ordem.HasIndex(o => o.MovimentoAcabadoId).IsUnique().HasFilter("[MovimentoAcabadoId] IS NOT NULL");
+            ordem.HasOne<MovimentoProdutoAcabado>().WithMany().HasForeignKey(o => o.MovimentoAcabadoId)
+                .OnDelete(DeleteBehavior.Restrict);
             ordem.Property(o => o.NomeReceita).HasMaxLength(ReceitaProducao.NomeMax);
             ordem.Property(o => o.ImpressaoInicio).HasMaxLength(64).IsFixedLength();
             ordem.HasIndex(o => new { o.IniciadaPorId, o.ChaveInicio }).IsUnique().HasFilter("[ChaveInicio] IS NOT NULL");
@@ -40,6 +47,9 @@ internal static class OrdemProducaoMapping
             alocacao.ToTable("AlocacoesMateriasPrimas", t => t.HasCheckConstraint("CK_AlocacoesMateriasPrimas_Quantidade",
                 "[Reservada] > 0 AND [Consumida] >= 0 AND [Consumida] <= [Reservada]"));
             alocacao.HasKey(a => new { a.NecessidadeId, a.SaldoId });
+            alocacao.HasIndex(a => a.MovimentoConsumoId).IsUnique().HasFilter("[MovimentoConsumoId] IS NOT NULL");
+            alocacao.HasOne<MovimentoInsumo>().WithMany().HasForeignKey(a => a.MovimentoConsumoId)
+                .OnDelete(DeleteBehavior.Restrict);
             alocacao.Property(a => a.Reservada).HasPrecision(18, 6);
             alocacao.Property(a => a.Consumida).HasPrecision(18, 6);
             alocacao.HasOne(a => a.Necessidade).WithMany().HasForeignKey(a => a.NecessidadeId).OnDelete(DeleteBehavior.Restrict);

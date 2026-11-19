@@ -13,6 +13,11 @@ public sealed class OrdemProducao
     public string? NomeReceita { get; private set; }
     public Guid? ChaveInicio { get; private set; }
     public string? ImpressaoInicio { get; private set; }
+    public Guid Versao { get; private set; } = Guid.NewGuid();
+    public Guid? ChaveConclusao { get; private set; }
+    public string? ImpressaoConclusao { get; private set; }
+    public int? QuantidadeProduzida { get; private set; }
+    public Guid? MovimentoAcabadoId { get; private set; }
     public Guid? ChaveCancelamento { get; private set; }
     public Guid IniciadaPorId { get; private set; }
     public DateTimeOffset IniciadaEmUtc { get; private set; }
@@ -56,9 +61,26 @@ public sealed class OrdemProducao
         if (Situacao != SituacaoOrdemProducao.EmAndamento || autor == Guid.Empty || agora < IniciadaEmUtc)
             throw new InvalidOperationException("A ordem não pode ser cancelada com os dados informados.");
         Situacao = SituacaoOrdemProducao.Cancelada;
+        Versao = Guid.NewGuid();
         ChaveCancelamento = chave;
         EncerradaPorId = autor;
         EncerradaEmUtc = agora.ToUniversalTime();
+    }
+
+    public void Concluir(int quantidade, Guid movimento, Guid autor, Guid chave, string impressao, DateTimeOffset agora)
+    {
+        if (Situacao != SituacaoOrdemProducao.EmAndamento || agora < IniciadaEmUtc)
+            throw new InvalidOperationException("Só é possível concluir uma ordem em andamento.");
+        if (quantidade <= 0 || movimento == Guid.Empty || autor == Guid.Empty || chave == Guid.Empty || impressao.Length != 64)
+            throw new ArgumentException("Dados de conclusão inválidos.");
+        Situacao = SituacaoOrdemProducao.Concluida;
+        QuantidadeProduzida = quantidade;
+        MovimentoAcabadoId = movimento;
+        ChaveConclusao = chave;
+        ImpressaoConclusao = impressao;
+        EncerradaPorId = autor;
+        EncerradaEmUtc = agora.ToUniversalTime();
+        Versao = Guid.NewGuid();
     }
 }
 
@@ -95,7 +117,20 @@ public sealed class AlocacaoMateriaPrima
     public decimal Reservada { get; private set; }
     public decimal Consumida { get; private set; }
 
+    public Guid? MovimentoConsumoId { get; private set; }
+
     private AlocacaoMateriaPrima() { }
+
+    public void RegistrarConsumo(MovimentoInsumo movimento)
+    {
+        if (MovimentoConsumoId.HasValue || movimento.InsumoId != Necessidade.InsumoId ||
+            movimento.LoteId != Saldo.LoteId || movimento.Direcao != DirecaoMovimentoInsumo.Saida ||
+            movimento.QuantidadeBase.UnidadeBase != Necessidade.UnidadeBase ||
+            movimento.QuantidadeBase.ValorBase <= 0m || movimento.QuantidadeBase.ValorBase > Reservada)
+            throw new ArgumentException("O consumo não corresponde à reserva da posição.");
+        Consumida = movimento.QuantidadeBase.ValorBase;
+        MovimentoConsumoId = movimento.Id;
+    }
 
     public AlocacaoMateriaPrima(NecessidadeOrdemProducao necessidade, SaldoInsumo saldo, decimal quantidade)
     {

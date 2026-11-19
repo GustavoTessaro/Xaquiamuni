@@ -857,11 +857,18 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasPrecision(18, 6)
                         .HasColumnType("decimal(18,6)");
 
+                    b.Property<Guid?>("MovimentoConsumoId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<decimal>("Reservada")
                         .HasPrecision(18, 6)
                         .HasColumnType("decimal(18,6)");
 
                     b.HasKey("NecessidadeId", "SaldoId");
+
+                    b.HasIndex("MovimentoConsumoId")
+                        .IsUnique()
+                        .HasFilter("[MovimentoConsumoId] IS NOT NULL");
 
                     b.HasIndex("SaldoId");
 
@@ -1605,6 +1612,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("ChaveCancelamento")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ChaveConclusao")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<Guid?>("ChaveInicio")
                         .HasColumnType("uniqueidentifier");
 
@@ -1613,6 +1623,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.Property<Guid?>("EncerradaPorId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("ImpressaoConclusao")
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
 
                     b.Property<string>("ImpressaoInicio")
                         .HasMaxLength(64)
@@ -1625,6 +1640,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("IniciadaPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("MovimentoAcabadoId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("NomeReceita")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
@@ -1633,6 +1651,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("QuantidadePlanejada")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("QuantidadeProduzida")
                         .HasColumnType("int");
 
                     b.Property<Guid>("ReceitaVersaoId")
@@ -1644,7 +1665,17 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
+                    b.Property<Guid>("Versao")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.HasKey("Id");
+
+                    b.HasIndex("MovimentoAcabadoId")
+                        .IsUnique()
+                        .HasFilter("[MovimentoAcabadoId] IS NOT NULL");
 
                     b.HasIndex("ProdutoVarianteId");
 
@@ -1653,6 +1684,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("EncerradaPorId", "ChaveCancelamento")
                         .IsUnique()
                         .HasFilter("[EncerradaPorId] IS NOT NULL AND [ChaveCancelamento] IS NOT NULL");
+
+                    b.HasIndex("EncerradaPorId", "ChaveConclusao")
+                        .IsUnique()
+                        .HasFilter("[EncerradaPorId] IS NOT NULL AND [ChaveConclusao] IS NOT NULL");
 
                     b.HasIndex("IniciadaPorId", "ChaveInicio")
                         .IsUnique()
@@ -2305,6 +2340,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.AlocacaoMateriaPrima", b =>
                 {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoInsumo", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoConsumoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Xaquiamuni.Dominio.Estoque.NecessidadeOrdemProducao", "Necessidade")
                         .WithMany()
                         .HasForeignKey("NecessidadeId")
@@ -2757,6 +2797,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.OrdemProducao", b =>
                 {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoAcabadoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
                         .WithMany()
                         .HasForeignKey("ProdutoVarianteId")

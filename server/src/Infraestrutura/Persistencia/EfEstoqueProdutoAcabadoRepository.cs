@@ -265,17 +265,10 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                         .ConfigureAwait(false);
                 }
 
-                var politica = await _dbContext.PoliticasEstoqueProdutoVariante
-                    .SingleOrDefaultAsync(
-                        item => item.ProdutoVarianteId == variante.Id,
-                        cancellationToken).ConfigureAwait(false);
                 try
                 {
-                    lote = LoteProdutoAcabado.Criar(
-                        variante,
-                        politica,
-                        dataFabricacao,
-                        input.DataValidadeNovoLote);
+                    lote = await CriarLoteEntradaAsync(variante, dataFabricacao, input.DataValidadeNovoLote,
+                        cancellationToken).ConfigureAwait(false);
                 }
                 catch (ArgumentException exception)
                 {
@@ -320,7 +313,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
             MovimentoProdutoAcabado movimento;
             try
             {
-                movimento = saldo.RegistrarEntrada(
+                movimento = AplicarEntradaAcabado(
+                    saldo,
                     lote,
                     input.Quantidade,
                     input.CondicaoDestino,
@@ -347,7 +341,6 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                     exception.Message).ConfigureAwait(false);
             }
 
-            _dbContext.MovimentosProdutoAcabado.Add(movimento);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             _dbContext.ChangeTracker.Clear();
@@ -1119,6 +1112,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
             await AdquirirLockVarianteAsync(
                 original.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
+
+            if (await _dbContext.OrdensProducao.AnyAsync(o => o.MovimentoAcabadoId == original.Id, cancellationToken)
+                .ConfigureAwait(false))
+                return await ReverterEstornoComFalhaAsync(transaction, OperacaoProdutoAcabadoStatus.MovimentoNaoEncontrado,
+                    "Entradas de produção exigem uma correção vinculada à ordem.").ConfigureAwait(false);
 
             var lote = await _dbContext.LotesProdutoAcabado
                 .SingleOrDefaultAsync(

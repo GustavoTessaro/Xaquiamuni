@@ -111,7 +111,7 @@ public sealed partial class EfEstoqueInsumoRepository : IGerenciarOrdensProducao
         orderby ordem.IniciadaEmUtc descending, ordem.Id descending
         select new ResumoOrdemProducao(ordem.Id, variante.ProdutoId, variante.Produto.Nome, variante.Identificacao,
             receita.Id, ordem.NomeReceita ?? receita.Nome, versao.Numero, ordem.QuantidadePlanejada,
-            ordem.Situacao.ToString(), ordem.IniciadaEmUtc, ordem.EncerradaEmUtc);
+            ordem.Situacao.ToString(), ordem.IniciadaEmUtc, ordem.EncerradaEmUtc, ordem.Versao);
 
     private async Task<ReceitaProducao?> CarregarReceitaAsync(Guid id, bool bloquear, CancellationToken ct)
     {

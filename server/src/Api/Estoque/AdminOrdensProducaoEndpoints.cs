@@ -39,6 +39,7 @@ public static class AdminOrdensProducaoEndpoints
                 _ => Falha(resultado)
             };
         }).RequireXaquiamuniAntiforgery();
+        group.MapPost("/{id:guid}/concluir", ConcluirAsync).RequireXaquiamuniAntiforgery();
         group.MapPost("/{id:guid}/cancelar", async Task<IResult> (Guid id, HttpContext ctx, IGerenciarOrdensProducao ordens, CancellationToken ct) =>
         {
             if (!Identificar(ctx, out var autor)) return Results.Forbid();
@@ -47,6 +48,16 @@ public static class AdminOrdensProducaoEndpoints
             return resultado.Status is OperacaoProducaoStatus.Sucesso or OperacaoProducaoStatus.Repetida
                 ? Results.Ok(new { ordemId = resultado.OrdemId }) : Falha(resultado);
         }).RequireXaquiamuniAntiforgery();
+    }
+
+    private static async Task<IResult> ConcluirAsync(Guid id, ConcluirProducaoInput input, HttpContext ctx,
+        IConcluirOrdemProducao conclusao, CancellationToken ct)
+    {
+        if (!Identificar(ctx, out var autor)) return Results.Forbid();
+        if (!Chave(ctx, out var chave)) return Invalida("Informe Idempotency-Key em formato UUID.");
+        var resultado = await conclusao.ConcluirAsync(id, autor, chave, input, ct);
+        return resultado.Status is OperacaoProducaoStatus.Sucesso or OperacaoProducaoStatus.Repetida
+            ? Results.Ok(await conclusao.ConsultarConclusaoAsync(id, ct)) : Falha(resultado);
     }
 
     private static async Task<IResult> ListarAsync(string? situacao, Guid? produtoId, Guid? receitaId,

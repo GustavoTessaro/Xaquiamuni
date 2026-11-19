@@ -1030,6 +1030,11 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
 
             await AdquirirLockAsync($"stock-supply:{original.InsumoId:D}", cancellationToken)
                 .ConfigureAwait(false);
+            if (await _dbContext.AlocacoesMateriasPrimas.AnyAsync(a => a.MovimentoConsumoId == original.Id, cancellationToken)
+                .ConfigureAwait(false))
+                return await ReverterComFalhaAsync(transaction, OperacaoEstoqueInsumoStatus.OperacaoInvalida,
+                    "Consumos de produção exigem uma correção vinculada à ordem.").ConfigureAwait(false);
+
             if (await _dbContext.EntradasRecebimentoCompra.AnyAsync(entrada => entrada.MovimentoId == original.Id, cancellationToken)
                 .ConfigureAwait(false))
             {
