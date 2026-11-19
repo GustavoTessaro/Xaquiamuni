@@ -169,9 +169,15 @@ describe('checkout integrado aos contratos HTTP', () => {
     const confirmado = harness.routeNativeElement!;
     expect(confirmado.textContent).toContain('92.233.720.368.547.758,07');
     expect(confirmado.textContent).toContain('Aguardando pagamento');
-    expect(confirmado.textContent).toContain(
-      'As instruções de pagamento ainda não estão disponíveis.',
-    );
+    http.expectOne({ method: 'GET', url: `/api/pedidos/${pedidoId}/pagamento` }).flush({
+      situacao: 'configuracao_ausente',
+      valorCentavos: pedido.totalCentavos,
+      prazoPagamentoEmUtc: pedido.prazoPagamentoEmUtc,
+      pix: null,
+    });
+    harness.detectChanges();
+    expect(confirmado.textContent).toContain('A loja ainda não disponibilizou as instruções');
+    http.expectNone({ method: 'POST', url: '/api/pedidos' });
     expect(confirmado.querySelector('time')?.getAttribute('datetime')).toBe(
       pedido.prazoPagamentoEmUtc,
     );
@@ -317,6 +323,13 @@ describe('checkout integrado aos contratos HTTP', () => {
     expect(
       harness.routeNativeElement!.querySelector('ul[aria-label="Itens do pedido"]'),
     ).not.toBeNull();
+    http
+      .expectOne({ method: 'GET', url: `/api/pedidos/${pedidoId}/pagamento` })
+      .flush(null, { status: 404, statusText: 'Not Found' });
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.textContent).toContain(
+      'Pagamento não encontrado para esta conta',
+    );
     expect(formatarCentavos('9007199254740993')).toContain('90.071.992.547.409,93');
   });
 });

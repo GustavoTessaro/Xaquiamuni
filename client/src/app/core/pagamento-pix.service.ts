@@ -1,0 +1,56 @@
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { inject, Injectable } from '@angular/core';
+import { switchMap, timeout } from 'rxjs';
+import { CsrfService } from './security/csrf.service';
+
+export const tiposChavePix = {
+  Aleatoria: 'Aleatória',
+  Email: 'E-mail',
+  Telefone: 'Telefone',
+};
+
+export interface DadosPix {
+  tipoChave: keyof typeof tiposChavePix;
+  chavePix: string;
+  nomeRecebedor: string;
+  instrucoesAdicionais: string | null;
+}
+
+export interface PagamentoPixPedido {
+  situacao: 'disponivel' | 'configuracao_ausente' | 'pagamento_indisponivel';
+  valorCentavos: string;
+  prazoPagamentoEmUtc: string;
+  pix: DadosPix | null;
+}
+
+export function statusPix(erro: unknown): number {
+  return erro instanceof HttpErrorResponse ? erro.status : 0;
+}
+
+@Injectable({ providedIn: 'root' })
+export class PagamentoPixService {
+  private readonly http = inject(HttpClient);
+  private readonly csrf = inject(CsrfService);
+  private readonly adminUrl = '/api/admin/configuracoes/pix-manual';
+
+  consultarConfiguracao() {
+    return this.http.get<DadosPix>(this.adminUrl).pipe(timeout(30_000));
+  }
+
+  salvarConfiguracao(dados: DadosPix) {
+    return this.csrf.getRequestToken().pipe(
+      switchMap(({ requestToken }) =>
+        this.http.put<DadosPix>(this.adminUrl, dados, {
+          headers: { 'X-XSRF-TOKEN': requestToken },
+        }),
+      ),
+      timeout(30_000),
+    );
+  }
+
+  consultarPedido(id: string) {
+    return this.http
+      .get<PagamentoPixPedido>(`/api/pedidos/${encodeURIComponent(id)}/pagamento`)
+      .pipe(timeout(30_000));
+  }
+}

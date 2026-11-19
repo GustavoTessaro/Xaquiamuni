@@ -36,8 +36,11 @@
             </time>
             (horário local)
           </p>
-          <p>As instruções de pagamento ainda não estão disponíveis.</p>
         }
+        <app-pedido-pix
+          [pedidoId]="confirmado.id"
+          [aguardandoPagamento]="confirmado.situacao === 'AguardandoPagamento'"
+        />
       </section>
     </div>
   } @else if (erro()) {

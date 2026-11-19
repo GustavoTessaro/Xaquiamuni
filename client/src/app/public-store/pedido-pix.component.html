@@ -1,0 +1,62 @@
+<section class="painel" aria-labelledby="pedido-pix-titulo">
+  <h2 id="pedido-pix-titulo">Pagamento via PIX</h2>
+  @if (carregando()) {
+    <p role="status">Consultando instruções de pagamento…</p>
+  } @else if (falha() !== null) {
+    <p class="aviso" role="alert">
+      @switch (falha()) {
+        @case (401) {
+          Entre na sua conta para consultar o pagamento.
+        }
+        @case (403) {
+          Esta conta não pode consultar o pagamento.
+        }
+        @case (404) {
+          Pagamento não encontrado para esta conta.
+        }
+        @default {
+          Não foi possível consultar as instruções de pagamento agora.
+        }
+      }
+    </p>
+    @if (falha() === 401) {
+      <a routerLink="/login" [queryParams]="{ pedido: pedidoId() }">Entrar</a>
+    } @else if (falha() !== 403 && falha() !== 404) {
+      <button type="button" class="principal" (click)="consultarNovamente()">
+        Tentar novamente
+      </button>
+    }
+  } @else if (pix(); as dados) {
+    <p>Faça o pagamento no aplicativo do seu banco. A loja confirma o recebimento manualmente.</p>
+    <dl>
+      <dt>Valor do PIX</dt>
+      <dd>
+        <strong>{{ reais(pagamento()!.valorCentavos) }}</strong>
+      </dd>
+      <dt>Tipo de chave</dt>
+      <dd>{{ tipos[dados.tipoChave] }}</dd>
+      <dt>Chave PIX</dt>
+      <dd>{{ dados.chavePix }}</dd>
+      <dt>Recebedor</dt>
+      <dd>{{ dados.nomeRecebedor }}</dd>
+    </dl>
+    @if (dados.instrucoesAdicionais) {
+      <p class="instrucoes-pix">{{ dados.instrucoesAdicionais }}</p>
+    }
+    <button type="button" class="principal" [disabled]="copia() === 'pendente'" (click)="copiar()">
+      Copiar chave PIX
+    </button>
+    <div aria-live="polite">
+      @if (copia() === 'sucesso') {
+        <p>Chave PIX copiada.</p>
+      }
+      @if (copia() === 'falha') {
+        <p>Não foi possível copiar. Selecione e copie a chave manualmente.</p>
+      }
+    </div>
+  } @else if (aguardandoPagamento() && pagamento()?.situacao === 'configuracao_ausente') {
+    <p>A loja ainda não disponibilizou as instruções de pagamento.</p>
+  } @else {
+    <p>O pagamento não está disponível para a situação atual do pedido.</p>
+  }
+</section>

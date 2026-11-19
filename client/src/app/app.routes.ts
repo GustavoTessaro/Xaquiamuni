@@ -12,6 +12,12 @@ import { ResetPasswordComponent } from './reset-password/reset-password.componen
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
   {
+    path: 'admin/configuracoes/pix-manual',
+    loadComponent: () =>
+      import('./admin/pix/admin-pix.component').then((module) => module.AdminPixComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/pedidos/:pedidoId',
     loadComponent: () =>
       import('./admin/pedidos/admin-pedido-detalhe.component').then(

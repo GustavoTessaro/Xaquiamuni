@@ -1,0 +1,153 @@
+<app-admin-workspace activePage="pix">
+  <section aria-labelledby="pix-titulo" class="grid min-w-0 gap-4 rounded-2xl bg-white p-4 sm:p-6">
+    <h1 id="pix-titulo" class="text-2xl font-bold text-emerald-950">PIX manual</h1>
+    <p>
+      Estes dados aparecem para clientes com pedidos aguardando pagamento. Confirme o recebimento no
+      banco antes de confirmar o pagamento no painel.
+    </p>
+    @if (erro()) {
+      <p role="alert" class="text-red-800">{{ erro() }}</p>
+    }
+    @if (requerLogin()) {
+      <a routerLink="/admin/login" class="underline">Entrar novamente</a>
+    }
+    <p role="status" [class.hidden]="!sucesso()">{{ sucesso() }}</p>
+    @switch (estado()) {
+      @case ('carregando') {
+        <p role="status">Consultando configuração…</p>
+      }
+      @case ('falha') {
+        @if (!requerLogin()) {
+          <button
+            type="button"
+            class="justify-self-start min-h-11 rounded-xl border px-4 focus-visible:outline-2"
+            (click)="carregar()"
+          >
+            Tentar novamente
+          </button>
+        }
+      }
+      @default {
+        @if (estado() === 'nova') {
+          <p role="status">A loja ainda não tem uma configuração PIX.</p>
+        }
+        <form
+          [formGroup]="formulario"
+          (ngSubmit)="salvar()"
+          novalidate
+          class="grid w-full max-w-xl gap-4"
+        >
+          <fieldset [disabled]="salvando() || requerLogin()" class="grid min-w-0 gap-4">
+            <div class="grid gap-1">
+              <label for="pix-tipo" class="font-semibold">Tipo de chave</label>
+              <select
+                id="pix-tipo"
+                formControlName="tipoChave"
+                required
+                class="min-h-11 w-full rounded-lg border border-slate-500 bg-white px-3 focus-visible:outline-2"
+                [attr.aria-invalid]="
+                  enviado() && formulario.controls.tipoChave.invalid ? 'true' : null
+                "
+                [attr.aria-describedby]="
+                  enviado() && formulario.controls.tipoChave.invalid ? 'pix-tipo-erro' : null
+                "
+              >
+                <option value="">Selecione</option>
+                @for (tipo of tipos; track tipo[0]) {
+                  <option [value]="tipo[0]">{{ tipo[1] }}</option>
+                }
+              </select>
+              @if (enviado() && formulario.controls.tipoChave.invalid) {
+                <p id="pix-tipo-erro">Selecione um tipo de chave.</p>
+              }
+            </div>
+            <div class="grid gap-1">
+              <label for="pix-chave" class="font-semibold">Chave PIX</label>
+              <input
+                id="pix-chave"
+                formControlName="chavePix"
+                required
+                maxlength="77"
+                autocomplete="off"
+                spellcheck="false"
+                class="min-h-11 w-full rounded-lg border border-slate-500 px-3 focus-visible:outline-2"
+                [attr.aria-invalid]="
+                  enviado() &&
+                  (formulario.hasError('chave') || formulario.controls.chavePix.invalid)
+                    ? 'true'
+                    : null
+                "
+                [attr.aria-describedby]="
+                  enviado() &&
+                  (formulario.hasError('chave') || formulario.controls.chavePix.invalid)
+                    ? 'pix-chave-ajuda pix-chave-erro'
+                    : 'pix-chave-ajuda'
+                "
+              />
+              <p id="pix-chave-ajuda" class="text-sm">
+                Use o formato da chave escolhida. Para telefone, inclua o sinal + e o código do
+                país.
+              </p>
+              @if (
+                enviado() && (formulario.hasError('chave') || formulario.controls.chavePix.invalid)
+              ) {
+                <p id="pix-chave-erro">Informe uma chave válida com até 77 caracteres.</p>
+              }
+            </div>
+            <div class="grid gap-1">
+              <label for="pix-recebedor" class="font-semibold">Nome do recebedor</label>
+              <input
+                id="pix-recebedor"
+                formControlName="nomeRecebedor"
+                required
+                maxlength="150"
+                autocomplete="off"
+                class="min-h-11 w-full rounded-lg border border-slate-500 px-3 focus-visible:outline-2"
+                [attr.aria-invalid]="
+                  enviado() && formulario.controls.nomeRecebedor.invalid ? 'true' : null
+                "
+                [attr.aria-describedby]="
+                  enviado() && formulario.controls.nomeRecebedor.invalid
+                    ? 'pix-recebedor-erro'
+                    : null
+                "
+              />
+              @if (enviado() && formulario.controls.nomeRecebedor.invalid) {
+                <p id="pix-recebedor-erro">Informe o nome do recebedor, com até 150 caracteres.</p>
+              }
+            </div>
+            <div class="grid gap-1">
+              <label for="pix-instrucoes" class="font-semibold"
+                >Instruções adicionais (opcional)</label
+              >
+              <textarea
+                id="pix-instrucoes"
+                formControlName="instrucoesAdicionais"
+                maxlength="500"
+                rows="3"
+                class="w-full rounded-lg border border-slate-500 px-3 py-2 focus-visible:outline-2"
+                [attr.aria-invalid]="
+                  enviado() && formulario.controls.instrucoesAdicionais.invalid ? 'true' : null
+                "
+                [attr.aria-describedby]="
+                  enviado() && formulario.controls.instrucoesAdicionais.invalid
+                    ? 'pix-instrucoes-erro'
+                    : null
+                "
+              ></textarea>
+              @if (enviado() && formulario.controls.instrucoesAdicionais.invalid) {
+                <p id="pix-instrucoes-erro">Use texto simples com até 500 caracteres.</p>
+              }
+            </div>
+            <button
+              type="submit"
+              class="min-h-11 justify-self-start rounded-xl bg-emerald-900 px-4 text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-60"
+            >
+              {{ salvando() ? 'Salvando…' : 'Salvar configuração' }}
+            </button>
+          </fieldset>
+        </form>
+      }
+    }
+  </section>
+</app-admin-workspace>

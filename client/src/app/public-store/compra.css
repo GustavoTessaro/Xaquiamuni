@@ -50,6 +50,10 @@ h2 {
   padding-top: 0.75rem;
 }
 
+.instrucoes-pix {
+  white-space: pre-wrap;
+}
+
 .aviso {
   color: #7a371f;
 }
