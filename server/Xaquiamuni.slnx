@@ -17,6 +17,7 @@
   </Folder>
   <Folder Name="/tools/">
     <Project Path="tools/Xaquiamuni.Demonstracao/Xaquiamuni.Demonstracao.csproj" />
+    <Project Path="tools/Xaquiamuni.PreVoo/Xaquiamuni.PreVoo.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Xaquiamuni.Tests/Xaquiamuni.Tests.csproj" />
