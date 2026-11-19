@@ -17,6 +17,41 @@ interface Material {
   reservado: string;
 }
 
+export interface ConsumoProducao {
+  insumoId: string;
+  unidadeBase: Material['unidade'];
+  quantidade: string;
+}
+
+export interface ConcluirProducao {
+  versao: string;
+  quantidadeProduzida: number;
+  consumos: ConsumoProducao[];
+  dataFabricacao: string | null;
+  dataValidade: string | null;
+}
+
+export interface ConclusaoProducao {
+  ordemId: string;
+  situacao: 'Concluida';
+  versao: string;
+  quantidadeProduzida: number;
+  loteId: string;
+  codigoLote: string;
+  movimentoEntradaId: string;
+  dataFabricacao: string;
+  dataValidade: string;
+  responsavelId: string;
+  concluidaEmUtc: string;
+  consumos: {
+    insumoId: string;
+    nome: string;
+    unidadeBase: Material['unidade'];
+    consumida: string;
+    liberada: string;
+  }[];
+}
+
 export interface PreviaProducao {
   receitaVersaoId: string;
   versao: number;
@@ -32,6 +67,7 @@ export interface ResumoOrdem {
   receita: string;
   versao: number;
   quantidade: number;
+  versaoOrdem: string;
   situacao: 'EmAndamento' | 'Cancelada' | 'Concluida';
   iniciadaEmUtc: string;
   encerradaEmUtc: string | null;
@@ -40,6 +76,8 @@ export interface ResumoOrdem {
 export interface DetalheOrdem {
   resumo: ResumoOrdem;
   materiais: (Material & { reservaInelegivel: boolean })[];
+  varianteId: string;
+  conclusao: ConclusaoProducao | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -76,15 +114,21 @@ export class OrdensProducaoService {
     return this.post(`${this.rota}/${encodeURIComponent(id)}/cancelar`, {}, chave);
   }
 
-  private post(url: string, corpo: object, chave: string) {
-    return this.csrf
-      .getRequestToken()
-      .pipe(
-        switchMap(({ requestToken }) =>
-          this.http.post<{ ordemId: string }>(url, corpo, {
-            headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave },
-          }),
-        ),
-      );
+  concluir(id: string, corpo: ConcluirProducao, chave: string) {
+    return this.post<ConclusaoProducao>(
+      `${this.rota}/${encodeURIComponent(id)}/concluir`,
+      corpo,
+      chave,
+    );
+  }
+
+  private post<T = { ordemId: string }>(url: string, corpo: object, chave: string) {
+    return this.csrf.getRequestToken().pipe(
+      switchMap(({ requestToken }) =>
+        this.http.post<T>(url, corpo, {
+          headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave },
+        }),
+      ),
+    );
   }
 }

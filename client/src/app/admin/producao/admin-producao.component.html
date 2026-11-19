@@ -28,7 +28,13 @@
         class="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4"
       >
         <h2 id="tentativa-titulo" class="font-semibold">
-          {{ tentativa.tipo === 'inicio' ? 'Início pendente' : 'Cancelamento pendente' }}
+          {{
+            tentativa.tipo === 'inicio'
+              ? 'Início pendente'
+              : tentativa.tipo === 'conclusao'
+                ? 'Conclusão pendente'
+                : 'Cancelamento pendente'
+          }}
         </h2>
         <p class="text-sm">
           {{
@@ -177,68 +183,110 @@
             {{ ordem.resumo.iniciadaEmUtc | date: 'dd/MM/yyyy HH:mm' }}
           </p>
         </div>
-        <h3 class="font-semibold">Materiais</h3>
-        <ul class="grid gap-3 sm:grid-cols-2">
-          @for (item of ordem.materiais; track item.insumoId) {
-            <li class="min-w-0 rounded-lg border border-slate-200 p-3 [overflow-wrap:anywhere]">
-              <p class="font-medium">{{ item.nome }}</p>
-              <p class="text-sm">
-                Necessário: {{ medida(item.necessario, item.unidade) }} · Reservado:
-                {{ medida(item.reservado, item.unidade) }}
-              </p>
-              @if (item.reservaInelegivel) {
-                <p class="font-medium text-red-900" role="status">
-                  Parte da reserva está em lote vencido ou bloqueado.
-                </p>
-              }
-              <a
-                [routerLink]="['/admin/estoque/insumos', item.insumoId, 'consultas']"
-                class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
-                >Ver estoque e histórico</a
-              >
-            </li>
-          }
-        </ul>
-        <div class="flex flex-wrap gap-3">
-          <button
-            type="button"
-            (click)="voltar()"
-            [disabled]="ocupado()"
-            class="min-h-11 underline focus-visible:outline-2"
+        @if (ordem.conclusao; as resultado) {
+          <section
+            aria-labelledby="resultado-conclusao"
+            class="space-y-2 rounded-lg bg-emerald-50 p-3 [overflow-wrap:anywhere]"
           >
-            Voltar à lista
-          </button>
-          @if (ordem.resumo.situacao === 'EmAndamento' && !confirmarCancelamento()) {
-            <button
-              type="button"
-              (click)="confirmarCancelamento.set(true)"
-              [disabled]="ocupado() || !!pendente()"
-              class="min-h-11 px-2 text-red-900 underline focus-visible:outline-2"
+            <h3 id="resultado-conclusao" class="font-semibold">Resultado da produção</h3>
+            <p>Produzido: {{ resultado.quantidadeProduzida }} unidades</p>
+            <p>Conclusão: {{ resultado.concluidaEmUtc | date: 'dd/MM/yyyy HH:mm' }}</p>
+            <p>Responsável: {{ responsavel(resultado.responsavelId) }}</p>
+            <ul class="grid gap-2 sm:grid-cols-2">
+              @for (item of resultado.consumos; track item.insumoId) {
+                <li>
+                  {{ item.nome }} · Consumido: {{ medida(item.consumida, item.unidadeBase) }} ·
+                  Liberado: {{ medida(item.liberada, item.unidadeBase) }}
+                </li>
+              }
+            </ul>
+            <a
+              [routerLink]="['/admin/estoque/produtos-acabados', ordem.varianteId]"
+              class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
             >
-              Cancelar produção
-            </button>
-          }
-        </div>
-        @if (confirmarCancelamento()) {
-          <div class="rounded-lg bg-red-50 p-3">
-            <p>Cancelar a produção libera as reservas e mantém o saldo físico.</p>
+              Ver estoque e histórico do produto acabado
+            </a>
+          </section>
+        }
+        @if (exibindoConclusao()) {
+          <app-concluir-producao
+            [ordem]="ordem"
+            [bloqueado]="ocupado() || !!pendente()"
+            (confirmar)="concluir($event)"
+            (voltar)="exibindoConclusao.set(false)"
+          />
+        } @else {
+          <h3 class="font-semibold">Materiais</h3>
+          <ul class="grid gap-3 sm:grid-cols-2">
+            @for (item of ordem.materiais; track item.insumoId) {
+              <li class="min-w-0 rounded-lg border border-slate-200 p-3 [overflow-wrap:anywhere]">
+                <p class="font-medium">{{ item.nome }}</p>
+                <p class="text-sm">
+                  Necessário: {{ medida(item.necessario, item.unidade) }} · Reservado:
+                  {{ medida(item.reservado, item.unidade) }}
+                </p>
+                @if (item.reservaInelegivel) {
+                  <p class="font-medium text-red-900" role="status">
+                    Parte da reserva está em lote vencido ou bloqueado.
+                  </p>
+                }
+                <a
+                  [routerLink]="['/admin/estoque/insumos', item.insumoId, 'consultas']"
+                  class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+                  >Ver estoque e histórico</a
+                >
+              </li>
+            }
+          </ul>
+          <div class="flex flex-wrap gap-3">
             <button
               type="button"
-              (click)="cancelar()"
-              [disabled]="ocupado() || !!pendente()"
-              class="mr-3 min-h-11 font-semibold text-red-900 underline focus-visible:outline-2"
-            >
-              Confirmar cancelamento
-            </button>
-            <button
-              type="button"
-              (click)="confirmarCancelamento.set(false)"
+              (click)="voltar()"
               [disabled]="ocupado()"
               class="min-h-11 underline focus-visible:outline-2"
             >
-              Manter produção
+              Voltar à lista
             </button>
+            @if (ordem.resumo.situacao === 'EmAndamento' && !confirmarCancelamento()) {
+              <button
+                type="button"
+                (click)="abrirConclusao()"
+                [disabled]="ocupado() || !!pendente()"
+                class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 disabled:opacity-50"
+              >
+                Concluir produção
+              </button>
+              <button
+                type="button"
+                (click)="confirmarCancelamento.set(true)"
+                [disabled]="ocupado() || !!pendente()"
+                class="min-h-11 px-2 text-red-900 underline focus-visible:outline-2"
+              >
+                Cancelar produção
+              </button>
+            }
           </div>
+          @if (confirmarCancelamento()) {
+            <div class="rounded-lg bg-red-50 p-3">
+              <p>Cancelar a produção libera as reservas e mantém o saldo físico.</p>
+              <button
+                type="button"
+                (click)="cancelar()"
+                [disabled]="ocupado() || !!pendente()"
+                class="mr-3 min-h-11 font-semibold text-red-900 underline focus-visible:outline-2"
+              >
+                Confirmar cancelamento
+              </button>
+              <button
+                type="button"
+                (click)="confirmarCancelamento.set(false)"
+                [disabled]="ocupado()"
+                class="min-h-11 underline focus-visible:outline-2"
+              >
+                Manter produção
+              </button>
+            </div>
+          }
         }
       </section>
     } @else {

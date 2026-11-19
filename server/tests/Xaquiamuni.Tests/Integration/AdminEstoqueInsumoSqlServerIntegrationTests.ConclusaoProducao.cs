@@ -98,6 +98,10 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
         Assert.Equal(3, resposta.QuantidadeProduzida);
         Assert.Equal(AdminId, resposta.ResponsavelId);
         Assert.Equal(AgoraProducao, resposta.ConcluidaEmUtc);
+        var detalheConcluido = (await admin.GetFromJsonAsync<DetalheOrdemProducao>($"{RotaProducao}/{ordemId:D}"))!;
+        Assert.NotEqual(Guid.Empty, detalheConcluido.VarianteId);
+        Assert.Equal(resposta.MovimentoEntradaId, detalheConcluido.Conclusao?.MovimentoEntradaId);
+        Assert.Equal(resposta.Versao, detalheConcluido.Resumo.VersaoOrdem);
         Assert.Equal(2m, Assert.Single(resposta.Consumos, c => c.InsumoId == erva.Id).Liberada);
         Assert.Equal(0m, Assert.Single(resposta.Consumos, c => c.InsumoId == baseG.Id).Liberada);
         Assert.Equal(3, (await db.SaldosProdutoAcabado.SingleAsync()).QuantidadeVendavel);

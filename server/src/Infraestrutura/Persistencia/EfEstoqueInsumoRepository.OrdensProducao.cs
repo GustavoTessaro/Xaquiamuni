@@ -29,7 +29,12 @@ public sealed partial class EfEstoqueInsumoRepository : IGerenciarOrdensProducao
                 _dbContext.Ativas().Any(a => a.NecessidadeId == n.Id && a.Saldo.LoteId != null &&
                     _dbContext.LotesInsumo.Any(l => l.Id == a.Saldo.LoteId && (l.Bloqueado || l.DataValidade < data)))))
             .ToListAsync(ct);
-        return new(resumo, materiais);
+        var varianteId = await _dbContext.OrdensProducao.Where(o => o.Id == id)
+            .Select(o => o.ProdutoVarianteId).SingleAsync(ct);
+        var conclusao = resumo.Situacao == nameof(SituacaoOrdemProducao.Concluida)
+            ? await ConsultarConclusaoAsync(id, ct)
+            : null;
+        return new(resumo, materiais, varianteId, conclusao);
     }
 
     public Task<Guid?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct) =>

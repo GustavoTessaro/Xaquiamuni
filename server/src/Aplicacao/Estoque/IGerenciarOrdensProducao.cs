@@ -17,7 +17,8 @@ public sealed record MaterialOrdemProducao(Guid InsumoId, string Nome, string Un
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] decimal Necessario,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] decimal Reservado,
     bool ReservaInelegivel);
-public sealed record DetalheOrdemProducao(ResumoOrdemProducao Resumo, IReadOnlyList<MaterialOrdemProducao> Materiais);
+public sealed record DetalheOrdemProducao(ResumoOrdemProducao Resumo, IReadOnlyList<MaterialOrdemProducao> Materiais,
+    Guid VarianteId, ConclusaoProducao? Conclusao);
 public enum OperacaoProducaoStatus { Sucesso, Repetida, Invalida, Ausente, Conflito }
 public sealed record OperacaoProducaoResult(OperacaoProducaoStatus Status, Guid? OrdemId = null,
     PreviaProducao? Previa = null, string? Erro = null, bool RejeicaoDefinitiva = false);

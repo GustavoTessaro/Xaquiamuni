@@ -15,6 +15,7 @@ import { Observable, catchError, finalize, of, switchMap } from 'rxjs';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { OperacaoPendenteStore } from '../../core/admin-estoque/operacao-pendente.store';
 import {
+  ConcluirProducao,
   DetalheOrdem,
   OrdensProducaoService,
   PreviaProducao,
@@ -23,6 +24,7 @@ import {
 import { ReceitasProducaoService, ResumoReceita } from '../../core/receitas-producao.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { decimalEscalado } from '../compras/compra-decimais';
+import { ConcluirProducaoComponent } from './concluir-producao.component';
 import {
   lerTentativaProducao,
   quantidadePlanejadaValida,
@@ -31,7 +33,7 @@ import {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AdminWorkspaceComponent, FormsModule, DatePipe, RouterLink],
+  imports: [AdminWorkspaceComponent, FormsModule, DatePipe, RouterLink, ConcluirProducaoComponent],
   templateUrl: './admin-producao.component.html',
 })
 export class AdminProducaoComponent {
@@ -52,6 +54,7 @@ export class AdminProducaoComponent {
   protected readonly previa = signal<PreviaProducao | null>(null);
   protected readonly filtro = signal('');
   protected readonly confirmarCancelamento = signal(false);
+  protected readonly exibindoConclusao = signal(false);
   protected readonly ocupado = signal(false);
   protected readonly falhaLista = signal(false);
   protected readonly erro = signal('');
@@ -165,6 +168,31 @@ export class AdminProducaoComponent {
     this.preparar((chave) => ({ tipo: 'cancelamento', chave, ordemId: ordem.id }));
   }
 
+  protected abrirConclusao(): void {
+    if (this.ocupado() || this.pendente() || this.detalhe()?.resumo.situacao !== 'EmAndamento')
+      return;
+    this.confirmarCancelamento.set(false);
+    this.erro.set('');
+    this.sucesso.set('');
+    this.exibindoConclusao.set(true);
+  }
+
+  protected concluir(corpo: ConcluirProducao): void {
+    const ordem = this.detalhe()?.resumo;
+    if (
+      this.ocupado() ||
+      this.pendente() ||
+      ordem?.situacao !== 'EmAndamento' ||
+      ordem.versaoOrdem !== corpo.versao
+    )
+      return;
+    this.preparar((chave) => ({ tipo: 'conclusao', chave, ordemId: ordem.id, corpo }));
+  }
+
+  protected responsavel(id: string): string {
+    return this.ator === id ? 'Você' : 'Outra conta administrativa';
+  }
+
   protected consultar(id: string): void {
     this.executar(
       this.api.obter(id),
@@ -174,6 +202,7 @@ export class AdminProducaoComponent {
   }
 
   protected voltar(): void {
+    this.exibindoConclusao.set(false);
     this.nova.set(false);
     this.detalhe.set(null);
     this.confirmarCancelamento.set(false);
@@ -198,6 +227,24 @@ export class AdminProducaoComponent {
       consulta,
       (ordem) => {
         if (ordem) this.exibir(ordem);
+        if (pendente.tipo === 'conclusao') {
+          if (ordem?.resumo.situacao === 'Concluida') {
+            this.limpar();
+            this.sucesso.set('A conclusão foi localizada no servidor.');
+            this.carregar();
+          } else if (
+            ordem?.resumo.situacao === 'EmAndamento' &&
+            ordem.resumo.versaoOrdem === pendente.corpo.versao
+          ) {
+            this.podeReenviar.set(true);
+          } else {
+            this.limpar();
+            this.erro.set(
+              'A ordem mudou desde a tentativa. O reenvio foi bloqueado. Confira os dados atuais.',
+            );
+          }
+          return;
+        }
         if (
           (pendente.tipo === 'inicio' && ordem) ||
           (pendente.tipo === 'cancelamento' && ordem?.resumo.situacao !== 'EmAndamento')
@@ -213,6 +260,16 @@ export class AdminProducaoComponent {
         }
       },
       'Não foi possível conferir a situação. A tentativa foi preservada.',
+      (erro) => {
+        if (
+          pendente.tipo === 'conclusao' &&
+          erro instanceof HttpErrorResponse &&
+          erro.status === 404
+        ) {
+          this.limpar();
+          this.voltar();
+        }
+      },
     );
   }
 
@@ -260,6 +317,10 @@ export class AdminProducaoComponent {
 
   private enviar(tentativa: TentativaProducao): void {
     this.podeReenviar.set(false);
+    if (tentativa.tipo === 'conclusao') {
+      this.enviarConclusao(tentativa);
+      return;
+    }
     const post =
       tentativa.tipo === 'inicio'
         ? this.api.iniciar(tentativa.corpo, tentativa.chave)
@@ -300,7 +361,72 @@ export class AdminProducaoComponent {
     );
   }
 
+  private enviarConclusao(tentativa: Extract<TentativaProducao, { tipo: 'conclusao' }>): void {
+    let confirmada = false;
+    this.executar(
+      this.api.concluir(tentativa.ordemId, tentativa.corpo, tentativa.chave).pipe(
+        catchError((erro: unknown) => {
+          if (
+            !(erro instanceof HttpErrorResponse) ||
+            erro.status !== 409 ||
+            erro.error?.rejeicaoDefinitiva !== true
+          ) {
+            throw erro;
+          }
+          return this.api.obter(tentativa.ordemId).pipe(
+            switchMap((ordem) => {
+              this.limpar();
+              this.exibir(ordem);
+              this.carregar();
+              throw erro;
+            }),
+          );
+        }),
+        switchMap((conclusao) => {
+          confirmada = true;
+          const atual = this.detalhe();
+          if (atual?.resumo.id === conclusao.ordemId) {
+            this.exibir({
+              ...atual,
+              resumo: {
+                ...atual.resumo,
+                situacao: conclusao.situacao,
+                versaoOrdem: conclusao.versao,
+                encerradaEmUtc: conclusao.concluidaEmUtc,
+              },
+              materiais: atual.materiais.map((m) => ({
+                ...m,
+                reservado: '0',
+                reservaInelegivel: false,
+              })),
+              conclusao,
+            });
+          }
+          return this.api.obter(conclusao.ordemId);
+        }),
+      ),
+      (ordem) => {
+        this.limpar();
+        this.exibir(ordem);
+        this.sucesso.set('Produção concluída. Estoque e reservas atualizados.');
+        this.carregar();
+      },
+      'Não foi possível atualizar o resultado. Confira a situação antes de reenviar.',
+      (erro) => {
+        if (
+          !confirmada &&
+          erro instanceof HttpErrorResponse &&
+          ((erro.status === 400 && erro.error?.errors?.producao) || erro.status === 404)
+        ) {
+          this.limpar();
+          if (erro.status === 404) this.voltar();
+        }
+      },
+    );
+  }
+
   private exibir(ordem: DetalheOrdem): void {
+    this.exibindoConclusao.set(false);
     this.nova.set(false);
     this.detalhe.set(ordem);
     this.confirmarCancelamento.set(false);
@@ -349,6 +475,8 @@ export class AdminProducaoComponent {
     }
     if (erro.status === 403) return 'Acesso negado ou sessão inválida.';
     if (erro.status === 404) return 'Ordem ou receita não encontrada.';
+    if (erro.status === 503)
+      return 'O serviço está temporariamente indisponível. Confira a situação antes de reenviar.';
     const detalhe = erro.status === 409 ? erro.error?.detail : erro.error?.errors?.producao?.[0];
     return typeof detalhe === 'string' ? detalhe : padrao;
   }

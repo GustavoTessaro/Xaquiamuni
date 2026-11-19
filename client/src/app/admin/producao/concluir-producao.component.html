@@ -1,0 +1,147 @@
+<form
+  class="space-y-4 rounded-xl border border-emerald-800 p-3 sm:p-4"
+  aria-labelledby="conclusao-titulo"
+  (ngSubmit)="emitir()"
+>
+  <h3 #titulo id="conclusao-titulo" tabindex="-1" class="font-semibold focus-visible:outline-2">
+    Conferir conclusão da produção
+  </h3>
+  <p>{{ ordem().resumo.produto }} · {{ ordem().resumo.variante }}</p>
+  <p class="text-sm">
+    {{ ordem().resumo.receita }} · Versão {{ ordem().resumo.versao }} ·
+    {{ ordem().resumo.quantidade }} unidades planejadas
+  </p>
+  @if (erroPolitica()) {
+    <p role="alert">Não foi possível consultar a política de validade da variante.</p>
+    <button
+      type="button"
+      (click)="carregarPolitica()"
+      class="min-h-11 underline focus-visible:outline-2"
+    >
+      Tentar consultar validade novamente
+    </button>
+  } @else if (!politica()) {
+    <p role="status">Consultando política de validade…</p>
+  }
+
+  <fieldset [disabled]="bloqueado() || !politica()" class="min-w-0 space-y-4">
+    <label class="block max-w-xs text-sm font-medium">
+      Quantidade realmente produzida (unidades)
+      <input
+        type="number"
+        name="produzida"
+        required
+        min="1"
+        max="2147483647"
+        step="1"
+        class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+        [ngModel]="produzida()"
+        (ngModelChange)="produzida.set($event); conferido.set(false)"
+      />
+    </label>
+    <ul class="grid gap-3 sm:grid-cols-2">
+      @for (linha of linhas(); track linha.insumoId; let i = $index) {
+        <li
+          class="min-w-0 space-y-2 rounded-lg border border-slate-200 p-3 [overflow-wrap:anywhere]"
+        >
+          <p class="font-semibold">{{ linha.nome }}</p>
+          <p class="text-sm">
+            Reservado: {{ linha.reservado.replace('.', ',') }} {{ linha.unidadeRotulo }}
+          </p>
+          <label class="block text-sm font-medium">
+            Consumo real de {{ linha.nome }} ({{ linha.unidadeRotulo }})
+            <input
+              type="text"
+              [inputMode]="linha.unidade === 'Unidade' ? 'numeric' : 'decimal'"
+              required
+              [name]="'consumo-' + i"
+              [attr.name]="'consumo-' + i"
+              [ngModel]="linha.valor"
+              (ngModelChange)="alterar(linha.insumoId, $event)"
+              [attr.aria-invalid]="!linha.valido ? 'true' : null"
+              [attr.aria-describedby]="'consumo-ajuda-' + i"
+              class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            />
+          </label>
+          <p [id]="'consumo-ajuda-' + i" class="text-sm">
+            @if (linha.valido) {
+              Sobra a liberar: {{ linha.sobra }} {{ linha.unidadeRotulo }}
+            } @else {
+              Informe uma quantidade positiva até o valor reservado.
+              {{
+                linha.unidade === 'Unidade'
+                  ? 'Use um número inteiro.'
+                  : 'Use até seis casas decimais.'
+              }}
+            }
+          </p>
+        </li>
+      }
+    </ul>
+    @if (politica(); as regra) {
+      <div class="grid gap-3 sm:grid-cols-2">
+        <label class="min-w-0 text-sm font-medium">
+          Data de fabricação
+          <input
+            type="date"
+            name="fabricacao"
+            [ngModel]="fabricacao()"
+            (ngModelChange)="fabricacao.set($event); conferido.set(false)"
+            class="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+          />
+        </label>
+        <label class="min-w-0 text-sm font-medium">
+          Data de validade {{ regra.prazo === null ? '(obrigatória)' : '(opcional)' }}
+          <input
+            type="date"
+            name="validade"
+            [required]="regra.prazo === null"
+            [ngModel]="validade()"
+            (ngModelChange)="validade.set($event); conferido.set(false)"
+            aria-describedby="conclusao-prazo"
+            class="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+          />
+        </label>
+        <p id="conclusao-prazo" class="text-sm sm:col-span-2">
+          @if (regra.prazo === null) {
+            Esta variante precisa de uma data de validade.
+          } @else {
+            Se deixar em branco, o servidor aplica o prazo padrão de {{ regra.prazo }} dias.
+          }
+        </p>
+      </div>
+    }
+    <label class="flex items-start gap-2 text-sm font-medium">
+      <input
+        type="checkbox"
+        name="conferido"
+        required
+        [ngModel]="conferido()"
+        (ngModelChange)="conferido.set($event)"
+        class="mt-1 size-4 shrink-0 focus-visible:outline-2"
+      />
+      Ao concluir, os materiais utilizados serão baixados do estoque e os produtos fabricados
+      ficarão disponíveis para venda, respeitando a publicação e a validade do produto.
+    </label>
+    @if (erroCampos()) {
+      <p role="alert" class="text-sm text-red-900">
+        Revise a quantidade produzida, os consumos e a validade quando obrigatória.
+      </p>
+    }
+    <button
+      type="submit"
+      [disabled]="!conferido()"
+      class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 disabled:opacity-50"
+    >
+      Confirmar conclusão
+    </button>
+  </fieldset>
+  <button
+    type="button"
+    (click)="voltar.emit()"
+    [disabled]="bloqueado()"
+    class="min-h-11 underline focus-visible:outline-2"
+  >
+    Voltar à ordem
+  </button>
+</form>
