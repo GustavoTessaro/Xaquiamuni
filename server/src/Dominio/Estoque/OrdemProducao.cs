@@ -10,6 +10,10 @@ public sealed class OrdemProducao
     public Guid ReceitaVersaoId { get; private set; }
     public int QuantidadePlanejada { get; private set; }
     public SituacaoOrdemProducao Situacao { get; private set; }
+    public string? NomeReceita { get; private set; }
+    public Guid? ChaveInicio { get; private set; }
+    public string? ImpressaoInicio { get; private set; }
+    public Guid? ChaveCancelamento { get; private set; }
     public Guid IniciadaPorId { get; private set; }
     public DateTimeOffset IniciadaEmUtc { get; private set; }
     public Guid? EncerradaPorId { get; private set; }
@@ -27,7 +31,7 @@ public sealed class OrdemProducao
         var calculadas = versao.CalcularNecessidades(quantidade);
         var ordem = new OrdemProducao
         {
-            Id = Guid.NewGuid(), ProdutoVarianteId = receita.ProdutoVarianteId,
+            Id = Guid.NewGuid(), ProdutoVarianteId = receita.ProdutoVarianteId, NomeReceita = receita.Nome,
             ReceitaVersaoId = versao.Id, QuantidadePlanejada = quantidade,
             Situacao = SituacaoOrdemProducao.EmAndamento, IniciadaPorId = autor, IniciadaEmUtc = agora.ToUniversalTime()
         };
@@ -38,12 +42,21 @@ public sealed class OrdemProducao
         return ordem;
     }
 
-    public void Cancelar(Guid autor, DateTimeOffset agora)
+    public void RegistrarTentativaInicio(Guid chave, string impressao)
+    {
+        if (chave == Guid.Empty || impressao.Length != 64 || ChaveInicio.HasValue)
+            throw new ArgumentException("Tentativa de início inválida ou já registrada.");
+        ChaveInicio = chave;
+        ImpressaoInicio = impressao;
+    }
+
+    public void Cancelar(Guid autor, DateTimeOffset agora, Guid? chave = null)
     {
         if (Situacao == SituacaoOrdemProducao.Cancelada) return;
         if (Situacao != SituacaoOrdemProducao.EmAndamento || autor == Guid.Empty || agora < IniciadaEmUtc)
             throw new InvalidOperationException("A ordem não pode ser cancelada com os dados informados.");
         Situacao = SituacaoOrdemProducao.Cancelada;
+        ChaveCancelamento = chave;
         EncerradaPorId = autor;
         EncerradaEmUtc = agora.ToUniversalTime();
     }

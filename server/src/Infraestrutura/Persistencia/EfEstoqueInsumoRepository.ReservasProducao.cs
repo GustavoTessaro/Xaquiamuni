@@ -26,7 +26,7 @@ public sealed partial class EfEstoqueInsumoRepository
         await BloquearMateriaisProducaoAsync(ordem, ct);
         if (await _dbContext.OrdensProducao.AnyAsync(o => o.Id == ordem.Id, ct) ||
             !await _dbContext.ReceitasProducao.AnyAsync(r => r.Ativa && r.Variante.Ativa &&
-                r.ProdutoVarianteId == ordem.ProdutoVarianteId && r.Versoes.Any(v => v.Id == ordem.ReceitaVersaoId), ct))
+                r.ProdutoVarianteId == ordem.ProdutoVarianteId && r.Versoes.Any(v => v.Id == ordem.ReceitaVersaoId && !r.Versoes.Any(a => a.Numero > v.Numero)), ct))
             return false;
 
         var data = _calendario.ObterDataAtual();
@@ -66,7 +66,7 @@ public sealed partial class EfEstoqueInsumoRepository
         return true;
     }
 
-    internal async Task<bool> PrepararLiberacaoProducaoAsync(Guid ordemId, Guid autor, DateTimeOffset agora, CancellationToken ct)
+    internal async Task<bool> PrepararLiberacaoProducaoAsync(Guid ordemId, Guid autor, DateTimeOffset agora, CancellationToken ct, Guid? chave = null)
     {
         ExigirTransacaoProducao();
         await AdquirirLockAsync($"production-order:{ordemId:D}", ct);
@@ -75,7 +75,9 @@ public sealed partial class EfEstoqueInsumoRepository
         if (ordem.Situacao == SituacaoOrdemProducao.Cancelada) return true;
 
         await BloquearMateriaisProducaoAsync(ordem, ct);
-        ordem.Cancelar(autor, agora);
+        if (await _dbContext.AlocacoesMateriasPrimas.AnyAsync(
+            a => a.Necessidade.OrdemId == ordemId && a.Consumida > 0m, ct)) return false;
+        ordem.Cancelar(autor, agora, chave);
         return true;
     }
 

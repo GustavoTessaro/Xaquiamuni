@@ -199,6 +199,13 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
             filtro.ItensPorPagina);
     }
 
+    internal async Task<IReadOnlyDictionary<Guid, ResumoEstoqueInsumo>> ConsultarResumosAsync(
+        Guid[] ids, DateOnly data, CancellationToken ct)
+    {
+        var dados = await ConstruirResumoQuery(data).Where(r => ids.Contains(r.Insumo.Id)).ToListAsync(ct);
+        return dados.ToDictionary(r => r.Insumo.Id, MapearResumo);
+    }
+
     private IQueryable<ResumoEstoqueSql> ConstruirResumoQuery(DateOnly dataReferencia)
     {
         var reservasAtivas = dbContext.Ativas();

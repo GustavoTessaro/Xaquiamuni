@@ -1602,17 +1602,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("ChaveCancelamento")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("ChaveInicio")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset?>("EncerradaEmUtc")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<Guid?>("EncerradaPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ImpressaoInicio")
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
                     b.Property<DateTimeOffset>("IniciadaEmUtc")
                         .HasColumnType("datetimeoffset");
 
                     b.Property<Guid>("IniciadaPorId")
                         .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("NomeReceita")
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
 
                     b.Property<Guid>("ProdutoVarianteId")
                         .HasColumnType("uniqueidentifier");
@@ -1634,6 +1649,14 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("ProdutoVarianteId");
 
                     b.HasIndex("ReceitaVersaoId");
+
+                    b.HasIndex("EncerradaPorId", "ChaveCancelamento")
+                        .IsUnique()
+                        .HasFilter("[EncerradaPorId] IS NOT NULL AND [ChaveCancelamento] IS NOT NULL");
+
+                    b.HasIndex("IniciadaPorId", "ChaveInicio")
+                        .IsUnique()
+                        .HasFilter("[ChaveInicio] IS NOT NULL");
 
                     b.ToTable("OrdensProducao", null, t =>
                         {

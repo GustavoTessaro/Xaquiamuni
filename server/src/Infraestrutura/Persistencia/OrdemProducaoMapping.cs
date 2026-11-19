@@ -13,6 +13,11 @@ internal static class OrdemProducaoMapping
             ordem.ToTable("OrdensProducao", t =>
                 t.HasCheckConstraint("CK_OrdensProducao_Valida",
                     "[QuantidadePlanejada] > 0 AND (([Situacao] = 'EmAndamento' AND [EncerradaEmUtc] IS NULL AND [EncerradaPorId] IS NULL) OR ([Situacao] IN ('Concluida', 'Cancelada') AND [EncerradaEmUtc] IS NOT NULL AND [EncerradaPorId] IS NOT NULL))"));
+            ordem.Property(o => o.NomeReceita).HasMaxLength(ReceitaProducao.NomeMax);
+            ordem.Property(o => o.ImpressaoInicio).HasMaxLength(64).IsFixedLength();
+            ordem.HasIndex(o => new { o.IniciadaPorId, o.ChaveInicio }).IsUnique().HasFilter("[ChaveInicio] IS NOT NULL");
+            ordem.HasIndex(o => new { o.EncerradaPorId, o.ChaveCancelamento }).IsUnique()
+                .HasFilter("[EncerradaPorId] IS NOT NULL AND [ChaveCancelamento] IS NOT NULL");
             ordem.Property(o => o.Situacao).HasConversion<string>().HasMaxLength(20).IsConcurrencyToken();
             ordem.HasOne<ProdutoVariante>().WithMany().HasForeignKey(o => o.ProdutoVarianteId).OnDelete(DeleteBehavior.Restrict);
             ordem.HasOne<ReceitaProducaoVersao>().WithMany().HasForeignKey(o => o.ReceitaVersaoId).OnDelete(DeleteBehavior.Restrict);

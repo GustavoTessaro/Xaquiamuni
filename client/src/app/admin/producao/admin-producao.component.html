@@ -1,0 +1,295 @@
+<app-admin-workspace activePage="production">
+  <section class="space-y-4" aria-labelledby="producao-titulo" [attr.aria-busy]="ocupado()">
+    <header class="flex flex-wrap items-center justify-between gap-3">
+      <h1 id="producao-titulo" class="text-2xl font-semibold">Produção</h1>
+      @if (!nova() && !detalhe()) {
+        <button
+          type="button"
+          (click)="abrirNova()"
+          [disabled]="ocupado() || !!pendente()"
+          class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 disabled:opacity-50"
+        >
+          Nova produção
+        </button>
+      }
+    </header>
+    @if (erro()) {
+      <p role="alert" class="rounded-lg bg-red-50 p-3 text-red-900">{{ erro() }}</p>
+    }
+    @if (sucesso()) {
+      <p role="status" class="text-emerald-900">{{ sucesso() }}</p>
+    }
+    @if (ocupado()) {
+      <p role="status">Aguarde…</p>
+    }
+    @if (pendente(); as tentativa) {
+      <section
+        aria-labelledby="tentativa-titulo"
+        class="space-y-2 rounded-xl border border-amber-300 bg-amber-50 p-4"
+      >
+        <h2 id="tentativa-titulo" class="font-semibold">
+          {{ tentativa.tipo === 'inicio' ? 'Início pendente' : 'Cancelamento pendente' }}
+        </h2>
+        <p class="text-sm">
+          {{
+            podeReenviar()
+              ? 'O servidor ainda não confirmou a operação. Você pode reenviar a mesma tentativa.'
+              : 'Confira a situação no servidor antes de reenviar.'
+          }}
+        </p>
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            (click)="conferirPendente()"
+            [disabled]="ocupado()"
+            class="min-h-11 underline focus-visible:outline-2"
+          >
+            Conferir situação
+          </button>
+          @if (podeReenviar()) {
+            <button
+              type="button"
+              (click)="reenviar()"
+              [disabled]="ocupado()"
+              class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2"
+            >
+              Reenviar tentativa
+            </button>
+          }
+        </div>
+      </section>
+    }
+
+    @if (nova()) {
+      <form
+        (ngSubmit)="prever()"
+        novalidate
+        class="space-y-4 rounded-xl border border-slate-200 bg-white p-4"
+      >
+        <h2 class="text-lg font-semibold">Nova produção</h2>
+        <fieldset [disabled]="ocupado() || !!pendente()" class="grid min-w-0 gap-3 sm:grid-cols-2">
+          <label class="min-w-0 text-sm font-medium"
+            >Receita
+            <select
+              name="receita"
+              required
+              [ngModel]="receitaId()"
+              (ngModelChange)="receitaId.set($event); previa.set(null)"
+              class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            >
+              <option value="">Selecione uma receita</option>
+              @for (receita of receitas(); track receita.id) {
+                <option [value]="receita.id">
+                  {{ receita.nome }} · {{ receita.produto }} · {{ receita.variante }}
+                </option>
+              }
+            </select>
+          </label>
+          <label class="min-w-0 text-sm font-medium"
+            >Quantidade planejada (unidades)
+            <input
+              name="quantidade"
+              required
+              type="number"
+              min="1"
+              step="1"
+              max="2147483647"
+              [ngModel]="quantidade()"
+              (ngModelChange)="quantidade.set($event); previa.set(null)"
+              class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            />
+          </label>
+          <button
+            type="submit"
+            class="min-h-11 w-fit rounded-lg border border-emerald-800 px-3 font-medium text-emerald-900 focus-visible:outline-2"
+          >
+            Consultar disponibilidade
+          </button>
+        </fieldset>
+      </form>
+      @if (previa(); as dados) {
+        <section class="space-y-3" aria-labelledby="previa-titulo">
+          <h2 id="previa-titulo" class="font-semibold">Materiais · Versão {{ dados.versao }}</h2>
+          <p class="text-sm">
+            A prévia é informativa. Ao iniciar, o servidor confere o saldo novamente e reserva todos
+            os materiais.
+          </p>
+          <ul class="grid gap-3 sm:grid-cols-2">
+            @for (material of dados.materiais; track material.insumoId) {
+              <li
+                class="min-w-0 rounded-xl border border-slate-200 bg-white p-3 [overflow-wrap:anywhere]"
+              >
+                <h3 class="font-semibold">{{ material.nome }}</h3>
+                <dl class="grid grid-cols-2 gap-x-2 text-sm">
+                  <dt>Necessário</dt>
+                  <dd>{{ medida(material.necessario, material.unidade) }}</dd>
+                  <dt>Utilizável</dt>
+                  <dd>{{ medida(material.utilizavel, material.unidade) }}</dd>
+                  <dt>Reservado</dt>
+                  <dd>{{ medida(material.reservado, material.unidade) }}</dd>
+                  <dt>Livre</dt>
+                  <dd>{{ medida(material.livre, material.unidade) }}</dd>
+                  <dt>Falta</dt>
+                  <dd>{{ medida(material.falta, material.unidade) }}</dd>
+                </dl>
+                @if (
+                  motivoFalta(material.necessario, material.utilizavel, material.falta);
+                  as motivo
+                ) {
+                  <p class="mt-1 font-medium text-red-900">{{ motivo }}</p>
+                }
+              </li>
+            }
+          </ul>
+          <button
+            type="button"
+            (click)="iniciar()"
+            [disabled]="ocupado() || !!pendente() || !podeIniciar()"
+            class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 disabled:opacity-50"
+          >
+            Iniciar produção
+          </button>
+        </section>
+      }
+      <button
+        type="button"
+        (click)="voltar()"
+        [disabled]="ocupado()"
+        class="min-h-11 underline focus-visible:outline-2"
+      >
+        Voltar à lista
+      </button>
+    } @else if (detalhe(); as ordem) {
+      <section
+        class="space-y-4 rounded-xl border border-slate-200 bg-white p-4"
+        aria-labelledby="ordem-titulo"
+      >
+        <div class="[overflow-wrap:anywhere]">
+          <h2 id="ordem-titulo" class="text-lg font-semibold">
+            {{ ordem.resumo.produto }} · {{ ordem.resumo.variante }}
+          </h2>
+          <p>
+            {{ ordem.resumo.receita }} · Versão {{ ordem.resumo.versao }} ·
+            {{ ordem.resumo.quantidade }} unidades
+          </p>
+          <p>
+            {{ situacao(ordem.resumo.situacao) }} ·
+            {{ ordem.resumo.iniciadaEmUtc | date: 'dd/MM/yyyy HH:mm' }}
+          </p>
+        </div>
+        <h3 class="font-semibold">Materiais</h3>
+        <ul class="grid gap-3 sm:grid-cols-2">
+          @for (item of ordem.materiais; track item.insumoId) {
+            <li class="min-w-0 rounded-lg border border-slate-200 p-3 [overflow-wrap:anywhere]">
+              <p class="font-medium">{{ item.nome }}</p>
+              <p class="text-sm">
+                Necessário: {{ medida(item.necessario, item.unidade) }} · Reservado:
+                {{ medida(item.reservado, item.unidade) }}
+              </p>
+              @if (item.reservaInelegivel) {
+                <p class="font-medium text-red-900" role="status">
+                  Parte da reserva está em lote vencido ou bloqueado.
+                </p>
+              }
+              <a
+                [routerLink]="['/admin/estoque/insumos', item.insumoId, 'consultas']"
+                class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+                >Ver estoque e histórico</a
+              >
+            </li>
+          }
+        </ul>
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="button"
+            (click)="voltar()"
+            [disabled]="ocupado()"
+            class="min-h-11 underline focus-visible:outline-2"
+          >
+            Voltar à lista
+          </button>
+          @if (ordem.resumo.situacao === 'EmAndamento' && !confirmarCancelamento()) {
+            <button
+              type="button"
+              (click)="confirmarCancelamento.set(true)"
+              [disabled]="ocupado() || !!pendente()"
+              class="min-h-11 px-2 text-red-900 underline focus-visible:outline-2"
+            >
+              Cancelar produção
+            </button>
+          }
+        </div>
+        @if (confirmarCancelamento()) {
+          <div class="rounded-lg bg-red-50 p-3">
+            <p>Cancelar a produção libera as reservas e mantém o saldo físico.</p>
+            <button
+              type="button"
+              (click)="cancelar()"
+              [disabled]="ocupado() || !!pendente()"
+              class="mr-3 min-h-11 font-semibold text-red-900 underline focus-visible:outline-2"
+            >
+              Confirmar cancelamento
+            </button>
+            <button
+              type="button"
+              (click)="confirmarCancelamento.set(false)"
+              [disabled]="ocupado()"
+              class="min-h-11 underline focus-visible:outline-2"
+            >
+              Manter produção
+            </button>
+          </div>
+        }
+      </section>
+    } @else {
+      <label class="block max-w-xs text-sm font-medium"
+        >Situação
+        <select
+          [ngModel]="filtro()"
+          (ngModelChange)="filtro.set($event)"
+          class="mt-1 min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+        >
+          <option value="">Todas</option>
+          <option value="EmAndamento">Em andamento</option>
+          <option value="Cancelada">Canceladas</option>
+          <option value="Concluida">Concluídas</option>
+        </select>
+      </label>
+      @if (falhaLista()) {
+        <button
+          type="button"
+          (click)="carregar()"
+          class="min-h-11 underline focus-visible:outline-2"
+        >
+          Tentar novamente
+        </button>
+      } @else {
+        <ul class="grid gap-3">
+          @for (ordem of visiveis(); track ordem.id) {
+            <li
+              class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4"
+            >
+              <div class="min-w-0 [overflow-wrap:anywhere]">
+                <h2 class="font-semibold">{{ ordem.produto }} · {{ ordem.variante }}</h2>
+                <p class="text-sm">
+                  {{ ordem.receita }} · {{ ordem.quantidade }} unidades ·
+                  {{ situacao(ordem.situacao) }}
+                </p>
+              </div>
+              <button
+                type="button"
+                (click)="consultar(ordem.id)"
+                [disabled]="ocupado()"
+                class="min-h-11 rounded-lg border border-slate-400 px-3 focus-visible:outline-2"
+              >
+                Abrir ordem
+              </button>
+            </li>
+          } @empty {
+            <li role="status">Nenhuma ordem nesta situação.</li>
+          }
+        </ul>
+      }
+    }
+  </section>
+</app-admin-workspace>
