@@ -132,6 +132,8 @@
                 @for (disponivel of acoesDisponiveis(); track disponivel) {
                   <button
                     type="button"
+                    #botaoAcao
+                    [attr.data-acao]="disponivel"
                     (click)="abrir(disponivel)"
                     [disabled]="enviando()"
                     class="min-h-11 max-w-full rounded-lg border px-4 font-semibold focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
@@ -147,7 +149,12 @@
               </div>
             } @else if (acao(); as atual) {
               @let confirmacao = acoes[atual];
-              <form (submit)="enviar($event)" [attr.aria-busy]="enviando()" novalidate>
+              <form
+                (submit)="enviar($event)"
+                (keydown.escape)="fechar()"
+                [attr.aria-busy]="enviando()"
+                novalidate
+              >
                 <fieldset [disabled]="enviando()" class="grid min-w-0 gap-3">
                   <legend class="mb-2 font-semibold">{{ confirmacao.titulo }}</legend>
                   @if ('orientacao' in confirmacao) {

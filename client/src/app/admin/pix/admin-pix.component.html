@@ -11,7 +11,7 @@
     @if (requerLogin()) {
       <a routerLink="/admin/login" class="underline">Entrar novamente</a>
     }
-    <p role="status" [class.hidden]="!sucesso()">{{ sucesso() }}</p>
+    <p role="status" [class.sr-only]="!sucesso()">{{ sucesso() }}</p>
     @switch (estado()) {
       @case ('carregando') {
         <p role="status">Consultando configuração…</p>

@@ -11,6 +11,7 @@ import {
   inject,
   signal,
   viewChild,
+  viewChildren,
   ElementRef,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -102,6 +103,7 @@ export class AdminPedidoDetalheComponent {
   private readonly confirmarCampo = viewChild<ElementRef<HTMLInputElement>>('confirmarCampo');
   private readonly confirmarBotao = viewChild<ElementRef<HTMLButtonElement>>('confirmarBotao');
   private readonly motivoCampo = viewChild<ElementRef<HTMLTextAreaElement>>('motivoCampo');
+  private readonly botoesAcao = viewChildren<ElementRef<HTMLButtonElement>>('botaoAcao');
   private readonly titulo = viewChild<ElementRef<HTMLElement>>('titulo');
   private readonly agora = signal(Date.now());
   private readonly prazoEncerradoServidor = signal(false);
@@ -213,8 +215,17 @@ export class AdminPedidoDetalheComponent {
 
   protected fechar(): void {
     if (this.enviando()) return;
+    const acao = this.acao();
     this.limparAcao();
-    this.titulo()?.nativeElement.focus();
+    afterNextRender(
+      () => {
+        const botao = this.botoesAcao().find(
+          ({ nativeElement }) => nativeElement.dataset['acao'] === acao,
+        );
+        (botao?.nativeElement ?? this.titulo()?.nativeElement)?.focus();
+      },
+      { injector: this.injector },
+    );
   }
 
   protected atualizarMotivo(motivo: string): void {

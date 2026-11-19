@@ -59,7 +59,7 @@
 }
 
 .store-brand__copy small {
-  color: #777a68;
+  color: #686b58;
   font-size: 0.61rem;
   letter-spacing: 0.16em;
 }
@@ -90,7 +90,7 @@
 }
 
 .store-search input::placeholder {
-  color: #939487;
+  color: #686b58;
 }
 
 .store-search button {
@@ -102,6 +102,12 @@
   background: transparent;
   color: #315a3e;
   cursor: pointer;
+}
+
+.store-search button:focus-visible {
+  outline: 2px solid #376348;
+  outline-offset: -4px;
+  border-radius: 999px;
 }
 
 .store-search button svg {

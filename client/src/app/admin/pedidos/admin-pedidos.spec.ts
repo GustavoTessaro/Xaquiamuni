@@ -152,6 +152,22 @@ describe('Pedidos administrativos', () => {
     http.expectNone(`${api}/${id}`);
   });
 
+  it('devolve o foco ao botão da ação ao fechar por Escape', async () => {
+    const harness = await abrirPedido();
+    clicar(harness, 'Confirmar pagamento');
+    await harness.fixture.whenStable();
+    const campo =
+      harness.routeNativeElement!.querySelector<HTMLInputElement>('input[type=checkbox]')!;
+    expect(document.activeElement).toBe(campo);
+    campo.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+    expect(document.activeElement).toBe(
+      harness.routeNativeElement!.querySelector('[data-acao="pagamento"]'),
+    );
+    http.expectNone('/api/auth/csrf');
+  });
+
   it('lista e pagina, conserva o filtro na rota e distingue carregamento de vazio', async () => {
     const harness = await RouterTestingHarness.create(caminho);
     expect(harness.routeNativeElement!.querySelector('[role=status]')?.textContent).toContain(

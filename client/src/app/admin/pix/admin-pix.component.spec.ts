@@ -45,6 +45,9 @@ describe('AdminPixComponent', () => {
     };
     const salvar = () => view.querySelector('form')!.dispatchEvent(new Event('submit'));
     expect(view.textContent).toContain('ainda não tem uma configuração PIX');
+    const feedback = view.querySelector('[role=status]')!;
+    expect(feedback.classList.contains('sr-only')).toBe(true);
+    expect(feedback.classList.contains('hidden')).toBe(false);
     expect(campo('#pix-chave').value).toBe('');
     expect(view.querySelector('label[for="pix-chave"]')).not.toBeNull();
     expect(Array.from(view.querySelectorAll('option'), (opcao) => opcao.value)).toEqual([
@@ -73,7 +76,9 @@ describe('AdminPixComponent', () => {
     expect(put.request.body).toEqual(dados);
     put.flush(dados);
     fixture.detectChanges();
-    expect(view.querySelector('[role=status]')?.textContent).toContain('salva');
+    expect(view.querySelector('[role=status]')).toBe(feedback);
+    expect(feedback.textContent).toContain('salva');
+    expect(feedback.classList.contains('sr-only')).toBe(false);
 
     preencher('#pix-instrucoes', 'Instrução de teste');
     salvar();
