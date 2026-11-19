@@ -379,7 +379,11 @@
                         class="inline-flex min-h-7 items-center rounded-full border px-2.5 text-xs font-semibold"
                         [class]="tipoClasse(movimento.tipo)"
                       >
-                        {{ rotuloTipo(movimento.tipo) }}
+                        {{
+                          movimento.ordemProducaoId
+                            ? 'Consumo de produção'
+                            : rotuloTipo(movimento.tipo)
+                        }}
                       </span>
                       <span class="text-sm font-semibold text-slate-800">
                         {{ rotuloDirecao(movimento.direcao) }}
@@ -392,7 +396,8 @@
                       {{ formatarQuantidade(movimento.quantidadeBase, movimento.unidadeBase) }}
                     </p>
                     <p class="mt-1 text-sm text-slate-600">
-                      Origem: {{ rotuloOrigem(movimento.origem) }}
+                      Origem:
+                      {{ movimento.ordemProducaoId ? 'Produção' : rotuloOrigem(movimento.origem) }}
                       @if (movimento.quantidadeOriginal !== null && movimento.unidadeOriginal) {
                         <span>
                           · informado como
@@ -425,7 +430,11 @@
                   <div>
                     <dt class="text-slate-500">Observação</dt>
                     <dd class="mt-0.5 break-words font-medium text-slate-800">
-                      {{ movimento.observacao || 'Sem observação' }}
+                      {{
+                        movimento.ordemProducaoId
+                          ? 'Vinculado a uma ordem de produção'
+                          : movimento.observacao || 'Sem observação'
+                      }}
                     </dd>
                   </div>
                   <div>
@@ -450,7 +459,19 @@
                       </dd>
                     </div>
                   }
-                  @if (movimento.tipo !== 'Estorno' && insumoId) {
+                  @if (movimento.ordemProducaoId) {
+                    <div class="sm:col-span-2 xl:col-span-4">
+                      <dt class="sr-only">Origem</dt>
+                      <dd>
+                        <a
+                          routerLink="/admin/producao"
+                          [queryParams]="{ ordem: movimento.ordemProducaoId }"
+                          class="inline-flex min-h-11 items-center underline focus-visible:outline-2"
+                          >Ver ordem de produção</a
+                        >
+                      </dd>
+                    </div>
+                  } @else if (movimento.tipo !== 'Estorno' && insumoId) {
                     <div class="sm:col-span-2 xl:col-span-4">
                       <dt class="sr-only">Ação</dt>
                       <dd>

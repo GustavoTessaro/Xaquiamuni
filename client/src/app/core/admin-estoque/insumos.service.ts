@@ -227,6 +227,7 @@ export interface AdminMovimentoInsumo {
   custoTotal: number | null;
   custoPorUnidadeBase: number | null;
   movimentoOriginalId: string | null;
+  ordemProducaoId?: string | null;
 }
 
 export type AdminMovimentoPreciso = Omit<

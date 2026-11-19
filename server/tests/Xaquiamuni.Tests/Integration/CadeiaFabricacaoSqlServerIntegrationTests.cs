@@ -121,6 +121,54 @@ public sealed class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(pedidoId, (await db.Pedidos.AsNoTracking().SingleAsync()).Id);
         await ConferirAcabadosAsync(admin, dados, livre: 2);
         Assert.Equal(1, await db.MovimentosProdutoAcabado.CountAsync());
+        var historicoInsumo = (await admin.Http.GetFromJsonAsync<JsonElement>(
+            $"/api/admin/insumos/{dados.Extrato:D}/movimentacoes")).GetProperty("itens");
+        var consumoHistorico = Assert.Single(historicoInsumo.EnumerateArray(), m => m.GetProperty("tipo").GetString() == "SaidaManual");
+        Assert.Equal(ordem.Resumo.Id, consumoHistorico.GetProperty("ordemProducaoId").GetGuid());
+        var aquisicao = Assert.Single(historicoInsumo.EnumerateArray(), m => m.GetProperty("tipo").GetString() == "Aquisicao");
+        Assert.Equal(JsonValueKind.Null, aquisicao.GetProperty("ordemProducaoId").ValueKind);
+        var historicoAcabado = (await admin.Http.GetFromJsonAsync<JsonElement>(
+            $"/api/admin/estoque/produtos-acabados/variantes/{dados.VarianteId:D}/movimentacoes")).GetProperty("itens");
+        var entradaHistorico = Assert.Single(historicoAcabado.EnumerateArray());
+        Assert.Equal("EntradaManual", entradaHistorico.GetProperty("tipo").GetString());
+        Assert.Equal(ordem.Resumo.Id, entradaHistorico.GetProperty("ordemProducaoId").GetGuid());
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task CadeiaFabricacao_HistoricoMantemNomesEIdentificaFallbackLegado()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
+        await using var db = ambiente.Banco.CreateVerificationContext();
+        var dados = await PrepararCompraAsync(admin, db);
+        var (receita, nova) = await ReceberEIniciarAsync(admin, dados);
+        await admin.PostAsync<JsonElement>($"{Producao}/{nova.Resumo.Id:D}/cancelar", new { },
+            HttpStatusCode.OK, Guid.NewGuid());
+        var previa = await PreviaAsync(admin, receita);
+        var legada = await IniciarAsync(admin, new(receita, previa.ReceitaVersaoId, 4), Guid.NewGuid());
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE OrdensProducao SET NomeProduto = NULL, NomeVariante = NULL WHERE Id = {legada.Resumo.Id}");
+
+        var produto = await db.Produtos.Include(p => p.Variantes).SingleAsync(p => p.Id == dados.ProdutoId);
+        produto.AtualizarDados("Sabonete renomeado", null);
+        var variante = Assert.Single(produto.Variantes, v => v.Id == dados.VarianteId);
+        variante.AtualizarDados("Variante renomeada", "UN", variante.PrecoVenda);
+        await db.SaveChangesAsync();
+        var lista = (await admin.Http.GetFromJsonAsync<ResumoOrdemProducao[]>(Producao))!;
+        var historica = Assert.Single(lista, o => o.Id == nova.Resumo.Id);
+        var atual = Assert.Single(lista, o => o.Id == legada.Resumo.Id);
+        Assert.False(historica.NomesAtuais);
+        Assert.Equal((nova.Resumo.Produto, nova.Resumo.Variante), (historica.Produto, historica.Variante));
+        Assert.True(atual.NomesAtuais);
+        Assert.Equal(("Sabonete renomeado", "Variante renomeada"), (atual.Produto, atual.Variante));
+        foreach (var resumo in new[] { historica, atual })
+        {
+            var detalhe = (await admin.Http.GetFromJsonAsync<DetalheOrdemProducao>($"{Producao}/{resumo.Id:D}"))!;
+            Assert.Equal(resumo, detalhe.Resumo);
+            Assert.Equal(dados.ProdutoId, detalhe.Resumo.ProdutoId);
+            Assert.Equal(dados.VarianteId, detalhe.VarianteId);
+            Assert.Equal(previa.Versao, detalhe.Resumo.Versao);
+        }
     }
 
     [SqlServerIntegrationFact]

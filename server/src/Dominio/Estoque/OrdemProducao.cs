@@ -10,6 +10,8 @@ public sealed class OrdemProducao
     public Guid ReceitaVersaoId { get; private set; }
     public int QuantidadePlanejada { get; private set; }
     public SituacaoOrdemProducao Situacao { get; private set; }
+    public string? NomeProduto { get; private set; }
+    public string? NomeVariante { get; private set; }
     public string? NomeReceita { get; private set; }
     public Guid? ChaveInicio { get; private set; }
     public string? ImpressaoInicio { get; private set; }
@@ -37,6 +39,7 @@ public sealed class OrdemProducao
         var ordem = new OrdemProducao
         {
             Id = Guid.NewGuid(), ProdutoVarianteId = receita.ProdutoVarianteId, NomeReceita = receita.Nome,
+            NomeProduto = receita.Variante.Produto?.Nome, NomeVariante = receita.Variante.Identificacao,
             ReceitaVersaoId = versao.Id, QuantidadePlanejada = quantidade,
             Situacao = SituacaoOrdemProducao.EmAndamento, IniciadaPorId = autor, IniciadaEmUtc = agora.ToUniversalTime()
         };

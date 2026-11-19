@@ -185,6 +185,7 @@ describe('Administração de produção', () => {
     await atualizar();
     expect(root.textContent).toContain('Materiais reservados');
     expect(root.textContent).toContain('lote vencido ou bloqueado');
+    expect(root.textContent).toContain('procure suporte antes de continuar');
     expect(
       root.querySelector(`a[href="/admin/estoque/insumos/${material.insumoId}/consultas"]`),
     ).not.toBeNull();

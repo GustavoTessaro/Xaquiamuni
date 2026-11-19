@@ -1639,7 +1639,9 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
                     movimento.RegistradoEmUtc,
                     movimento.LoteId,
                     lote.Codigo,
-                    movimento.MovimentoOriginalId))
+                    movimento.MovimentoOriginalId,
+                    dbContext.OrdensProducao.Where(o => o.MovimentoAcabadoId == movimento.Id)
+                        .Select(o => (Guid?)o.Id).FirstOrDefault()))
             .Skip(skip)
             .Take(filtro.ItensPorPagina)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -1665,7 +1667,8 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
                 item.RegistradoEmUtc,
                 item.LoteId,
                 item.CodigoLote,
-                item.MovimentoOriginalId))
+                item.MovimentoOriginalId,
+                item.OrdemProducaoId))
             .ToArray();
 
         return new PaginaEstoque<MovimentoProdutoAcabadoConsulta>(
@@ -1753,5 +1756,6 @@ public sealed class EfEstoqueProdutoAcabadoConsultaRepository(
         DateTimeOffset RegistradoEmUtc,
         Guid LoteId,
         string CodigoLote,
-        Guid? MovimentoOriginalId);
+        Guid? MovimentoOriginalId,
+        Guid? OrdemProducaoId);
 }

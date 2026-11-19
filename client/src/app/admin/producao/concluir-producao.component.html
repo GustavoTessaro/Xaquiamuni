@@ -45,6 +45,12 @@
           class="min-w-0 space-y-2 rounded-lg border border-slate-200 p-3 [overflow-wrap:anywhere]"
         >
           <p class="font-semibold">{{ linha.nome }}</p>
+          @if (linha.reservaInelegivel) {
+            <p class="text-sm text-amber-950">
+              Parte da reserva está vencida ou bloqueada. Confira o estoque deste material e procure
+              suporte se precisar dessa parte para concluir.
+            </p>
+          }
           <p class="text-sm">
             Reservado: {{ linha.reservado.replace('.', ',') }} {{ linha.unidadeRotulo }}
           </p>

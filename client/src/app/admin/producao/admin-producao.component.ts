@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, of, switchMap } from 'rxjs';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { OperacaoPendenteStore } from '../../core/admin-estoque/operacao-pendente.store';
@@ -43,6 +43,7 @@ export class AdminProducaoComponent {
   private readonly storage = inject(OperacaoPendenteStore);
   private readonly destroy = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly rota = inject(ActivatedRoute);
   private ator: string | null = null;
 
   protected readonly lista = signal<ResumoOrdem[]>([]);
@@ -83,7 +84,9 @@ export class AdminProducaoComponent {
           } catch {
             // O formulário verifica se consegue guardar a tentativa antes de enviar.
           }
+          const ordemId = this.rota.snapshot.queryParamMap.get('ordem');
           if (this.pendente()) this.conferirPendente();
+          else if (ordemId) this.consultar(ordemId);
         },
         error: () => {
           /* Ações de escrita exigem sessão identificada. */

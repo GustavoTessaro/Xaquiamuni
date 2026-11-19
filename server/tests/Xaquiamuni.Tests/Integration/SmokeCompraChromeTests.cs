@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Pedidos;
+using Xaquiamuni.Dominio.Estoque;
 using Xunit.Abstractions;
 
 namespace Xaquiamuni.Tests.Integration;
@@ -41,6 +42,10 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
     [ChromeCompraFact]
     [Trait("Category", "SqlServerIntegration")]
     public Task JornadaChromeCompraRetiradaComConciliacao() => ExecutarChromeAsync(jornada: true);
+
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public Task ChromeAuditaSeisTelasAdministrativas() => ExecutarChromeAsync(jornada: false, auditoriaAdmin: true);
 
     [ChromeCompraFact]
     [Trait("Category", "SqlServerIntegration")]
@@ -95,7 +100,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         output.WriteLine("Demonstração encerrada: HTTPS indisponível, banco e diretório removidos.");
     }
 
-    private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false)
+    private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false, bool auditoriaAdmin = false)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -131,11 +136,21 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                     var fluxo = relogio is null ? null : new JornadaCompraE2E(host, relogio, admin.Id, cliente.Email);
                     var outroCliente = jornada ? await host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
                     var seed = fluxo is null ? null : await fluxo.SemearAsync();
+                    Guid? varianteAuditoria = null;
+                    if (auditoriaAdmin)
+                    {
+                        await using var verificacao = db.CreateVerificationContext();
+                        var (_, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
+                        varianteAuditoria = variante.Id;
+                        verificacao.InsumosEstoque.Add(InsumoEstoque.Criar("Base sintética",
+                            TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama));
+                        await verificacao.SaveChangesAsync();
+                    }
                     await RodarChromeAsync(script, new
                     {
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
-                        outroCliente, seed, pixManual,
+                        outroCliente, seed, pixManual, varianteAuditoria,
                     }, fluxo);
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }

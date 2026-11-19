@@ -156,6 +156,57 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
+  if (dados.varianteAuditoria) {
+    const telas = [
+      ['/admin/fornecedores', 'Fornecedores', 'Novo fornecedor', 'Salvar fornecedor'],
+      ['/admin/compras', 'Compras de matérias-primas', 'Nova compra', 'Salvar rascunho'],
+      ['/admin/estoque/insumos', 'Matérias-primas', 'Novo material'],
+      ['/admin/receitas', 'Receitas', 'Nova receita'],
+      ['/admin/producao', 'Produção', 'Nova produção', 'Consultar disponibilidade'],
+      ['/admin/estoque/produtos-acabados/' + dados.varianteAuditoria, 'Sabonete', 'Registrar saída'],
+    ];
+    const vazios = {
+      Fornecedores: 'Nenhum fornecedor cadastrado.',
+      'Compras de matérias-primas': 'Nenhuma compra cadastrada.',
+      Receitas: 'Nenhuma receita encontrada.',
+      Produção: 'Nenhuma ordem nesta situação.',
+    };
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', {
+        width, height: 900, mobile: false, deviceScaleFactor: 1,
+      }, a.sessionId);
+      for (const [rota, titulo, acao, formulario] of telas) {
+        await a.ir(rota);
+        const botao = `[...document.querySelectorAll('main button, main a')]
+          .find(e => e.textContent.trim() === ${JSON.stringify(acao)} && !e.matches(':disabled') && e.getClientRects().length)`;
+        await waitFor(() => a.ev(`document.querySelector('main h1')?.textContent.trim() === ${JSON.stringify(titulo)}
+           && !!(${botao})`), 'Tela ou ação indisponível: ' + titulo);
+        if (vazios[titulo]) {
+          await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes(${JSON.stringify(vazios[titulo])})`),
+            'Estado vazio indisponível: ' + titulo);
+        }
+        assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'), titulo + ' excede a largura');
+        assert.ok(await a.ev(`(() => { const e = ${botao}; e.focus(); return document.activeElement === e; })()`), acao);
+        if (formulario || acao === 'Registrar saída' || acao === 'Nova receita') {
+          await a.ev(`(${botao}).click()`);
+          await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes(
+            ${JSON.stringify(formulario ?? (acao === 'Registrar saída' ? 'Saldo disponível para saída' : 'Rendimento'))})`),
+            'Formulário indisponível: ' + titulo);
+          assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'), titulo + ' formulário excede a largura');
+          if (titulo === 'Fornecedores') {
+            await a.ev(`document.querySelector('form[aria-labelledby="supplier-form-title"] button[type=submit]').click()`);
+            await waitFor(() => a.ev(`(() => {
+              const campo = document.querySelector('#supplier-name');
+              return campo.labels.length > 0 && campo.getAttribute('aria-invalid') === 'true'
+                && !!document.getElementById(campo.getAttribute('aria-describedby'));
+            })()`), 'Validação do nome do fornecedor sem associação acessível');
+          }
+        }
+      }
+      console.log('Seis telas administrativas verificadas em ' + width + ' px.');
+    }
+  }
+
   if (dados.demonstracao) {
     await c.ir('/produtos');
     await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes('Sabonete demonstração')

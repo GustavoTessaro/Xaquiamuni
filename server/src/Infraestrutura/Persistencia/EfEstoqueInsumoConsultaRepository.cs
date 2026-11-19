@@ -186,7 +186,9 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
                     movimento.FatorCompra == null
                         ? null
                         : (UnidadeFisicaEstoque?)movimento.FatorCompra.UnidadeBase,
-                    movimento.MovimentoOriginalId))
+                    movimento.MovimentoOriginalId,
+                    dbContext.AlocacoesMateriasPrimas.Where(a => a.MovimentoConsumoId == movimento.Id)
+                        .Select(a => (Guid?)a.Necessidade.OrdemId).FirstOrDefault()))
             .Skip(skip)
             .Take(filtro.ItensPorPagina)
             .ToListAsync(cancellationToken)

@@ -1643,9 +1643,17 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("MovimentoAcabadoId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("NomeProduto")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("NomeReceita")
                         .HasMaxLength(120)
                         .HasColumnType("nvarchar(120)");
+
+                    b.Property<string>("NomeVariante")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<Guid>("ProdutoVarianteId")
                         .HasColumnType("uniqueidentifier");

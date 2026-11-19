@@ -81,6 +81,7 @@ export interface MovimentoProdutoAcabado {
   loteId: string;
   codigoLote: string;
   movimentoOriginalId: string | null;
+  ordemProducaoId?: string | null;
 }
 
 export interface AdminPaginaProdutoAcabado<T> {

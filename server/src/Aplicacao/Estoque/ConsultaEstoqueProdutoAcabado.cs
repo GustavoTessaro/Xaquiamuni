@@ -101,7 +101,8 @@ public sealed record MovimentoProdutoAcabadoConsulta(
     DateTimeOffset RegistradoEmUtc,
     Guid LoteId,
     string CodigoLote,
-    Guid? MovimentoOriginalId);
+    Guid? MovimentoOriginalId,
+    Guid? OrdemProducaoId = null);
 
 public interface IEstoqueProdutoAcabadoConsultaRepository
 {

@@ -68,6 +68,7 @@ export interface ResumoOrdem {
   versao: number;
   quantidade: number;
   versaoOrdem: string;
+  nomesAtuais?: boolean;
   situacao: 'EmAndamento' | 'Cancelada' | 'Concluida';
   iniciadaEmUtc: string;
   encerradaEmUtc: string | null;

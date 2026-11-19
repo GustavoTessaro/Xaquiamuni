@@ -858,7 +858,8 @@ public sealed record MovimentoAdminResponse(
     [property: JsonConverter(typeof(JsonStringEnumConverter))] UnidadeFisicaEstoque? UnidadeFatorCompra,
     decimal? CustoTotal,
     decimal? CustoPorUnidadeBase,
-    Guid? MovimentoOriginalId)
+    Guid? MovimentoOriginalId,
+    Guid? OrdemProducaoId = null)
 {
     public static MovimentoAdminResponse From(MovimentoInsumo movimento) =>
         new(
@@ -910,7 +911,8 @@ public sealed record MovimentoAdminResponse(
             movimento.UnidadeFatorCompra,
             null,
             null,
-            movimento.MovimentoOriginalId);
+            movimento.MovimentoOriginalId,
+            movimento.OrdemProducaoId);
 
     private static OrigemMovimentoInsumo ObterOrigem(MovimentoInsumo movimento) =>
         movimento.Tipo switch

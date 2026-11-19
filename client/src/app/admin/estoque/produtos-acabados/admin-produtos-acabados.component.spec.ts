@@ -539,51 +539,61 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(cartaoVencido.textContent).toContain('estoque vendável deste lote é insuficiente');
   });
 
-  it('exibe uma movimentação datada e permite abrir a correção pelo histórico', async () => {
-    const api = criarApi();
-    api.listarMovimentacoes.mockReturnValueOnce(
-      of({
-        itens: [
-          {
-            id: 'mov-1',
-            tipo: 'EntradaManual',
-            quantidade: 2,
-            condicaoOrigem: null,
-            condicaoDestino: 'Vendavel',
-            quantidadeContada: null,
-            saldoAnteriorVendavel: 0,
-            saldoAnteriorDanificada: 0,
-            saldoAnteriorQuarentena: 0,
-            saldoPosteriorVendavel: 2,
-            saldoPosteriorDanificada: 0,
-            saldoPosteriorQuarentena: 0,
-            motivo: 'Entrada de teste',
-            observacao: null,
-            responsavelId: 'actor-1',
-            registradoEmUtc: '2026-11-18T12:00:00Z',
-            loteId: 'lot-1',
-            codigoLote: loteInicial.codigo,
-            movimentoOriginalId: null,
-          },
-        ],
-        totalItens: 1,
-        pagina: 1,
-        itensPorPagina: 20,
-      }),
-    );
-    const fixture = await montarComponente(api);
-    const root = fixture.nativeElement as HTMLElement;
-    const historico = root.querySelector('[aria-labelledby="finished-history-title"]')!;
-    expect(historico.textContent).toContain('18/11/2026');
-    expect(historico.textContent).toContain('Entrada de teste');
-    const detalhes = historico.querySelector('details')!;
-    expect(detalhes.open).toBe(false);
-    detalhes.open = true;
-    clicar(fixture, 'Corrigir movimentação');
-    expect(root.querySelectorAll('main form')).toHaveLength(1);
-    expect(root.querySelector('#reverse-reason')).not.toBeNull();
-    expect(api.estornarMovimento).not.toHaveBeenCalled();
-  });
+  it.each([null, 'ordem-1'])(
+    'distingue entrada manual e produtiva (%s)',
+    async (ordemProducaoId) => {
+      const api = criarApi();
+      api.listarMovimentacoes.mockReturnValueOnce(
+        of({
+          itens: [
+            {
+              id: 'mov-1',
+              tipo: 'EntradaManual',
+              quantidade: 2,
+              condicaoOrigem: null,
+              condicaoDestino: 'Vendavel',
+              quantidadeContada: null,
+              saldoAnteriorVendavel: 0,
+              saldoAnteriorDanificada: 0,
+              saldoAnteriorQuarentena: 0,
+              saldoPosteriorVendavel: 2,
+              saldoPosteriorDanificada: 0,
+              saldoPosteriorQuarentena: 0,
+              motivo: 'Entrada de teste',
+              observacao: null,
+              responsavelId: 'actor-1',
+              registradoEmUtc: '2026-11-18T12:00:00Z',
+              loteId: 'lot-1',
+              codigoLote: loteInicial.codigo,
+              movimentoOriginalId: null,
+              ordemProducaoId,
+            },
+          ],
+          totalItens: 1,
+          pagina: 1,
+          itensPorPagina: 20,
+        }),
+      );
+      const fixture = await montarComponente(api);
+      const root = fixture.nativeElement as HTMLElement;
+      const historico = root.querySelector('[aria-labelledby="finished-history-title"]')!;
+      expect(historico.textContent).toContain('18/11/2026');
+      expect(historico.textContent).toContain('Entrada de teste');
+      const detalhes = historico.querySelector('details')!;
+      expect(detalhes.open).toBe(false);
+      detalhes.open = true;
+      if (ordemProducaoId) {
+        expect(historico.textContent).toContain('Entrada de produção');
+        expect(historico.textContent).not.toContain('Corrigir movimentação');
+        expect(historico.querySelector('a[href="/admin/producao?ordem=ordem-1"]')).not.toBeNull();
+        return;
+      }
+      clicar(fixture, 'Corrigir movimentação');
+      expect(root.querySelectorAll('main form')).toHaveLength(1);
+      expect(root.querySelector('#reverse-reason')).not.toBeNull();
+      expect(api.estornarMovimento).not.toHaveBeenCalled();
+    },
+  );
 
   it('apresenta o estado vazio ao abrir conferência e mantém a entrada disponível', async () => {
     const api = criarApi();

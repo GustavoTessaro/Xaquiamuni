@@ -114,16 +114,16 @@ public sealed partial class EfEstoqueInsumoRepository : IGerenciarOrdensProducao
         where (!id.HasValue || ordem.Id == id) && (!situacao.HasValue || ordem.Situacao == situacao) &&
             (!produtoId.HasValue || variante.ProdutoId == produtoId) && (!receitaId.HasValue || receita.Id == receitaId)
         orderby ordem.IniciadaEmUtc descending, ordem.Id descending
-        select new ResumoOrdemProducao(ordem.Id, variante.ProdutoId, variante.Produto.Nome, variante.Identificacao,
-            receita.Id, ordem.NomeReceita ?? receita.Nome, versao.Numero, ordem.QuantidadePlanejada,
-            ordem.Situacao.ToString(), ordem.IniciadaEmUtc, ordem.EncerradaEmUtc, ordem.Versao);
+        select new ResumoOrdemProducao(ordem.Id, variante.ProdutoId, ordem.NomeProduto ?? variante.Produto.Nome,
+            ordem.NomeVariante ?? variante.Identificacao, receita.Id, ordem.NomeReceita ?? receita.Nome, versao.Numero, ordem.QuantidadePlanejada,
+            ordem.Situacao.ToString(), ordem.IniciadaEmUtc, ordem.EncerradaEmUtc, ordem.Versao, ordem.NomeProduto == null || ordem.NomeVariante == null);
 
     private async Task<ReceitaProducao?> CarregarReceitaAsync(Guid id, bool bloquear, CancellationToken ct)
     {
         IQueryable<ReceitaProducao> query = bloquear
             ? _dbContext.ReceitasProducao.FromSqlInterpolated($"SELECT * FROM [ReceitasProducao] WITH (HOLDLOCK) WHERE [Id] = {id}")
             : _dbContext.ReceitasProducao;
-        var receita = await query.AsNoTracking().Include(r => r.Variante)
+        var receita = await query.AsNoTracking().Include(r => r.Variante).ThenInclude(v => v.Produto)
             .Include(r => r.Versoes.OrderByDescending(v => v.Numero).Take(1)).ThenInclude(v => v.Itens)
             .SingleOrDefaultAsync(r => r.Id == id, ct);
         if (bloquear && receita is not null)

@@ -12,7 +12,7 @@ public sealed record MaterialProducao(Guid InsumoId, string Nome, string Unidade
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] decimal Falta);
 public sealed record PreviaProducao(Guid ReceitaVersaoId, int Versao, IReadOnlyList<MaterialProducao> Materiais);
 public sealed record ResumoOrdemProducao(Guid Id, Guid ProdutoId, string Produto, string Variante, Guid ReceitaId,
-    string Receita, int Versao, int Quantidade, string Situacao, DateTimeOffset IniciadaEmUtc, DateTimeOffset? EncerradaEmUtc, Guid VersaoOrdem);
+    string Receita, int Versao, int Quantidade, string Situacao, DateTimeOffset IniciadaEmUtc, DateTimeOffset? EncerradaEmUtc, Guid VersaoOrdem, bool NomesAtuais = false);
 public sealed record MaterialOrdemProducao(Guid InsumoId, string Nome, string Unidade,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] decimal Necessario,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] decimal Reservado,

@@ -20,6 +20,8 @@ internal static class OrdemProducaoMapping
             ordem.HasIndex(o => o.MovimentoAcabadoId).IsUnique().HasFilter("[MovimentoAcabadoId] IS NOT NULL");
             ordem.HasOne<MovimentoProdutoAcabado>().WithMany().HasForeignKey(o => o.MovimentoAcabadoId)
                 .OnDelete(DeleteBehavior.Restrict);
+            ordem.Property(o => o.NomeProduto).HasMaxLength(Dominio.Entidades.Produto.NomeMaxLength);
+            ordem.Property(o => o.NomeVariante).HasMaxLength(Dominio.Entidades.ProdutoVariante.IdentificacaoMaxLength);
             ordem.Property(o => o.NomeReceita).HasMaxLength(ReceitaProducao.NomeMax);
             ordem.Property(o => o.ImpressaoInicio).HasMaxLength(64).IsFixedLength();
             ordem.HasIndex(o => new { o.IniciadaPorId, o.ChaveInicio }).IsUnique().HasFilter("[ChaveInicio] IS NOT NULL");

@@ -133,7 +133,8 @@ public sealed record MovimentoInsumoConsulta(
     string? FormaCompraNome,
     decimal? FatorCompra,
     UnidadeFisicaEstoque? UnidadeFatorCompra,
-    Guid? MovimentoOriginalId);
+    Guid? MovimentoOriginalId,
+    Guid? OrdemProducaoId = null);
 
 public static class ClassificadorSituacaoEstoqueInsumo
 {

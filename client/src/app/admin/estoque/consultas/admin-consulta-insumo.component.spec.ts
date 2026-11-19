@@ -113,6 +113,20 @@ describe('AdminConsultaInsumoComponent', () => {
     expect(api.listarMovimentacoes.mock.calls.length).toBe(1);
   });
 
+  it('identifica consumo de produção pelo vínculo, mesmo com tipo interno manual', async () => {
+    const api = criarApi(posicaoAgregada);
+    api.listarMovimentacoes.mockReturnValueOnce(
+      of({
+        ...paginaMovimentos,
+        itens: [{ ...paginaMovimentos.itens[0], tipo: 'SaidaManual', ordemProducaoId: 'ordem-1' }],
+      }),
+    );
+    const root = (await renderConsulta(api)).routeNativeElement!;
+    expect(root.textContent).toContain('Consumo de produção');
+    expect(root.textContent).not.toContain('Solicitar estorno');
+    expect(root.querySelector('a[href="/admin/producao?ordem=ordem-1"]')).not.toBeNull();
+  });
+
   it('groups routine operations separately from exceptional losses and discards', async () => {
     const harness = await renderConsulta(criarApi(posicaoAgregada));
     const root = harness.routeNativeElement!;

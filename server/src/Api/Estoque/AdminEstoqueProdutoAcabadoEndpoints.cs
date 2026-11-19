@@ -826,7 +826,8 @@ public sealed record MovimentoProdutoAcabadoAdminResponse(
     DateTimeOffset RegistradoEmUtc,
     Guid LoteId,
     string CodigoLote,
-    Guid? MovimentoOriginalId)
+    Guid? MovimentoOriginalId,
+    Guid? OrdemProducaoId = null)
 {
     public static MovimentoProdutoAcabadoAdminResponse From(
         MovimentoProdutoAcabado movimento,
@@ -873,7 +874,8 @@ public sealed record MovimentoProdutoAcabadoAdminResponse(
             movimento.RegistradoEmUtc,
             movimento.LoteId,
             movimento.CodigoLote,
-            movimento.MovimentoOriginalId);
+            movimento.MovimentoOriginalId,
+            movimento.OrdemProducaoId);
 }
 
 public sealed record EntradaProdutoAcabadoAdminRequest
