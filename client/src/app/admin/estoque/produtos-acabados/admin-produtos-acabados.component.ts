@@ -455,6 +455,7 @@ export class AdminProdutosAcabadosComponent {
       return;
     }
     this.acaoMovimentacao.set(acao);
+    this.tituloAcoes?.nativeElement.focus();
     this.sucessoMovimentacao.set('');
     this.erroMovimentacao.set('');
     this.contagemConcluidaLoteId.set(null);
@@ -467,10 +468,14 @@ export class AdminProdutosAcabadosComponent {
     }
   }
 
+  @ViewChild('tituloAcoes')
+  private tituloAcoes?: ElementRef<HTMLElement>;
+
   protected fecharMovimentacao(): void {
     if (!this.enviandoMovimentacao()) {
       this.acaoMovimentacao.set(null);
       this.erroMovimentacao.set('');
+      this.tituloAcoes?.nativeElement.focus();
     }
   }
 
@@ -715,11 +720,13 @@ export class AdminProdutosAcabadosComponent {
     if (
       movimento.tipo === 'Estorno' ||
       this.movimentoJaEstornado(movimento) ||
+      this.acaoMovimentacao() ||
       this.enviandoMovimentacao()
     ) {
       return;
     }
     this.acaoMovimentacao.set('Estorno');
+    this.tituloAcoes?.nativeElement.focus();
     this.movimentoEstorno.set(movimento);
     this.estornoForm.reset({ motivo: '' });
     this.erroMovimentacao.set('');
@@ -1276,7 +1283,8 @@ export class AdminProdutosAcabadosComponent {
       year: 'numeric',
       month: '2-digit',
       day: '2-digit',
-      timeStyle: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
     }).format(date);
   }
 

@@ -1,13 +1,6 @@
 <app-admin-workspace activePage="products">
   <div class="space-y-6">
-    <header>
-      <p class="text-sm font-semibold uppercase tracking-wide text-emerald-800">Estoque</p>
-      <h1 class="mt-1 text-2xl font-bold tracking-tight text-emerald-950 sm:text-3xl">
-        {{ produtoId() || varianteId() ? 'Estoque do produto' : 'Produtos prontos para venda' }}
-      </h1>
-      <p class="mt-2 text-sm text-slate-600">
-        Consulte os saldos, lotes e movimentações de cada produto e variante.
-      </p>
+    <header class="space-y-2">
       <a
         routerLink="/admin/produtos"
         queryParamsHandling="preserve"
@@ -15,6 +8,30 @@
       >
         Voltar para Produtos
       </a>
+      @if (produtoSelecionado(); as produto) {
+        <h1 class="break-words text-2xl font-bold text-emerald-950 sm:text-3xl">
+          {{ produto.nome }}
+        </h1>
+        <div class="flex flex-wrap items-center gap-x-4">
+          <p class="break-words text-sm text-slate-700">
+            Estoque · {{ varianteSelecionada()?.identificacao }} ·
+            {{ varianteSelecionada()?.unidadeVenda }}
+          </p>
+          @if (produto.variantes.length > 1) {
+            <a
+              [routerLink]="['/admin/produtos', produto.id, 'estoque']"
+              queryParamsHandling="preserve"
+              class="inline-flex min-h-11 items-center text-sm font-semibold text-emerald-800 underline focus-visible:outline-2"
+            >
+              Selecionar outra variante
+            </a>
+          }
+        </div>
+      } @else {
+        <h1 class="text-2xl font-bold text-emerald-950 sm:text-3xl">
+          {{ produtoId() || varianteId() ? 'Estoque do produto' : 'Produtos prontos para venda' }}
+        </h1>
+      }
     </header>
 
     @if (erro()) {
@@ -89,26 +106,6 @@
         }
       </section>
     } @else {
-      <div class="flex flex-wrap items-center justify-between gap-3">
-        @if (produtoSelecionado(); as produto) {
-          @if (produto.variantes.length > 1) {
-            <a
-              [routerLink]="['/admin/produtos', produto.id, 'estoque']"
-              queryParamsHandling="preserve"
-              class="inline-flex min-h-11 items-center text-sm font-semibold text-emerald-800 underline focus-visible:outline-2"
-            >
-              Selecionar outra variante
-            </a>
-          }
-        }
-        @if (produtoSelecionado() && varianteSelecionada()) {
-          <p class="text-sm text-slate-600">
-            <strong class="text-slate-900">{{ produtoSelecionado()!.nome }}</strong>
-            · {{ varianteSelecionada()!.identificacao }} · {{ varianteSelecionada()!.unidadeVenda }}
-          </p>
-        }
-      </div>
-
       @if (erroPosicao()) {
         <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           <p role="alert">{{ erroPosicao() }}</p>
@@ -148,109 +145,82 @@
           class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
           aria-labelledby="finished-position-title"
         >
-          <div class="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 id="finished-position-title" class="text-lg font-semibold text-emerald-950">
-                Posição da variante
-              </h2>
-              <p class="mt-1 text-sm text-slate-600">
-                Os saldos seguem as regras atuais do estoque e dos lotes.
-              </p>
-            </div>
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <h2 id="finished-position-title" class="text-lg font-semibold text-emerald-950">
+              Resumo do estoque
+            </h2>
             <button
               type="button"
               (click)="carregarVariante()"
               [disabled]="carregando()"
-              class="min-h-10 rounded-xl border border-emerald-800 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
+              class="min-h-11 rounded-xl border border-emerald-800 px-3 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 focus-visible:outline-2 disabled:opacity-60"
             >
               {{ carregando() ? 'Atualizando...' : 'Atualizar posição' }}
             </button>
           </div>
-
-          <dl class="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <dt class="text-sm text-slate-600">Saldo físico</dt>
-              <dd class="mt-1 text-xl font-semibold text-slate-950">
-                {{ position.saldoFisico }} un.
-              </dd>
-              <dd class="mt-1 text-xs text-slate-600">
-                Total registrado, incluindo unidades indisponíveis.
-              </dd>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <dt class="text-sm text-slate-600">Estoque vendável</dt>
-              <dd class="mt-1 text-xl font-semibold text-slate-950">
-                {{ position.varianteAtiva ? position.saldoUtilizavel : 0 }} un.
-              </dd>
-              <dd class="mt-1 text-xs text-slate-600">
-                Unidades em condição vendável, em lotes válidos e de variante ativa.
-              </dd>
-            </div>
-            <div class="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <dt class="text-sm text-slate-600">Comprometido por reservas</dt>
-              <dd class="mt-1 text-xl font-semibold text-slate-950">
-                {{ position.saldoReservado }} un.
-              </dd>
-              <dd class="mt-1 text-xs text-slate-600">
-                @if (position.saldoReservado > 0) {
-                  Reservas confirmadas ou ativas dentro do prazo.
-                } @else {
-                  Sem reservas vigentes.
-                }
-              </dd>
-            </div>
-            <div class="rounded-xl border border-emerald-400 bg-emerald-50 p-4">
-              <dt class="text-sm font-semibold text-emerald-900">Disponível para venda</dt>
-              <dd class="mt-1 text-2xl font-semibold text-emerald-950">
+          <dl class="mt-4 grid gap-2 sm:grid-cols-3">
+            <div class="min-w-0 rounded-xl bg-emerald-900 p-4 text-white">
+              <dt class="text-sm font-semibold">Disponível para venda</dt>
+              <dd class="mt-1 break-words text-3xl font-bold">
                 {{ position.saldoDisponivel }} un.
               </dd>
-              <dd class="mt-1 text-xs text-emerald-900">
-                Unidades livres para novas vendas após descontar as reservas de cada lote.
+            </div>
+            <div class="min-w-0 rounded-xl bg-slate-50 p-4">
+              <dt class="text-sm text-slate-700">Reservado em pedidos</dt>
+              <dd class="mt-1 break-words text-xl font-semibold text-slate-950">
+                {{ position.saldoReservado }} un.
+              </dd>
+            </div>
+            <div class="min-w-0 rounded-xl bg-slate-50 p-4">
+              <dt class="text-sm text-slate-700">Total físico</dt>
+              <dd class="mt-1 break-words text-xl font-semibold text-slate-950">
+                {{ position.saldoFisico }} un.
               </dd>
             </div>
           </dl>
-
-          <dl class="mt-4 grid gap-3 sm:grid-cols-3">
-            <div class="rounded-xl border border-slate-200 p-3">
-              <dt class="text-xs font-medium text-slate-600">Na condição vendável</dt>
-              <dd class="mt-1 text-base font-semibold text-slate-900">{{ totalVendavel() }} un.</dd>
-              <dd class="mt-1 text-xs text-slate-600">
-                Pode incluir unidades de lotes vencidos ou inelegíveis, que ficam fora do saldo
-                disponível.
-              </dd>
-            </div>
-            <div class="rounded-xl border border-slate-200 p-3">
-              <dt class="text-xs font-medium text-slate-500">Avariado (danificado)</dt>
-              <dd class="mt-1 text-base font-semibold text-slate-900">
-                {{ totalDanificada() }} un.
-              </dd>
-              <dd class="mt-1 text-xs text-slate-600">Com problema e indisponível para venda.</dd>
-            </div>
-            <div class="rounded-xl border border-slate-200 p-3">
-              <dt class="text-xs font-medium text-slate-500">Quarentena</dt>
-              <dd class="mt-1 text-base font-semibold text-slate-900">
-                {{ totalQuarentena() }} un.
-              </dd>
-              <dd class="mt-1 text-xs text-slate-600">
-                Separado temporariamente e indisponível para venda.
-              </dd>
-            </div>
-          </dl>
-
-          <div class="mt-4">
-            <p class="text-sm text-slate-700">
-              Estoque mínimo:
-              <strong>{{
-                position.estoqueMinimoConfigurado
-                  ? position.estoqueMinimo + ' un.'
-                  : 'Não configurado'
-              }}</strong>
-              · {{ rotuloSituacao(position.situacao) }}
+          <p class="mt-3 text-sm text-slate-600">
+            O disponível considera somente unidades elegíveis e livres de reservas.
+          </p>
+          <details class="mt-4 border-t border-slate-200 pt-2">
+            <summary
+              class="min-h-11 cursor-pointer py-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2"
+            >
+              Detalhes dos saldos
+            </summary>
+            <dl class="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt>Estoque vendável</dt>
+                <dd class="font-semibold">
+                  {{ position.varianteAtiva ? position.saldoUtilizavel : 0 }} un.
+                </dd>
+              </div>
+              <div>
+                <dt>Na condição vendável</dt>
+                <dd class="font-semibold">{{ totalVendavel() }} un.</dd>
+              </div>
+              <div>
+                <dt>Avariado (danificado)</dt>
+                <dd class="font-semibold">{{ totalDanificada() }} un.</dd>
+              </div>
+              <div>
+                <dt>Quarentena</dt>
+                <dd class="font-semibold">{{ totalQuarentena() }} un.</dd>
+              </div>
+            </dl>
+            <p class="mt-3 text-sm text-slate-600">
+              O total físico inclui unidades indisponíveis. A condição vendável pode incluir lotes
+              vencidos.
             </p>
-            <p class="mt-1 text-xs text-slate-600">
-              Quantidade de referência para alertar sobre necessidade de reposição.
-            </p>
-          </div>
+          </details>
+          <p class="mt-3 text-sm text-slate-700">
+            Estoque mínimo:
+            <strong>{{
+              position.estoqueMinimoConfigurado
+                ? position.estoqueMinimo + ' un.'
+                : 'Não configurado'
+            }}</strong>
+            · {{ rotuloSituacao(position.situacao) }}
+          </p>
         </section>
 
         <section
@@ -258,94 +228,111 @@
           aria-labelledby="finished-movement-title"
         >
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <h2 id="finished-movement-title" class="text-lg font-semibold text-emerald-950">
-              Ações de estoque
+            <h2
+              #tituloAcoes
+              id="finished-movement-title"
+              tabindex="-1"
+              class="text-lg font-semibold text-emerald-950"
+            >
+              Movimentar estoque
             </h2>
             @if (acaoMovimentacao() && acaoMovimentacao() !== 'Contagem') {
               <button
                 type="button"
                 (click)="fecharMovimentacao()"
                 [disabled]="enviandoMovimentacao()"
-                class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700"
+                class="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 focus-visible:outline-2 disabled:opacity-60"
               >
-                Fechar
+                {{ sucessoMovimentacao() ? 'Voltar às ações' : 'Cancelar operação' }}
               </button>
             }
           </div>
-          <div class="mt-4 grid gap-3 md:grid-cols-2">
-            <section
-              class="rounded-xl border border-emerald-100 bg-emerald-50/50 p-4"
-              aria-labelledby="finished-routine-actions-title"
+          @if (!acaoMovimentacao()) {
+            <div
+              class="mt-3 flex flex-wrap gap-2"
+              aria-label="Entradas e saídas"
+              role="group"
+              id="finished-routine-actions-title"
             >
-              <h3 id="finished-routine-actions-title" class="text-sm font-semibold text-slate-900">
-                Entradas e saídas
-              </h3>
-              <p class="mt-1 text-sm text-slate-600">
-                Registre unidades que chegaram ou saíram do estoque.
-              </p>
-              <div class="mt-3 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  (click)="abrirMovimentacao('Entrada')"
-                  [disabled]="enviandoMovimentacao()"
-                  class="min-h-10 rounded-lg bg-emerald-800 px-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
-                >
-                  Registrar entrada
-                </button>
-                <button
-                  type="button"
-                  (click)="abrirMovimentacao('Saida')"
-                  [disabled]="enviandoMovimentacao()"
-                  class="min-h-10 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
-                >
-                  Registrar saída
-                </button>
-              </div>
-            </section>
-            <section
-              class="rounded-xl border border-orange-100 bg-orange-50/50 p-4"
-              aria-labelledby="finished-exception-actions-title"
-            >
-              <h3
-                id="finished-exception-actions-title"
-                class="text-sm font-semibold text-slate-900"
+              <button
+                type="button"
+                (click)="abrirMovimentacao('Entrada')"
+                class="min-h-11 rounded-lg bg-emerald-800 px-3 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
               >
-                Perdas e mudanças de condição
-              </h3>
-              <p class="mt-1 text-sm text-slate-600">
-                Registre perdas, descartes ou alterações no estado das unidades.
-              </p>
-              <div class="mt-3 flex flex-wrap gap-2">
+                Registrar entrada
+              </button>
+              <button
+                type="button"
+                (click)="abrirMovimentacao('Saida')"
+                class="min-h-11 rounded-lg border border-emerald-800 px-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-900"
+              >
+                Registrar saída
+              </button>
+            </div>
+            <details class="mt-4 border-t border-slate-200 pt-2">
+              <summary
+                id="finished-exception-actions-title"
+                class="min-h-11 cursor-pointer py-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2"
+              >
+                Outras ações
+              </summary>
+              <div class="flex flex-wrap gap-2">
                 <button
                   type="button"
                   (click)="abrirMovimentacao('Perda')"
-                  [disabled]="enviandoMovimentacao()"
-                  class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-900"
+                  class="min-h-11 rounded-lg border border-slate-400 px-3 text-sm font-semibold focus-visible:outline-2"
                 >
                   Registrar perda
                 </button>
                 <button
                   type="button"
                   (click)="abrirMovimentacao('Descarte')"
-                  [disabled]="enviandoMovimentacao()"
-                  class="min-h-10 rounded-lg border border-orange-700 px-3 text-sm font-semibold text-orange-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-900"
+                  class="min-h-11 rounded-lg border border-slate-400 px-3 text-sm font-semibold focus-visible:outline-2"
                 >
                   Registrar descarte
                 </button>
                 <button
                   type="button"
                   (click)="abrirMovimentacao('Transferencia')"
-                  [disabled]="enviandoMovimentacao()"
-                  class="min-h-10 rounded-lg border border-sky-700 px-3 text-sm font-semibold text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-900"
+                  class="min-h-11 rounded-lg border border-slate-400 px-3 text-sm font-semibold focus-visible:outline-2"
                 >
                   Mudar condição do lote
                 </button>
               </div>
-            </section>
-          </div>
-          <p class="mt-3 text-sm text-slate-600">
-            Para conferir as quantidades, use “Conferir estoque” no cartão do lote.
-          </p>
+              <p class="mt-3 text-sm text-slate-600">
+                Para contar unidades, abra Conferência e lotes. Para corrigir um registro, abra seus
+                detalhes no Histórico.
+              </p>
+            </details>
+          } @else if (acaoMovimentacao() !== 'Contagem') {
+            <h3 class="mt-4 text-base font-semibold text-slate-950">
+              @switch (acaoMovimentacao()) {
+                @case ('Entrada') {
+                  Registrar entrada
+                }
+                @case ('Saida') {
+                  Registrar saída
+                }
+                @case ('Perda') {
+                  Registrar perda
+                }
+                @case ('Descarte') {
+                  Registrar descarte
+                }
+                @case ('Transferencia') {
+                  Mudar condição
+                }
+                @case ('Estorno') {
+                  Corrigir movimentação
+                }
+              }
+            </h3>
+            @if (acaoMovimentacao() !== 'Estorno') {
+              <p class="mt-1 text-sm text-slate-600">
+                Informe o lote correspondente às unidades desta operação.
+              </p>
+            }
+          }
 
           @if (sucessoMovimentacao() && !contagemConcluidaLoteId()) {
             <p
@@ -788,673 +775,684 @@
           }
         </section>
 
-        <section
-          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
-          aria-labelledby="finished-lots-title"
-        >
-          <h2 id="finished-lots-title" class="text-lg font-semibold text-emerald-950">Lotes</h2>
-          <p class="mt-1 text-sm font-medium text-slate-700">
-            {{ produtoSelecionado()?.nome }} · {{ varianteSelecionada()?.identificacao }}
-          </p>
-          <p class="mt-1 text-sm text-slate-600">
-            Grupo identificado de unidades com informações de fabricação e validade.
-          </p>
-          @if (position.lotes.length === 0) {
-            <p
-              class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
-            >
-              Nenhum lote possui posição registrada para esta variante.
+        <details class="rounded-2xl border border-emerald-950/10 bg-white px-5 shadow-sm">
+          <summary
+            id="finished-lots-title"
+            class="min-h-12 cursor-pointer py-4 font-semibold text-emerald-950 focus-visible:outline-2"
+          >
+            Conferência e lotes
+          </summary>
+          <div class="pb-5">
+            <p class="text-sm text-slate-600">
+              Escolha o lote da etiqueta para conferir as quantidades.
             </p>
-          } @else {
-            <ul class="mt-4 grid list-none gap-3 p-0 lg:grid-cols-2">
-              @for (lote of position.lotes; track lote.loteId) {
-                <li
-                  [class]="
-                    loteEmContagem(lote.loteId)
-                      ? 'rounded-xl border border-sky-300 bg-sky-50/20 p-4 shadow-sm lg:col-span-2'
-                      : 'rounded-xl border border-slate-200 bg-white p-4'
-                  "
-                >
-                  <div class="flex flex-wrap items-start justify-between gap-3">
-                    <div class="min-w-0">
-                      <h3 class="text-xs font-medium text-slate-500">Validade</h3>
-                      <p class="mt-0.5 text-lg font-semibold text-slate-950">
-                        {{ formatarDataCivil(lote.dataValidade) }}
-                      </p>
-                      <p class="mt-1 text-sm text-slate-600">
-                        Fabricação {{ formatarDataCivil(lote.dataFabricacao) }}
-                      </p>
-                      <p class="mt-1 text-xs text-slate-500">
-                        {{
-                          lote.origemValidade === 'PrazoPadrao'
-                            ? 'Validade por prazo padrão'
-                            : 'Validade informada manualmente'
-                        }}
-                      </p>
-                      <details class="mt-2">
-                        <summary
-                          class="min-h-9 cursor-pointer text-xs font-medium text-emerald-900 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
-                        >
-                          Código do lote (rastreabilidade)
-                        </summary>
-                        <code
-                          class="mt-1 block max-w-full break-all text-xs text-slate-700"
-                          [title]="'Código completo: ' + lote.codigo"
-                        >
-                          {{ lote.codigo }}
-                        </code>
-                      </details>
-                    </div>
-                    <span
-                      [class]="
-                        lote.valido
-                          ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-950'
-                          : 'rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950'
-                      "
-                    >
-                      {{ rotuloValidade(lote) }}
-                    </span>
-                    <button
-                      type="button"
-                      (click)="abrirContagem(lote)"
-                      [attr.aria-label]="'Conferir estoque do lote ' + lote.codigo"
-                      [attr.aria-expanded]="loteEmContagem(lote.loteId)"
-                      [attr.aria-controls]="loteEmContagem(lote.loteId) ? 'count-form' : null"
-                      [disabled]="enviandoMovimentacao()"
-                      class="min-h-11 rounded-lg bg-sky-800 px-4 text-sm font-semibold text-white hover:bg-sky-900 disabled:opacity-60"
-                    >
-                      Conferir estoque
-                    </button>
-                  </div>
-                  <dl class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                    <div>
-                      <dt class="text-slate-500">Na condição vendável</dt>
-                      <dd class="font-medium">{{ lote.quantidadeVendavel }} un.</dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Danificada</dt>
-                      <dd class="font-medium">{{ lote.quantidadeDanificada }} un.</dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Quarentena</dt>
-                      <dd class="font-medium">{{ lote.quantidadeQuarentena }} un.</dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Saldo físico</dt>
-                      <dd class="font-medium">{{ lote.saldoFisico }} un.</dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Estoque vendável</dt>
-                      <dd class="font-medium">
-                        {{ position.varianteAtiva ? lote.saldoUtilizavel : 0 }} un.
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="text-slate-500">Comprometido por reservas</dt>
-                      <dd class="font-medium">{{ lote.saldoReservado }} un.</dd>
-                    </div>
-                    <div>
-                      <dt class="font-semibold text-emerald-900">Disponível para venda</dt>
-                      <dd class="font-medium">{{ lote.saldoDisponivel }} un.</dd>
-                    </div>
-                  </dl>
-                  @if (lote.saldoReservado > (position.varianteAtiva ? lote.saldoUtilizavel : 0)) {
-                    <p class="mt-2 text-sm text-amber-900">
-                      Atenção: o estoque vendável deste lote é insuficiente para as reservas.
-                    </p>
-                  }
-                  @if (contagemConcluidaLoteId() === lote.loteId) {
-                    <p
-                      class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-                      role="status"
-                    >
-                      Conferência do lote registrada.
-                    </p>
-                  }
-                  @if (loteEmContagem(lote.loteId)) {
-                    @if (loteDaContagem(); as loteContagem) {
-                      <form
-                        id="count-form"
-                        class="mt-4 grid gap-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4"
-                        [formGroup]="contagemForm"
-                        (ngSubmit)="revisarContagem()"
-                        aria-labelledby="count-form-title"
+            @if (position.lotes.length === 0) {
+              <p
+                class="mt-4 rounded-xl border border-dashed border-slate-300 px-4 py-6 text-center text-sm text-slate-600"
+              >
+                Nenhum lote possui posição registrada para esta variante.
+              </p>
+            } @else {
+              <ul class="mt-4 grid list-none gap-3 p-0 lg:grid-cols-2">
+                @for (lote of position.lotes; track lote.loteId) {
+                  <li
+                    [class]="
+                      loteEmContagem(lote.loteId)
+                        ? 'rounded-xl border border-sky-300 bg-sky-50/20 p-4 shadow-sm lg:col-span-2'
+                        : 'rounded-xl border border-slate-200 bg-white p-4'
+                    "
+                  >
+                    <div class="flex flex-wrap items-start justify-between gap-3">
+                      <div class="min-w-0">
+                        <h3 class="text-xs font-medium text-slate-500">Validade</h3>
+                        <p class="mt-0.5 text-lg font-semibold text-slate-950">
+                          {{ formatarDataCivil(lote.dataValidade) }}
+                        </p>
+                        <p class="mt-1 text-sm text-slate-600">
+                          Fabricação {{ formatarDataCivil(lote.dataFabricacao) }}
+                        </p>
+                        <p class="mt-1 text-xs text-slate-500">
+                          {{
+                            lote.origemValidade === 'PrazoPadrao'
+                              ? 'Validade por prazo padrão'
+                              : 'Validade informada manualmente'
+                          }}
+                        </p>
+                        <details class="mt-2">
+                          <summary
+                            class="min-h-9 cursor-pointer text-xs font-medium text-emerald-900 underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
+                          >
+                            Código do lote (rastreabilidade)
+                          </summary>
+                          <code
+                            class="mt-1 block max-w-full break-all text-xs text-slate-700"
+                            [title]="'Código completo: ' + lote.codigo"
+                          >
+                            {{ lote.codigo }}
+                          </code>
+                        </details>
+                      </div>
+                      <span
+                        [class]="
+                          lote.valido
+                            ? 'rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-950'
+                            : 'rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-950'
+                        "
                       >
-                        <div>
-                          <h4 id="count-form-title" class="text-base font-semibold text-sky-950">
-                            Contagem física
-                          </h4>
-                          <p class="mt-1 text-sm text-slate-700">
-                            {{ produtoSelecionado()?.nome }} ·
-                            {{ varianteSelecionada()?.identificacao }}
-                          </p>
-                          <p class="mt-1 text-sm text-slate-600">
-                            Fabricação {{ formatarDataCivil(loteContagem.dataFabricacao) }} ·
-                            validade {{ formatarDataCivil(loteContagem.dataValidade) }}
-                          </p>
-                          <p class="mt-2 text-sm text-slate-700">
-                            Conte as unidades deste lote e informe o total encontrado em cada
-                            condição. Digite 0 quando não houver unidades.
-                          </p>
-                        </div>
-
-                        @if (erroMovimentacao()) {
-                          <p
-                            #countErrorAlert
-                            class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
-                            role="alert"
-                            tabindex="-1"
-                          >
-                            {{ erroMovimentacao() }}
-                          </p>
-                        }
-
-                        <fieldset class="min-w-0">
-                          <legend class="mb-3 text-sm font-semibold text-slate-900">
-                            Quantidades por condição
-                          </legend>
-                          <div
-                            class="hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)]"
-                            aria-hidden="true"
-                          >
-                            <span>Condição</span>
-                            <span>Registrado no sistema</span>
-                            <span>Encontrado na contagem</span>
-                          </div>
-                          <div class="grid gap-3">
-                            <div
-                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
-                            >
-                              <p class="font-semibold text-slate-900">Vendável</p>
-                              <div>
-                                <span class="text-xs text-slate-600 sm:hidden"
-                                  >Registrado no sistema</span
-                                >
-                                <output
-                                  id="count-vendavel-registered"
-                                  aria-label="Quantidade vendável registrada no sistema"
-                                  class="block font-medium text-slate-900"
-                                >
-                                  {{ loteContagem.quantidadeVendavel }} un.
-                                </output>
-                              </div>
-                              <div>
-                                <label for="count-vendavel" class="block text-sm font-semibold">
-                                  Quantidade vendável encontrada
-                                </label>
-                                <input
-                                  #countVendavelInput
-                                  id="count-vendavel"
-                                  type="number"
-                                  min="0"
-                                  max="2147483647"
-                                  step="1"
-                                  inputmode="numeric"
-                                  required
-                                  formControlName="vendavel"
-                                  [readonly]="mostrandoResumoContagem()"
-                                  [attr.aria-invalid]="
-                                    erroContagemVisivel('vendavel') ? 'true' : null
-                                  "
-                                  [attr.aria-describedby]="
-                                    erroContagemVisivel('vendavel')
-                                      ? 'count-vendavel-help count-vendavel-error'
-                                      : 'count-vendavel-help'
-                                  "
-                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
-                                />
-                                <p id="count-vendavel-help" class="mt-1 text-xs text-slate-600">
-                                  Use um número inteiro, inclusive 0.
-                                </p>
-                                @if (erroContagemVisivel('vendavel')) {
-                                  <p id="count-vendavel-error" class="mt-1 text-sm text-red-700">
-                                    {{ mensagemErroContagem('vendavel') }}
-                                  </p>
-                                }
-                              </div>
-                            </div>
-                            <div
-                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
-                            >
-                              <p class="font-semibold text-slate-900">Avariada (danificada)</p>
-                              <div>
-                                <span class="text-xs text-slate-600 sm:hidden"
-                                  >Registrado no sistema</span
-                                >
-                                <output
-                                  id="count-damaged-registered"
-                                  aria-label="Quantidade danificada registrada no sistema"
-                                  class="block font-medium text-slate-900"
-                                >
-                                  {{ loteContagem.quantidadeDanificada }} un.
-                                </output>
-                              </div>
-                              <div>
-                                <label for="count-damaged" class="block text-sm font-semibold">
-                                  Quantidade avariada encontrada
-                                </label>
-                                <input
-                                  #countDanificadaInput
-                                  id="count-damaged"
-                                  type="number"
-                                  min="0"
-                                  max="2147483647"
-                                  step="1"
-                                  inputmode="numeric"
-                                  required
-                                  formControlName="danificada"
-                                  [readonly]="mostrandoResumoContagem()"
-                                  [attr.aria-invalid]="
-                                    erroContagemVisivel('danificada') ? 'true' : null
-                                  "
-                                  [attr.aria-describedby]="
-                                    erroContagemVisivel('danificada')
-                                      ? 'count-damaged-help count-damaged-error'
-                                      : 'count-damaged-help'
-                                  "
-                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
-                                />
-                                <p id="count-damaged-help" class="mt-1 text-xs text-slate-600">
-                                  Corresponde à condição danificada no estoque.
-                                </p>
-                                @if (erroContagemVisivel('danificada')) {
-                                  <p id="count-damaged-error" class="mt-1 text-sm text-red-700">
-                                    {{ mensagemErroContagem('danificada') }}
-                                  </p>
-                                }
-                              </div>
-                            </div>
-                            <div
-                              class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
-                            >
-                              <p class="font-semibold text-slate-900">Quarentena</p>
-                              <div>
-                                <span class="text-xs text-slate-600 sm:hidden"
-                                  >Registrado no sistema</span
-                                >
-                                <output
-                                  id="count-quarantine-registered"
-                                  aria-label="Quantidade em quarentena registrada no sistema"
-                                  class="block font-medium text-slate-900"
-                                >
-                                  {{ loteContagem.quantidadeQuarentena }} un.
-                                </output>
-                              </div>
-                              <div>
-                                <label for="count-quarantine" class="block text-sm font-semibold">
-                                  Quantidade em quarentena encontrada
-                                </label>
-                                <input
-                                  #countQuarentenaInput
-                                  id="count-quarantine"
-                                  type="number"
-                                  min="0"
-                                  max="2147483647"
-                                  step="1"
-                                  inputmode="numeric"
-                                  required
-                                  formControlName="quarentena"
-                                  [readonly]="mostrandoResumoContagem()"
-                                  [attr.aria-invalid]="
-                                    erroContagemVisivel('quarentena') ? 'true' : null
-                                  "
-                                  [attr.aria-describedby]="
-                                    erroContagemVisivel('quarentena')
-                                      ? 'count-quarantine-help count-quarantine-error'
-                                      : 'count-quarantine-help'
-                                  "
-                                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
-                                />
-                                <p id="count-quarantine-help" class="mt-1 text-xs text-slate-600">
-                                  Use um número inteiro, inclusive 0.
-                                </p>
-                                @if (erroContagemVisivel('quarentena')) {
-                                  <p id="count-quarantine-error" class="mt-1 text-sm text-red-700">
-                                    {{ mensagemErroContagem('quarentena') }}
-                                  </p>
-                                }
-                              </div>
-                            </div>
-                          </div>
-                        </fieldset>
-
-                        <div>
-                          <label for="count-reason" class="block text-sm font-semibold">
-                            Motivo da contagem
-                          </label>
-                          <input
-                            #countReasonInput
-                            id="count-reason"
-                            type="text"
-                            maxlength="120"
-                            required
-                            formControlName="motivo"
-                            [readonly]="mostrandoResumoContagem()"
-                            [attr.aria-invalid]="erroContagemVisivel('motivo') ? 'true' : null"
-                            [attr.aria-describedby]="
-                              erroContagemVisivel('motivo')
-                                ? 'count-reason-help count-reason-error'
-                                : 'count-reason-help'
-                            "
-                            class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
-                          />
-                          <p id="count-reason-help" class="mt-1 text-xs text-slate-600">
-                            Exemplo: contagem física do lote.
-                          </p>
-                          @if (erroContagemVisivel('motivo')) {
-                            <p id="count-reason-error" class="mt-1 text-sm text-red-700">
-                              {{ mensagemErroContagem('motivo') }}
+                        {{ rotuloValidade(lote) }}
+                      </span>
+                      <button
+                        type="button"
+                        (click)="abrirContagem(lote)"
+                        [attr.aria-label]="'Conferir estoque do lote ' + lote.codigo"
+                        [attr.aria-expanded]="loteEmContagem(lote.loteId)"
+                        [attr.aria-controls]="loteEmContagem(lote.loteId) ? 'count-form' : null"
+                        [disabled]="enviandoMovimentacao()"
+                        class="min-h-11 rounded-lg bg-sky-800 px-4 text-sm font-semibold text-white hover:bg-sky-900 disabled:opacity-60"
+                      >
+                        Conferir estoque
+                      </button>
+                    </div>
+                    <dl class="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                      <div>
+                        <dt class="text-slate-500">Na condição vendável</dt>
+                        <dd class="font-medium">{{ lote.quantidadeVendavel }} un.</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Danificada</dt>
+                        <dd class="font-medium">{{ lote.quantidadeDanificada }} un.</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Quarentena</dt>
+                        <dd class="font-medium">{{ lote.quantidadeQuarentena }} un.</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Saldo físico</dt>
+                        <dd class="font-medium">{{ lote.saldoFisico }} un.</dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Estoque vendável</dt>
+                        <dd class="font-medium">
+                          {{ position.varianteAtiva ? lote.saldoUtilizavel : 0 }} un.
+                        </dd>
+                      </div>
+                      <div>
+                        <dt class="text-slate-500">Comprometido por reservas</dt>
+                        <dd class="font-medium">{{ lote.saldoReservado }} un.</dd>
+                      </div>
+                      <div>
+                        <dt class="font-semibold text-emerald-900">Disponível para venda</dt>
+                        <dd class="font-medium">{{ lote.saldoDisponivel }} un.</dd>
+                      </div>
+                    </dl>
+                    @if (
+                      lote.saldoReservado > (position.varianteAtiva ? lote.saldoUtilizavel : 0)
+                    ) {
+                      <p class="mt-2 text-sm text-amber-900">
+                        Atenção: o estoque vendável deste lote é insuficiente para as reservas.
+                      </p>
+                    }
+                    @if (contagemConcluidaLoteId() === lote.loteId) {
+                      <p
+                        class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                        role="status"
+                      >
+                        Conferência do lote registrada.
+                      </p>
+                    }
+                    @if (loteEmContagem(lote.loteId)) {
+                      @if (loteDaContagem(); as loteContagem) {
+                        <form
+                          id="count-form"
+                          class="mt-4 grid gap-4 rounded-xl border border-sky-200 bg-sky-50/50 p-4"
+                          [formGroup]="contagemForm"
+                          (ngSubmit)="revisarContagem()"
+                          aria-labelledby="count-form-title"
+                        >
+                          <div>
+                            <h4 id="count-form-title" class="text-base font-semibold text-sky-950">
+                              Contagem física
+                            </h4>
+                            <p class="mt-1 text-sm text-slate-700">
+                              {{ produtoSelecionado()?.nome }} ·
+                              {{ varianteSelecionada()?.identificacao }}
                             </p>
-                          }
-                        </div>
+                            <p class="mt-1 text-sm text-slate-600">
+                              Fabricação {{ formatarDataCivil(loteContagem.dataFabricacao) }} ·
+                              validade {{ formatarDataCivil(loteContagem.dataValidade) }}
+                            </p>
+                            <p class="mt-2 text-sm text-slate-700">
+                              Conte as unidades deste lote e informe o total encontrado em cada
+                              condição. Digite 0 quando não houver unidades.
+                            </p>
+                          </div>
 
-                        @if (mostrandoResumoContagem()) {
-                          <section
-                            class="rounded-xl border border-sky-200 bg-white p-4"
-                            aria-labelledby="count-summary-title"
-                          >
-                            <h5
-                              #countSummary
-                              id="count-summary-title"
-                              class="font-semibold text-sky-950"
+                          @if (erroMovimentacao()) {
+                            <p
+                              #countErrorAlert
+                              class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800"
+                              role="alert"
                               tabindex="-1"
                             >
-                              Resumo da conferência
-                            </h5>
-                            <p class="mt-1 text-sm text-slate-700">
-                              Compare o saldo registrado com o total encontrado em cada condição.
+                              {{ erroMovimentacao() }}
                             </p>
+                          }
+
+                          <fieldset class="min-w-0">
+                            <legend class="mb-3 text-sm font-semibold text-slate-900">
+                              Quantidades por condição
+                            </legend>
                             <div
-                              class="mt-4 hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                              class="hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)]"
                               aria-hidden="true"
                             >
                               <span>Condição</span>
                               <span>Registrado no sistema</span>
                               <span>Encontrado na contagem</span>
-                              <span>Diferença</span>
                             </div>
-                            <dl class="mt-3 space-y-2 text-sm">
+                            <div class="grid gap-3">
                               <div
-                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
                               >
+                                <p class="font-semibold text-slate-900">Vendável</p>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
-                                  <dd class="font-semibold text-slate-900">Vendável</dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Registrado no sistema
-                                  </dt>
-                                  <dd id="count-summary-vendavel-registered">
+                                  <span class="text-xs text-slate-600 sm:hidden"
+                                    >Registrado no sistema</span
+                                  >
+                                  <output
+                                    id="count-vendavel-registered"
+                                    aria-label="Quantidade vendável registrada no sistema"
+                                    class="block font-medium text-slate-900"
+                                  >
                                     {{ loteContagem.quantidadeVendavel }} un.
-                                  </dd>
+                                  </output>
                                 </div>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Encontrado na contagem
-                                  </dt>
-                                  <dd id="count-summary-vendavel-found">
-                                    {{ contagemForm.controls.vendavel.value }} un.
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
-                                  <dd id="count-summary-vendavel-difference">
-                                    {{
-                                      formatarDiferenca(
-                                        diferencaCondicao(
-                                          loteContagem.quantidadeVendavel,
-                                          contagemForm.controls.vendavel.value
-                                        )
-                                      )
-                                    }}
-                                  </dd>
+                                  <label for="count-vendavel" class="block text-sm font-semibold">
+                                    Quantidade vendável encontrada
+                                  </label>
+                                  <input
+                                    #countVendavelInput
+                                    id="count-vendavel"
+                                    type="number"
+                                    min="0"
+                                    max="2147483647"
+                                    step="1"
+                                    inputmode="numeric"
+                                    required
+                                    formControlName="vendavel"
+                                    [readonly]="mostrandoResumoContagem()"
+                                    [attr.aria-invalid]="
+                                      erroContagemVisivel('vendavel') ? 'true' : null
+                                    "
+                                    [attr.aria-describedby]="
+                                      erroContagemVisivel('vendavel')
+                                        ? 'count-vendavel-help count-vendavel-error'
+                                        : 'count-vendavel-help'
+                                    "
+                                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                  />
+                                  <p id="count-vendavel-help" class="mt-1 text-xs text-slate-600">
+                                    Use um número inteiro, inclusive 0.
+                                  </p>
+                                  @if (erroContagemVisivel('vendavel')) {
+                                    <p id="count-vendavel-error" class="mt-1 text-sm text-red-700">
+                                      {{ mensagemErroContagem('vendavel') }}
+                                    </p>
+                                  }
                                 </div>
                               </div>
                               <div
-                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
                               >
+                                <p class="font-semibold text-slate-900">Avariada (danificada)</p>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
-                                  <dd class="font-semibold text-slate-900">
-                                    Avariada (danificada)
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Registrado no sistema
-                                  </dt>
-                                  <dd id="count-summary-damaged-registered">
+                                  <span class="text-xs text-slate-600 sm:hidden"
+                                    >Registrado no sistema</span
+                                  >
+                                  <output
+                                    id="count-damaged-registered"
+                                    aria-label="Quantidade danificada registrada no sistema"
+                                    class="block font-medium text-slate-900"
+                                  >
                                     {{ loteContagem.quantidadeDanificada }} un.
-                                  </dd>
+                                  </output>
                                 </div>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Encontrado na contagem
-                                  </dt>
-                                  <dd id="count-summary-damaged-found">
-                                    {{ contagemForm.controls.danificada.value }} un.
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
-                                  <dd id="count-summary-damaged-difference">
-                                    {{
-                                      formatarDiferenca(
-                                        diferencaCondicao(
-                                          loteContagem.quantidadeDanificada,
-                                          contagemForm.controls.danificada.value
-                                        )
-                                      )
-                                    }}
-                                  </dd>
+                                  <label for="count-damaged" class="block text-sm font-semibold">
+                                    Quantidade avariada encontrada
+                                  </label>
+                                  <input
+                                    #countDanificadaInput
+                                    id="count-damaged"
+                                    type="number"
+                                    min="0"
+                                    max="2147483647"
+                                    step="1"
+                                    inputmode="numeric"
+                                    required
+                                    formControlName="danificada"
+                                    [readonly]="mostrandoResumoContagem()"
+                                    [attr.aria-invalid]="
+                                      erroContagemVisivel('danificada') ? 'true' : null
+                                    "
+                                    [attr.aria-describedby]="
+                                      erroContagemVisivel('danificada')
+                                        ? 'count-damaged-help count-damaged-error'
+                                        : 'count-damaged-help'
+                                    "
+                                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                  />
+                                  <p id="count-damaged-help" class="mt-1 text-xs text-slate-600">
+                                    Corresponde à condição danificada no estoque.
+                                  </p>
+                                  @if (erroContagemVisivel('danificada')) {
+                                    <p id="count-damaged-error" class="mt-1 text-sm text-red-700">
+                                      {{ mensagemErroContagem('danificada') }}
+                                    </p>
+                                  }
                                 </div>
                               </div>
                               <div
-                                class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                class="grid min-w-0 gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,0.8fr)_minmax(0,1.2fr)] lg:items-center"
                               >
+                                <p class="font-semibold text-slate-900">Quarentena</p>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
-                                  <dd class="font-semibold text-slate-900">Quarentena</dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Registrado no sistema
-                                  </dt>
-                                  <dd id="count-summary-quarantine-registered">
+                                  <span class="text-xs text-slate-600 sm:hidden"
+                                    >Registrado no sistema</span
+                                  >
+                                  <output
+                                    id="count-quarantine-registered"
+                                    aria-label="Quantidade em quarentena registrada no sistema"
+                                    class="block font-medium text-slate-900"
+                                  >
                                     {{ loteContagem.quantidadeQuarentena }} un.
-                                  </dd>
+                                  </output>
                                 </div>
                                 <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">
-                                    Encontrado na contagem
-                                  </dt>
-                                  <dd id="count-summary-quarantine-found">
-                                    {{ contagemForm.controls.quarentena.value }} un.
-                                  </dd>
-                                </div>
-                                <div>
-                                  <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
-                                  <dd id="count-summary-quarantine-difference">
-                                    {{
-                                      formatarDiferenca(
-                                        diferencaCondicao(
-                                          loteContagem.quantidadeQuarentena,
-                                          contagemForm.controls.quarentena.value
-                                        )
-                                      )
-                                    }}
-                                  </dd>
+                                  <label for="count-quarantine" class="block text-sm font-semibold">
+                                    Quantidade em quarentena encontrada
+                                  </label>
+                                  <input
+                                    #countQuarentenaInput
+                                    id="count-quarantine"
+                                    type="number"
+                                    min="0"
+                                    max="2147483647"
+                                    step="1"
+                                    inputmode="numeric"
+                                    required
+                                    formControlName="quarentena"
+                                    [readonly]="mostrandoResumoContagem()"
+                                    [attr.aria-invalid]="
+                                      erroContagemVisivel('quarentena') ? 'true' : null
+                                    "
+                                    [attr.aria-describedby]="
+                                      erroContagemVisivel('quarentena')
+                                        ? 'count-quarantine-help count-quarantine-error'
+                                        : 'count-quarantine-help'
+                                    "
+                                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                                  />
+                                  <p id="count-quarantine-help" class="mt-1 text-xs text-slate-600">
+                                    Use um número inteiro, inclusive 0.
+                                  </p>
+                                  @if (erroContagemVisivel('quarentena')) {
+                                    <p
+                                      id="count-quarantine-error"
+                                      class="mt-1 text-sm text-red-700"
+                                    >
+                                      {{ mensagemErroContagem('quarentena') }}
+                                    </p>
+                                  }
                                 </div>
                               </div>
-                            </dl>
-                            <p class="mt-3 text-sm font-semibold text-slate-900">
-                              Diferença física total:
-                              {{
-                                formatarDiferenca(
-                                  (contagemForm.controls.vendavel.value ?? 0) +
-                                    (contagemForm.controls.danificada.value ?? 0) +
-                                    (contagemForm.controls.quarentena.value ?? 0) -
-                                    loteContagem.saldoFisico
-                                )
-                              }}
+                            </div>
+                          </fieldset>
+
+                          <div>
+                            <label for="count-reason" class="block text-sm font-semibold">
+                              Motivo da contagem
+                            </label>
+                            <input
+                              #countReasonInput
+                              id="count-reason"
+                              type="text"
+                              maxlength="120"
+                              required
+                              formControlName="motivo"
+                              [readonly]="mostrandoResumoContagem()"
+                              [attr.aria-invalid]="erroContagemVisivel('motivo') ? 'true' : null"
+                              [attr.aria-describedby]="
+                                erroContagemVisivel('motivo')
+                                  ? 'count-reason-help count-reason-error'
+                                  : 'count-reason-help'
+                              "
+                              class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 read-only:bg-slate-100"
+                            />
+                            <p id="count-reason-help" class="mt-1 text-xs text-slate-600">
+                              Exemplo: contagem física do lote.
                             </p>
-                            <p class="mt-3 text-sm text-slate-700">
-                              Ao confirmar, os saldos deste lote serão atualizados para as
-                              quantidades encontradas. Se houver diferenças, os ajustes serão
-                              registrados no histórico. Se não houver diferença, a conferência será
-                              registrada sem movimentação de ajuste.
-                            </p>
-                            @if (conflitoContagemVersao()) {
-                              <p class="mt-3 text-sm font-medium text-amber-900" role="status">
-                                O estoque mudou durante a conferência. Atualize os dados quando
-                                estiver pronta; as quantidades e o motivo digitados serão mantidos.
+                            @if (erroContagemVisivel('motivo')) {
+                              <p id="count-reason-error" class="mt-1 text-sm text-red-700">
+                                {{ mensagemErroContagem('motivo') }}
                               </p>
+                            }
+                          </div>
+
+                          @if (mostrandoResumoContagem()) {
+                            <section
+                              class="rounded-xl border border-sky-200 bg-white p-4"
+                              aria-labelledby="count-summary-title"
+                            >
+                              <h5
+                                #countSummary
+                                id="count-summary-title"
+                                class="font-semibold text-sky-950"
+                                tabindex="-1"
+                              >
+                                Resumo da conferência
+                              </h5>
+                              <p class="mt-1 text-sm text-slate-700">
+                                Compare o saldo registrado com o total encontrado em cada condição.
+                              </p>
+                              <div
+                                class="mt-4 hidden gap-3 px-3 pb-2 text-xs font-semibold text-slate-600 lg:grid lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                aria-hidden="true"
+                              >
+                                <span>Condição</span>
+                                <span>Registrado no sistema</span>
+                                <span>Encontrado na contagem</span>
+                                <span>Diferença</span>
+                              </div>
+                              <dl class="mt-3 space-y-2 text-sm">
+                                <div
+                                  class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                >
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                    <dd class="font-semibold text-slate-900">Vendável</dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Registrado no sistema
+                                    </dt>
+                                    <dd id="count-summary-vendavel-registered">
+                                      {{ loteContagem.quantidadeVendavel }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Encontrado na contagem
+                                    </dt>
+                                    <dd id="count-summary-vendavel-found">
+                                      {{ contagemForm.controls.vendavel.value }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                    <dd id="count-summary-vendavel-difference">
+                                      {{
+                                        formatarDiferenca(
+                                          diferencaCondicao(
+                                            loteContagem.quantidadeVendavel,
+                                            contagemForm.controls.vendavel.value
+                                          )
+                                        )
+                                      }}
+                                    </dd>
+                                  </div>
+                                </div>
+                                <div
+                                  class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                >
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                    <dd class="font-semibold text-slate-900">
+                                      Avariada (danificada)
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Registrado no sistema
+                                    </dt>
+                                    <dd id="count-summary-damaged-registered">
+                                      {{ loteContagem.quantidadeDanificada }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Encontrado na contagem
+                                    </dt>
+                                    <dd id="count-summary-damaged-found">
+                                      {{ contagemForm.controls.danificada.value }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                    <dd id="count-summary-damaged-difference">
+                                      {{
+                                        formatarDiferenca(
+                                          diferencaCondicao(
+                                            loteContagem.quantidadeDanificada,
+                                            contagemForm.controls.danificada.value
+                                          )
+                                        )
+                                      }}
+                                    </dd>
+                                  </div>
+                                </div>
+                                <div
+                                  class="grid gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 lg:grid-cols-[minmax(0,0.9fr)_repeat(3,minmax(0,1fr))]"
+                                >
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Condição</dt>
+                                    <dd class="font-semibold text-slate-900">Quarentena</dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Registrado no sistema
+                                    </dt>
+                                    <dd id="count-summary-quarantine-registered">
+                                      {{ loteContagem.quantidadeQuarentena }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">
+                                      Encontrado na contagem
+                                    </dt>
+                                    <dd id="count-summary-quarantine-found">
+                                      {{ contagemForm.controls.quarentena.value }} un.
+                                    </dd>
+                                  </div>
+                                  <div>
+                                    <dt class="text-xs text-slate-500 lg:sr-only">Diferença</dt>
+                                    <dd id="count-summary-quarantine-difference">
+                                      {{
+                                        formatarDiferenca(
+                                          diferencaCondicao(
+                                            loteContagem.quantidadeQuarentena,
+                                            contagemForm.controls.quarentena.value
+                                          )
+                                        )
+                                      }}
+                                    </dd>
+                                  </div>
+                                </div>
+                              </dl>
+                              <p class="mt-3 text-sm font-semibold text-slate-900">
+                                Diferença física total:
+                                {{
+                                  formatarDiferenca(
+                                    (contagemForm.controls.vendavel.value ?? 0) +
+                                      (contagemForm.controls.danificada.value ?? 0) +
+                                      (contagemForm.controls.quarentena.value ?? 0) -
+                                      loteContagem.saldoFisico
+                                  )
+                                }}
+                              </p>
+                              <p class="mt-3 text-sm text-slate-700">
+                                Ao confirmar, os saldos deste lote serão atualizados para as
+                                quantidades encontradas. Se houver diferenças, os ajustes serão
+                                registrados no histórico. Se não houver diferença, a conferência
+                                será registrada sem movimentação de ajuste.
+                              </p>
+                              @if (conflitoContagemVersao()) {
+                                <p class="mt-3 text-sm font-medium text-amber-900" role="status">
+                                  O estoque mudou durante a conferência. Atualize os dados quando
+                                  estiver pronta; as quantidades e o motivo digitados serão
+                                  mantidos.
+                                </p>
+                                <button
+                                  type="button"
+                                  (click)="recarregarContagemParaNovoSnapshot()"
+                                  [disabled]="enviandoMovimentacao() || carregando()"
+                                  class="mt-3 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-900 disabled:opacity-60"
+                                >
+                                  Atualizar dados mantendo os valores digitados
+                                </button>
+                              }
+                            </section>
+                          }
+
+                          <div class="flex flex-wrap gap-2">
+                            @if (mostrandoResumoContagem()) {
                               <button
                                 type="button"
-                                (click)="recarregarContagemParaNovoSnapshot()"
+                                (click)="voltarAEditarContagem()"
                                 [disabled]="enviandoMovimentacao() || carregando()"
-                                class="mt-3 min-h-11 rounded-xl border border-sky-800 px-4 text-sm font-semibold text-sky-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-900 disabled:opacity-60"
+                                class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 disabled:opacity-60"
                               >
-                                Atualizar dados mantendo os valores digitados
+                                Voltar e editar
+                              </button>
+                              <button
+                                type="button"
+                                (click)="confirmarContagem()"
+                                [disabled]="
+                                  enviandoMovimentacao() || carregando() || conflitoContagemVersao()
+                                "
+                                class="min-h-11 rounded-xl bg-sky-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
+                              >
+                                {{
+                                  enviandoMovimentacao() ? 'Confirmando...' : 'Confirmar contagem'
+                                }}
+                              </button>
+                            } @else {
+                              <button
+                                type="submit"
+                                [disabled]="enviandoMovimentacao() || carregando()"
+                                class="min-h-11 rounded-xl border border-sky-700 px-4 text-sm font-semibold text-sky-900 disabled:opacity-60"
+                              >
+                                Revisar contagem
                               </button>
                             }
-                          </section>
-                        }
-
-                        <div class="flex flex-wrap gap-2">
-                          @if (mostrandoResumoContagem()) {
                             <button
                               type="button"
-                              (click)="voltarAEditarContagem()"
-                              [disabled]="enviandoMovimentacao() || carregando()"
-                              class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-800 disabled:opacity-60"
+                              (click)="cancelarContagem()"
+                              [disabled]="enviandoMovimentacao()"
+                              class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
                             >
-                              Voltar e editar
+                              Cancelar
                             </button>
-                            <button
-                              type="button"
-                              (click)="confirmarContagem()"
-                              [disabled]="
-                                enviandoMovimentacao() || carregando() || conflitoContagemVersao()
-                              "
-                              class="min-h-11 rounded-xl bg-sky-800 px-4 text-sm font-semibold text-white disabled:opacity-60"
-                            >
-                              {{ enviandoMovimentacao() ? 'Confirmando...' : 'Confirmar contagem' }}
-                            </button>
-                          } @else {
-                            <button
-                              type="submit"
-                              [disabled]="enviandoMovimentacao() || carregando()"
-                              class="min-h-11 rounded-xl border border-sky-700 px-4 text-sm font-semibold text-sky-900 disabled:opacity-60"
-                            >
-                              Revisar contagem
-                            </button>
-                          }
-                          <button
-                            type="button"
-                            (click)="cancelarContagem()"
-                            [disabled]="enviandoMovimentacao()"
-                            class="min-h-11 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 disabled:opacity-60"
-                          >
-                            Cancelar
-                          </button>
-                        </div>
-                      </form>
+                          </div>
+                        </form>
+                      }
                     }
-                  }
-                </li>
-              }
-            </ul>
-          }
-        </section>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        </details>
 
-        <section
-          class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
-          aria-labelledby="finished-policy-title"
-        >
-          <h2 id="finished-policy-title" class="text-lg font-semibold text-emerald-950">
-            Política de estoque
-          </h2>
-          @if (mensagemPolitica()) {
-            <p
-              class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
-              role="status"
-            >
-              {{ mensagemPolitica() }}
-            </p>
-          }
-          @if (politica()) {
-            @let erroEstoqueMinimoVisivel = estoqueMinimo.touched && estoqueMinimo.invalid;
-            @let erroPrazoValidadeVisivel = prazoValidade.touched && prazoValidade.invalid;
-            <div class="mt-4 grid gap-4 sm:grid-cols-2">
-              <div>
-                <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
-                  >Estoque mínimo</label
-                >
-                <input
-                  #policyMinimumInput
-                  id="finished-minimum"
-                  type="number"
-                  min="0"
-                  step="1"
-                  [formControl]="estoqueMinimo"
-                  [attr.aria-invalid]="erroEstoqueMinimoVisivel ? 'true' : null"
-                  [attr.aria-describedby]="
-                    erroEstoqueMinimoVisivel
-                      ? 'finished-minimum-error finished-minimum-help'
-                      : 'finished-minimum-help'
-                  "
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
-                />
-                @if (erroEstoqueMinimoVisivel) {
-                  <p id="finished-minimum-error" class="mt-1 text-sm text-red-700">
-                    <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+        <details class="rounded-2xl border border-emerald-950/10 bg-white px-5 shadow-sm">
+          <summary
+            id="finished-policy-title"
+            class="min-h-12 cursor-pointer py-4 font-semibold text-emerald-950 focus-visible:outline-2"
+          >
+            Configurações de estoque
+          </summary>
+          <div class="pb-5">
+            @if (mensagemPolitica()) {
+              <p
+                class="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900"
+                role="status"
+              >
+                {{ mensagemPolitica() }}
+              </p>
+            }
+            @if (politica() && !acaoMovimentacao()) {
+              @let erroEstoqueMinimoVisivel = estoqueMinimo.touched && estoqueMinimo.invalid;
+              @let erroPrazoValidadeVisivel = prazoValidade.touched && prazoValidade.invalid;
+              <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label for="finished-minimum" class="block text-sm font-semibold text-slate-800"
+                    >Estoque mínimo</label
+                  >
+                  <input
+                    #policyMinimumInput
+                    id="finished-minimum"
+                    type="number"
+                    min="0"
+                    step="1"
+                    [formControl]="estoqueMinimo"
+                    [attr.aria-invalid]="erroEstoqueMinimoVisivel ? 'true' : null"
+                    [attr.aria-describedby]="
+                      erroEstoqueMinimoVisivel
+                        ? 'finished-minimum-error finished-minimum-help'
+                        : 'finished-minimum-help'
+                    "
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
+                  />
+                  @if (erroEstoqueMinimoVisivel) {
+                    <p id="finished-minimum-error" class="mt-1 text-sm text-red-700">
+                      <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+                    </p>
+                  }
+                  <p id="finished-minimum-help" class="mt-1 text-xs text-slate-600">
+                    Em branco, o estoque mínimo fica sem configuração.
                   </p>
-                }
-                <p id="finished-minimum-help" class="mt-1 text-xs text-slate-600">
-                  Em branco, o estoque mínimo fica sem configuração.
-                </p>
-              </div>
-              <div>
-                <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
-                  >Prazo padrão de validade (dias)</label
-                >
-                <input
-                  #policyExpiryInput
-                  id="finished-expiry"
-                  type="number"
-                  min="0"
-                  step="1"
-                  [formControl]="prazoValidade"
-                  [attr.aria-invalid]="erroPrazoValidadeVisivel ? 'true' : null"
-                  [attr.aria-describedby]="
-                    erroPrazoValidadeVisivel
-                      ? 'finished-expiry-error finished-expiry-help'
-                      : 'finished-expiry-help'
-                  "
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
-                />
-                @if (erroPrazoValidadeVisivel) {
-                  <p id="finished-expiry-error" class="mt-1 text-sm text-red-700">
-                    <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+                </div>
+                <div>
+                  <label for="finished-expiry" class="block text-sm font-semibold text-slate-800"
+                    >Prazo padrão de validade (dias)</label
+                  >
+                  <input
+                    #policyExpiryInput
+                    id="finished-expiry"
+                    type="number"
+                    min="0"
+                    step="1"
+                    [formControl]="prazoValidade"
+                    [attr.aria-invalid]="erroPrazoValidadeVisivel ? 'true' : null"
+                    [attr.aria-describedby]="
+                      erroPrazoValidadeVisivel
+                        ? 'finished-expiry-error finished-expiry-help'
+                        : 'finished-expiry-help'
+                    "
+                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3 aria-invalid:border-red-700"
+                  />
+                  @if (erroPrazoValidadeVisivel) {
+                    <p id="finished-expiry-error" class="mt-1 text-sm text-red-700">
+                      <strong>Erro:</strong> Informe um inteiro maior ou igual a zero.
+                    </p>
+                  }
+                  <p id="finished-expiry-help" class="mt-1 text-xs text-slate-600">
+                    Sem prazo padrão, informe a validade ao criar o lote.
                   </p>
-                }
-                <p id="finished-expiry-help" class="mt-1 text-xs text-slate-600">
-                  Sem prazo padrão, informe a validade ao criar o lote.
-                </p>
+                </div>
               </div>
-            </div>
-            <button
-              type="button"
-              (click)="salvarPolitica()"
-              [disabled]="salvandoPolitica() || carregando() || !!erroPolitica()"
-              class="mt-4 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
-            >
-              {{ salvandoPolitica() ? 'Salvando...' : 'Salvar política' }}
-            </button>
-          }
-        </section>
+              <button
+                type="button"
+                (click)="salvarPolitica()"
+                [disabled]="salvandoPolitica() || carregando() || !!erroPolitica()"
+                class="mt-4 min-h-11 rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
+              >
+                {{ salvandoPolitica() ? 'Salvando...' : 'Salvar política' }}
+              </button>
+            }
+          </div>
+        </details>
 
         <section
           class="rounded-2xl border border-emerald-950/10 bg-white p-5 shadow-sm"
@@ -1531,44 +1529,53 @@
                       {{ movimento.quantidade }} un.
                     </p>
                   </div>
-                  <p class="mt-3 text-sm text-slate-700">
-                    <strong>Lote:</strong> {{ movimento.codigoLote || 'Não informado' }}
-                  </p>
-                  <p class="mt-1 text-sm text-slate-700">
-                    <strong>Motivo:</strong> {{ movimento.motivo }}
-                  </p>
-                  @if (movimento.condicaoOrigem || movimento.condicaoDestino) {
-                    <p class="mt-1 text-sm text-slate-700">
-                      @if (movimento.condicaoOrigem) {
-                        Origem: {{ rotuloCondicao(movimento.condicaoOrigem) }}
-                      }
-                      @if (movimento.condicaoOrigem && movimento.condicaoDestino) {
-                        ·
-                      }
-                      @if (movimento.condicaoDestino) {
-                        Destino: {{ rotuloCondicao(movimento.condicaoDestino) }}
-                      }
-                    </p>
-                  }
-                  @if (movimento.movimentoOriginalId) {
-                    <p class="mt-1 text-sm text-slate-700">
-                      Correção do movimento {{ movimento.movimentoOriginalId }}
-                    </p>
-                  }
-                  @if (movimento.tipo !== 'Estorno') {
-                    <button
-                      type="button"
-                      (click)="abrirEstorno(movimento)"
-                      [disabled]="enviandoMovimentacao() || movimentoJaEstornado(movimento)"
-                      class="mt-3 min-h-10 rounded-lg border border-amber-700 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-50"
+                  <p class="mt-2 break-words text-sm text-slate-700">{{ movimento.motivo }}</p>
+                  <details class="mt-2 border-t border-slate-100 pt-1">
+                    <summary
+                      class="min-h-11 cursor-pointer py-3 text-sm font-semibold text-emerald-900 focus-visible:outline-2"
                     >
-                      {{
-                        movimentoJaEstornado(movimento)
-                          ? 'Movimentação já corrigida'
-                          : 'Corrigir movimentação'
-                      }}
-                    </button>
-                  }
+                      Detalhes da movimentação
+                    </summary>
+                    <p class="break-words text-sm text-slate-700">
+                      <strong>Lote:</strong> {{ movimento.codigoLote || 'Não informado' }}
+                    </p>
+                    @if (movimento.condicaoOrigem || movimento.condicaoDestino) {
+                      <p class="mt-1 text-sm text-slate-700">
+                        @if (movimento.condicaoOrigem) {
+                          Origem: {{ rotuloCondicao(movimento.condicaoOrigem) }}
+                        }
+                        @if (movimento.condicaoOrigem && movimento.condicaoDestino) {
+                          ·
+                        }
+                        @if (movimento.condicaoDestino) {
+                          Destino: {{ rotuloCondicao(movimento.condicaoDestino) }}
+                        }
+                      </p>
+                    }
+                    @if (movimento.movimentoOriginalId) {
+                      <p class="mt-1 break-all text-sm text-slate-700">
+                        Correção do movimento {{ movimento.movimentoOriginalId }}
+                      </p>
+                    }
+                    @if (movimento.tipo !== 'Estorno') {
+                      <button
+                        type="button"
+                        (click)="abrirEstorno(movimento)"
+                        [disabled]="
+                          enviandoMovimentacao() ||
+                          !!acaoMovimentacao() ||
+                          movimentoJaEstornado(movimento)
+                        "
+                        class="mt-3 min-h-10 rounded-lg border border-amber-700 px-3 text-sm font-semibold text-amber-900 hover:bg-amber-50"
+                      >
+                        {{
+                          movimentoJaEstornado(movimento)
+                            ? 'Movimentação já corrigida'
+                            : 'Corrigir movimentação'
+                        }}
+                      </button>
+                    }
+                  </details>
                 </li>
               }
             </ul>

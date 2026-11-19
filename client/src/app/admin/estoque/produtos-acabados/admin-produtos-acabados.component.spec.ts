@@ -87,7 +87,7 @@ function criarApi() {
         prazoValidadePadraoDias: 30,
       }),
     ),
-    listarMovimentacoes: vi.fn(() =>
+    listarMovimentacoes: vi.fn<ProdutosAcabadosService['listarMovimentacoes']>(() =>
       of({ itens: [], totalItens: 0, pagina: 1, itensPorPagina: 20 }),
     ),
     registrarEntrada: vi.fn(
@@ -312,7 +312,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(listar).toHaveBeenCalledTimes(2);
     expect(api.consultarPosicao).toHaveBeenCalledExactlyOnceWith('variant-1');
     expect(fixture.nativeElement.textContent).toContain('Lavanda 100 g');
-    expect(fixture.nativeElement.textContent).toContain('Posição da variante');
+    expect(fixture.nativeElement.textContent).toContain('Resumo do estoque');
   });
 
   it('recupera a posição inicial da mesma variante e reaproveita a política carregada', async () => {
@@ -327,13 +327,13 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(root.querySelector('[role="alert"]')?.textContent).toContain(
       'Não foi possível consultar o estoque desta variante.',
     );
-    expect(root.textContent).not.toContain('Posição da variante');
+    expect(root.textContent).not.toContain('Resumo do estoque');
     expect(root.textContent).not.toContain('Não foi possível consultar a política');
     expect(api.listarMovimentacoes).not.toHaveBeenCalled();
 
     clicar(fixture, 'Tentar consultar o estoque novamente');
 
-    expect(root.textContent).toContain('Posição da variante');
+    expect(root.textContent).toContain('Resumo do estoque');
     expect(root.querySelector<HTMLInputElement>('#finished-expiry')?.value).toBe('30');
     expect(root.querySelector('[role="alert"]')).toBeNull();
     expect(api.consultarPosicao.mock.calls).toEqual([['variant-1'], ['variant-1']]);
@@ -353,7 +353,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(root.querySelector('[role="alert"]')?.textContent).toContain(
       'Não foi possível consultar a política de estoque.',
     );
-    expect(root.textContent).toContain('Posição da variante');
+    expect(root.textContent).toContain('Resumo do estoque');
     expect(root.textContent).toContain('Histórico');
     expect(root.textContent).not.toContain('Salvar política');
 
@@ -457,28 +457,24 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(salvar?.disabled).toBe(false);
   });
 
-  it('explica os saldos, condições e lotes sem sugerir automação futura', async () => {
+  it('prioriza os saldos e recolhe detalhes, lotes e configurações', async () => {
     const fixture = await montarComponente(criarApi());
-    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-
-    expect(text).toContain('Estoque do produto');
-    expect(text).toContain('Total registrado, incluindo unidades indisponíveis.');
-    expect(text).toContain('Unidades em condição vendável, em lotes válidos e de variante ativa.');
-    expect(text).toContain('Sem reservas vigentes.');
-    expect(text).toContain('Disponível para venda');
-    expect(text).toContain(
-      'Unidades livres para novas vendas após descontar as reservas de cada lote.',
-    );
-    expect(text).toContain('Na condição vendável');
-    expect(text.replace(/\s+/g, ' ')).toContain(
-      'Pode incluir unidades de lotes vencidos ou inelegíveis, que ficam fora do saldo disponível.',
-    );
-    expect(text).toContain('Com problema e indisponível para venda.');
-    expect(text).toContain('Separado temporariamente e indisponível para venda.');
-    expect(text).toContain(
-      'Grupo identificado de unidades com informações de fabricação e validade.',
-    );
-    expect(text).toContain('Quantidade de referência para alertar sobre necessidade de reposição.');
+    const root = fixture.nativeElement as HTMLElement;
+    expect(root.querySelector('main h1')?.textContent?.trim()).toBe(produto.nome);
+    expect(root.textContent).toContain('Lavanda 100 g');
+    const saldo = root.querySelector('[aria-labelledby="finished-position-title"]')!;
+    expect(
+      Array.from(saldo.querySelectorAll('dl:first-of-type dt'))
+        .slice(0, 3)
+        .map((dt) => dt.textContent?.trim()),
+    ).toEqual(['Disponível para venda', 'Reservado em pedidos', 'Total físico']);
+    expect(saldo.querySelector('details')?.open).toBe(false);
+    expect(saldo.textContent).toContain('A condição vendável pode incluir lotes vencidos.');
+    for (const id of ['finished-lots-title', 'finished-policy-title']) {
+      expect(root.querySelector<HTMLDetailsElement>('#' + id)?.closest('details')?.open).toBe(
+        false,
+      );
+    }
   });
 
   it('separa a quantidade na condição vendável do saldo disponível quando há lote vencido', async () => {
@@ -512,22 +508,22 @@ describe('AdminProdutosAcabadosComponent', () => {
     const root = fixture.nativeElement as HTMLElement;
     const indicadores = new Map(
       Array.from(
-        root.querySelectorAll('[aria-labelledby="finished-position-title"] > dl dt'),
+        root.querySelectorAll('[aria-labelledby="finished-position-title"] dl dt'),
         (label) => [label.textContent?.trim(), label.nextElementSibling?.textContent?.trim()],
       ),
     );
     expect(indicadores).toEqual(
       new Map([
-        ['Saldo físico', '11 un.'],
+        ['Total físico', '11 un.'],
         ['Estoque vendável', '5 un.'],
-        ['Comprometido por reservas', '3 un.'],
+        ['Reservado em pedidos', '3 un.'],
         ['Disponível para venda', '4 un.'],
         ['Na condição vendável', '8 un.'],
         ['Avariado (danificado)', '1 un.'],
         ['Quarentena', '2 un.'],
       ]),
     );
-    const lotes = root.querySelector('[aria-labelledby="finished-lots-title"]')!;
+    const lotes = root.querySelector('#finished-lots-title')!.closest('details')!;
     const cartaoVencido = Array.from(lotes.querySelectorAll('li')).find((item) =>
       item.textContent?.includes(loteVencido.codigo),
     )!;
@@ -540,6 +536,74 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(indicadoresVencido.get('Comprometido por reservas')).toBe('2 un.');
     expect(indicadoresVencido.get('Disponível para venda')).toBe('0 un.');
     expect(cartaoVencido.textContent).toContain('estoque vendável deste lote é insuficiente');
+  });
+
+  it('exibe uma movimentação datada e permite abrir a correção pelo histórico', async () => {
+    const api = criarApi();
+    api.listarMovimentacoes.mockReturnValueOnce(
+      of({
+        itens: [
+          {
+            id: 'mov-1',
+            tipo: 'EntradaManual',
+            quantidade: 2,
+            condicaoOrigem: null,
+            condicaoDestino: 'Vendavel',
+            quantidadeContada: null,
+            saldoAnteriorVendavel: 0,
+            saldoAnteriorDanificada: 0,
+            saldoAnteriorQuarentena: 0,
+            saldoPosteriorVendavel: 2,
+            saldoPosteriorDanificada: 0,
+            saldoPosteriorQuarentena: 0,
+            motivo: 'Entrada de teste',
+            observacao: null,
+            responsavelId: 'actor-1',
+            registradoEmUtc: '2026-11-18T12:00:00Z',
+            loteId: 'lot-1',
+            codigoLote: loteInicial.codigo,
+            movimentoOriginalId: null,
+          },
+        ],
+        totalItens: 1,
+        pagina: 1,
+        itensPorPagina: 20,
+      }),
+    );
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const historico = root.querySelector('[aria-labelledby="finished-history-title"]')!;
+    expect(historico.textContent).toContain('18/11/2026');
+    expect(historico.textContent).toContain('Entrada de teste');
+    const detalhes = historico.querySelector('details')!;
+    expect(detalhes.open).toBe(false);
+    detalhes.open = true;
+    clicar(fixture, 'Corrigir movimentação');
+    expect(root.querySelectorAll('main form')).toHaveLength(1);
+    expect(root.querySelector('#reverse-reason')).not.toBeNull();
+    expect(api.estornarMovimento).not.toHaveBeenCalled();
+  });
+
+  it('apresenta o estado vazio ao abrir conferência e mantém a entrada disponível', async () => {
+    const api = criarApi();
+    api.consultarPosicao.mockReturnValueOnce(
+      of({
+        ...criarPosicao(),
+        lotes: [],
+        saldoFisico: 0,
+        saldoUtilizavel: 0,
+        saldoDisponivel: 0,
+      }),
+    );
+    const fixture = await montarComponente(api);
+    const root = fixture.nativeElement as HTMLElement;
+    const lotes = root.querySelector('#finished-lots-title')!.closest('details')!;
+    lotes.open = true;
+    expect(lotes.textContent).toContain('Nenhum lote possui posição registrada');
+    expect(lotes.querySelector('button')).toBeNull();
+    expect(root.querySelector('#finished-routine-actions-title')?.textContent).toContain(
+      'Registrar entrada',
+    );
   });
 
   it('identifica a falta de saldo para venda quando o físico está todo comprometido', async () => {
@@ -556,27 +620,23 @@ describe('AdminProdutosAcabadosComponent', () => {
     );
   });
 
-  it('groups routine and exceptional actions and explains when to use them', async () => {
+  it('mantém as ações secundárias acessíveis e mostra um formulário por vez', async () => {
     const fixture = await montarComponente(criarApi());
     const root = fixture.nativeElement as HTMLElement;
-    const routine = root.querySelector('#finished-routine-actions-title')?.closest('section');
-    const exceptional = root.querySelector('#finished-exception-actions-title')?.closest('section');
-
-    expect(routine?.textContent).toContain('Registrar entrada');
-    expect(routine?.textContent).toContain('Registrar saída');
-    expect(routine?.textContent).toContain('Registre unidades que chegaram ou saíram do estoque.');
-    expect(exceptional?.textContent).toContain('Registrar perda');
-    expect(exceptional?.textContent).toContain('Registrar descarte');
-    expect(exceptional?.textContent).toContain('Mudar condição do lote');
-    expect(exceptional?.textContent).toContain(
-      'Registre perdas, descartes ou alterações no estado das unidades.',
-    );
-    expect(root.textContent).toContain('use “Conferir estoque” no cartão do lote');
-    for (const button of root.querySelectorAll<HTMLButtonElement>(
-      '#finished-routine-actions-title ~ div button, #finished-exception-actions-title ~ div button',
-    )) {
-      expect(button.className).toContain('focus-visible:outline');
-    }
+    const rotina = root.querySelector('#finished-routine-actions-title');
+    expect(rotina?.textContent).toContain('Registrar entrada');
+    expect(rotina?.textContent).toContain('Registrar saída');
+    const outras = root.querySelector('#finished-exception-actions-title')?.closest('details');
+    expect(outras?.open).toBe(false);
+    outras!.open = true;
+    expect(outras?.textContent).toContain('Registrar descarte');
+    expect(outras?.textContent).toContain('Mudar condição do lote');
+    clicar(fixture, 'Registrar perda');
+    expect(root.querySelectorAll('main form')).toHaveLength(1);
+    expect(root.querySelector('#finished-routine-actions-title')).toBeNull();
+    clicar(fixture, 'Cancelar operação');
+    expect(root.querySelectorAll('main form')).toHaveLength(0);
+    expect(root.querySelector('#finished-routine-actions-title')).not.toBeNull();
   });
 
   it('identifica lotes por datas e saldo nos seletores de movimentação e histórico', async () => {
@@ -604,6 +664,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(entradaOption?.textContent).toContain('Válido');
     expect(entradaOption?.textContent).toContain(loteInicial.codigo);
 
+    clicar(fixture, 'Cancelar operação');
     clicar(fixture, 'Registrar saída');
     const saidaOption = root.querySelector<HTMLOptionElement>(
       '#finished-operation-lot option[value="lot-1"]',
@@ -612,6 +673,8 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(saidaOption?.textContent).toContain('físico 6 un.');
     expect(saidaOption?.textContent).toContain(loteInicial.codigo);
 
+    clicar(fixture, 'Cancelar operação');
+    root.querySelector('#finished-exception-actions-title')!.closest('details')!.open = true;
     clicar(fixture, 'Mudar condição do lote');
     const transferenciaOption = root.querySelector<HTMLOptionElement>(
       '#finished-transfer-lot option[value="lot-1"]',
