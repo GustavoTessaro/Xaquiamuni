@@ -191,6 +191,14 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                     "O insumo informado não existe.").ConfigureAwait(false);
             }
 
+            if (!ativo && insumo.Ativo && await _dbContext.Ativas().AnyAsync(
+                    a => a.Necessidade.InsumoId == insumoId, cancellationToken).ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(transaction, AdministrarInsumoEstoqueStatus.Conflito,
+                    "O material tem reservas de produção ativas. Libere as reservas antes de inativá-lo.")
+                    .ConfigureAwait(false);
+            }
+
             insumo.DefinirAtivo(ativo);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
@@ -680,6 +688,13 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                     "A saída excede o saldo físico da posição informada.").ConfigureAwait(false);
             }
 
+            if (await ViolaReservaProducaoAsync(saldo, anterior.ValorBase - quantidade.ValorBase, cancellationToken)
+                .ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(transaction, OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
+                    "A saída reduziria o saldo comprometido com produções.").ConfigureAwait(false);
+            }
+
             var movimento = MovimentoInsumo.CriarSaida(
                 insumo,
                 lote,
@@ -876,6 +891,13 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                 return OperacaoEstoqueInsumoResult.NoDifference();
             }
 
+            if (contada.ValorBase < anterior.ValorBase &&
+                await ViolaReservaProducaoAsync(saldo, contada.ValorBase, cancellationToken).ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(transaction, OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
+                    "A contagem está abaixo do saldo comprometido com produções.").ConfigureAwait(false);
+            }
+
             var diferenca = Math.Abs(contada.ValorBase - anterior.ValorBase);
             var movimento = MovimentoInsumo.CriarAjuste(
                 insumo,
@@ -1063,6 +1085,14 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
                     OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
                     "O saldo atual não permite estornar esta movimentação.")
                     .ConfigureAwait(false);
+            }
+
+            if (direcaoEstorno == DirecaoMovimentoInsumo.Saida &&
+                await ViolaReservaProducaoAsync(saldo, anterior.ValorBase - original.QuantidadeBase.ValorBase,
+                    cancellationToken).ConfigureAwait(false))
+            {
+                return await ReverterComFalhaAsync(transaction, OperacaoEstoqueInsumoStatus.SaldoInsuficiente,
+                    "O estorno reduziria o saldo comprometido com produções.").ConfigureAwait(false);
             }
 
             var movimento = MovimentoInsumo.CriarEstorno(

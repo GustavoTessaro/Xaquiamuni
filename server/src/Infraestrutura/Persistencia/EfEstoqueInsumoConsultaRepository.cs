@@ -201,6 +201,9 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
 
     private IQueryable<ResumoEstoqueSql> ConstruirResumoQuery(DateOnly dataReferencia)
     {
+        var reservasAtivas = dbContext.Ativas();
+        var lotesElegiveis = dbContext.LotesInsumo.AsNoTracking()
+            .Where(l => !l.Bloqueado && (l.DataValidade ?? dataReferencia) >= dataReferencia);
         return dbContext.InsumosEstoque
             .AsNoTracking()
             .Select(insumo => new ResumoEstoqueSql
@@ -222,7 +225,13 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
                                     && lote.Id == saldo.LoteId
                                     && !lote.Bloqueado
                                     && (lote.DataValidade ?? dataReferencia) >= dataReferencia))))
-                    .Sum(saldo => (decimal?)saldo.QuantidadeFisica.ValorBase) ?? 0m
+                    .Sum(saldo => (decimal?)saldo.QuantidadeFisica.ValorBase) ?? 0m,
+                SaldoReservado = reservasAtivas.Where(a => a.Necessidade.InsumoId == insumo.Id)
+                    .Sum(a => (decimal?)(a.Reservada - a.Consumida)) ?? 0m,
+                ReservadoElegivel = reservasAtivas.Where(a => a.Necessidade.InsumoId == insumo.Id &&
+                        ((!insumo.ControlaLote && a.Saldo.LoteId == null) || (insumo.ControlaLote &&
+                            lotesElegiveis.Any(l => l.Id == a.Saldo.LoteId))))
+                    .Sum(a => (decimal?)(a.Reservada - a.Consumida)) ?? 0m
             });
     }
 
@@ -260,11 +269,14 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
             .Select(item => new
             {
                 item.QuantidadeFisica.ValorBase,
-                Versao = EF.Property<byte[]>(item, "Versao")
+                Versao = EF.Property<byte[]>(item, "Versao"),
+                Reservado = dbContext.Ativas().Where(a => a.SaldoId == item.Id)
+                    .Sum(a => (decimal?)(a.Reservada - a.Consumida)) ?? 0m
             })
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
         var quantidade = saldo?.ValorBase ?? 0m;
+        var reservado = saldo?.Reservado ?? 0m;
         return
         [
             new PosicaoEstoqueInsumoConsulta(
@@ -279,8 +291,8 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
                 saldo?.Versao,
                 quantidade,
                 quantidade,
-                0m,
-                quantidade)
+                reservado,
+                Math.Max(0m, quantidade - reservado))
         ];
     }
 
@@ -308,7 +320,9 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
                         && (lote.DataValidade ?? dataReferencia) >= dataReferencia,
                     saldo != null,
                     saldo == null ? null : EF.Property<byte[]>(saldo, "Versao"),
-                    saldo == null ? 0m : saldo.QuantidadeFisica.ValorBase))
+                    saldo == null ? 0m : saldo.QuantidadeFisica.ValorBase,
+                    dbContext.Ativas().Where(a => saldo != null && a.SaldoId == saldo.Id)
+                        .Sum(a => (decimal?)(a.Reservada - a.Consumida)) ?? 0m))
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
@@ -324,8 +338,8 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
                 posicao.Versao,
                 posicao.SaldoFisico,
                 posicao.Elegivel ? posicao.SaldoFisico : 0m,
-                0m,
-                posicao.Elegivel ? posicao.SaldoFisico : 0m))
+                posicao.Reservado,
+                posicao.Elegivel ? Math.Max(0m, posicao.SaldoFisico - posicao.Reservado) : 0m))
             .ToArray();
     }
 
@@ -340,8 +354,8 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
             item.Insumo.ValidadeObrigatoria,
             item.SaldoFisico,
             item.SaldoUtilizavel,
-            0m,
-            item.SaldoUtilizavel,
+            item.SaldoReservado,
+            Math.Max(0m, item.SaldoUtilizavel - item.ReservadoElegivel),
             item.Insumo.EstoqueMinimo?.ValorBase,
             item.Insumo.EstoqueMinimo is not null,
             ClassificadorSituacaoEstoqueInsumo.Classificar(
@@ -353,6 +367,8 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
         public InsumoEstoque Insumo { get; init; } = null!;
         public decimal SaldoFisico { get; init; }
         public decimal SaldoUtilizavel { get; init; }
+        public decimal SaldoReservado { get; init; }
+        public decimal ReservadoElegivel { get; init; }
     }
 
     private sealed record PosicaoLoteSql(
@@ -365,5 +381,6 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
         bool Elegivel,
         bool TemRegistroSaldo,
         byte[]? Versao,
-        decimal SaldoFisico);
+        decimal SaldoFisico,
+        decimal Reservado);
 }

@@ -28,6 +28,8 @@ public sealed class XaquiamuniDbContext
     public DbSet<ClienteEndereco> ClienteEnderecos => Set<ClienteEndereco>();
     public DbSet<EntradaRecebimentoCompra> EntradasRecebimentoCompra => Set<EntradaRecebimentoCompra>();
     public DbSet<CompraMateriaPrima> ComprasMateriasPrimas => Set<CompraMateriaPrima>();
+    public DbSet<OrdemProducao> OrdensProducao => Set<OrdemProducao>();
+    public DbSet<AlocacaoMateriaPrima> AlocacoesMateriasPrimas => Set<AlocacaoMateriaPrima>();
     public DbSet<ReceitaProducao> ReceitasProducao => Set<ReceitaProducao>();
     public DbSet<Fornecedor> Fornecedores => Set<Fornecedor>();
     public DbSet<Categoria> Categorias => Set<Categoria>();
@@ -78,6 +80,7 @@ public sealed class XaquiamuniDbContext
     {
         base.OnModelCreating(builder);
         builder.MapearReceitasProducao();
+        builder.MapearOrdensProducao();
         builder.MapearComprasMateriasPrimas();
         builder.Entity<Fornecedor>(fornecedor =>
         {
