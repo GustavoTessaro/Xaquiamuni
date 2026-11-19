@@ -16,6 +16,7 @@ public static class AdminComprasMateriasPrimasEndpoints
         var group = endpoints.MapGroup(Rota).RequireAuthorization(AuthorizationPolicies.Administracao);
         group.MapGet("", ListarAsync);
         group.MapGet("/{id:guid}", ConsultarAsync);
+        group.MapGet("/tentativas/{chave:guid}", ConsultarCriacaoAsync);
         group.MapPost("", CriarAsync).RequireXaquiamuniAntiforgery();
         group.MapPut("/{id:guid}", EditarAsync).RequireXaquiamuniAntiforgery();
         group.MapPost("/{id:guid}/cancelar", CancelarAsync).RequireXaquiamuniAntiforgery();
@@ -40,6 +41,16 @@ public static class AdminComprasMateriasPrimasEndpoints
     private static async Task<IResult> ConsultarAsync(Guid id, IGerenciarComprasMateriaPrima compras,
         CancellationToken ct) =>
         await compras.ConsultarAsync(id, ct) is { } compra ? Results.Ok(RespostaDetalhe(compra)) : Results.NotFound();
+
+    private static async Task<IResult> ConsultarCriacaoAsync(Guid chave, HttpContext context,
+        IGerenciarComprasMateriaPrima compras, CancellationToken ct)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        if (!Autor(context, out var autor)) return Results.Forbid();
+        if (chave == Guid.Empty) return Invalida("Informe uma chave de idempotência válida.");
+        return await compras.ConsultarCriacaoAsync(autor, chave, ct) is { } compra
+            ? Results.Ok(RespostaDetalhe(compra)) : Results.NotFound();
+    }
 
     private static async Task<IResult> CriarAsync(CompraMateriaPrimaInput input, HttpContext context,
         IGerenciarComprasMateriaPrima compras, CancellationToken ct)

@@ -32,6 +32,7 @@ import {
 import { Fornecedor, FornecedoresService } from '../../core/fornecedores.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { decimalEscalado, decimalTexto, exibirReais } from './compra-decimais';
+import { CriacaoCompraPendente, lerCriacaoCompra } from './criacao-compra-pendente';
 
 import { dataCivilValida, lerRecebimento, RecebimentoPendente } from './recebimento-pendente';
 
@@ -122,7 +123,9 @@ export class AdminComprasMateriasPrimasComponent {
   protected readonly confirmarCancelamento = signal(false);
   protected readonly busca = signal('');
   protected readonly filtro = signal('');
-  private tentativa: { assinatura: string; chave: string; incerta: boolean } | null = null;
+  protected readonly criacao = signal<CriacaoCompraPendente | null>(null);
+  protected readonly podeReenviarCriacao = signal(false);
+  protected readonly confirmarDescarteCriacao = signal(false);
 
   protected readonly visiveis = computed(() => {
     const termo = this.busca().trim().toLocaleLowerCase('pt-BR');
@@ -143,11 +146,12 @@ export class AdminComprasMateriasPrimasComponent {
           this.administrador.set(sessao?.userId ?? null);
           if (!sessao) return;
           try {
+            const criacao = lerCriacaoCompra(this.storage.ler(this.chaveCriacao(sessao.userId)));
+            this.criacao.set(criacao);
             const pendente = lerRecebimento(this.storage.ler(this.chaveStorage(sessao.userId)));
-            if (pendente) {
-              this.pendente.set(pendente);
-              this.conferirPendente();
-            }
+            this.pendente.set(pendente);
+            if (criacao) this.conferirCriacao();
+            else if (pendente) this.conferirPendente();
           } catch {
             // A listagem permanece utilizável quando o armazenamento está bloqueado.
           }
@@ -184,6 +188,7 @@ export class AdminComprasMateriasPrimasComponent {
   }
 
   protected novo(): void {
+    if (this.criacao()) return;
     this.abrir(
       forkJoin({
         detalhe: of(null),
@@ -194,24 +199,23 @@ export class AdminComprasMateriasPrimasComponent {
   }
 
   protected consultar(id: string): void {
+    if (this.criacao()) return;
     if (this.pendente()?.compraId === id) {
       this.conferirPendente();
       return;
     }
     this.abrir(
-      this.api
-        .obter(id)
-        .pipe(
-          switchMap((detalhe) =>
-            detalhe.resumo.situacao !== 'Rascunho'
-              ? of({ detalhe, fornecedores: [], insumos: [] })
-              : forkJoin({
-                  detalhe: of(detalhe),
-                  fornecedores: this.fornecedoresApi.listar(),
-                  insumos: this.listarInsumos(),
-                }),
-          ),
+      this.api.obter(id).pipe(
+        switchMap((detalhe) =>
+          detalhe.resumo.situacao !== 'Rascunho'
+            ? of({ detalhe, fornecedores: [], insumos: [] })
+            : forkJoin({
+                detalhe: of(detalhe),
+                fornecedores: this.fornecedoresApi.listar(),
+                insumos: this.listarInsumos(),
+              }),
         ),
+      ),
     );
   }
 
@@ -256,7 +260,6 @@ export class AdminComprasMateriasPrimasComponent {
           }
           this.fornecedores.set(fornecedores.filter((f) => f.ativo));
           this.insumos.set(insumos);
-          this.tentativa = null;
           const hoje = new Date();
           const dataLocal = [hoje.getFullYear(), hoje.getMonth() + 1, hoje.getDate()]
             .map((valor) => String(valor).padStart(2, '0'))
@@ -517,12 +520,6 @@ export class AdminComprasMateriasPrimasComponent {
   }
 
   protected fechar(): void {
-    if (this.tentativa?.incerta) {
-      this.erro.set(
-        'Repita o envio com os mesmos dados para confirmar o resultado antes de fechar.',
-      );
-      return;
-    }
     this.editor.set(null);
     this.revisao.set(null);
     this.erro.set('');
@@ -625,24 +622,159 @@ export class AdminComprasMateriasPrimasComponent {
   }
 
   protected salvar(compra: EditorCompra): void {
-    if (this.ocupado() || compra.cancelada) return;
+    if (this.ocupado() || compra.cancelada || this.criacao()) return;
     this.erro.set('');
     const dados = this.montar(compra);
     if (!dados) return;
-    const assinatura = JSON.stringify(dados);
-    if (this.tentativa?.incerta && this.tentativa.assinatura !== assinatura) {
-      this.erro.set(
-        'O resultado é incerto. Reenvie os mesmos dados para verificar se a compra já foi criada.',
-      );
+    if (compra.id) {
+      this.gravar(this.api.salvar(compra.id, dados, ''), 'Rascunho salvo.');
       return;
     }
-    if (!this.tentativa || this.tentativa.assinatura !== assinatura)
-      this.tentativa = { assinatura, chave: crypto.randomUUID(), incerta: false };
-    this.gravar(
-      this.api.salvar(compra.id, dados, this.tentativa.chave),
-      'Rascunho salvo.',
-      !compra.id,
-    );
+    const ator = this.administrador();
+    const chave = this.storage.criarChaveIdempotencia();
+    if (!ator || !chave) {
+      this.erro.set('Não foi possível preparar a tentativa. Entre novamente no painel.');
+      return;
+    }
+    const insumos = this.insumos();
+    const formas = this.formas();
+    const itens = dados.linhas.flatMap((linha) => linha.componentes);
+    const tentativa: CriacaoCompraPendente = {
+      chave,
+      corpo: dados,
+      fornecedor:
+        this.fornecedores().find((f) => f.id === dados.fornecedorId)?.nome ?? 'Fornecedor',
+      materiais: Object.fromEntries(
+        itens.map((item) => [
+          item.insumoId,
+          insumos.find((insumo) => insumo.insumoId === item.insumoId)?.nome ?? 'Matéria-prima',
+        ]),
+      ),
+      apresentacoes: Object.fromEntries(
+        itens.flatMap((item) =>
+          item.apresentacaoId
+            ? [
+                [
+                  item.apresentacaoId,
+                  formas[item.insumoId]?.find((forma) => forma.id === item.apresentacaoId)?.nome ??
+                    'Apresentação de compra',
+                ],
+              ]
+            : [],
+        ),
+      ),
+    };
+    if (!this.storage.salvar(this.chaveCriacao(ator), tentativa)) {
+      this.erro.set('Não foi possível guardar a tentativa nesta aba. Nenhuma compra foi enviada.');
+      return;
+    }
+    this.criacao.set(tentativa);
+    this.enviarCriacao(tentativa, false);
+  }
+
+  protected conferirCriacao(): void {
+    const tentativa = this.criacao();
+    if (!tentativa || this.ocupado()) return;
+    this.ocupado.set(true);
+    this.erro.set('');
+    this.podeReenviarCriacao.set(false);
+    this.confirmarDescarteCriacao.set(false);
+    this.api
+      .consultarCriacao(tentativa.chave)
+      .pipe(
+        takeUntilDestroyed(this.destroy),
+        finalize(() => this.ocupado.set(false)),
+      )
+      .subscribe({
+        next: (compra) => {
+          this.limparCriacao();
+          this.exibirRevisao(compra);
+          this.sucesso.set('Rascunho localizado. Confira os dados da compra.');
+        },
+        error: (erro: unknown) => {
+          if (erro instanceof HttpErrorResponse && erro.status === 404) {
+            this.podeReenviarCriacao.set(true);
+            return;
+          }
+          this.erro.set(
+            this.mensagem(
+              erro,
+              'Não foi possível conferir a compra. A tentativa continua guardada.',
+            ),
+          );
+        },
+      });
+  }
+
+  protected reenviarCriacao(): void {
+    const tentativa = this.criacao();
+    if (tentativa && this.podeReenviarCriacao() && !this.ocupado())
+      this.enviarCriacao(tentativa, true);
+  }
+
+  protected descartarCriacao(): void {
+    if (!this.criacao() || !this.confirmarDescarteCriacao() || this.ocupado()) return;
+    if (!this.limparCriacao()) {
+      this.erro.set('Não foi possível descartar a tentativa guardada nesta aba.');
+      return;
+    }
+    this.editor.set(null);
+    this.revisao.set(null);
+    this.novo();
+  }
+
+  private enviarCriacao(tentativa: CriacaoCompraPendente, reenvio: boolean): void {
+    this.ocupado.set(true);
+    this.erro.set('');
+    this.sucesso.set('');
+    this.podeReenviarCriacao.set(false);
+    this.confirmarDescarteCriacao.set(false);
+    this.api
+      .salvar(null, tentativa.corpo, tentativa.chave)
+      .pipe(
+        takeUntilDestroyed(this.destroy),
+        finalize(() => this.ocupado.set(false)),
+      )
+      .subscribe({
+        next: (compra) => {
+          this.limparCriacao();
+          this.editor.set(null);
+          if (reenvio) this.exibirRevisao(compra);
+          this.sucesso.set('Rascunho salvo.');
+          this.carregar();
+        },
+        error: (erro: unknown) => {
+          const status = erro instanceof HttpErrorResponse ? erro.status : 0;
+          if (
+            erro instanceof HttpErrorResponse &&
+            status === 400 &&
+            erro.error?.errors?.compra &&
+            !reenvio
+          )
+            this.limparCriacao();
+          this.erro.set(
+            this.mensagem(
+              erro,
+              status === 400
+                ? 'Confira os dados da compra.'
+                : 'Não foi possível confirmar a criação da compra. Confira a situação antes de reenviar.',
+            ),
+          );
+        },
+      });
+  }
+
+  private chaveCriacao(ator: string): string {
+    return `xaquiamuni:compras:criacao:v1:${ator}`;
+  }
+
+  private limparCriacao(): boolean {
+    const ator = this.administrador();
+    if (!ator || !this.storage.remover(this.chaveCriacao(ator))) return false;
+    this.criacao.set(null);
+    this.podeReenviarCriacao.set(false);
+    this.confirmarDescarteCriacao.set(false);
+    return true;
   }
 
   protected cancelar(compra: EditorCompra): void {
@@ -706,7 +838,7 @@ export class AdminComprasMateriasPrimasComponent {
     };
   }
 
-  private gravar(requisicao: Observable<DetalheCompra>, mensagem: string, criacao = false): void {
+  private gravar(requisicao: Observable<DetalheCompra>, mensagem: string): void {
     this.ocupado.set(true);
     this.erro.set('');
     this.sucesso.set('');
@@ -717,26 +849,12 @@ export class AdminComprasMateriasPrimasComponent {
       )
       .subscribe({
         next: () => {
-          this.tentativa = null;
           this.editor.set(null);
           this.sucesso.set(mensagem);
           this.carregar();
         },
         error: (erro: unknown) => {
-          if (
-            criacao &&
-            this.tentativa &&
-            (!(erro instanceof HttpErrorResponse) || erro.status === 0 || erro.status >= 500)
-          ) {
-            this.tentativa.incerta = true;
-            this.erro.set(
-              'O resultado é incerto. Repita o envio com os mesmos dados para evitar duplicação.',
-            );
-          } else {
-            this.erro.set(
-              this.mensagem(erro, 'Não foi possível salvar a compra. Tente novamente.'),
-            );
-          }
+          this.erro.set(this.mensagem(erro, 'Não foi possível salvar a compra. Tente novamente.'));
         },
       });
   }

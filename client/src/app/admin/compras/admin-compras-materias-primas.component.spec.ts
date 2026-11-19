@@ -52,6 +52,35 @@ const versao = '09000000-0000-4000-8000-000000000002';
 const componenteId = '09000000-0000-4000-8000-000000000003';
 const ator = 'admin-teste';
 const storageKey = 'xaquiamuni:compras:recebimento:v1:' + ator;
+const chaveCriacao = '09000000-0000-4000-8000-000000000010';
+const criacaoKey = 'xaquiamuni:compras:criacao:v1:' + ator;
+const criacaoOriginal = {
+  chave: chaveCriacao,
+  fornecedor: 'Ervas do Vale',
+  materiais: { [compraId]: 'Alecrim', [componenteId]: 'Guiné' },
+  apresentacoes: { [versao]: 'Pacote' },
+  corpo: {
+    fornecedorId: compraId,
+    dataCompra: '2026-11-19',
+    versao: null,
+    linhas: [
+      {
+        kit: 'Ervas juntas',
+        quantidade: '1',
+        valorTotal: '0',
+        componentes: [
+          { insumoId: compraId, apresentacaoId: versao, quantidade: '2', snapshotId: null },
+          {
+            insumoId: componenteId,
+            apresentacaoId: null,
+            quantidade: '7.123456',
+            snapshotId: null,
+          },
+        ],
+      },
+    ],
+  },
+};
 const rascunho: DetalheCompra = {
   ...detalhe,
   resumo: { ...resumo, id: compraId },
@@ -108,12 +137,18 @@ const resultado: RecebimentoCompra = {
 beforeEach(() => sessionStorage.clear());
 afterEach(() => sessionStorage.clear());
 
-async function montar(atual = detalhe) {
+async function montar(
+  atual = detalhe,
+  consultarCriacao = vi.fn<ComprasMateriasPrimasService['consultarCriacao']>(() =>
+    throwError(() => new HttpErrorResponse({ status: 404 })),
+  ),
+) {
   const compras = {
     listar: vi.fn(() =>
       of([atual.resumo, { ...resumo, id: 'c2', situacao: 'Cancelada', nomeFornecedor: 'Vidros' }]),
     ),
     obter: vi.fn(() => of(atual)),
+    consultarCriacao,
     receber: vi.fn(() => of(resultado)),
     salvar: vi.fn(() => of(detalhe)),
     cancelar: vi.fn(() => of(detalhe)),
@@ -184,7 +219,7 @@ async function montar(atual = detalhe) {
     await atualizar();
   }
   await atualizar();
-  return { compras, root, clicar, preencher };
+  return { compras, root, clicar, preencher, atualizar };
 }
 
 describe('Compras de matérias-primas', () => {
@@ -252,6 +287,75 @@ describe('Compras de matérias-primas', () => {
       expect.any(String),
     );
     expect(root.textContent).toContain('Rascunho salvo.');
+  });
+
+  it('guarda antes de enviar, bloqueia cliques e preserva o pedido após 503', async () => {
+    const { compras, root, clicar, preencher, atualizar } = await montar();
+    await clicar('Nova compra');
+    await preencher('[name=fornecedor]', 'f1');
+    await preencher('[name=material-0-0]', 'i1');
+    await preencher('[name=qtd-0-0]', '2');
+    const resposta = new Subject<DetalheCompra>();
+    compras.salvar.mockImplementationOnce(() => {
+      expect(sessionStorage.getItem(criacaoKey)).not.toBeNull();
+      return resposta;
+    });
+    const salvar = [...root.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === 'Salvar rascunho',
+    )!;
+    salvar.click();
+    salvar.click();
+    resposta.error(new HttpErrorResponse({ status: 503 }));
+    await atualizar();
+    expect(compras.salvar).toHaveBeenCalledTimes(1);
+    const { chave, corpo } = JSON.parse(sessionStorage.getItem(criacaoKey)!);
+    expect(compras.salvar).toHaveBeenCalledWith(null, corpo, chave);
+    expect(root.textContent).toContain('Criação de compra pendente');
+    expect(root.textContent).not.toContain('Nova compra');
+  });
+
+  it('localiza rascunho já criado após recarga, sem POST', async () => {
+    sessionStorage.setItem(criacaoKey, JSON.stringify(criacaoOriginal));
+    const consulta = vi.fn<ComprasMateriasPrimasService['consultarCriacao']>(() => of(rascunho));
+    const { compras, root } = await montar(rascunho, consulta);
+    expect(consulta).toHaveBeenCalledExactlyOnceWith(chaveCriacao);
+    expect(compras.salvar).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('Rascunho localizado');
+    expect(root.textContent).toContain('Ervas juntas');
+    expect(sessionStorage.getItem(criacaoKey)).toBeNull();
+  });
+
+  it('após 404, mostra os dados originais e reenvia manualmente o mesmo kit e a mesma chave', async () => {
+    sessionStorage.setItem(criacaoKey, JSON.stringify(criacaoOriginal));
+    const { compras, root, clicar } = await montar();
+    expect(compras.salvar).not.toHaveBeenCalled();
+    expect(root.textContent).toContain('Ervas juntas');
+    expect(root.textContent).toContain('7,123456');
+    expect(root.textContent).toContain('R$ 0,00');
+    expect(root.querySelector('[name=fornecedor]')).toBeNull();
+    await clicar('Reenviar criação');
+    expect(compras.salvar).toHaveBeenCalledExactlyOnceWith(
+      null,
+      criacaoOriginal.corpo,
+      chaveCriacao,
+    );
+    expect(sessionStorage.getItem(criacaoKey)).toBeNull();
+  });
+
+  it('preserva a tentativa sem reenvio quando a consulta falha e exige confirmação para descartá-la', async () => {
+    sessionStorage.setItem(criacaoKey, JSON.stringify(criacaoOriginal));
+    const consulta = vi.fn<ComprasMateriasPrimasService['consultarCriacao']>(() =>
+      throwError(() => new HttpErrorResponse({ status: 0 })),
+    );
+    const { compras, clicar, root } = await montar(detalhe, consulta);
+    expect(root.textContent).not.toContain('Reenviar criação');
+    await clicar('Descartar tentativa');
+    expect(root.textContent).toContain('pode gerar um rascunho duplicado');
+    expect(sessionStorage.getItem(criacaoKey)).not.toBeNull();
+    await clicar('Descartar e iniciar outra compra');
+    expect(root.querySelector('[name=fornecedor]')).not.toBeNull();
+    expect(sessionStorage.getItem(criacaoKey)).toBeNull();
+    expect(compras.salvar).not.toHaveBeenCalled();
   });
 
   it('revisa kit e material, valida datas e evita confirmação duplicada', async () => {

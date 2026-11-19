@@ -26,6 +26,9 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
     public Task<CompraMateriaPrima?> ConsultarAsync(Guid id, CancellationToken ct) =>
         Detalhes().AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct);
 
+    public Task<CompraMateriaPrima?> ConsultarCriacaoAsync(Guid autor, Guid chave, CancellationToken ct) =>
+        PorChaveAsync(autor, chave, ct);
+
     public async Task<CompraMateriaPrimaResult> CriarAsync(CompraMateriaPrimaInput input, Guid autor,
         Guid chave, CancellationToken ct)
     {

@@ -82,6 +82,10 @@ export class ComprasMateriasPrimasService {
     return this.http.get<DetalheCompra>(`${this.rota}/${encodeURIComponent(id)}`);
   }
 
+  consultarCriacao(chave: string) {
+    return this.http.get<DetalheCompra>(`${this.rota}/tentativas/${encodeURIComponent(chave)}`);
+  }
+
   salvar(id: string | null, compra: CompraInput, chave: string) {
     return this.csrf.getRequestToken().pipe(
       switchMap(({ requestToken }) => {

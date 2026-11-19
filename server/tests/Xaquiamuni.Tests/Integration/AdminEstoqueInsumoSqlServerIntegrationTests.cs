@@ -125,6 +125,13 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
 
         var data = new DateOnly(2026, 11, 19);
         var chave = Guid.NewGuid();
+        var urlTentativa = $"{path}/tentativas/{chave:D}";
+        using var tentativaInicial = await admin.GetAsync(urlTentativa);
+        Assert.Equal(HttpStatusCode.NotFound, tentativaInicial.StatusCode);
+        using var tentativaAnonima = await anonimo.GetAsync(urlTentativa);
+        using var tentativaCliente = await cliente.GetAsync(urlTentativa);
+        Assert.Equal(HttpStatusCode.Unauthorized, tentativaAnonima.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, tentativaCliente.StatusCode);
         Xaquiamuni.Aplicacao.Estoque.CompraMateriaPrimaInput Montar(Guid? versao = null, Guid? snapshot = null,
             decimal? preco = 23.45m, Guid? apresentacao = null) =>
             new(fornecedor.Id, data, [
@@ -150,6 +157,15 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
         var criado = await primeira.Content.ReadFromJsonAsync<JsonElement>();
         var replay = await repetida.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal(criado.GetProperty("resumo").GetProperty("id").GetGuid(), replay.GetProperty("resumo").GetProperty("id").GetGuid());
+        using var recuperada = await admin.GetAsync(urlTentativa);
+        Assert.Equal(HttpStatusCode.OK, recuperada.StatusCode);
+        Assert.True(recuperada.Headers.CacheControl?.NoStore);
+        Assert.Equal(criado.GetRawText(), (await recuperada.Content.ReadFromJsonAsync<JsonElement>()).GetRawText());
+        using var outroAdmin = CreateClient(factory, XaquiamuniRoles.Administrador);
+        outroAdmin.DefaultRequestHeaders.Remove(TestAuthenticationHandler.UserIdHeader);
+        outroAdmin.DefaultRequestHeaders.Add(TestAuthenticationHandler.UserIdHeader, Guid.NewGuid().ToString("D"));
+        using var tentativaAlheia = await outroAdmin.GetAsync(urlTentativa);
+        Assert.Equal(HttpStatusCode.NotFound, tentativaAlheia.StatusCode);
         Assert.Equal("23.45", criado.GetProperty("resumo").GetProperty("total").GetString());
         var linhas = criado.GetProperty("linhas");
         Assert.Equal("0", linhas[0].GetProperty("valorTotal").GetString());

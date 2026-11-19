@@ -19,6 +19,7 @@ public interface IGerenciarComprasMateriaPrima
 {
     Task<IReadOnlyList<CompraMateriaPrima>> ListarAsync(string? busca, SituacaoCompraMateriaPrima? situacao, CancellationToken ct);
     Task<CompraMateriaPrima?> ConsultarAsync(Guid id, CancellationToken ct);
+    Task<CompraMateriaPrima?> ConsultarCriacaoAsync(Guid autor, Guid chave, CancellationToken ct);
     Task<CompraMateriaPrimaResult> CriarAsync(CompraMateriaPrimaInput input, Guid autor, Guid chave, CancellationToken ct);
     Task<CompraMateriaPrimaResult> EditarAsync(Guid id, CompraMateriaPrimaInput input, Guid autor, CancellationToken ct);
     Task<CompraMateriaPrimaResult> CancelarAsync(Guid id, Guid versao, Guid autor, CancellationToken ct);
