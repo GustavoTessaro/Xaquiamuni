@@ -52,6 +52,7 @@ try {
   let externos = 0;
   const respostas = new Map();
   const compras = new Map();
+  const falhasPix = new Map();
   call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
@@ -75,8 +76,11 @@ try {
         const chave = Object.entries(request.headers).find(([nome]) => nome.toLowerCase() === 'idempotency-key')?.[1];
         compras.set(data.sessionId, { chave, corpo: request.postData });
       }
-      void call(local ? 'Fetch.continueRequest' : 'Fetch.failRequest',
-        local ? { requestId } : { requestId, errorReason: 'BlockedByClient' }, data.sessionId)
+      const falhaPix = local && request.method === 'GET'
+        && new URL(request.url).pathname === falhasPix.get(data.sessionId);
+      if (falhaPix) falhasPix.delete(data.sessionId);
+      void call(local && !falhaPix ? 'Fetch.continueRequest' : 'Fetch.failRequest',
+        local && !falhaPix ? { requestId } : { requestId, errorReason: 'BlockedByClient' }, data.sessionId)
         .catch(() => {});
     } else if (data.method === 'Network.responseReceived') {
       const url = new URL(data.params.response.url);
@@ -114,7 +118,8 @@ try {
       } catch { return false; }
     })()`), true);
     assert.equal(await ev('fetch("/health").then(r => r.status)'), 200);
-    return { ev, sessionId, compra: () => compras.get(sessionId), ir: async destino => {
+    return { ev, sessionId, browserContextId,
+      falharProximaConsultaPix: path => falhasPix.set(sessionId, path), compra: () => compras.get(sessionId), ir: async destino => {
       const resultado = await call('Page.navigate', { url: origin + destino }, sessionId);
       if (resultado.errorText) throw new Error('Falha de navega??o na jornada');
     } };

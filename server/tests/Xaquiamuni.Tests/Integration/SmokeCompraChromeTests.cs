@@ -42,7 +42,11 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
     [Trait("Category", "SqlServerIntegration")]
     public Task JornadaChromeCompraRetiradaComConciliacao() => ExecutarChromeAsync(jornada: true);
 
-    private async Task ExecutarChromeAsync(bool jornada)
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public Task JornadaChromePixManualComConciliacao() => ExecutarChromeAsync(jornada: true, pixManual: true);
+
+    private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -82,7 +86,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                     {
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
-                        outroCliente, seed,
+                        outroCliente, seed, pixManual,
                     }, fluxo);
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }
