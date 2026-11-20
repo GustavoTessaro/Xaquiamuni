@@ -34,9 +34,7 @@ import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { decimalEscalado, decimalTexto, exibirReais } from './compra-decimais';
 import { CriacaoCompraPendente, lerCriacaoCompra } from './criacao-compra-pendente';
 
-import { dataCivilValida, lerRecebimento, RecebimentoPendente } from './recebimento-pendente';
-
-type PoliticaValidade = { controlaLote: boolean; validadeObrigatoria: boolean };
+import { lerRecebimento, RecebimentoPendente } from './recebimento-pendente';
 
 type Snapshot = DetalheCompra['linhas'][number]['componentes'][number];
 interface ItemEditor {
@@ -81,32 +79,9 @@ export class AdminComprasMateriasPrimasComponent {
   private readonly injector = inject(Injector);
   protected readonly administrador = signal<string | null>(null);
   protected readonly revisao = signal<DetalheCompra | null>(null);
-  protected readonly politicas = signal<Record<string, PoliticaValidade> | null>(null);
-  protected readonly validades = signal<Record<string, string>>({});
   protected readonly pendente = signal<RecebimentoPendente | null>(null);
+  protected readonly revisaoDesatualizada = signal(false);
   protected readonly podeReenviar = signal(false);
-  protected readonly validadesValidas = computed(() => {
-    const compra = this.revisao();
-    const politicas = this.politicas();
-    if (!compra || !politicas) return false;
-    const validades = this.validades();
-    return (
-      compra.linhas.length > 0 &&
-      compra.linhas.every(
-        (linha) =>
-          linha.componentes.length > 0 &&
-          linha.componentes.every((item) => {
-            const politica = politicas[item.insumoId];
-            const valor = validades[item.id];
-            return (
-              !!politica &&
-              (!politica.controlaLote ||
-                (valor ? dataCivilValida(valor) : !politica.validadeObrigatoria))
-            );
-          }),
-      )
-    );
-  });
 
   protected readonly compras = signal<ResumoCompra[]>([]);
   protected readonly fornecedores = signal<Fornecedor[]>([]);
@@ -316,65 +291,26 @@ export class AdminComprasMateriasPrimasComponent {
     this.api
       .obter(id)
       .pipe(
-        switchMap((compra) => {
-          if (compra.resumo.situacao !== 'Rascunho') return of({ compra, politicas: null });
-          const ids = [
-            ...new Set(compra.linhas.flatMap((l) => l.componentes.map((item) => item.insumoId))),
-          ];
-          if (!ids.length) return of({ compra, politicas: null });
-          return forkJoin(
-            ids.map((insumoId) =>
-              this.insumosApi.obterParaEntrada(insumoId).pipe(
-                map(
-                  ({ resumo }) =>
-                    [
-                      insumoId,
-                      {
-                        controlaLote: resumo.controlaLote,
-                        validadeObrigatoria: resumo.validadeObrigatoria,
-                      },
-                    ] as const,
-                ),
-              ),
-            ),
-          ).pipe(map((dados) => ({ compra, politicas: Object.fromEntries(dados) })));
-        }),
         takeUntilDestroyed(this.destroy),
         finalize(() => this.ocupado.set(false)),
       )
       .subscribe({
-        next: ({ compra, politicas }) => {
-          this.exibirRevisao(compra);
-          this.politicas.set(politicas);
-          if (!politicas && compra.resumo.situacao === 'Rascunho')
-            this.erro.set('A compra não tem materiais para receber.');
-        },
+        next: (compra) => this.exibirRevisao(compra),
         error: (erro) =>
           this.erro.set(
-            this.mensagem(
-              erro,
-              'Não foi possível consultar a compra e as regras de validade. Tente novamente.',
-            ),
+            this.mensagem(erro, 'Não foi possível consultar a compra. Tente novamente.'),
           ),
       });
-  }
-
-  protected selecionarValidade(id: string, valor: string): void {
-    this.validades.update((validades) => ({ ...validades, [id]: valor }));
   }
 
   protected confirmarRecebimento(): void {
     if (this.ocupado()) return;
     const compra = this.revisao();
-    if (!compra || compra.resumo.situacao !== 'Rascunho') return;
+    if (!compra || compra.resumo.situacao !== 'Rascunho' || this.revisaoDesatualizada()) return;
     const pendente = this.pendente();
     if (pendente) {
       if (this.podeReenviar() && pendente.compraId === compra.resumo.id)
         this.enviarRecebimento(pendente, compra, true);
-      return;
-    }
-    if (!this.validadesValidas()) {
-      this.erro.set('Confira as validades obrigatórias e informe datas válidas.');
       return;
     }
     const ator = this.administrador();
@@ -385,15 +321,10 @@ export class AdminComprasMateriasPrimasComponent {
       );
       return;
     }
-    const politicas = this.politicas()!;
-    const validades = this.validades();
     const corpo: ReceberCompraInput = {
       versao: compra.versao,
-      validades: compra.linhas.flatMap((linha) =>
-        linha.componentes
-          .filter((item) => politicas[item.insumoId].controlaLote && validades[item.id])
-          .map((item) => ({ componenteId: item.id, dataValidade: validades[item.id] })),
-      ),
+      validades: [],
+      semControleValidade: true,
     };
     const tentativa = { compraId: compra.resumo.id, chave, corpo };
     if (!this.storage.salvar(this.chaveStorage(ator), tentativa)) {
@@ -429,13 +360,9 @@ export class AdminComprasMateriasPrimasComponent {
             compra.versao !== pendente.corpo.versao
           ) {
             this.limparPendente();
+            this.revisaoDesatualizada.set(true);
             this.erro.set('A compra foi alterada. A tentativa anterior não pode ser reenviada.');
           } else {
-            this.validades.set(
-              Object.fromEntries(
-                pendente.corpo.validades.map((v) => [v.componenteId, v.dataValidade]),
-              ),
-            );
             this.podeReenviar.set(true);
           }
         },
@@ -496,9 +423,8 @@ export class AdminComprasMateriasPrimasComponent {
   private exibirRevisao(compra: DetalheCompra): void {
     this.editor.set(null);
     this.confirmarCancelamento.set(false);
+    this.revisaoDesatualizada.set(false);
     this.revisao.set(compra);
-    this.validades.set({});
-    this.politicas.set(null);
     this.compras.update((lista) =>
       lista.map((item) => (item.id === compra.resumo.id ? compra.resumo : item)),
     );
@@ -545,8 +471,8 @@ export class AdminComprasMateriasPrimasComponent {
     this.carregarFormas(id);
   }
 
-  protected carregarFormas(id: string): void {
-    if (!id || this.formas()[id] || this.carregandoFormas().has(id)) return;
+  protected carregarFormas(id: string, atualizar = false): void {
+    if (!id || (!atualizar && this.formas()[id]) || this.carregandoFormas().has(id)) return;
     this.carregandoFormas.update((ids) => new Set([...ids, id]));
     this.falhasFormas.update((ids) => new Set([...ids].filter((outro) => outro !== id)));
     this.insumosApi

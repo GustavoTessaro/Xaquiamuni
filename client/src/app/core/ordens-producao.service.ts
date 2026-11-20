@@ -24,6 +24,7 @@ export interface ConsumoProducao {
 }
 
 export interface ConcluirProducao {
+  semControleValidade?: boolean;
   versao: string;
   quantidadeProduzida: number;
   consumos: ConsumoProducao[];
@@ -40,7 +41,7 @@ export interface ConclusaoProducao {
   codigoLote: string;
   movimentoEntradaId: string;
   dataFabricacao: string;
-  dataValidade: string;
+  dataValidade: string | null;
   responsavelId: string;
   concluidaEmUtc: string;
   consumos: {

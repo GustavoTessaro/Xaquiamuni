@@ -11,20 +11,7 @@
     {{ ordem().resumo.receita }} · Versão {{ ordem().resumo.versao }} ·
     {{ ordem().resumo.quantidade }} unidades planejadas
   </p>
-  @if (erroPolitica()) {
-    <p role="alert">Não foi possível consultar a política de validade da variante.</p>
-    <button
-      type="button"
-      (click)="carregarPolitica()"
-      class="min-h-11 underline focus-visible:outline-2"
-    >
-      Tentar consultar validade novamente
-    </button>
-  } @else if (!politica()) {
-    <p role="status">Consultando política de validade…</p>
-  }
-
-  <fieldset [disabled]="bloqueado() || !politica()" class="min-w-0 space-y-4">
+  <fieldset [disabled]="bloqueado()" class="min-w-0 space-y-4">
     <label class="block max-w-xs text-sm font-medium">
       Quantidade realmente produzida (unidades)
       <input
@@ -84,39 +71,6 @@
         </li>
       }
     </ul>
-    @if (politica(); as regra) {
-      <div class="grid gap-3 sm:grid-cols-2">
-        <label class="min-w-0 text-sm font-medium">
-          Data de fabricação
-          <input
-            type="date"
-            name="fabricacao"
-            [ngModel]="fabricacao()"
-            (ngModelChange)="fabricacao.set($event); conferido.set(false)"
-            class="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
-          />
-        </label>
-        <label class="min-w-0 text-sm font-medium">
-          Data de validade {{ regra.prazo === null ? '(obrigatória)' : '(opcional)' }}
-          <input
-            type="date"
-            name="validade"
-            [required]="regra.prazo === null"
-            [ngModel]="validade()"
-            (ngModelChange)="validade.set($event); conferido.set(false)"
-            aria-describedby="conclusao-prazo"
-            class="mt-1 min-h-11 w-full min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
-          />
-        </label>
-        <p id="conclusao-prazo" class="text-sm sm:col-span-2">
-          @if (regra.prazo === null) {
-            Esta variante precisa de uma data de validade.
-          } @else {
-            Se deixar em branco, o servidor aplica o prazo padrão de {{ regra.prazo }} dias.
-          }
-        </p>
-      </div>
-    }
     <label class="flex items-start gap-2 text-sm font-medium">
       <input
         type="checkbox"
@@ -127,12 +81,10 @@
         class="mt-1 size-4 shrink-0 focus-visible:outline-2"
       />
       Ao concluir, os materiais utilizados serão baixados do estoque e os produtos fabricados
-      ficarão disponíveis para venda, respeitando a publicação e a validade do produto.
+      ficarão disponíveis para venda, respeitando a publicação do produto.
     </label>
     @if (erroCampos()) {
-      <p role="alert" class="text-sm text-red-900">
-        Revise a quantidade produzida, os consumos e a validade quando obrigatória.
-      </p>
+      <p role="alert" class="text-sm text-red-900">Revise a quantidade produzida e os consumos.</p>
     }
     <button
       type="submit"

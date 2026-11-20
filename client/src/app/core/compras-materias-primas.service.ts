@@ -55,6 +55,7 @@ export interface DetalheCompra {
 }
 
 export interface ReceberCompraInput {
+  semControleValidade?: boolean;
   versao: string;
   validades: Array<{ componenteId: string; dataValidade: string }>;
 }

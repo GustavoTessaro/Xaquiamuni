@@ -340,6 +340,45 @@ try {
           }
         }
       }
+      const visivel = selector => a.ev(`!!document.querySelector(${JSON.stringify(selector)})`);
+      const larguraValida = () => a.ev('document.documentElement.scrollWidth <= innerWidth');
+      const preencher = (selector, valor) => a.ev(`(() => {
+        const campo = document.querySelector(${JSON.stringify(selector)});
+        campo.value = ${JSON.stringify(valor)};
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await a.ir('/admin/estoque/produtos-acabados/' + dados.varianteAuditoria);
+      const abrirEntrada = `[...document.querySelectorAll('main button')]
+        .find(e => e.textContent.trim() === 'Registrar entrada' && e.getClientRects().length)`;
+      await waitFor(() => a.ev(`!!(${abrirEntrada})`), 'Entrada de acabados indisponivel');
+      await a.ev(`(${abrirEntrada}).click()`);
+      await waitFor(() => visivel('#finished-entry-quantity'), 'Formulario de entrada de acabados');
+      assert.equal(await visivel('#finished-entry-lot-mode, #finished-entry-fabrication, #finished-entry-expiry'), false);
+      assert.ok(await larguraValida(), 'Entrada de acabados excede a largura');
+      respostas.delete('/api/admin/estoque/produtos-acabados/variantes/' + dados.varianteAuditoria + '/entradas');
+      await preencher('#finished-entry-quantity', '1');
+      await preencher('#finished-entry-reason', 'Estoque sintetico do ensaio');
+      await a.ev(`document.querySelector('#finished-entry-quantity').form.requestSubmit()`);
+      const rotaEntrada = '/api/admin/estoque/produtos-acabados/variantes/' + dados.varianteAuditoria + '/entradas';
+      await waitFor(() => respostas.get(rotaEntrada) === 201 &&
+        a.ev("document.querySelector('main').textContent.includes('Movimenta\u00e7\u00e3o registrada com sucesso')"),
+        'Entrada de acabados sem validade nao confirmada');
+
+      await a.ir('/admin/estoque/insumos/novo');
+      await waitFor(() => visivel('#stock-supply-name'), 'Cadastro de materia-prima indisponivel');
+      assert.equal(await visivel('[formControlName="controlaLote"], [formControlName="validadeObrigatoria"]'), false);
+      assert.ok(await larguraValida(), 'Cadastro de materia-prima excede a largura');
+
+      await a.ir('/admin/estoque/insumos');
+      const href = await waitFor(() => a.ev(`[...document.querySelectorAll('main a[href]')]
+        .find(a => a.pathname.split('/').length === 6 && a.pathname.startsWith('/admin/estoque/insumos/') && a.pathname.endsWith('/consultas'))
+        ?.getAttribute('href')`), 'Consulta de materia-prima indisponivel');
+      const material = href.split('/')[4];
+      await a.ir('/admin/compras/apresentacoes/' + material);
+      await waitFor(() => visivel('#stock-supply-forms-title'), 'Apresentacoes em Compras indisponiveis');
+      assert.equal(await visivel('#stock-supply-name'), false);
+      assert.ok(await larguraValida(), 'Apresentacoes excedem a largura');
+      console.log('Entrada de acabados confirmada e cadastro de materiais e apresentacoes verificados em ' + width + ' px.');
       console.log('Seis telas administrativas verificadas em ' + width + ' px.');
     }
   }

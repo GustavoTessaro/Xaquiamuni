@@ -160,6 +160,7 @@ export interface AdminMovimentoFiltro {
 }
 
 export interface RegistrarEntradaInsumoRequest {
+  semControleValidade?: boolean;
   tipo: TipoEntradaInsumo;
   quantidadeOriginal: string;
   unidadeOriginal: UnidadeFisicaEstoque | null;
@@ -562,6 +563,9 @@ function serializeEntradaRequest(request: RegistrarEntradaInsumoRequest): string
     `"loteId":${JSON.stringify(request.loteId)},` +
     `"identificacaoNovoLote":${JSON.stringify(request.identificacaoNovoLote)},` +
     `"dataEntradaNovoLote":${JSON.stringify(request.dataEntradaNovoLote)},` +
+    (request.semControleValidade === undefined
+      ? ''
+      : `"semControleValidade":${JSON.stringify(request.semControleValidade)},`) +
     `"dataValidadeNovoLote":${JSON.stringify(request.dataValidadeNovoLote)},` +
     `"fornecedorNovoLote":${JSON.stringify(request.fornecedorNovoLote)},` +
     `"novoLoteBloqueado":${request.novoLoteBloqueado},` +

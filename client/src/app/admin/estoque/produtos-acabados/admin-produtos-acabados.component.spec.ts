@@ -217,7 +217,6 @@ function preencherEntrada(
 ): void {
   clicar(fixture, 'Registrar entrada');
   preencher(fixture, '#finished-entry-quantity', quantidade);
-  preencher(fixture, '#finished-entry-fabrication', '2026-11-17');
   preencher(fixture, '#finished-entry-reason', 'Recebimento reservado');
 }
 
@@ -381,7 +380,7 @@ describe('AdminProdutosAcabadosComponent', () => {
       'Em branco, o estoque mínimo fica sem configuração.',
     );
     expect(root.querySelector('#finished-expiry-help')?.textContent).toContain(
-      'Sem prazo padrão, informe a validade ao criar o lote.',
+      'Prazo mantido para operações legadas.',
     );
     preencher(fixture, '#finished-minimum', '-1');
     expect(minimo.hasAttribute('aria-invalid')).toBe(false);
@@ -685,18 +684,7 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(filtroHistorico?.textContent).toContain(loteInicial.codigo);
 
     clicar(fixture, 'Registrar entrada');
-    const modoLote = root.querySelector<HTMLSelectElement>('#finished-entry-lot-mode');
-    expect(modoLote).not.toBeNull();
-    modoLote!.value = 'existente';
-    modoLote!.dispatchEvent(new Event('change', { bubbles: true }));
-    fixture.detectChanges();
-
-    const entradaOption = root.querySelector<HTMLOptionElement>(
-      '#finished-entry-existing-lot option[value="lot-1"]',
-    );
-    expect(entradaOption?.textContent).toContain('Validade 17/12/2026');
-    expect(entradaOption?.textContent).toContain('Válido');
-    expect(entradaOption?.textContent).toContain(loteInicial.codigo);
+    expect(root.querySelector('#finished-entry-lot-mode, #finished-entry-fabrication')).toBeNull();
 
     clicar(fixture, 'Cancelar operação');
     root.querySelector('#finished-exception-actions-title')!.closest('details')!.open = true;
@@ -1074,6 +1062,12 @@ describe('AdminProdutosAcabadosComponent', () => {
     clicar(fixture, 'Confirmar entrada');
     await estabilizar(fixture);
 
+    expect(api.registrarEntrada.mock.calls[0]?.[1]).toMatchObject({
+      quantidade: 4,
+      condicaoDestino: 'Vendavel',
+      semControleValidade: true,
+    });
+    expect(api.registrarEntrada.mock.calls[0]?.[1]).not.toHaveProperty('dataValidade');
     const originalKey = api.registrarEntrada.mock.calls[0]?.[2];
     expect(originalKey).toBeTruthy();
     expect(sessionStorage.length).toBe(1);
@@ -1095,6 +1089,23 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(api.registrarEntrada.mock.calls[1]?.[2]).toBe(originalKey);
     expect(sessionStorage.length).toBe(0);
     expect(root.textContent).toContain('Movimentação registrada com sucesso');
+  });
+
+  it('blocks a new entry when the old request cannot be replayed and the user declines', async () => {
+    const api = criarApi();
+    const fixture = await montarComponente(api);
+    preencherEntrada(fixture, '4');
+    const legacyKey =
+      'xaquiamuni:estoque:produtos-acabados:pendente:actor-1:variant-1:entrada:original';
+    sessionStorage.setItem(legacyKey, '{}');
+    const confirmar = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+
+    clicar(fixture, 'Confirmar entrada');
+    await estabilizar(fixture);
+
+    expect(confirmar).toHaveBeenCalledOnce();
+    expect(api.registrarEntrada).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(legacyKey)).toBe('{}');
   });
 
   it('usa nova chave para payload alterado sem descartar a tentativa de resultado incerto', async () => {

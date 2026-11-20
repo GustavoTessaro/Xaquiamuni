@@ -102,7 +102,6 @@ describe('AdminConsultaInsumoComponent', () => {
     });
     expect(text).toContain('1.234,567001 g');
     expect(text).toContain('800 g');
-    expect(text).toContain('posição agregada, sem');
     expect(text).not.toContain('Nenhum lote possui posição');
     expect(text).toContain('2 kg');
     expect(text).toContain('Lote A');

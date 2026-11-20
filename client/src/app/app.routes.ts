@@ -159,6 +159,14 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/compras/apresentacoes/:id',
+    loadComponent: () => import('./admin/estoque/insumos/admin-insumo-form.component').then(
+      (module) => module.AdminInsumoFormComponent,
+    ),
+    data: { apresentacoes: true },
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/compras',
     loadComponent: () => import('./admin/compras/admin-compras-materias-primas.component').then(
       (module) => module.AdminComprasMateriasPrimasComponent,

@@ -36,6 +36,15 @@ export class OperacaoPendenteStore {
     return sessionStorage.getItem(chave);
   }
 
+  listarChaves(prefixo: string): string[] {
+    const chaves: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const chave = sessionStorage.key(i);
+      if (chave?.startsWith(prefixo)) chaves.push(chave);
+    }
+    return chaves;
+  }
+
   async calcularFingerprint(value: unknown): Promise<string> {
     const serialized = JSON.stringify(value);
     if (serialized === undefined) {

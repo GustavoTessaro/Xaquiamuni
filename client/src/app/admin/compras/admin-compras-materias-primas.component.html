@@ -196,28 +196,6 @@
                         class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
                         >Ver estoque e histórico</a
                       >
-                    } @else if (pendente()) {
-                      @if (validades()[item.id]; as validade) {
-                        <p class="text-sm">
-                          Validade: {{ validade.split('-').reverse().join('/') }}
-                        </p>
-                      }
-                    } @else if (politicas()?.[item.insumoId]; as politica) {
-                      @if (politica.controlaLote) {
-                        <label class="mt-2 block max-w-xs text-sm font-medium">
-                          Validade de {{ item.nomeInsumo }} ({{
-                            politica.validadeObrigatoria ? 'obrigatória' : 'opcional'
-                          }})
-                          <input
-                            type="date"
-                            [required]="politica.validadeObrigatoria"
-                            [disabled]="ocupado()"
-                            [value]="validades()[item.id] ?? ''"
-                            (input)="selecionarValidade(item.id, $any($event.target).value)"
-                            class="mt-1 block min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2 focus-visible:outline-emerald-800"
-                          />
-                        </label>
-                      }
                     }
                   </li>
                 }
@@ -247,10 +225,10 @@
                 >
                   Conferir situação
                 </button>
-              } @else if (podeReenviar() || politicas()) {
+              } @else if (!revisaoDesatualizada()) {
                 <button
                   type="submit"
-                  [disabled]="ocupado() || (!podeReenviar() && !validadesValidas())"
+                  [disabled]="ocupado()"
                   class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50"
                 >
                   {{ podeReenviar() ? 'Reenviar tentativa' : 'Confirmar e atualizar estoque' }}
@@ -258,8 +236,7 @@
               }
             }
             @if (
-              detalhe.resumo.situacao === 'Rascunho' &&
-              (podeReenviar() || (!pendente() && !politicas()))
+              detalhe.resumo.situacao === 'Rascunho' && (podeReenviar() || revisaoDesatualizada())
             ) {
               <button
                 type="button"
@@ -443,6 +420,25 @@
                     }
                   </select>
                 </label>
+                @if (item.insumoId) {
+                  <div class="flex flex-wrap items-center gap-3 text-sm">
+                    <a
+                      [routerLink]="['/admin/compras/apresentacoes', item.insumoId]"
+                      target="_blank"
+                      rel="noopener"
+                      class="underline focus-visible:outline-2"
+                      >Gerenciar apresentações (nova aba)</a
+                    >
+                    <button
+                      type="button"
+                      (click)="carregarFormas(item.insumoId, true)"
+                      [disabled]="carregandoFormas().has(item.insumoId)"
+                      class="min-h-10 underline focus-visible:outline-2"
+                    >
+                      Atualizar apresentações
+                    </button>
+                  </div>
+                }
                 @if (carregandoFormas().has(item.insumoId)) {
                   <p role="status" class="text-sm sm:col-span-2">Carregando apresentações…</p>
                 } @else if (falhasFormas().has(item.insumoId)) {

@@ -34,6 +34,8 @@ export function lerTentativaProducao(serializado: string | null): TentativaProdu
       quantidadePlanejadaValida(corpo.quantidadeProduzida) &&
       dataValida(corpo.dataFabricacao) &&
       dataValida(corpo.dataValidade) &&
+      (corpo.semControleValidade === undefined || typeof corpo.semControleValidade === 'boolean') &&
+      (corpo.semControleValidade !== true || corpo.dataValidade === null) &&
       Array.isArray(corpo.consumos) &&
       corpo.consumos.length >= 1 &&
       corpo.consumos.length <= 100 &&

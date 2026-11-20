@@ -371,20 +371,6 @@
                 </select>
               </div>
               <div>
-                <label for="finished-entry-condition" class="block text-sm font-semibold"
-                  >Condição de destino</label
-                >
-                <select
-                  id="finished-entry-condition"
-                  formControlName="condicaoDestino"
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
-                >
-                  <option value="Vendavel">Vendável</option>
-                  <option value="Danificada">Danificada</option>
-                  <option value="Quarentena">Quarentena</option>
-                </select>
-              </div>
-              <div>
                 <label for="finished-entry-quantity" class="block text-sm font-semibold"
                   >Quantidade inteira</label
                 >
@@ -397,70 +383,6 @@
                   class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
                 />
               </div>
-              <div>
-                <label for="finished-entry-lot-mode" class="block text-sm font-semibold"
-                  >Lote</label
-                >
-                <select
-                  id="finished-entry-lot-mode"
-                  [value]="entradaForm.controls.novoLote.value ? 'novo' : 'existente'"
-                  (change)="
-                    entradaForm.controls.novoLote.setValue($any($event.target).value === 'novo')
-                  "
-                  class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
-                >
-                  <option value="novo">Criar novo lote</option>
-                  <option value="existente">Usar lote existente</option>
-                </select>
-              </div>
-              @if (!entradaForm.controls.novoLote.value) {
-                <div>
-                  <label for="finished-entry-existing-lot" class="block text-sm font-semibold"
-                    >Lote existente</label
-                  >
-                  <select
-                    id="finished-entry-existing-lot"
-                    formControlName="loteId"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3"
-                  >
-                    <option value="">Selecione</option>
-                    @for (lote of position.lotes; track lote.loteId) {
-                      <option [value]="lote.loteId">
-                        Validade {{ formatarDataCivil(lote.dataValidade) }} ·
-                        {{ rotuloValidade(lote) }} · fabricação
-                        {{ formatarDataCivil(lote.dataFabricacao) }} · físico
-                        {{ lote.saldoFisico }} un. · {{ lote.codigo }}
-                      </option>
-                    }
-                  </select>
-                </div>
-              } @else {
-                <div>
-                  <label for="finished-entry-fabrication" class="block text-sm font-semibold"
-                    >Data de fabricação</label
-                  >
-                  <input
-                    id="finished-entry-fabrication"
-                    type="date"
-                    formControlName="dataFabricacao"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                </div>
-                <div>
-                  <label for="finished-entry-expiry" class="block text-sm font-semibold"
-                    >Validade manual (opcional)</label
-                  >
-                  <input
-                    id="finished-entry-expiry"
-                    type="date"
-                    formControlName="dataValidade"
-                    class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 px-3"
-                  />
-                  <p class="mt-1 text-xs text-slate-500">
-                    Quando vazia, usa o prazo padrão configurado.
-                  </p>
-                </div>
-              }
               <div class="sm:col-span-2">
                 <label for="finished-entry-reason" class="block text-sm font-semibold"
                   >Motivo</label
@@ -1506,7 +1428,7 @@
                     </p>
                   }
                   <p id="finished-expiry-help" class="mt-1 text-xs text-slate-600">
-                    Sem prazo padrão, informe a validade ao criar o lote.
+                    Prazo mantido para operações legadas.
                   </p>
                 </div>
               </div>
@@ -1546,7 +1468,12 @@
                 }
               </select>
             </div>
-            <div>
+            <details>
+              <summary
+                class="min-h-10 cursor-pointer rounded text-sm font-semibold focus-visible:outline-2"
+              >
+                Filtro avançado
+              </summary>
               <label for="finished-history-lot" class="block text-sm font-semibold text-slate-800"
                 >Lote</label
               >
@@ -1564,7 +1491,7 @@
                   </option>
                 }
               </select>
-            </div>
+            </details>
           </div>
 
           @if (carregandoHistorico()) {

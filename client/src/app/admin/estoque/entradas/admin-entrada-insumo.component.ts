@@ -25,7 +25,6 @@ import {
   AdminInsumoDetalhePreciso,
   AdminMovimentoInsumo,
   AdminPagina,
-  AdminPosicaoEstoquePrecisa,
   AdminResumoInsumoPreciso,
   InsumosService,
   RegistrarEntradaInsumoRequest,
@@ -52,7 +51,6 @@ import {
 import { AdminWorkspaceComponent } from '../../admin-workspace.component';
 
 type FormaQuantidade = 'Direta' | 'FormaCompra';
-type FormaLote = 'Existente' | 'Novo';
 type EtapaEntrada = 'formulario' | 'revisao' | 'enviando' | 'incerta' | 'conflito' | 'sucesso';
 type EstadoPendente = EstadoOperacaoEstoquePendente;
 
@@ -64,13 +62,6 @@ interface EntradaControls {
   quantidadeOriginal: FormControl<string>;
   custoTotal: FormControl<string>;
   observacao: FormControl<string>;
-  formaLote: FormControl<FormaLote>;
-  loteId: FormControl<string>;
-  identificacaoNovoLote: FormControl<string>;
-  dataEntradaNovoLote: FormControl<string>;
-  dataValidadeNovoLote: FormControl<string>;
-  fornecedorNovoLote: FormControl<string>;
-  novoLoteBloqueado: FormControl<boolean>;
 }
 
 interface ResumoEntrada {
@@ -82,7 +73,6 @@ interface ResumoEntrada {
   quantidadeBase: string;
   unidadeBase: UnidadeBaseEstoque;
   formaCompraNome: string | null;
-  loteLabel: string;
   custoTotal: string | null;
   custoUnitarioEstimado: string | null;
 }
@@ -150,13 +140,6 @@ export class AdminEntradaInsumoComponent {
       nonNullable: true,
       validators: [Validators.maxLength(500)],
     }),
-    formaLote: new FormControl<FormaLote>('Novo', { nonNullable: true }),
-    loteId: new FormControl('', { nonNullable: true }),
-    identificacaoNovoLote: new FormControl('', { nonNullable: true }),
-    dataEntradaNovoLote: new FormControl('', { nonNullable: true }),
-    dataValidadeNovoLote: new FormControl('', { nonNullable: true }),
-    fornecedorNovoLote: new FormControl('', { nonNullable: true }),
-    novoLoteBloqueado: new FormControl(false, { nonNullable: true }),
   });
 
   protected readonly totalPaginasInsumos = computed(() =>
@@ -165,17 +148,6 @@ export class AdminEntradaInsumoComponent {
   protected readonly formasCompraAtivas = computed(() =>
     (this.detalhe()?.formasCompra ?? []).filter((forma) => forma.ativa),
   );
-  protected readonly lotes = computed(() =>
-    (this.detalhe()?.posicoes ?? []).filter(
-      (posicao): posicao is AdminPosicaoEstoquePrecisa & { loteId: string } =>
-        posicao.loteId !== null,
-    ),
-  );
-  protected readonly selecionadoIneligivel = computed(() => {
-    const id = this.form.controls.loteId.value;
-    return this.lotes().find((lote) => lote.loteId === id && !lote.elegivel) ?? null;
-  });
-
   private readonly insumosService = inject(InsumosService);
   private readonly operacaoPendenteStore = inject(OperacaoPendenteStore);
   private readonly adminAuthService = inject(AdminAuthService);
@@ -221,14 +193,6 @@ export class AdminEntradaInsumoComponent {
     this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => {
       this.erroValidacao.set('');
     });
-
-    this.form.controls.tipo.valueChanges
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((tipo) => {
-        if (tipo === 'Aquisicao') {
-          this.form.controls.novoLoteBloqueado.setValue(false, { emitEvent: false });
-        }
-      });
 
     this.adminAuthService
       .getCurrentSession()
@@ -303,7 +267,6 @@ export class AdminEntradaInsumoComponent {
           this.detalhe.set(detalhe);
           this.form.controls.unidadeOriginal.setValue(detalhe.resumo.unidadeBase);
           this.form.controls.formaCompraId.setValue('');
-          this.form.controls.loteId.setValue('');
           this.atualizarQueryInsumo(insumoId);
         },
         error: (error: unknown) => this.tratarErroDetalhe(error),
@@ -337,13 +300,6 @@ export class AdminEntradaInsumoComponent {
       quantidadeOriginal: '',
       custoTotal: '',
       observacao: '',
-      formaLote: 'Novo',
-      loteId: '',
-      identificacaoNovoLote: '',
-      dataEntradaNovoLote: '',
-      dataValidadeNovoLote: '',
-      fornecedorNovoLote: '',
-      novoLoteBloqueado: false,
     });
     this.busca.setValue('', { emitEvent: false });
     this.paginaInsumos.set(1);
@@ -435,13 +391,6 @@ export class AdminEntradaInsumoComponent {
     this.enviarOperacaoPendente(retry);
   }
 
-  protected escolherLote(lote: AdminPosicaoEstoquePrecisa): void {
-    if (!lote.loteId || (this.form.controls.tipo.value === 'Aquisicao' && !lote.elegivel)) {
-      return;
-    }
-    this.form.controls.loteId.setValue(lote.loteId);
-  }
-
   protected unidadesDiretas(): UnidadeFisicaEstoque[] {
     const base = this.detalhe()?.resumo.unidadeBase;
     switch (base) {
@@ -475,21 +424,6 @@ export class AdminEntradaInsumoComponent {
     return tipo === 'EstoqueInicial' ? 'Estoque inicial' : 'Aquisição';
   }
 
-  protected rotuloSituacaoLote(posicao: AdminPosicaoEstoquePrecisa): string {
-    if (posicao.bloqueado) {
-      return 'Bloqueado';
-    }
-    return posicao.elegivel ? 'Elegível' : 'Vencido ou inelegível';
-  }
-
-  protected formatarDataCivil(value: string | null): string {
-    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return 'Não informada';
-    }
-    const [year, month, day] = value.split('-');
-    return `${day}/${month}/${year}`;
-  }
-
   protected equivalenciaForma(forma: AdminFormaCompraPrecisa): string {
     const decimal = forma.quantidadeEquivalentePorEmbalagemDecimal;
     return decimal
@@ -520,10 +454,6 @@ export class AdminEntradaInsumoComponent {
   protected exibirErroCampo(controlName: keyof EntradaControls): boolean {
     const control = this.form.controls[controlName];
     return control.invalid && control.touched;
-  }
-
-  protected lotePendente(loteId: string): boolean {
-    return this.form.controls.loteId.value === loteId;
   }
 
   protected saldoAtualizadoLabel(): string {
@@ -711,41 +641,6 @@ export class AdminEntradaInsumoComponent {
       return 'A observação deve ter no máximo 500 caracteres.';
     }
 
-    if (detalhe.resumo.controlaLote) {
-      if (this.form.controls.formaLote.value === 'Existente') {
-        const lote = this.lotes().find((item) => item.loteId === this.form.controls.loteId.value);
-        if (!lote) {
-          return 'Selecione um lote pertencente a este insumo.';
-        }
-        if (this.form.controls.tipo.value === 'Aquisicao' && !lote.elegivel) {
-          return 'Aquisições exigem lote elegível. Escolha um lote elegível ou registre estoque inicial quando permitido.';
-        }
-      } else {
-        const identificacao = this.form.controls.identificacaoNovoLote.value.trim();
-        if (!identificacao || identificacao.length > 100) {
-          return 'Informe a identificação do novo lote, com até 100 caracteres.';
-        }
-        if (!isCivilDate(this.form.controls.dataEntradaNovoLote.value)) {
-          return 'Informe a data de entrada do novo lote.';
-        }
-        const validity = this.form.controls.dataValidadeNovoLote.value;
-        if (detalhe.resumo.validadeObrigatoria && !isCivilDate(validity)) {
-          return 'Este insumo exige uma data de validade para cada novo lote.';
-        }
-        if (validity && !isCivilDate(validity)) {
-          return 'Informe uma data de validade válida.';
-        }
-        if (this.form.controls.fornecedorNovoLote.value.trim().length > 200) {
-          return 'O fornecedor deve ter no máximo 200 caracteres.';
-        }
-        if (
-          this.form.controls.tipo.value === 'Aquisicao' &&
-          this.form.controls.novoLoteBloqueado.value
-        ) {
-          return 'Uma aquisição não pode abrir um lote bloqueado.';
-        }
-      }
-    }
     return null;
   }
 
@@ -795,42 +690,22 @@ export class AdminEntradaInsumoComponent {
           ) ?? null)
         : null;
     const unit = formaQuantidade === 'Direta' ? this.form.controls.unidadeOriginal.value : null;
-    const formaLote = this.form.controls.formaLote.value;
-    const existingLot =
-      detail.resumo.controlaLote && formaLote === 'Existente'
-        ? (this.lotes().find((item) => item.loteId === this.form.controls.loteId.value) ?? null)
-        : null;
-    const isNewLot = detail.resumo.controlaLote && formaLote === 'Novo';
     const cost = this.form.controls.custoTotal.value.trim();
     const request: RegistrarEntradaInsumoRequest = {
       tipo: this.form.controls.tipo.value,
       quantidadeOriginal: original.text,
       unidadeOriginal: unit,
       formaCompraId: selectedForm?.id ?? null,
-      loteId: existingLot?.loteId ?? null,
-      identificacaoNovoLote: isNewLot
-        ? this.form.controls.identificacaoNovoLote.value.trim()
-        : null,
-      dataEntradaNovoLote: isNewLot ? this.form.controls.dataEntradaNovoLote.value : null,
-      dataValidadeNovoLote:
-        isNewLot && this.form.controls.dataValidadeNovoLote.value
-          ? this.form.controls.dataValidadeNovoLote.value
-          : null,
-      fornecedorNovoLote: isNewLot
-        ? this.form.controls.fornecedorNovoLote.value.trim() || null
-        : null,
-      novoLoteBloqueado:
-        isNewLot && this.form.controls.tipo.value === 'EstoqueInicial'
-          ? this.form.controls.novoLoteBloqueado.value
-          : false,
+      loteId: null,
+      identificacaoNovoLote: null,
+      dataEntradaNovoLote: null,
+      dataValidadeNovoLote: null,
+      fornecedorNovoLote: null,
+      novoLoteBloqueado: false,
+      semControleValidade: true,
       custoTotal: cost ? (parseDecimalText(cost)?.text ?? null) : null,
       observacao: this.form.controls.observacao.value.trim() || null,
     };
-    const lotLabel = existingLot
-      ? `${existingLot.identificacaoLote ?? 'Lote'} (${this.rotuloSituacaoLote(existingLot)})`
-      : isNewLot
-        ? this.form.controls.identificacaoNovoLote.value.trim()
-        : 'Não se aplica';
     const formaFactor = selectedForm?.quantidadeEquivalentePorEmbalagemDecimal ?? null;
     const originalLabel = selectedForm
       ? `${formatDecimalPtBr(original.text)} embalagem(ns)`
@@ -850,7 +725,6 @@ export class AdminEntradaInsumoComponent {
           selectedForm && formaFactor
             ? `${selectedForm.nome} (${formatDecimalPtBr(formaFactor)} ${this.rotuloUnidade(selectedForm.unidade)}/embalagem)`
             : null,
-        loteLabel: lotLabel,
         custoTotal: cost ? formatBrl(cost) : null,
         custoUnitarioEstimado: cost ? estimateCostPerBaseUnit(cost, baseQuantity) : null,
       },
@@ -983,18 +857,18 @@ export class AdminEntradaInsumoComponent {
   private mensagemErroEntrada(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 400) {
-        return 'Não foi possível registrar a entrada. Confira a quantidade, a unidade, o custo e os dados do lote.';
+        return 'Não foi possível registrar a entrada. Confira a quantidade, a unidade, o custo.';
       }
       if (error.status === 403) {
         return 'A entrada foi bloqueada por segurança ou falta de permissão. Os dados foram mantidos.';
       }
       if (error.status === 404) {
-        return 'O insumo ou lote não foi encontrado. Atualize os dados antes de tentar novamente.';
+        return 'O material não foi encontrado. Atualize os dados antes de tentar novamente.';
       }
       if (error.status === 409) {
         const detail = this.detalheErroApi(error).toLowerCase();
         if (detail.includes('inelegível') || detail.includes('elegível')) {
-          return 'Este lote não pode receber uma entrada. Confira a validade e o bloqueio ou selecione outro lote.';
+          return 'O estoque não aceitou a entrada. Atualize os dados e tente novamente.';
         }
         if (detail.includes('estoque inicial')) {
           return 'O estoque inicial só pode abrir uma posição sem saldo ou histórico. Para uma posição existente, registre uma aquisição.';
@@ -1034,19 +908,6 @@ export class AdminEntradaInsumoComponent {
   private criarChaveIdempotencia(): string | null {
     return this.operacaoPendenteStore.criarChaveIdempotencia();
   }
-}
-
-function isCivilDate(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-  const [year, month, day] = value.split('-').map(Number);
-  if (!year || !month || !day || month > 12) {
-    return false;
-  }
-  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
-  return day <= (daysInMonth ?? 0);
 }
 
 function removeDecimalZeroes(value: NonNullable<ReturnType<typeof parseDecimalText>>): string {

@@ -60,7 +60,7 @@ const resultado: ConclusaoProducao = {
   codigoLote: 'PA',
   movimentoEntradaId: 'm1',
   dataFabricacao: '2026-11-19',
-  dataValidade: '2026-12-19',
+  dataValidade: null,
   responsavelId: 'admin-teste',
   concluidaEmUtc: '2026-11-19T16:00:00Z',
   consumos: [
@@ -238,14 +238,14 @@ describe('Administração de produção', () => {
     const { api, root, clicar, preencher, atualizar, botao, consultarPolitica } = await montar();
     await clicar('Abrir ordem');
     await clicar('Concluir produção');
-    expect(consultarPolitica).toHaveBeenCalledWith('v1');
+    expect(consultarPolitica).not.toHaveBeenCalled();
+    expect(root.querySelector('input[type=date]')).toBeNull();
     expect(root.querySelector<HTMLInputElement>('[name=consumo-0]')?.value).toBe('8');
     expect(root.querySelector('label')?.textContent).toContain('Quantidade realmente produzida');
     expect(botao('Confirmar conclusão').disabled).toBe(true);
     await preencher('[name=produzida]', '3');
     await preencher('[name=consumo-0]', '5,123456');
     expect(root.textContent).toContain('2,876544 g');
-    expect(root.textContent).toContain('prazo padrão de 30 dias');
     (root.querySelector('[name=conferido]') as HTMLInputElement).click();
     await atualizar();
     const resposta = new Subject<ConclusaoProducao>();
@@ -257,7 +257,8 @@ describe('Administração de produção', () => {
       {
         versao: versaoId,
         quantidadeProduzida: 3,
-        dataFabricacao: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/),
+        dataFabricacao: null,
+        semControleValidade: true,
         dataValidade: null,
         consumos: [{ insumoId: material.insumoId, unidadeBase: 'Grama', quantidade: '5.123456' }],
       },
@@ -275,20 +276,16 @@ describe('Administração de produção', () => {
     expect(sessionStorage.getItem(storageKey)).toBeNull();
   });
 
-  it('exige validade manual quando não há prazo e rejeita excesso e precisão inválida', async () => {
+  it('permite concluir sem validade e rejeita excesso e precisão inválida', async () => {
     const { api, root, clicar, preencher, atualizar } = await montar(detalhe, false, null);
     await clicar('Abrir ordem');
     await clicar('Concluir produção');
-    expect(root.querySelector<HTMLInputElement>('[name=validade]')?.required).toBe(true);
+    expect(root.querySelector('[name=validade]')).toBeNull();
     await preencher('[name=produzida]', '3');
     const declarar = async () => {
       (root.querySelector('[name=conferido]') as HTMLInputElement).click();
       await atualizar();
     };
-    await declarar();
-    await clicar('Confirmar conclusão');
-    expect(api.concluir).not.toHaveBeenCalled();
-    await preencher('[name=validade]', '2026-12-19');
     for (const invalida of ['9', '0', '1.0000001']) {
       await preencher('[name=consumo-0]', invalida);
       expect(root.querySelector('[name=consumo-0]')?.getAttribute('aria-invalid')).toBe('true');
@@ -301,7 +298,8 @@ describe('Administração de produção', () => {
     api.obter.mockReturnValueOnce(of(concluida));
     await clicar('Confirmar conclusão');
     expect(api.concluir.mock.calls[0]?.[1] satisfies ConcluirProducao | undefined).toMatchObject({
-      dataValidade: '2026-12-19',
+      dataValidade: null,
+      semControleValidade: true,
       consumos: [{ quantidade: '8' }],
     });
   });

@@ -23,6 +23,9 @@ export function lerRecebimento(serializado: string | null): RecebimentoPendente 
       identificador(dado?.compraId) &&
       identificador(dado.chave) &&
       identificador(dado.corpo?.versao) &&
+      (dado.corpo.semControleValidade === undefined ||
+        typeof dado.corpo.semControleValidade === 'boolean') &&
+      (dado.corpo.semControleValidade !== true || dado.corpo.validades?.length === 0) &&
       Array.isArray(dado.corpo.validades) &&
       dado.corpo.validades.length <= 1500 &&
       dado.corpo.validades.every((v: unknown) => {

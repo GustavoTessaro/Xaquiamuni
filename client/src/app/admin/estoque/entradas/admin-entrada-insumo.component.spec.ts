@@ -177,72 +177,6 @@ describe('AdminEntradaInsumoComponent', () => {
     expect(api.registrarEntrada).not.toHaveBeenCalled();
   });
 
-  it('selects only an eligible existing lot for an acquisition', async () => {
-    const detail: AdminInsumoDetalhePreciso = {
-      ...detalheBase,
-      resumo: { ...resumoBase, controlaLote: true },
-      posicoes: [
-        {
-          loteId: 'lote-bloqueado',
-          identificacaoLote: 'Lote bloqueado',
-          fornecedor: null,
-          dataEntrada: '2026-01-01',
-          dataValidade: '2027-01-01',
-          bloqueado: true,
-          elegivel: false,
-          temRegistroSaldo: true,
-          versaoSaldo: 'AQID',
-          saldoFisico: '4',
-          saldoUtilizavel: '0',
-          saldoReservado: '0',
-          saldoDisponivel: '0',
-        },
-        {
-          loteId: 'lote-elegivel',
-          identificacaoLote: 'Lote elegível',
-          fornecedor: 'Fornecedor',
-          dataEntrada: '2026-01-02',
-          dataValidade: '2027-06-30',
-          bloqueado: false,
-          elegivel: true,
-          temRegistroSaldo: true,
-          versaoSaldo: 'BAUG',
-          saldoFisico: '10',
-          saldoUtilizavel: '10',
-          saldoReservado: '0',
-          saldoDisponivel: '10',
-        },
-      ],
-    };
-    const api = criarApi(detail);
-    const harness = await renderEntry(api);
-    const root = harness.routeNativeElement!;
-    setRadio(harness, 'Existente');
-    const blockedOption = root.querySelector<HTMLOptionElement>(
-      '#stock-entry-lot option[value="lote-bloqueado"]',
-    );
-    expect(blockedOption?.disabled).toBe(true);
-    expect(blockedOption?.textContent).toContain('Validade 01/01/2027');
-    expect(blockedOption?.textContent).toContain('Bloqueado');
-    expect(blockedOption?.textContent).toContain('4 g');
-    expect(blockedOption?.textContent).toContain('Lote bloqueado');
-    const lotCard = root.querySelector<HTMLElement>('li details');
-    expect(lotCard?.querySelector('summary')?.textContent).toContain(
-      'Código do lote (rastreabilidade)',
-    );
-    expect(lotCard?.querySelector('code')?.textContent).toContain('Lote bloqueado');
-
-    setSelect(harness, '#stock-entry-lot', 'lote-elegivel');
-    setInput(harness, '#stock-entry-quantity', '5');
-    click(harness, 'button[type="submit"]');
-    clickText(harness, 'Confirmar entrada');
-    expect(api.registrarEntrada.mock.calls[0]?.[1]).toMatchObject({
-      loteId: 'lote-elegivel',
-      identificacaoNovoLote: null,
-      dataEntradaNovoLote: null,
-    });
-  });
-
   it('rejects fractional quantities for indivisible base units', async () => {
     const detail: AdminInsumoDetalhePreciso = {
       ...detalheBase,
@@ -259,31 +193,21 @@ describe('AdminEntradaInsumoComponent', () => {
     expect(api.registrarEntrada).not.toHaveBeenCalled();
   });
 
-  it('requires configured lot validity and preserves civil dates in the request', async () => {
-    const detail: AdminInsumoDetalhePreciso = {
+  it('registers stock without dates or lot selection for a historical supply', async () => {
+    const api = criarApi({
       ...detalheBase,
       resumo: { ...resumoBase, controlaLote: true, validadeObrigatoria: true },
-    };
-    const api = criarApi(detail);
+    });
     const harness = await renderEntry(api);
     const root = harness.routeNativeElement!;
-
-    setInput(harness, '#stock-entry-quantity', '250');
-    setInput(harness, '#stock-entry-lot-name', 'Lote-2026-01');
-    setInput(harness, '#stock-entry-lot-date', '2026-02-01');
+    expect(root.querySelector('input[type=date], #stock-entry-lot')).toBeNull();
+    setInput(harness, '#stock-entry-quantity', '5');
     click(harness, 'button[type="submit"]');
-    expect(root.textContent).toContain('exige uma data de validade');
-    expect(root.textContent).not.toContain('Revise a entrada antes de registrar');
-
-    setInput(harness, '#stock-entry-lot-expiry', '2028-02-29');
-    click(harness, 'button[type="submit"]');
-    expect(root.textContent).toContain('Revise a entrada antes de registrar');
     clickText(harness, 'Confirmar entrada');
-    const request = api.registrarEntrada.mock.calls[0]?.[1] as RegistrarEntradaInsumoRequest;
-    expect(request).toMatchObject({
-      identificacaoNovoLote: 'Lote-2026-01',
-      dataEntradaNovoLote: '2026-02-01',
-      dataValidadeNovoLote: '2028-02-29',
+    expect(api.registrarEntrada.mock.calls[0]?.[1]).toMatchObject({
+      loteId: null,
+      dataValidadeNovoLote: null,
+      semControleValidade: true,
     });
   });
 

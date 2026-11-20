@@ -15,6 +15,7 @@ import { AdminInsumoFormComponent } from './admin-insumo-form.component';
 
 describe('AdminInsumoFormComponent', () => {
   let fixture: ComponentFixture<AdminInsumoFormComponent>;
+  let apresentacoes: boolean;
   let routeId: string | null;
   let obter: ReturnType<typeof vi.fn<InsumosService['obter']>>;
   let criar: ReturnType<typeof vi.fn<InsumosService['criar']>>;
@@ -51,6 +52,7 @@ describe('AdminInsumoFormComponent', () => {
 
   beforeEach(async () => {
     routeId = null;
+    apresentacoes = false;
     obter = vi.fn<InsumosService['obter']>().mockReturnValue(of(detalhe));
     criar = vi.fn<InsumosService['criar']>().mockReturnValue(of(detalhe));
     editar = vi.fn<InsumosService['editar']>().mockReturnValue(of(detalhe));
@@ -67,6 +69,7 @@ describe('AdminInsumoFormComponent', () => {
           provide: ActivatedRoute,
           useFactory: () => ({
             snapshot: {
+              data: { apresentacoes },
               paramMap: { get: (name: string) => (name === 'id' ? routeId : null) },
             },
           }),
@@ -156,7 +159,7 @@ describe('AdminInsumoFormComponent', () => {
     });
   });
 
-  it('requires lot control for validity and leaves the base unit unchanged during edits', () => {
+  it('preserves historical policy and base unit without exposing lot controls', () => {
     routeId = 'insumo-1';
     const item = {
       ...detalhe,
@@ -178,23 +181,21 @@ describe('AdminInsumoFormComponent', () => {
     expect((root().querySelector('#stock-supply-base-unit') as HTMLSelectElement).disabled).toBe(
       true,
     );
-    expect(
-      (root().querySelector('input[formControlName="validadeObrigatoria"]') as HTMLInputElement)
-        .disabled,
-    ).toBe(false);
-
-    setCheckbox('input[formControlName="controlaLote"]', false);
-    expect(
-      (root().querySelector('input[formControlName="validadeObrigatoria"]') as HTMLInputElement)
-        .checked,
-    ).toBe(false);
-    expect(
-      (root().querySelector('input[formControlName="validadeObrigatoria"]') as HTMLInputElement)
-        .disabled,
-    ).toBe(true);
+    expect(root().querySelector('[formControlName="controlaLote"]')).toBeNull();
+    expect(root().querySelector('[formControlName="validadeObrigatoria"]')).toBeNull();
+    expect(text()).not.toContain('Apresentações de compra');
+    setField('stock-supply-name', 'Material revisto');
+    clickButton('Salvar alterações');
+    expect(editar).toHaveBeenCalledWith(
+      'insumo-1',
+      expect.objectContaining({
+        controlaLote: true,
+        validadeObrigatoria: true,
+      }),
+    );
   });
 
-  it('explains protected policy conflicts and preserves the edited values', () => {
+  it('explains concurrent changes and preserves the edited values', () => {
     routeId = 'insumo-1';
     editar.mockReturnValue(
       throwError(
@@ -208,18 +209,16 @@ describe('AdminInsumoFormComponent', () => {
     render();
 
     setField('stock-supply-name', 'Base revisada');
-    setCheckbox('input[formControlName="controlaLote"]', true);
-    setCheckbox('input[formControlName="validadeObrigatoria"]', true);
     clickButton('Salvar alterações');
 
     expect(editar).toHaveBeenCalledWith('insumo-1', {
       nome: 'Base revisada',
       tipo: 'MateriaPrima',
       estoqueMinimo: null,
-      controlaLote: true,
-      validadeObrigatoria: true,
+      controlaLote: false,
+      validadeObrigatoria: false,
     });
-    expect(text()).toContain('já possui lotes, saldos ou movimentações');
+    expect(text()).toContain('o cadastro pode ter sido alterado em outra operação');
     expect(text()).not.toContain('SQL or persistence details');
     expect((root().querySelector('#stock-supply-name') as HTMLInputElement).value).toBe(
       'Base revisada',
@@ -228,6 +227,7 @@ describe('AdminInsumoFormComponent', () => {
 
   it('converts purchase packaging into the canonical base unit and keeps whole units integral', () => {
     routeId = 'insumo-1';
+    apresentacoes = true;
     render();
     clickButton('Nova forma de compra');
     setField('purchase-form-name', 'Pacote de 500 g');
@@ -278,6 +278,7 @@ describe('AdminInsumoFormComponent', () => {
       resumo: { ...resumo, unidadeBase: 'Unidade' },
     };
     routeId = 'insumo-1';
+    apresentacoes = true;
     obter.mockReturnValue(of(integerDetail));
     fixture.destroy();
     render();
@@ -292,6 +293,7 @@ describe('AdminInsumoFormComponent', () => {
 
   it('edits and inactivates a purchase form through the dedicated API operations', () => {
     routeId = 'insumo-1';
+    apresentacoes = true;
     const form: AdminFormaCompra = {
       id: 'forma-1',
       nome: 'Pacote de 500 g',
@@ -374,13 +376,6 @@ describe('AdminInsumoFormComponent', () => {
     const select = root().querySelector(`#${id}`) as HTMLSelectElement;
     select.value = value;
     select.dispatchEvent(new Event('change', { bubbles: true }));
-    fixture.detectChanges();
-  }
-
-  function setCheckbox(selector: string, checked: boolean): void {
-    const checkbox = root().querySelector(selector) as HTMLInputElement;
-    checkbox.checked = checked;
-    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
     fixture.detectChanges();
   }
 

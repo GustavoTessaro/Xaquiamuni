@@ -358,23 +358,18 @@ describe('Compras de matérias-primas', () => {
     expect(compras.salvar).not.toHaveBeenCalled();
   });
 
-  it('revisa kit e material, valida datas e evita confirmação duplicada', async () => {
-    const { root, compras, clicar, preencher } = await montar(rascunho);
+  it('revisa kit e material, dispensa validade e evita confirmação duplicada', async () => {
+    const { root, compras, clicar } = await montar(rascunho);
     await clicar('Abrir compra');
     await clicar('Confirmar recebimento');
     expect(root.textContent).toContain('Ervas juntas');
     expect(root.textContent).toContain('Valor do kit: R$ 10,00');
     expect(root.textContent).toMatch(/Alecrim\s+3 g/);
-    expect(root.querySelectorAll('input[type=date]')).toHaveLength(2);
-    expect(
-      root.querySelector('input[type=date][required]')?.closest('label')?.textContent,
-    ).toContain('Extrato');
+    expect(root.querySelectorAll('input[type=date]')).toHaveLength(0);
     const botao = () =>
       [...root.querySelectorAll('button')].find(
         (b) => b.textContent.trim() === 'Confirmar e atualizar estoque',
       )!;
-    expect(botao().disabled).toBe(true);
-    await preencher('input[type=date][required]', '2026-12-20');
     expect(botao().disabled).toBe(false);
 
     const resposta = new Subject<RecebimentoCompra>();
@@ -387,7 +382,8 @@ describe('Compras de matérias-primas', () => {
       compraId,
       {
         versao,
-        validades: [{ componenteId, dataValidade: '2026-12-20' }],
+        validades: [],
+        semControleValidade: true,
       },
       expect.stringMatching(/^[0-9a-f-]{36}$/),
     );
@@ -424,7 +420,6 @@ describe('Compras de matérias-primas', () => {
       const { root, compras, clicar, preencher } = await montar(rascunho);
       await clicar('Abrir compra');
       await clicar('Confirmar recebimento');
-      await preencher('input[type=date][required]', '2026-12-20');
       const mensagem =
         status === 400
           ? 'Validade inválida'
@@ -458,7 +453,6 @@ describe('Compras de matérias-primas', () => {
     const { root, compras, clicar, preencher } = await montar(rascunho);
     await clicar('Abrir compra');
     await clicar('Confirmar recebimento');
-    await preencher('input[type=date][required]', '2026-12-20');
     compras.receber.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
     await clicar('Confirmar e atualizar estoque');
     const [, corpo, chave] = compras.receber.mock.calls[0] as unknown as [string, object, string];
@@ -480,7 +474,7 @@ describe('Compras de matérias-primas', () => {
         expect(root.textContent).toContain('O estoque foi atualizado.');
         expect(sessionStorage.getItem(storageKey)).toBeNull();
       } else {
-        expect(root.textContent).toContain('20/12/2026');
+        expect(root.querySelector('input[type=date]')).toBeNull();
         await clicar('Reenviar tentativa');
         expect(compras.receber).toHaveBeenCalledExactlyOnceWith(compraId, corpo, chave);
       }

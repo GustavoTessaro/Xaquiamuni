@@ -108,18 +108,11 @@ export class AdminProdutosAcabadosComponent {
     tipo: new FormControl<'EstoqueInicial' | 'EntradaManual'>('EntradaManual', {
       nonNullable: true,
     }),
-    loteId: new FormControl('', { nonNullable: true }),
-    novoLote: new FormControl(true, { nonNullable: true }),
     quantidade: new FormControl<number | null>(null, [
       Validators.required,
       Validators.min(1),
       Validators.pattern(/^\d+$/),
     ]),
-    condicaoDestino: new FormControl<CondicaoEstoqueProdutoAcabado>('Vendavel', {
-      nonNullable: true,
-    }),
-    dataFabricacao: new FormControl('', { nonNullable: true }),
-    dataValidade: new FormControl('', { nonNullable: true }),
     motivo: new FormControl('', {
       nonNullable: true,
       validators: [Validators.required, Validators.maxLength(120)],
@@ -508,37 +501,15 @@ export class AdminProdutosAcabadosComponent {
     }
 
     const value = this.entradaForm.getRawValue();
-    if (
-      !this.validarDataCivil(value.dataFabricacao) ||
-      (value.dataValidade && !this.validarDataCivil(value.dataValidade)) ||
-      (value.dataValidade && value.dataFabricacao && value.dataValidade < value.dataFabricacao)
-    ) {
-      this.erroMovimentacao.set(
-        'Informe datas civis válidas e mantenha a validade igual ou posterior à fabricação.',
-      );
-      return;
-    }
-
-    if (!value.novoLote && !value.loteId) {
-      this.erroMovimentacao.set('Selecione um lote existente ou escolha criar um novo lote.');
-      return;
-    }
-    if (value.novoLote && !value.dataFabricacao) {
-      this.erroMovimentacao.set('A data de fabricação é obrigatória para criar um novo lote.');
-      return;
-    }
-
     const request = {
       tipo: value.tipo,
       quantidade: value.quantidade!,
-      condicaoDestino: value.condicaoDestino,
-      loteId: value.novoLote ? null : value.loteId,
-      dataFabricacao: value.novoLote ? value.dataFabricacao : null,
-      dataValidade: value.novoLote && value.dataValidade ? value.dataValidade : null,
+      condicaoDestino: 'Vendavel' as const,
+      semControleValidade: true,
       motivo: value.motivo.trim(),
       observacao: value.observacao.trim() || null,
     };
-    this.executarMovimentacao('entrada', request, (idempotencyKey) =>
+    this.executarMovimentacao('entrada-sem-validade', request, (idempotencyKey) =>
       this.produtosAcabadosService.registrarEntrada(varianteId, request, idempotencyKey),
     );
   }
@@ -950,6 +921,10 @@ export class AdminProdutosAcabadosComponent {
       return null;
     }
 
+    if (acao === 'entrada-sem-validade' && !this.conferirEntradasLegadas(atorId, varianteId)) {
+      return null;
+    }
+
     const fingerprint = await this.operacaoPendenteStore.calcularFingerprint(payload);
     const storageKey = this.chaveArmazenamentoOperacao(atorId, varianteId, acao, fingerprint);
     let raw: string | null;
@@ -1023,6 +998,27 @@ export class AdminProdutosAcabadosComponent {
       return null;
     }
     return { operacao, storageKey };
+  }
+
+  private conferirEntradasLegadas(atorId: string, varianteId: string): boolean {
+    const prefixo = this.chaveArmazenamentoOperacao(atorId, varianteId, 'entrada', '');
+    const legadas = this.operacaoPendenteStore.listarChaves(prefixo);
+    if (legadas.length === 0) return true;
+
+    if (
+      !globalThis.confirm(
+        'Existe uma entrada antiga com resultado incerto. Confira no histórico se ela foi registrada. ' +
+          'Deseja descartar o registro local da tentativa anterior e prosseguir com uma nova entrada?',
+      )
+    ) {
+      this.erroMovimentacao.set('Confira a entrada anterior no histórico antes de continuar.');
+      return false;
+    }
+    if (!legadas.every((chave) => this.operacaoPendenteStore.remover(chave))) {
+      this.erroMovimentacao.set('O navegador não permitiu limpar a tentativa anterior.');
+      return false;
+    }
+    return true;
   }
 
   private chaveArmazenamentoOperacao(
@@ -1102,17 +1098,6 @@ export class AdminProdutosAcabadosComponent {
         'Movimentação registrada. Não foi possível limpar a tentativa salva no navegador; confira o histórico antes de repetir qualquer operação.',
       );
     }
-  }
-
-  private validarDataCivil(value: string): boolean {
-    if (!value) {
-      return true;
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-      return false;
-    }
-    const date = new Date(`${value}T00:00:00Z`);
-    return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
   }
 
   private mensagemErroMovimentacao(error: unknown, acao: string): string {
@@ -1302,14 +1287,15 @@ export class AdminProdutosAcabadosComponent {
   }
 
   protected rotuloValidade(lote: LoteProdutoAcabado): string {
+    if (lote.dataValidade === null) return 'Sem validade';
     if (!lote.valido) {
       return 'Vencido';
     }
     return 'Válido';
   }
 
-  protected formatarDataCivil(value: string): string {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  protected formatarDataCivil(value: string | null): string {
+    if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       return 'Não informada';
     }
     const [year, month, day] = value.split('-');

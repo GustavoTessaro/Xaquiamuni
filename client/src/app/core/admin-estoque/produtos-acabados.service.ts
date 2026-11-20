@@ -33,7 +33,7 @@ export interface LoteProdutoAcabado {
   loteId: string;
   codigo: string;
   dataFabricacao: string;
-  dataValidade: string;
+  dataValidade: string | null;
   origemValidade: 'PrazoPadrao' | 'InformadaManualmente';
   prazoValidadeAplicadoDias: number | null;
   valido: boolean;
@@ -99,6 +99,7 @@ export interface MovimentoProdutoAcabadoFiltro {
 }
 
 export interface EntradaProdutoAcabadoRequest {
+  semControleValidade?: boolean;
   tipo: 'EstoqueInicial' | 'EntradaManual';
   quantidade: number;
   condicaoDestino: CondicaoEstoqueProdutoAcabado;

@@ -117,7 +117,9 @@ const formaFactor: ValidatorFn = (control): ValidationErrors | null => {
   templateUrl: './admin-insumo-form.component.html',
 })
 export class AdminInsumoFormComponent {
-  protected readonly insumoId = inject(ActivatedRoute).snapshot.paramMap.get('id');
+  private readonly rota = inject(ActivatedRoute).snapshot;
+  protected readonly insumoId = this.rota.paramMap.get('id');
+  protected readonly apresentacoes = this.rota.data?.['apresentacoes'] === true;
   protected readonly editando = this.insumoId !== null;
   protected readonly detalhe = signal<AdminInsumoDetalhe | null>(null);
   protected readonly carregando = signal(false);
@@ -132,7 +134,9 @@ export class AdminInsumoFormComponent {
   protected readonly erroForma = signal('');
   protected readonly mensagemForma = signal('');
   protected readonly formasEmAtualizacao = signal<ReadonlySet<string>>(new Set());
-  protected readonly titulo = computed(() => (this.editando ? 'Detalhe do material' : 'Novo material'));
+  protected readonly titulo = computed(() =>
+    this.editando ? 'Detalhe do material' : 'Novo material',
+  );
 
   protected readonly form = new FormGroup<InsumoControls>(
     {
