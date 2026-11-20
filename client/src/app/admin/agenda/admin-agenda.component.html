@@ -15,20 +15,30 @@
       <section class="cartao" aria-labelledby="agenda-tentativa">
         <h2 id="agenda-tentativa">Tentativa pendente</h2>
         @if (pendente) {
-          <p>
-            {{
-              tentativaAusente
-                ? 'O servidor ainda não encontrou a tentativa. Você pode reenviar a mesma operação.'
-                : 'Consulte o servidor antes de tentar novamente.'
-            }}
-          </p>
+          @if (conflitoConfirmado) {
+            <p>O compromisso mudou ou foi excluído. Recarregue para consultar a situação atual.</p>
+          } @else {
+            <p>
+              {{
+                tentativaAusente
+                  ? 'O servidor ainda não encontrou a tentativa. Você pode reenviar a mesma operação.'
+                  : 'Consulte o servidor antes de tentar novamente.'
+              }}
+            </p>
+          }
           <div class="acoes">
             <button type="button" (click)="conferir()" [disabled]="ocupado">
               Conferir tentativa
             </button>
-            <button type="button" (click)="reenviar()" [disabled]="ocupado || !tentativaAusente">
-              Reenviar tentativa
-            </button>
+            @if (conflitoConfirmado) {
+              <button type="button" (click)="recarregarConflito()" [disabled]="ocupado">
+                Recarregar compromisso
+              </button>
+            } @else {
+              <button type="button" (click)="reenviar()" [disabled]="ocupado || !tentativaAusente">
+                Reenviar tentativa
+              </button>
+            }
           </div>
         } @else {
           <p>Os dados originais da tentativa não estão disponíveis. O reenvio foi bloqueado.</p>

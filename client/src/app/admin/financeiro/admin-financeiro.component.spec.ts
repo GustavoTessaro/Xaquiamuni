@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { Subject, of, throwError } from 'rxjs';
+import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angular/router';
+import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { ComprasMateriasPrimasService } from '../../core/compras-materias-primas.service';
 import {
@@ -52,7 +52,12 @@ describe('AdminFinanceiroComponent', () => {
     pagamentos: vi.fn(),
     enviar: vi.fn(),
   };
-  const rota = { snapshot: { queryParamMap: convertToParamMap({}) } };
+  const params = new BehaviorSubject(convertToParamMap({}));
+  const rota = { queryParamMap: params, snapshot: { queryParamMap: params.value } };
+  function simularUrl(compra: string | null) {
+    rota.snapshot.queryParamMap = convertToParamMap(compra ? { compra } : {});
+    params.next(rota.snapshot.queryParamMap);
+  }
   const sessao = { userId: 'admin' };
   const movimento = { valorCentavos: '2500', meio: 'Pix', data: '2026-11-20' };
   const comandos = {
@@ -76,7 +81,7 @@ describe('AdminFinanceiroComponent', () => {
     api.consultarTentativa.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 404 })),
     );
-    rota.snapshot.queryParamMap = convertToParamMap({});
+    simularUrl(null);
     api.lancamentos.mockReturnValue(of([lancamento]));
     api.lancamento.mockReturnValue(of(lancamento));
     api.compra.mockReturnValue(of(compra));
@@ -157,7 +162,7 @@ describe('AdminFinanceiroComponent', () => {
     await atualizar();
   }
   function abrirDireto() {
-    rota.snapshot.queryParamMap = convertToParamMap({ compra: id });
+    simularUrl(id);
   }
   function texto() {
     return fixture.nativeElement.textContent as string;
@@ -204,11 +209,70 @@ describe('AdminFinanceiroComponent', () => {
     expect(texto()).toContain('duas casas decimais');
   });
 
+  it('atualiza o histórico após criar um lançamento mantendo o filtro aplicado', async () => {
+    await render(false);
+    await clicar('Movimentações');
+    await campo('tipo', 'Entrada');
+    await clicar('Aplicar filtros');
+    await clicar('Lançamentos');
+    await preencher();
+    await campo('valor', '12,34');
+    await clicar('Confirmar');
+    expect(api.movimentacoes).toHaveBeenCalledTimes(2);
+    await clicar('Movimentações');
+    expect(api.movimentacoes).toHaveBeenCalledTimes(3);
+    expect(api.movimentacoes).toHaveBeenLastCalledWith(
+      expect.objectContaining({ tipo: 'Entrada' }),
+      1,
+    );
+    await clicar('Visão geral');
+    expect(api.resumo).toHaveBeenCalledTimes(2);
+  });
+
+  it('atualiza os indicadores após confirmar uma escrita cuja resposta foi perdida', async () => {
+    await render(false);
+    expect(api.resumo).toHaveBeenCalledOnce();
+    await clicar('Lançamentos');
+    await preencher();
+    await campo('valor', '12,34');
+    api.enviar.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })));
+    await clicar('Confirmar');
+    api.consultarTentativa.mockReturnValueOnce(
+      of({ operacao: 'criar', recursoId: id, resultado: lancamento }),
+    );
+    await clicar('Conferir estado');
+    expect(api.enviar).toHaveBeenCalledOnce();
+    expect(api.resumo).toHaveBeenCalledOnce();
+    await clicar('Visão geral');
+    expect(api.resumo).toHaveBeenCalledTimes(2);
+  });
+
+  it('sincroniza compras selecionadas com o histórico de navegação e limpa a URL ao sair', async () => {
+    const outro = '22222222-2222-4222-8222-222222222222';
+    const navegar = vi.spyOn(TestBed.inject(Router), 'navigate').mockResolvedValue(true);
+    abrirDireto();
+    await render(false);
+    expect(api.compra).toHaveBeenLastCalledWith(id);
+    simularUrl(outro);
+    await atualizar();
+    expect(api.compra).toHaveBeenLastCalledWith(outro);
+    simularUrl(id);
+    await atualizar();
+    expect(api.compra).toHaveBeenLastCalledWith(id);
+    await clicar('Movimentações');
+    expect(navegar).toHaveBeenLastCalledWith(
+      [],
+      expect.objectContaining({ queryParams: { compra: null } }),
+    );
+  });
+
   it('exige motivo e confirmação para cancelar', async () => {
     api.enviar.mockReturnValue(
       of({ ...lancamento, canceladoEmUtc: lancamento.criadoEmUtc, motivoCancelamento: 'Correção' }),
     );
-    await render();
+    await render(false);
+    await clicar('Movimentações');
+    await clicar('Lançamentos');
     await clicar('Ver detalhe');
     await clicar('Cancelar lançamento');
     await campo('motivo', 'Correção');
@@ -222,6 +286,8 @@ describe('AdminFinanceiroComponent', () => {
       expect.objectContaining({ tipo: 'cancelar', id, corpo: { motivo: 'Correção' } }),
     );
     expect(texto()).toContain('Cancelado');
+    await clicar('Movimentações');
+    expect(api.movimentacoes).toHaveBeenCalledTimes(2);
   });
 
   it('seleciona uma compra existente e mostra a obrigação pendente', async () => {
@@ -242,8 +308,10 @@ describe('AdminFinanceiroComponent', () => {
   ] as const)(
     'mostra compra %s e atualiza o histórico',
     async (situacaoFinanceira, rotulo, pagoCentavos, saldoCentavos) => {
-      abrirDireto();
-      await render();
+      await render(false);
+      await clicar('Movimentações');
+      simularUrl(id);
+      await atualizar();
       await clicar('Registrar pagamento');
       if (situacaoFinanceira === 'Quitada') await clicar('Usar saldo total');
       else await campo('valor', '25,00');
@@ -272,6 +340,8 @@ describe('AdminFinanceiroComponent', () => {
       expect(texto()).toContain(rotulo);
       expect(texto()).toContain('Recibo');
       expect(!!botao('Registrar pagamento')).toBe(situacaoFinanceira === 'Parcial');
+      await clicar('Movimentações');
+      expect(api.movimentacoes).toHaveBeenCalledTimes(2);
     },
   );
 

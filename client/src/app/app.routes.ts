@@ -140,6 +140,11 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/vendas-externas/:id',
+    loadComponent: () => import('./admin/vendas-externas/admin-vendas-externas.component').then(m => m.AdminVendasExternasComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/vendas-externas',
     loadComponent: () => import('./admin/vendas-externas/admin-vendas-externas.component').then(m => m.AdminVendasExternasComponent),
     canActivate: [adminAuthGuard],

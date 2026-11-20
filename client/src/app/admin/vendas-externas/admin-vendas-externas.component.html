@@ -500,6 +500,17 @@
           Voltar à lista
         </button>
       </article>
+    } @else if (idDaRota(); as id) {
+      @if (erro() && !pendente()) {
+        <div class="flex flex-wrap gap-3">
+          <button type="button" (click)="abrir(id)" class="min-h-11 underline">
+            Tentar novamente
+          </button>
+          <a routerLink="/admin/vendas-externas" class="inline-flex min-h-11 items-center underline"
+            >Voltar à lista</a
+          >
+        </div>
+      }
     } @else if (!pendente() && !armazenamentoInvalido()) {
       <fieldset [disabled]="ocupado() || !sessao()" class="grid min-w-0 gap-3 sm:grid-cols-2">
         <label class="grid gap-1"

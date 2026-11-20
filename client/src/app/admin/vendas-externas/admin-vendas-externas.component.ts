@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Observable, catchError, finalize, of, switchMap, tap } from 'rxjs';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { OperacaoPendenteStore } from '../../core/admin-estoque/operacao-pendente.store';
@@ -56,6 +56,7 @@ export class AdminVendasExternasComponent {
   private readonly estoque = inject(ProdutosAcabadosService);
   private readonly produtos = inject(ProdutosService);
   private readonly storage = inject(OperacaoPendenteStore);
+  private readonly rota = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly destroy = inject(DestroyRef);
   private chaveStorage = '';
@@ -151,7 +152,13 @@ export class AdminVendasExternasComponent {
             this.armazenamentoInvalido.set(true);
           }
           if (this.pendente()) this.conferir();
-          else this.carregar();
+          else
+            this.rota.paramMap.pipe(takeUntilDestroyed(this.destroy)).subscribe((params) => {
+              const id = params.get('id');
+              this.detalhe.set(null);
+              if (id) this.abrir(id);
+              else this.carregar();
+            });
         },
         error: (erro) => this.erro.set(this.mensagem(erro, 'Não foi possível confirmar a sessão.')),
       });
@@ -173,7 +180,15 @@ export class AdminVendasExternasComponent {
     this.executar(this.api.detalhe(id), (venda) => this.mostrar(venda));
   }
 
+  protected idDaRota(): string | null {
+    return this.rota.snapshot.paramMap.get('id');
+  }
+
   protected voltar(): void {
+    if (this.rota.snapshot.paramMap.get('id')) {
+      void this.router.navigate(['/admin/vendas-externas']);
+      return;
+    }
     this.detalhe.set(null);
     this.nova.set(false);
     this.acao = null;

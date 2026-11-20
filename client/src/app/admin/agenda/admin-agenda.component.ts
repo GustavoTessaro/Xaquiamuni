@@ -115,6 +115,8 @@ export class AdminAgendaComponent {
   protected sucesso = '';
   protected pendente: TentativaAgenda | null = null;
   protected tentativaAusente = false;
+  protected reenvioEmConflito = false;
+  protected conflitoConfirmado = false;
   protected semPayload = false;
   protected confirmarDescarte = false;
 
@@ -202,18 +204,20 @@ export class AdminAgendaComponent {
   }
 
   protected abrir(id: string, modo: 'editar' | 'ver' | 'excluir'): void {
-    this.executar(this.api.obter(id), (item) => {
-      this.atual = item;
-      this.modo = modo;
-      this.conflito = false;
-      this.titulo = item.titulo;
-      this.descricao = item.descricao ?? '';
-      this.categoria = item.categoria ?? '';
-      this.data = item.data;
-      this.inicio = item.horarioInicial?.slice(0, 5) ?? '';
-      this.fim = item.horarioFinal?.slice(0, 5) ?? '';
-      this.focarEditor();
-    });
+    this.executar(this.api.obter(id), (item) => this.mostrar(item, modo));
+  }
+
+  private mostrar(item: Compromisso, modo: 'editar' | 'ver' | 'excluir'): void {
+    this.atual = item;
+    this.modo = modo;
+    this.conflito = false;
+    this.titulo = item.titulo;
+    this.descricao = item.descricao ?? '';
+    this.categoria = item.categoria ?? '';
+    this.data = item.data;
+    this.inicio = item.horarioInicial?.slice(0, 5) ?? '';
+    this.fim = item.horarioFinal?.slice(0, 5) ?? '';
+    this.focarEditor();
   }
 
   protected salvar(): void {
@@ -281,7 +285,7 @@ export class AdminAgendaComponent {
   protected conferir(): void {
     const tentativa = this.pendente;
     if (!tentativa || this.ocupado) return;
-    this.tentativaAusente = false;
+    this.tentativaAusente = this.conflitoConfirmado = false;
     this.executar(
       this.api.tentativa(tentativa.chave),
       (resposta) => {
@@ -297,7 +301,44 @@ export class AdminAgendaComponent {
       (erro) => {
         if (erro instanceof HttpErrorResponse && erro.status === 404) {
           this.erro = '';
-          this.tentativaAusente = true;
+          if (tentativa.operacao === 'criar') {
+            this.tentativaAusente = !this.reenvioEmConflito;
+            if (this.reenvioEmConflito)
+              this.erro =
+                'O reenvio entrou em conflito. Confira a agenda antes de descartar a tentativa.';
+          } else {
+            const versao =
+              tentativa.operacao === 'editar' ? tentativa.corpo.versao : tentativa.versao;
+            this.executar(
+              this.api.obter(tentativa.id),
+              (item) => {
+                this.conflitoConfirmado = this.reenvioEmConflito || item.versao !== versao;
+                this.tentativaAusente = !this.conflitoConfirmado;
+              },
+              (falha) => {
+                if (falha instanceof HttpErrorResponse && falha.status === 404)
+                  this.conflitoConfirmado = true;
+              },
+            );
+          }
+        }
+      },
+    );
+  }
+
+  protected recarregarConflito(): void {
+    const tentativa = this.pendente;
+    if (!this.conflitoConfirmado || !tentativa || tentativa.operacao === 'criar') return;
+    this.executar(
+      this.api.obter(tentativa.id),
+      (item) => {
+        if (this.limpar()) this.mostrar(item, tentativa.operacao === 'editar' ? 'editar' : 'ver');
+      },
+      (erro) => {
+        if (erro instanceof HttpErrorResponse && erro.status === 404 && this.limpar()) {
+          this.modo = null;
+          this.atual = null;
+          this.erro = 'O compromisso já foi excluído em outra sessão.';
           this.carregar(true);
         }
       },
@@ -351,6 +392,11 @@ export class AdminAgendaComponent {
       this.api.enviar(tentativa),
       (item) => this.concluir(item, tentativa.operacao),
       (erro) => {
+        if (reenvio && erro instanceof HttpErrorResponse && [404, 409].includes(erro.status)) {
+          this.reenvioEmConflito = true;
+          this.conferir();
+          return;
+        }
         if (
           !reenvio &&
           erro instanceof HttpErrorResponse &&
@@ -381,6 +427,7 @@ export class AdminAgendaComponent {
       return false;
     }
     this.pendente = null;
+    this.reenvioEmConflito = this.conflitoConfirmado = false;
     this.semPayload = this.tentativaAusente = this.confirmarDescarte = false;
     return true;
   }

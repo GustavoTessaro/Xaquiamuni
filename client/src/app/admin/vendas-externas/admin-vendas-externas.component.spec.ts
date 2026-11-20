@@ -1,7 +1,9 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { provideRouter } from '@angular/router';
+import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
 import { Subject, of, throwError } from 'rxjs';
+import { routes } from '../../app.routes';
+import { adminAuthGuard } from '../admin-auth.guard';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
 import { ProdutosService } from '../../core/admin-produtos/produtos.service';
 import { ProdutosAcabadosService } from '../../core/admin-estoque/produtos-acabados.service';
@@ -47,7 +49,9 @@ describe('AdminVendasExternasComponent', () => {
     tentativa: vi.fn(),
     enviar: vi.fn(),
   };
+  let idDireto: string | undefined;
   beforeEach(() => {
+    idDireto = undefined;
     sessionStorage.removeItem(storageKey);
     vi.resetAllMocks();
     api.listar.mockReturnValue(of([venda.resumo]));
@@ -57,6 +61,13 @@ describe('AdminVendasExternasComponent', () => {
     TestBed.configureTestingModule({
       providers: [
         provideRouter([]),
+        {
+          provide: ActivatedRoute,
+          useFactory: () => {
+            const params = convertToParamMap(idDireto ? { id: idDireto } : {});
+            return { paramMap: of(params), snapshot: { paramMap: params } };
+          },
+        },
         {
           provide: AdminAuthService,
           useValue: { getCurrentSession: () => of({ userId: 'admin' }) },
@@ -127,6 +138,24 @@ describe('AdminVendasExternasComponent', () => {
       'input[name="confirmado"]',
     )!;
   }
+
+  it('protege a rota de detalhe com o guarda administrativo', () => {
+    expect(routes.find((rota) => rota.path === 'admin/vendas-externas/:id')?.canActivate).toContain(
+      adminAuthGuard,
+    );
+  });
+
+  it.each([true, false])('carrega a venda por URL direta (existe: %s)', async (existe) => {
+    idDireto = id;
+    if (!existe)
+      api.detalhe.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 404 })));
+    await render();
+    expect(api.detalhe).toHaveBeenCalledExactlyOnceWith(id);
+    expect(api.listar).not.toHaveBeenCalled();
+    expect(fixture.nativeElement.textContent).toContain(
+      existe ? 'Venda de 05/01/2026' : 'Venda não encontrada.',
+    );
+  });
 
   it('lista comprador, filtra por canal e pagamento e abre o detalhe', async () => {
     await render();

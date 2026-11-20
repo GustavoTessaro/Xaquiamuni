@@ -146,20 +146,31 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                     var outroCliente = jornada ? await host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
                     var seed = fluxo is null ? null : await fluxo.SemearAsync();
                     Guid? varianteAuditoria = null;
-                    if (auditoriaAdmin)
+                    Guid? insumoFinanceiro = null;
+                    Guid? produtoFinanceiro = null;
+                    Guid? varianteFinanceiro = null;
+                    if (auditoriaAdmin || financeiro)
                     {
                         await using var verificacao = db.CreateVerificationContext();
-                        var (_, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
-                        varianteAuditoria = variante.Id;
-                        verificacao.InsumosEstoque.Add(InsumoEstoque.Criar("Base sintética",
-                            TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama));
+                        var (produto, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
+                        if (auditoriaAdmin) varianteAuditoria = variante.Id;
+                        if (financeiro)
+                        {
+                            produtoFinanceiro = produto.Id;
+                            varianteFinanceiro = variante.Id;
+                        }
+                        var insumo = InsumoEstoque.Criar("Base sintética",
+                            TipoInsumoEstoque.MateriaPrima, UnidadeFisicaEstoque.Grama);
+                        if (financeiro) insumoFinanceiro = insumo.Id;
+                        verificacao.InsumosEstoque.Add(insumo);
                         await verificacao.SaveChangesAsync();
                     }
                     await RodarChromeAsync(script, new
                     {
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
-                        outroCliente, seed, pixManual, varianteAuditoria, financeiro, agenda,
+                        outroCliente, seed, pixManual, varianteAuditoria, insumoFinanceiro, produtoFinanceiro,
+                        varianteFinanceiro, financeiro, agenda,
                     }, fluxo);
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }

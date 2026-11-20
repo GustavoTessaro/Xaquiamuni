@@ -95,13 +95,19 @@
       </section>
     }
 
-    @if (secao === 'visao' && sessaoConfirmada) {
-      <app-admin-visao-financeira />
+    @if (sessaoConfirmada) {
+      <app-admin-visao-financeira
+        [hidden]="secao !== 'visao'"
+        [ativa]="secao === 'visao'"
+        [revisao]="revisaoFinanceira"
+      />
     }
 
     @if (movimentacoesAbertas) {
       <app-admin-movimentacoes-financeiras
         [hidden]="secao !== 'movimentacoes'"
+        [ativa]="secao === 'movimentacoes'"
+        [revisao]="revisaoFinanceira"
         (recurso)="abrirOrigem($event)"
       />
     }

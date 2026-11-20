@@ -234,6 +234,33 @@ describe('AdminAgendaComponent', () => {
     expect(api.enviar).toHaveBeenLastCalledWith(tentativa);
   });
 
+  it.each([false, true])(
+    'bloqueia versão antiga após reenvio em conflito (excluído: %s)',
+    async (excluido) => {
+      const tentativa = comandos[1];
+      sessionStorage.setItem(storage, JSON.stringify(tentativa));
+      await render();
+      expect(api.enviar).not.toHaveBeenCalled();
+      expect(botao('Reenviar tentativa').disabled).toBe(false);
+
+      const alterado = { ...compromisso, titulo: 'Editado em outra sessão', versao: chave };
+      api.obter.mockReturnValue(
+        excluido ? throwError(() => new HttpErrorResponse({ status: 404 })) : of(alterado),
+      );
+      api.enviar.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 409 })));
+      await clicar('Reenviar tentativa');
+      expect(api.enviar).toHaveBeenCalledExactlyOnceWith(tentativa);
+      expect(api.tentativa).toHaveBeenCalledTimes(2);
+      expect(sessionStorage.getItem(storage)).toBe(JSON.stringify(tentativa));
+      expect(botao('Reenviar tentativa')).toBeUndefined();
+      await clicar('Recarregar compromisso');
+      expect(api.enviar).toHaveBeenCalledTimes(1);
+      expect(sessionStorage.getItem(storage)).toBeNull();
+      if (excluido) expect(texto()).toContain('já foi excluído');
+      else expect(fixture.nativeElement.querySelector('[name=titulo]').value).toBe(alterado.titulo);
+    },
+  );
+
   it('mantém a tentativa e bloqueia reenvio se a consulta falhar', async () => {
     sessionStorage.setItem(storage, JSON.stringify(comandos[0]));
     api.tentativa.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 503 })));

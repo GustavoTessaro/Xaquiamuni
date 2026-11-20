@@ -122,6 +122,9 @@ export class AdminFinanceiroComponent {
 
   protected secao: 'visao' | 'movimentacoes' | 'lancamentos' | 'compras' = 'visao';
   protected movimentacoesAbertas = false;
+  protected revisaoFinanceira = 0;
+  private compraUrlPendente: string | null | undefined;
+
   protected sessaoConfirmada = false;
   protected lista: LancamentoFinanceiro[] = [];
   protected compras: ResumoCompra[] = [];
@@ -183,14 +186,14 @@ export class AdminFinanceiroComponent {
           } catch {
             this.armazenamentoInvalido = true;
           }
-          const compraId = this.route.snapshot.queryParamMap.get('compra');
           if (this.pendente) {
             this.secao = this.pendente.tipo === 'pagar' ? 'compras' : 'lancamentos';
-            this.conferir();
-          } else if (compraId && uuid.test(compraId)) {
-            this.secao = 'compras';
-            this.abrirCompra(compraId);
           }
+          this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroy)).subscribe((params) => {
+            this.compraUrlPendente = params.get('compra');
+            this.sincronizarCompra();
+          });
+          if (this.pendente) this.conferir();
           this.cdr.markForCheck();
         },
         error: (erro) => {
@@ -209,12 +212,15 @@ export class AdminFinanceiroComponent {
       if (secao === 'movimentacoes') this.movimentacoesAbertas = this.sessaoConfirmada;
       this.erro = this.sucesso = '';
     } else this.carregar();
+    this.atualizarUrlCompra(null);
   }
 
   protected abrirOrigem(recurso: { secao: 'lancamentos' | 'compras'; id: string }): void {
     this.secao = recurso.secao;
-    if (recurso.secao === 'lancamentos') this.abrirLancamento(recurso.id);
-    else this.abrirCompra(recurso.id);
+    if (recurso.secao === 'lancamentos') {
+      this.atualizarUrlCompra(null);
+      this.abrirLancamento(recurso.id);
+    } else this.abrirCompra(recurso.id);
   }
 
   protected carregar(pagina = this.pagina): void {
@@ -247,8 +253,13 @@ export class AdminFinanceiroComponent {
   }
 
   protected abrirCompra(id = this.compraSelecionada, pagina = 1, preservarMensagem = false): void {
-    if (!id) return;
+    if (!id || this.ocupado) return;
+    if (id !== this.compraSelecionada) {
+      this.compra = null;
+      this.formulario = null;
+    }
     this.compraSelecionada = id;
+    this.atualizarUrlCompra(id);
     this.executar(
       forkJoin({ compra: this.api.compra(id), pagamentos: this.api.pagamentos(id, pagina) }),
       (dados) => {
@@ -259,6 +270,30 @@ export class AdminFinanceiroComponent {
       undefined,
       preservarMensagem,
     );
+  }
+
+  private atualizarUrlCompra(id: string | null): void {
+    if (this.route.snapshot.queryParamMap.get('compra') === id) return;
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { compra: id },
+      queryParamsHandling: 'merge',
+    });
+  }
+
+  private sincronizarCompra(): void {
+    if (this.ocupado || this.pendente || this.compraUrlPendente === undefined) return;
+    const id = this.compraUrlPendente;
+    this.compraUrlPendente = undefined;
+    if (id && uuid.test(id)) {
+      if (this.secao === 'compras' && this.compraSelecionada === id) return;
+      this.secao = 'compras';
+      this.detalhe = null;
+      this.abrirCompra(id);
+    } else if (this.compraSelecionada) {
+      this.mudarSecao('visao');
+    }
+    this.cdr.markForCheck();
   }
 
   protected abrirFormulario(tipo: 'criar' | 'cancelar' | 'pagar'): void {
@@ -353,6 +388,8 @@ export class AdminFinanceiroComponent {
             'A chave corresponde a outra operação. Confira o histórico antes de continuar.';
           return;
         }
+        this.revisaoFinanceira++;
+        this.compraUrlPendente = undefined;
         if (!this.limpar()) return;
         this.formulario = null;
         this.sucesso = 'Operação recuperada e confirmada pelo servidor.';
@@ -361,6 +398,7 @@ export class AdminFinanceiroComponent {
           this.abrirCompra(confirmada.recursoId, 1, true);
         } else {
           this.secao = 'lancamentos';
+          this.atualizarUrlCompra(null);
           this.detalhe = confirmada.resultado;
           this.executar(
             this.api.lancamento(confirmada.recursoId),
@@ -413,6 +451,7 @@ export class AdminFinanceiroComponent {
     this.executar(
       this.api.enviar(tentativa),
       (dados) => {
+        this.revisaoFinanceira++;
         this.limpar();
         this.formulario = null;
         this.sucesso = 'Operação confirmada pelo servidor.';
@@ -461,12 +500,14 @@ export class AdminFinanceiroComponent {
       next: (dados) => {
         this.ocupado = false;
         proximo(dados);
+        this.sincronizarCompra();
         this.cdr.markForCheck();
       },
       error: (erro) => {
         this.ocupado = false;
         this.erro = this.mensagem(erro);
         falha?.(erro);
+        this.sincronizarCompra();
         this.cdr.markForCheck();
       },
     });

@@ -1,5 +1,14 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, inject, output, signal } from '@angular/core';
+import {
+  Component,
+  DestroyRef,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+  untracked,
+} from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -45,8 +54,16 @@ export class AdminMovimentacoesFinanceirasComponent {
   };
   protected readonly codigosOrigem = Object.keys(this.origens) as (keyof typeof this.origens)[];
 
+  readonly ativa = input(true);
+  readonly revisao = input(0);
+  private revisaoConsultada = -1;
+
   constructor() {
-    this.carregar(1);
+    effect(() => {
+      if (!this.ativa() || this.carregando() || this.revisaoConsultada === this.revisao()) return;
+      this.revisaoConsultada = this.revisao();
+      untracked(() => this.carregar());
+    });
   }
 
   protected aplicar(): void {
@@ -77,14 +94,21 @@ export class AdminMovimentacoesFinanceirasComponent {
     this.paginaSolicitada = pagina;
     this.carregando.set(true);
     this.erro.set('');
+    let voltarPagina = false;
     this.api
       .movimentacoes(this.aplicados, pagina)
       .pipe(
         takeUntilDestroyed(this.destroy),
-        finalize(() => this.carregando.set(false)),
+        finalize(() => {
+          this.carregando.set(false);
+          if (voltarPagina && !this.destroy.destroyed) this.carregar(pagina - 1);
+        }),
       )
       .subscribe({
-        next: (resultado) => this.resultado.set(resultado),
+        next: (resultado) => {
+          voltarPagina = pagina > 1 && resultado.itens.length === 0;
+          if (!voltarPagina) this.resultado.set(resultado);
+        },
         error: (falha) => {
           this.resultado.set(null);
           this.erro.set(this.mensagem(falha));

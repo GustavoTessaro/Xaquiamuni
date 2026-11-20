@@ -109,7 +109,7 @@
                   </button>
                 }
                 @case ('VendaExterna') {
-                  <span>Referência da venda {{ item.recursoId }}</span>
+                  <a [routerLink]="['/admin/vendas-externas', item.recursoId]">Ver venda externa</a>
                 }
               }
             </div>

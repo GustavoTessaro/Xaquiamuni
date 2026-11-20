@@ -105,7 +105,10 @@ try {
     if (navegacao.errorText) throw new Error('Falha ao navegar em ' + path + ': ' + navegacao.errorText);
     const ev = async expression => {
       const r = await call('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true }, sessionId);
-      if (r.exceptionDetails) throw new Error('Falha ao avaliar verificação no Chrome');
+      if (r.exceptionDetails) {
+        const erro = r.exceptionDetails.exception?.className ?? 'erro JavaScript';
+        throw new Error(`Falha ao avaliar verificação no Chrome (${erro}, linha ${r.exceptionDetails.lineNumber + 1})`);
+      }
       return r.result.value;
     };
     try {
@@ -209,12 +212,40 @@ try {
       await preencherAgenda('titulo', 'Compromisso editado');
       await clicarAgenda('Salvar compromisso');
       await waitFor(() => a.ev(`document.querySelector('main .resumo h3')?.textContent.trim() === 'Compromisso editado'`), 'Edição não persistiu');
+      const concorrente = await a.ev(`(async () => {
+        const rota = '/api/admin/agenda';
+        const item = (await fetch(rota).then(r => r.json())).find(x => x.titulo === 'Compromisso editado');
+        const url = rota + '/' + item.id;
+        const corpo = { titulo: 'Edição anterior', data: item.data, descricao: null, categoria: null,
+          horarioInicial: item.horarioInicial, horarioFinal: item.horarioFinal, versao: item.versao };
+        sessionStorage.setItem('xaquiamuni:agenda:v1:' + ${JSON.stringify(admin.Id)}, JSON.stringify({
+          operacao: 'editar', metodo: 'PUT', url, id: item.id, corpo, chave: crypto.randomUUID(),
+        }));
+        return { url, corpo: { ...corpo, titulo: 'Edição concorrente' } };
+      })()`);
+      await a.ir('/admin/agenda');
+      await waitFor(() => a.ev(`[...document.querySelectorAll('main button')].some(b =>
+        b.textContent.trim() === 'Reenviar tentativa' && !b.disabled)`), 'Tentativa não consultada na recarga');
+      assert.equal(await a.ev(`(async () => {
+        const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+        const { url, corpo } = ${JSON.stringify(concorrente)};
+        return (await fetch(url, { method: 'PUT', body: JSON.stringify(corpo), headers: {
+          'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+        } })).status;
+      })()`), 200);
+      await clicarAgenda('Reenviar tentativa');
+      await clicarAgenda('Recarregar compromisso');
+      await waitFor(() => a.ev(`document.querySelector('[name="titulo"]')?.value === 'Edição concorrente'`),
+        'Versão concorrente não foi carregada');
+      await a.ir('/admin/agenda');
+      await waitFor(() => a.ev(`document.querySelector('main .resumo h3')?.textContent.trim() === 'Edição concorrente'`),
+        'O reenvio alterou a versão concorrente');
       await clicarAgenda('Excluir');
       await clicarAgenda('Confirmar exclusão');
       await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Nenhum compromisso neste dia')
         && !document.querySelector('main [aria-pressed="true"] .marcador')`), 'Exclusão não atualizou a grade');
       assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
-      console.log('Agenda em ' + width + ' px: cadastro, horários, edição, exclusão e nenhuma rolagem horizontal.');
+      console.log('Agenda em ' + width + ' px: cadastro, edição, conflito no reenvio, recarga e exclusão.');
     }
   }
 
@@ -290,7 +321,111 @@ try {
       await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
       console.log('Movimentações em ' + width + ' px: filtro, centavos, origem e ausência de rolagem horizontal.');
     }
-    assert.equal(postsFinanceiros, 1);
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await a.ev(`(${botaoFinanceiro('Lançamentos')}).click()`);
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Novo lançamento')})`), 'Formulário financeiro indisponível');
+      await a.ev(`(${botaoFinanceiro('Novo lançamento')}).click()`);
+      const descricao = 'Atualização E2E ' + width;
+      await a.ev(`(() => {
+        for (const [nome, valor] of Object.entries({ categoria: 'Ensaio', descricao: ${JSON.stringify(descricao)}, valor: '10,00' })) {
+          const campo = document.querySelector('main [name="' + nome + '"]');
+          campo.value = valor;
+          campo.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+      })()`);
+      await a.ev(`(${botaoFinanceiro('Confirmar')}).click()`);
+      await waitFor(() => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === ${JSON.stringify(descricao)}`),
+        'Lançamento não confirmado');
+      await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
+      await waitFor(() => a.ev(`document.querySelector('app-admin-movimentacoes-financeiras')?.textContent.includes(${JSON.stringify(descricao)})`),
+        'Histórico permaneceu desatualizado');
+      console.log('Histórico atualizado após lançamento em ' + width + ' px.');
+    }
+    assert.equal(postsFinanceiros, 3);
+
+    const { comprasTeste, vendaId } = await a.ev(`(async () => {
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      const post = async (url, corpo) => {
+        const resposta = await fetch(url, { method: 'POST', body: JSON.stringify(corpo), headers: {
+          'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+        } });
+        if (resposta.status !== 201) return { erro: url + ': ' + resposta.status };
+        return resposta.json();
+      };
+      const comprasTeste = [];
+      for (const nome of ['Fornecedor E2E A', 'Fornecedor E2E B']) {
+        const fornecedor = await post('/api/admin/fornecedores', { nome });
+        const compra = await post('/api/admin/compras-materias-primas', {
+          fornecedorId: fornecedor.id, dataCompra: '2026-11-20', versao: null,
+          linhas: [{ kit: null, quantidade: 1, valorTotal: 12, componentes: [
+            { insumoId: ${JSON.stringify(dados.insumoFinanceiro)}, apresentacaoId: null, quantidade: 1, snapshotId: null },
+          ] }],
+        });
+        comprasTeste.push(compra.resumo?.id ?? compra.erro);
+      }
+      await post('/api/admin/estoque/produtos-acabados/variantes/' + ${JSON.stringify(dados.varianteFinanceiro)} + '/entradas',
+        { tipo: 'EntradaManual', quantidade: 1, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Ensaio' });
+      const venda = await post('/api/admin/vendas-externas', { canal: 'Feira', dataVenda: '2026-11-20', comprador: 'Cliente E2E',
+        itens: [{ produtoId: ${JSON.stringify(dados.produtoFinanceiro)}, varianteId: ${JSON.stringify(dados.varianteFinanceiro)},
+          quantidade: 1, precoUnitarioCentavos: '500', descontoCentavos: '0' }],
+        recebimentoInicial: { valorCentavos: '500', data: '2026-11-20', meio: 'Dinheiro' } });
+      return { comprasTeste, vendaId: venda.id ?? venda.erro };
+    })()`);
+    for (const id of [...comprasTeste, vendaId]) assert.match(id, /^[0-9a-f-]{36}$/);
+    console.log('Compras e venda externa sintéticas criadas para o ensaio de navegação.');
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await a.ir('/admin/compras');
+      const abrir = `[...document.querySelectorAll('main button')].find(b => b.getAttribute('aria-label')?.includes('Abrir compra de Fornecedor E2E A'))`;
+      await waitFor(() => a.ev(`!!(${abrir})`), 'Compra de teste ausente');
+      await a.ev(`(${abrir}).click()`);
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Confirmar recebimento')})`), 'Detalhe de compra indisponível');
+      await a.ev(`(${botaoFinanceiro('Confirmar recebimento')}).click()`);
+      const linkCompra = `document.querySelector('main a[href*="financeiro?compra="]')`;
+      await waitFor(() => a.ev(`!!(${linkCompra})`), 'Link de pagamentos ausente');
+      await a.ev(`(${linkCompra}).click()`);
+      const compraAberta = (id, fornecedor) => a.ev(`new URL(location.href).searchParams.get('compra') === ${JSON.stringify(id)}
+        && document.querySelector('#compra-titulo')?.textContent.trim() === ${JSON.stringify(fornecedor)}`);
+      await waitFor(() => compraAberta(comprasTeste[0], 'Fornecedor E2E A'), 'Compra A não abriu pelo link');
+      console.log('Link Compras → Financeiro confirmado em ' + width + ' px.');
+      await a.ir('/admin/financeiro?compra=' + comprasTeste[0]);
+      await waitFor(() => compraAberta(comprasTeste[0], 'Fornecedor E2E A'), 'Compra A não restaurada');
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Outra compra')})`), 'Seletor de outra compra indisponível');
+      await a.ev(`(${botaoFinanceiro('Outra compra')}).click()`);
+      await waitFor(() => a.ev(`!location.search && !!(${botaoFinanceiro('Consultar compra')})`), 'URL antiga persistiu');
+      await a.ev(`(() => {
+        const botao = ${botaoFinanceiro('Consultar compra')};
+        const seletor = botao.closest('section').querySelector('select');
+        seletor.value = ${JSON.stringify(comprasTeste[1])};
+        botao.click();
+      })()`).catch(() => { throw new Error('Falha ao selecionar a compra B'); });
+      await waitFor(() => compraAberta(comprasTeste[1], 'Fornecedor E2E B'), 'Compra B não selecionada');
+      console.log('Troca de compra confirmada em ' + width + ' px.');
+      await a.ev('history.back()');
+      await waitFor(() => a.ev('!location.search && !document.querySelector("#compra-titulo")'), 'Voltar manteve compra antiga');
+      await a.ev('history.forward()');
+      await waitFor(() => compraAberta(comprasTeste[1], 'Fornecedor E2E B'), 'Avançar não restaurou compra B');
+      console.log('Voltar e Avançar confirmados em ' + width + ' px.');
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Movimentações')})`), 'Aba Movimentações indisponível após Avançar');
+      await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
+      const rotaVenda = '/admin/vendas-externas/' + vendaId;
+      const linkVenda = `document.querySelector('main a[href="' + ${JSON.stringify(rotaVenda)} + '"]')`;
+      await waitFor(() => a.ev(`!location.search && !!(${linkVenda})`), 'Link da venda externa ausente');
+      await a.ev(`(${linkVenda}).click()`);
+      const vendaAberta = () => a.ev(`location.pathname === ${JSON.stringify(rotaVenda)}
+        && document.querySelector('main')?.textContent.includes('Cliente E2E')`);
+      await waitFor(vendaAberta, 'Venda externa não abriu pelo link');
+      await a.ir(rotaVenda);
+      await waitFor(vendaAberta, 'Venda externa não abriu após recarregar');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      console.log('Compras, Voltar/Avançar e detalhe de venda externa em ' + width + ' px.');
+    }
+    await c.ir('/admin/vendas-externas/' + vendaId);
+    await waitFor(() => c.ev(`location.pathname === '/admin/login'`), 'Cliente acessou a rota administrativa de venda');
+    await a.ir('/admin/vendas-externas/00000000-0000-4000-8000-000000000001');
+    await waitFor(() => a.ev(`document.querySelector('main [role="alert"]')?.textContent.includes('Venda não encontrada')`),
+      'Venda inexistente sem mensagem de erro');
   }
 
   if (dados.varianteAuditoria) {

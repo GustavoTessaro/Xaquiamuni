@@ -144,15 +144,17 @@ describe('AdminMovimentacoesFinanceirasComponent', () => {
     expect(texto()).toContain('Nenhuma movimentação para os filtros');
   });
 
-  it('abre os destinos existentes e apresenta a referência da venda sem link quebrado', async () => {
+  it('abre os destinos dos eventos, incluindo a venda externa', async () => {
     await render();
     const acao = vi.fn();
     fixture.componentInstance.recurso.subscribe(acao);
     expect(fixture.nativeElement.querySelector('a').getAttribute('href')).toBe(
       '/admin/pedidos/pedido-id',
     );
-    expect(texto()).toContain('Referência da venda venda-id');
-    expect(fixture.nativeElement.querySelectorAll('a')).toHaveLength(1);
+    expect(
+      fixture.nativeElement.querySelector('a[href="/admin/vendas-externas/venda-id"]'),
+    ).not.toBeNull();
+    expect(fixture.nativeElement.querySelectorAll('a')).toHaveLength(2);
     await clicar('Ver compra');
     await clicar('Ver lançamento');
     expect(acao.mock.calls).toEqual([

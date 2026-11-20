@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -39,8 +39,16 @@ export class AdminVisaoFinanceiraComponent {
   protected readonly erro = signal('');
   protected readonly erroPeriodo = signal('');
 
+  readonly ativa = input(true);
+  readonly revisao = input(0);
+  private revisaoConsultada = -1;
+
   constructor() {
-    this.carregar();
+    effect(() => {
+      if (!this.ativa() || this.carregando() || this.revisaoConsultada === this.revisao()) return;
+      this.revisaoConsultada = this.revisao();
+      untracked(() => this.carregar());
+    });
   }
 
   protected atalho(tipo: 'atual' | 'anterior' | 'todo'): void {
