@@ -43,6 +43,7 @@ const compra: CompraFinanceira = {
 describe('AdminFinanceiroComponent', () => {
   let fixture: ComponentFixture<AdminFinanceiroComponent>;
   const api = {
+    consultarTentativa: vi.fn(),
     lancamentos: vi.fn(),
     lancamento: vi.fn(),
     compra: vi.fn(),
@@ -50,10 +51,25 @@ describe('AdminFinanceiroComponent', () => {
     enviar: vi.fn(),
   };
   const rota = { snapshot: { queryParamMap: convertToParamMap({}) } };
+  const sessao = { userId: 'admin' };
+  const movimento = { valorCentavos: '2500', meio: 'Pix', data: '2026-11-20' };
+  const comandos = {
+    criar: {
+      tipo: 'criar',
+      chave: id,
+      corpo: { ...movimento, tipo: 'Entrada', categoria: 'Teste', descricao: 'Aporte' },
+    },
+    cancelar: { tipo: 'cancelar', chave: id, id, corpo: { motivo: 'Correção' } },
+    pagar: { tipo: 'pagar', chave: id, id, corpo: { ...movimento, referencia: null } },
+  };
 
   beforeEach(() => {
     sessionStorage.removeItem(chaveStorage);
     vi.resetAllMocks();
+    sessao.userId = 'admin';
+    api.consultarTentativa.mockReturnValue(
+      throwError(() => new HttpErrorResponse({ status: 404 })),
+    );
     rota.snapshot.queryParamMap = convertToParamMap({});
     api.lancamentos.mockReturnValue(of([lancamento]));
     api.lancamento.mockReturnValue(of(lancamento));
@@ -66,7 +82,7 @@ describe('AdminFinanceiroComponent', () => {
         { provide: ActivatedRoute, useValue: rota },
         {
           provide: AdminAuthService,
-          useValue: { getCurrentSession: () => of({ userId: 'admin' }) },
+          useValue: { getCurrentSession: () => of(sessao) },
         },
         { provide: FinanceiroService, useValue: api },
         {
@@ -273,10 +289,64 @@ describe('AdminFinanceiroComponent', () => {
     const tentativa = api.enviar.mock.calls[0][0];
     fixture.destroy();
     await render();
-    expect(api.compra).toHaveBeenCalledTimes(2);
+    expect(api.consultarTentativa).toHaveBeenCalledWith(tentativa.chave);
     expect(api.enviar).toHaveBeenCalledTimes(1);
     await clicar('Reenviar tentativa');
     expect(api.enviar).toHaveBeenLastCalledWith(tentativa);
+  });
+
+  it.each(['criar', 'cancelar', 'pagar'] as const)(
+    'recupera %s pela chave sem novo POST',
+    async (operacao) => {
+      sessionStorage.setItem(chaveStorage, JSON.stringify(comandos[operacao]));
+      const registro =
+        operacao === 'cancelar'
+          ? { ...lancamento, canceladoEmUtc: lancamento.criadoEmUtc }
+          : lancamento;
+      api.lancamento.mockReturnValue(of(registro));
+      api.consultarTentativa.mockReturnValue(
+        of({
+          operacao,
+          recursoId: id,
+          resultado: operacao === 'pagar' ? { ...movimento, id, compraId: id } : registro,
+        }),
+      );
+      await render();
+      expect(api.consultarTentativa).toHaveBeenCalledWith(id);
+      if (operacao === 'pagar') expect(api.compra).toHaveBeenCalledWith(id);
+      else expect(api.lancamento).toHaveBeenCalledWith(id);
+      expect(texto()).toContain('Operação recuperada');
+      expect(sessionStorage.getItem(chaveStorage)).toBeNull();
+      expect(api.enviar).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([503, 0])('bloqueia reenvio quando a consulta falha com %s', async (status) => {
+    sessionStorage.setItem(chaveStorage, JSON.stringify(comandos.criar));
+    api.consultarTentativa.mockReturnValue(throwError(() => new HttpErrorResponse({ status })));
+    await render();
+    expect(botao('Reenviar tentativa')?.disabled).toBe(true);
+    expect(texto()).toContain('Serviço indisponível');
+    expect(api.enviar).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(chaveStorage)).not.toBeNull();
+  });
+
+  it('ignora a tentativa de outra conta', async () => {
+    sessionStorage.setItem(chaveStorage, JSON.stringify(comandos.criar));
+    sessao.userId = 'outro-admin';
+    await render();
+    expect(api.consultarTentativa).not.toHaveBeenCalled();
+    expect(api.enviar).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(chaveStorage)).not.toBeNull();
+  });
+
+  it('bloqueia reenvio se o corpo original deixa de estar disponível', async () => {
+    sessionStorage.setItem(chaveStorage, JSON.stringify(comandos.criar));
+    await render();
+    sessionStorage.removeItem(chaveStorage);
+    await clicar('Reenviar tentativa');
+    expect(api.enviar).not.toHaveBeenCalled();
+    expect(texto()).toContain('Não foi possível ler a tentativa');
   });
 });
 

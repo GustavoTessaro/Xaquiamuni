@@ -18,6 +18,15 @@ public static class AdminFinanceiroEndpoints
             return next(ctx);
         });
 
+        grupo.MapGet("/tentativas/{chave:guid}", async Task<IResult> (Guid chave, HttpContext ctx,
+            IGerenciarFinanceiro financeiro, CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(ctx.User.FindFirstValue(ClaimTypes.NameIdentifier), out var autor) || autor == Guid.Empty)
+                return Results.Forbid();
+            if (chave == Guid.Empty) return Invalida("Informe uma chave UUID válida.");
+            return await financeiro.ConsultarTentativaAsync(autor, chave, ct) is { } tentativa
+                ? Results.Ok(tentativa) : Results.NotFound();
+        });
         grupo.MapGet("/lancamentos", async Task<IResult> (int? pagina, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
             PaginaValida(pagina)
                 ? Results.Ok(await financeiro.ListarAsync(pagina ?? 1, ct))

@@ -34,6 +34,15 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(HttpStatusCode.BadRequest, invalida.StatusCode);
 
         var criada = await admin.PostAsync<LancamentoDto>(url, entrada, HttpStatusCode.Created, chave);
+        using var outro = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
+        var tentativaUrl = Financeiro + $"/tentativas/{chave:D}";
+        using var proibida = await cliente.Http.GetAsync(tentativaUrl);
+        Assert.Equal(HttpStatusCode.Forbidden, proibida.StatusCode);
+        using var alheia = await outro.Http.GetAsync(tentativaUrl);
+        Assert.Equal(HttpStatusCode.NotFound, alheia.StatusCode);
+        using var ausente = await admin.Http.GetAsync(Financeiro + $"/tentativas/{Guid.NewGuid():D}");
+        Assert.Equal(HttpStatusCode.NotFound, ausente.StatusCode);
+        await ConferirTentativaAsync(admin, chave, "criar", criada.Id, criada);
         Assert.Equal("9223372036854775807", criada.ValorCentavos);
         Assert.Equal(TimeSpan.Zero, criada.CriadoEmUtc.Offset);
         Assert.Equal(criada, await admin.PostAsync<LancamentoDto>(url, entrada, HttpStatusCode.OK, chave));
@@ -46,6 +55,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var motivo = new CancelarLancamentoInput("Lançamento corrigido");
         var chaveCancelar = Guid.NewGuid();
         var cancelada = await admin.PostAsync<LancamentoDto>(cancelar, motivo, HttpStatusCode.OK, chaveCancelar);
+        await ConferirTentativaAsync(admin, chaveCancelar, "cancelar", criada.Id, cancelada);
+        await ConferirTentativaAsync(admin, chave, "criar", criada.Id, criada);
         Assert.Equal(criada.ResponsavelId, cancelada.CanceladoPorId);
         Assert.NotNull(cancelada.CanceladoEmUtc);
         Assert.Equal(motivo.Motivo, cancelada.MotivoCancelamento);
@@ -73,6 +84,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var input = new PagarFornecedorInput(dados.Hoje, "Pix", "Adiantamento", 650);
         var chave = Guid.NewGuid();
         var parcial = await admin.PostAsync<PagamentoFornecedorDto>(pagar, input, HttpStatusCode.OK, chave);
+        await ConferirTentativaAsync(admin, chave, "pagar", id, parcial);
         Assert.Equal(id, parcial.CompraId);
         Assert.False(await db.MovimentosInsumo.AnyAsync());
         Assert.False(await db.Set<LancamentoFinanceiro>().AnyAsync());
@@ -108,6 +120,17 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(2, (await admin.Http.GetFromJsonAsync<PagamentoFornecedorDto[]>(pagar))!.Length);
         Assert.Equal(movimentos, await db.MovimentosInsumo.CountAsync());
         Assert.False(await db.Set<LancamentoFinanceiro>().AnyAsync());
+    }
+
+    private static async Task ConferirTentativaAsync<T>(Sessao admin, Guid chave, string operacao, Guid id, T resultado)
+    {
+        using var resposta = await admin.Http.GetAsync(Financeiro + $"/tentativas/{chave:D}");
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        Assert.True(resposta.Headers.CacheControl?.NoStore);
+        var dados = await resposta.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(operacao, dados.GetProperty("operacao").GetString());
+        Assert.Equal(id, dados.GetProperty("recursoId").GetGuid());
+        Assert.Equal(resultado, dados.GetProperty("resultado").Deserialize<T>(new JsonSerializerOptions(JsonSerializerDefaults.Web)));
     }
 
     [SqlServerIntegrationFact]

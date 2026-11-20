@@ -65,11 +65,21 @@ export type ComandoFinanceiro =
 
 export type TentativaFinanceira = ComandoFinanceiro & { chave: string };
 
+export type ResultadoTentativaFinanceira =
+  | { operacao: 'criar' | 'cancelar'; recursoId: string; resultado: LancamentoFinanceiro }
+  | { operacao: 'pagar'; recursoId: string; resultado: PagamentoFornecedor };
+
 @Injectable({ providedIn: 'root' })
 export class FinanceiroService {
   private readonly http = inject(HttpClient);
   private readonly csrf = inject(CsrfService);
   private readonly base = '/api/admin/financeiro';
+
+  consultarTentativa(chave: string) {
+    return this.http.get<ResultadoTentativaFinanceira>(
+      this.base + '/tentativas/' + encodeURIComponent(chave),
+    );
+  }
 
   lancamentos(pagina: number) {
     return this.http.get<LancamentoFinanceiro[]>(this.base + '/lancamentos', {

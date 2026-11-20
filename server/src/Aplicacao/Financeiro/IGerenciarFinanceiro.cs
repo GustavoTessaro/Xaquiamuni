@@ -24,11 +24,14 @@ public sealed record CompraFinanceiraDto(Guid CompraId, Guid FornecedorId, strin
     string SituacaoCompra, string SituacaoFinanceira, string ComposicaoValor,
     string? TotalCentavos, string PagoCentavos, string? SaldoCentavos);
 
+public sealed record TentativaFinanceiraDto(string Operacao, Guid RecursoId, object Resultado);
+
 public enum StatusFinanceiro { Sucesso, Repetida, Invalida, Ausente, Conflito }
 public sealed record ResultadoFinanceiro<T>(StatusFinanceiro Status, T? Dados = default, string? Erro = null);
 
 public interface IGerenciarFinanceiro
 {
+    Task<TentativaFinanceiraDto?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct);
     Task<IReadOnlyList<LancamentoDto>> ListarAsync(int pagina, CancellationToken ct);
     Task<LancamentoDto?> ConsultarAsync(Guid id, CancellationToken ct);
     Task<CompraFinanceiraDto?> ConsultarCompraAsync(Guid id, CancellationToken ct);

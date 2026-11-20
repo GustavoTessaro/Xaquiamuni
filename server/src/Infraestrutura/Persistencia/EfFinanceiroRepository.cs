@@ -13,6 +13,25 @@ public sealed class EfFinanceiroRepository(XaquiamuniDbContext db, TimeProvider 
     private const int TamanhoPagina = 50;
     private DbSet<PagamentoFornecedor> Pagamentos => db.Set<PagamentoFornecedor>();
 
+    public async Task<TentativaFinanceiraDto?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct)
+    {
+        var resultado = await db.Set<OperacaoFinanceira>().AsNoTracking()
+            .Where(o => o.ResponsavelId == autor && o.Chave == chave)
+            .Select(o => o.Resultado).SingleOrDefaultAsync(ct);
+        if (resultado is null) return null;
+
+        // O snapshot original conserva o tipo e o estado no momento da operação.
+        using var snapshot = JsonDocument.Parse(resultado);
+        if (snapshot.RootElement.TryGetProperty(nameof(PagamentoFornecedorDto.CompraId), out _))
+        {
+            var pagamento = snapshot.RootElement.Deserialize<PagamentoFornecedorDto>()!;
+            return new("pagar", pagamento.CompraId, pagamento);
+        }
+
+        var lancamento = snapshot.RootElement.Deserialize<LancamentoDto>()!;
+        return new(lancamento.CanceladoEmUtc.HasValue ? "cancelar" : "criar", lancamento.Id, lancamento);
+    }
+
     public async Task<IReadOnlyList<LancamentoDto>> ListarAsync(int pagina, CancellationToken ct)
     {
         var lista = await db.Set<LancamentoFinanceiro>().AsNoTracking().OrderByDescending(x => x.Data)

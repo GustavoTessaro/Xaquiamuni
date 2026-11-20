@@ -50,6 +50,7 @@ try {
   let seq = 0;
   const pending = new Map();
   let externos = 0;
+  let postsFinanceiros = 0;
   const respostas = new Map();
   const compras = new Map();
   const falhasPix = new Map();
@@ -72,6 +73,8 @@ try {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
       if (!local) externos++;
+      if (local && request.method === 'POST' && new URL(request.url).pathname.startsWith('/api/admin/financeiro/'))
+        postsFinanceiros++;
       if (local && request.method === 'POST' && new URL(request.url).pathname === '/api/pedidos') {
         const chave = Object.entries(request.headers).find(([nome]) => nome.toLowerCase() === 'idempotency-key')?.[1];
         compras.set(data.sessionId, { chave, corpo: request.postData,
@@ -155,6 +158,33 @@ try {
   assert.equal(await a.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 200);
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
+
+  if (dados.financeiro) {
+    const adminId = JSON.stringify(admin.Id);
+    assert.equal(await a.ev(`(async () => {
+      const chave = crypto.randomUUID();
+      const corpo = { tipo: 'Entrada', categoria: 'Ensaio', descricao: 'Aporte de teste',
+        valorCentavos: '12345', data: '2026-11-20', meio: 'Pix' };
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      const resposta = await fetch('/api/admin/financeiro/lancamentos', {
+        method: 'POST', body: JSON.stringify(corpo), headers: {
+          'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave,
+        },
+      });
+      if (resposta.status !== 201) return resposta.status;
+      // Reproduz a sessão que ficou com a tentativa após o commit e sem processar a resposta.
+      sessionStorage.setItem('xaquiamuni:financeiro:v1:' + ${adminId}, JSON.stringify({ tipo: 'criar', corpo, chave }));
+      return resposta.status;
+    })()`), 201);
+    await a.ir('/admin/financeiro');
+    await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Operação recuperada')
+      && document.querySelector('#lancamento-titulo')?.textContent.trim() === 'Aporte de teste'`),
+      'O Financeiro não recuperou o lançamento confirmado');
+    assert.equal(await a.ev(`sessionStorage.getItem('xaquiamuni:financeiro:v1:' + ${adminId})`), null);
+    assert.equal(postsFinanceiros, 1);
+    assert.equal(await a.ev('fetch("/api/admin/financeiro/lancamentos").then(r => r.json()).then(r => r.length)'), 1);
+    console.log('Financeiro: chave recuperada, detalhe aberto e um único lançamento no SQL descartável.');
+  }
 
   if (dados.varianteAuditoria) {
     const telas = [

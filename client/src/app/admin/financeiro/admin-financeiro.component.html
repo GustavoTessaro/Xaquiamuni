@@ -44,17 +44,21 @@
               <p>Cancelamento · {{ tentativa.corpo.motivo }}</p>
             }
           }
-          <p>
-            A consulta mostra o estado atual, mas não identifica esta tentativa. Reenviar usa a
-            mesma chave e os mesmos dados.
-          </p>
+          @if (tentativaAusente) {
+            <p>
+              O servidor ainda não encontrou esta tentativa. Você pode reenviar com a mesma chave e
+              os mesmos dados.
+            </p>
+          } @else {
+            <p>Consulte o servidor para confirmar se esta tentativa foi concluída.</p>
+          }
           <div class="acoes">
             <button type="button" (click)="conferir()" [disabled]="ocupado">Conferir estado</button>
             <button
               type="button"
               class="primario"
               (click)="reenviar()"
-              [disabled]="ocupado || !conferida"
+              [disabled]="ocupado || !tentativaAusente"
             >
               Reenviar tentativa
             </button>

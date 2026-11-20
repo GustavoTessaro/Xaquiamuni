@@ -49,6 +49,51 @@ export function centavosFinanceiros(entrada: string): bigint | null {
   return valor !== null && valor > 0n && valor <= 9223372036854775807n ? valor : null;
 }
 
+function tentativaIntegra(tentativa: TentativaFinanceira): boolean {
+  if (
+    !tentativa ||
+    !uuid.test(tentativa.chave) ||
+    !tentativa.corpo ||
+    typeof tentativa.corpo !== 'object' ||
+    Array.isArray(tentativa.corpo)
+  )
+    return false;
+  const corpo = tentativa.corpo;
+  if (tentativa.tipo === 'cancelar') {
+    return (
+      uuid.test(tentativa.id) &&
+      'motivo' in corpo &&
+      typeof corpo.motivo === 'string' &&
+      Object.keys(corpo).length === 1
+    );
+  }
+  if (
+    !('valorCentavos' in corpo) ||
+    typeof corpo.valorCentavos !== 'string' ||
+    !/^\d{1,19}$/.test(corpo.valorCentavos) ||
+    typeof corpo.data !== 'string' ||
+    !dataCivilValida(corpo.data) ||
+    !meiosFinanceiros.includes(corpo.meio)
+  )
+    return false;
+  if (tentativa.tipo === 'criar') {
+    return (
+      'categoria' in corpo &&
+      typeof corpo.categoria === 'string' &&
+      typeof corpo.descricao === 'string' &&
+      ['Entrada', 'Saida'].includes(corpo.tipo) &&
+      Object.keys(corpo).length === 6
+    );
+  }
+  return (
+    tentativa.tipo === 'pagar' &&
+    uuid.test(tentativa.id) &&
+    'referencia' in corpo &&
+    (corpo.referencia === null || typeof corpo.referencia === 'string') &&
+    Object.keys(corpo).length === 4
+  );
+}
+
 @Component({
   imports: [AdminWorkspaceComponent, FormsModule, DatePipe],
   templateUrl: './admin-financeiro.component.html',
@@ -82,7 +127,7 @@ export class AdminFinanceiroComponent {
   protected sucesso = '';
   protected pendente: TentativaFinanceira | null = null;
   protected armazenamentoInvalido = false;
-  protected conferida = false;
+  protected tentativaAusente = false;
   protected confirmarDescarte = false;
   protected formulario: 'criar' | 'cancelar' | 'pagar' | null = null;
   protected tipo: 'Entrada' | 'Saida' = 'Entrada';
@@ -118,13 +163,7 @@ export class AdminFinanceiroComponent {
             const texto = this.store.ler(this.chaveStorage);
             if (texto) {
               const tentativa = JSON.parse(texto) as TentativaFinanceira;
-              if (
-                !tentativa ||
-                !uuid.test(tentativa.chave) ||
-                !tentativa.corpo ||
-                !['criar', 'cancelar', 'pagar'].includes(tentativa.tipo) ||
-                (tentativa.tipo !== 'criar' && !uuid.test(tentativa.id))
-              ) {
+              if (!tentativaIntegra(tentativa)) {
                 this.armazenamentoInvalido = true;
               } else {
                 this.pendente = tentativa;
@@ -279,42 +318,63 @@ export class AdminFinanceiroComponent {
   protected conferir(): void {
     const tentativa = this.pendente;
     if (!tentativa || this.ocupado) return;
-    this.conferida = false;
-    if (tentativa.tipo === 'pagar') {
-      this.secao = 'compras';
-      this.compraSelecionada = tentativa.id;
-      this.executar(
-        forkJoin({
-          compra: this.api.compra(tentativa.id),
-          pagamentos: this.api.pagamentos(tentativa.id, 1),
-        }),
-        (dados) => {
-          this.compra = dados.compra;
-          this.pagamentos = dados.pagamentos;
-          this.paginaPagamentos = 1;
-          this.conferida = true;
-        },
-      );
-    } else {
-      this.secao = 'lancamentos';
-      if (tentativa.tipo === 'cancelar') {
-        this.executar(this.api.lancamento(tentativa.id), (dados) => {
-          this.detalhe = dados;
-          this.conferida = true;
-        });
-      } else {
-        this.executar(this.api.lancamentos(1), (dados) => {
-          this.lista = dados;
-          this.pagina = 1;
-          this.carregado = true;
-          this.conferida = true;
-        });
-      }
-    }
+    this.tentativaAusente = false;
+    this.executar(
+      this.api.consultarTentativa(tentativa.chave),
+      (confirmada) => {
+        if (
+          confirmada.operacao !== tentativa.tipo ||
+          (tentativa.tipo !== 'criar' && confirmada.recursoId !== tentativa.id)
+        ) {
+          this.erro =
+            'A chave corresponde a outra operação. Confira o histórico antes de continuar.';
+          return;
+        }
+        if (!this.limpar()) return;
+        this.formulario = null;
+        this.sucesso = 'Operação recuperada e confirmada pelo servidor.';
+        if (confirmada.operacao === 'pagar') {
+          this.secao = 'compras';
+          this.abrirCompra(confirmada.recursoId, 1, true);
+        } else {
+          this.secao = 'lancamentos';
+          this.detalhe = confirmada.resultado;
+          this.executar(
+            this.api.lancamento(confirmada.recursoId),
+            (dados) => {
+              this.detalhe = dados;
+            },
+            undefined,
+            true,
+          );
+        }
+      },
+      (falha) => {
+        if (falha instanceof HttpErrorResponse && falha.status === 404) {
+          this.erro = '';
+          this.tentativaAusente = true;
+        }
+      },
+    );
   }
 
   protected reenviar(): void {
-    if (this.pendente && this.conferida) this.enviar(this.pendente, true);
+    const tentativa = this.pendente;
+    if (!tentativa || !this.tentativaAusente || this.ocupado) return;
+    try {
+      if (
+        JSON.stringify(JSON.parse(this.store.ler(this.chaveStorage) ?? 'null')) ===
+        JSON.stringify(tentativa)
+      ) {
+        this.enviar(tentativa, true);
+        return;
+      }
+    } catch {
+      /* O conte?do original ficou indispon?vel. */
+    }
+    this.pendente = null;
+    this.armazenamentoInvalido = true;
+    this.tentativaAusente = false;
   }
 
   protected descartar(): void {
@@ -326,7 +386,7 @@ export class AdminFinanceiroComponent {
   }
 
   private enviar(tentativa: TentativaFinanceira, reenvio: boolean): void {
-    this.conferida = false;
+    this.tentativaAusente = false;
     this.executar(
       this.api.enviar(tentativa),
       (dados) => {
@@ -361,7 +421,7 @@ export class AdminFinanceiroComponent {
       return false;
     }
     this.pendente = null;
-    this.armazenamentoInvalido = this.conferida = this.confirmarDescarte = false;
+    this.armazenamentoInvalido = this.tentativaAusente = this.confirmarDescarte = false;
     return true;
   }
 
