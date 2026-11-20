@@ -5,12 +5,12 @@
 | Campo                 | Informação                                                                                                                                                                                     |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Projeto               | Xaquiamuni — E-commerce e Gestão Artesanal                                                                                                                                                     |
-| Versão | 3.5 — F8.5.5, revisão da cadeia administrativa e comercial |
-| Data | 19/11/2026 |
-| Status | Compras, fabricação e checkout implementados. F8.5.3 validada pela API e SQL descartável. F8.5.4 validada em Chrome real nas seis telas administrativas. |
-| Documento-base | `docs/prd.md`, versão 0.27 |
+| Versão | 3.6 — F10.8.2, desenho do MVP validado |
+| Data | 20/11/2026 |
+| Status | MVP validado na F10.7.8 em ambiente local isolado. Homologação e produção permanecem pendentes. |
+| Documento-base | [PRD](prd.md), versão 0.28 |
 | Referência estrutural | Projeto NoteKeeper; reaproveitar princípios e organização, **não copiar código ou assumir detalhes não verificados**                                                                           |
-| Decisão recente | Ordens novas preservam os nomes da fabricação. Ordens antigas indicam uso dos nomes atuais. O histórico identifica movimentos de produção pelo vínculo com a ordem. |
+| Decisão recente | Operações comuns dispensam validade informada, com lotes internos e histórico preservados. |
 
 > **Convenções:** **Implementado** indica comportamento verificado no código e coberto por testes. **Confirmado** identifica decisão de negócio. **Proposto** indica trabalho ainda sujeito a validação. As tabelas de gates e versões preservam o estado de cada entrega histórica.
 
@@ -23,7 +23,7 @@ Construir uma aplicação web responsiva com vitrine e compra para clientes e pa
 - **Implementado:** estoque acabado vinculado à variante, reserva de insumos no início de produção e reserva comercial na criação do pedido. O carrinho não compromete estoque. O prazo de pagamento é de 24 horas e a baixa física ocorre na entrega presencial.
 - **Confirmado:** cliente possui conta, com nome, CPF, e-mail, telefone e endereço; administradora controla o sistema; funcionário terá permissões limitadas a detalhar.
 - **Confirmado:** vendas externas são lançadas manualmente no novo sistema; Trienta será substituído após migração e conferência.
-- **Confirmado:** lotes acabados registram fabricação e validade, com FEFO; são elegíveis até o fim da data de validade no calendário da loja. Insumos podem configurar controle de lote e exigência de validade.
+- **Implementado:** operações comuns dispensam seleção de lote e validade. Lotes permanecem internos, com FEFO entre posições datadas elegíveis e alocação determinística das posições sem validade.
 - **Confirmado para F4:** estoque físico não pode ficar negativo; operações de estoque exigem trilha append-only, idempotência e consistência transacional entre saldo e movimento. O cadastro de insumo ou variante existente não cria saldo inicial.
 - **Confirmado:** Vacaria tem opção de retirada sem frete e entrega própria por R$ 10, sujeito a delimitação de área, horários e endereço; Correios para localidades atendidas em RS/SC.
 - **Confirmado:** Sicredi é o banco PJ, **não** um provedor de API Pix já homologado.
@@ -36,7 +36,7 @@ Construir uma aplicação web responsiva com vitrine e compra para clientes e pa
 
 ### 1.2 Limites
 
-O escopo exclui marketplace, múltiplas lojas, personalização livre, venda sem estoque, emissão fiscal e integrações automáticas com Trienta e redes sociais. Kits mistos de compra estão implementados. Kits vendidos, financeiro completo, agenda e notificações externas permanecem condicionados. Confirmação de Pix é administrativa após conferência do recebimento.
+O escopo exclui marketplace, múltiplas lojas, personalização livre, venda sem estoque, emissão fiscal e integrações automáticas com Trienta e redes sociais. Kits mistos de compra estão implementados. Vendas Externas, Financeiro de caixa e Agenda administrativa integram a entrega. Kits vendidos, valoração, margem, lucro, recorrência e notificações externas permanecem futuros. Confirmação de Pix é administrativa após conferência do recebimento.
 
 ## 2. Decisões técnicas centralizadas
 
@@ -48,7 +48,7 @@ O escopo exclui marketplace, múltiplas lojas, personalização livre, venda sem
 | DT-04 | Persistência | EF Core e SQL Server; Azure SQL como possibilidade futura, não requisito para desenvolvimento local                                                                | Implementado na F2; Azure SQL não configurado                                                              |
 | DT-05 | Identidade   | ASP.NET Core Identity com cookie seguro e antifalsificação para as operações mutáveis; não há JWT no fluxo F2                                                      | Implementado na F2; armazenamento de Data Protection para produção pendente                                |
 | DT-06 | Permissões   | Papéis de base `ADMIN`, `FUNCIONARIO` e `CLIENTE` são inicializados; autorização continua por operação. O gate de confirmação do login é específico para `CLIENTE` | Papéis implementados; matriz fina e permissões de negócio pendentes                                        |
-| DT-07 | Valores      | Cálculos no servidor com `decimal`, armazenamento com precisão explícita; BRL e arredondamento definido por componente                                             | Proposto                                                                                                   |
+| DT-07 | Valores | Preços de catálogo e custos de insumos usam `decimal` com escala explícita. Pedidos, vendas externas e operações financeiras usam centavos inteiros. Contratos financeiros serializam centavos como strings. | Implementado |
 | DT-08 | Quantidades  | Unidade-base: g, ml ou un inteira; conversões padrão exatas entre unidades da mesma dimensão; quantidade-base `decimal(18,6)` de zero a `999999999999.999999`      | F4.1.1 implementada; F4.1.2 mantém fatores exatos por insumo e snapshots imutáveis da conversão            |
 | DT-09 | Concorrência | Transações SQL, controle de concorrência e atualização atômica condicional de saldo/reserva; índices de integridade                                                | F4.2 implementa locks por insumo, `rowversion`, idempotência e consistência saldo-ledger; reservas produtivas e comerciais integradas |
 | DT-10 | Histórico    | Movimentos append-only, idempotência e rastreabilidade; custo e snapshot de compra preservados em cada entrada                                                     | F4.2.3–F4.2.4 implementam entradas, saídas, perdas, descartes, ajustes e estornos                          |
@@ -57,6 +57,8 @@ O escopo exclui marketplace, múltiplas lojas, personalização livre, venda sem
 | DT-13 | Frete        | Estratégias por modalidade: retirada, entrega local, Correios; cotação externa desacoplada                                                                         | Proposto; integração pendente                                                                              |
 | DT-14 | Testes | Testes .NET e Angular, HTTP, SQL descartável e Chrome real com host isolado | Implementado; cobertura e limites na seção 8 |
 | DT-15 | Deploy       | Desenvolvimento local primeiro; configuração por ambiente, CI e hospedagem definidos após verificação de custos e limites                                          | Pendente                                                                                                   |
+
+**Versões fixadas nos arquivos do projeto.** `client/package-lock.json` registra Angular `22.2.5`, Angular CLI `22.2.6`, TypeScript `6.0.3`, Tailwind CSS `4.3.3` e Vitest `5.1.0`. Os projetos backend têm alvo `net10.0` e o projeto de Infraestrutura declara EF Core SQL Server `10.0.13`.
 
 **Controle de versões:** conferir SDK, Angular, TypeScript, EF Core, bibliotecas e lockfiles antes de adicionar ou atualizar projetos/dependências. Não fixar versões menores/patch arbitrariamente nem contornar conflitos com `--force`.
 
@@ -115,12 +117,11 @@ Xaquiamuni/
 ├── docs/
 │   ├── prd.md
 │   └── tdd.md
-├── .github/
 ├── .gitignore
 └── README.md
 ```
 
-A árvore resume os projetos e a organização inicial. Os módulos atuais de catálogo, estoque, compras, fabricação e pedidos usam as mesmas camadas. Migrations ficam em `Infraestrutura/Persistencia/Migrations`.
+A árvore resume a organização inicial e preserva a referência histórica à estrutura. Os módulos atuais seguem as mesmas camadas. O Angular inclui Fornecedores, Compras, Receitas, Produção, Vendas Externas, Financeiro e Agenda. Os utilitários de demonstração e pré-voo estão em `server/tools/`. As migrations ficam em `server/src/Infraestrutura/Persistencia/Migrations`.
 
 Estoque, compras e produção usam `Dominio/Estoque`, `Aplicacao/Estoque` e `Infraestrutura/Persistencia`. A API expõe contratos administrativos em `Api/Estoque`. O Angular organiza Fornecedores, Compras, Matérias-primas, Receitas e Produção em módulos administrativos e abre estoque acabado a partir de Produtos.
 
@@ -134,15 +135,17 @@ Na F4.5.4, as escritas Angular usam `POST /api/admin/insumos/{insumoId}/saidas`,
 | Catálogo | Categorias, produtos, variantes e fotos administrativos. A API e a loja públicas exibem disponibilidade por variante e integram carrinho e checkout. | RF-04–05 |
 | Estoque | Saldos, lotes, ledger, mínimos, consultas e operações administrativas. Reservas produtivas comprometem insumos e reservas comerciais comprometem acabados. | RF-06–08, RN-38–46 |
 | Produção             | Fichas versionadas, planejamento, reservas, execução e conclusão                                                                                                                                                                      | RF-09–14, RN-03–06, RN-18                  |
-| Comércio | Carrinho, checkout, reservas, consulta de pedidos e operação de retirada. Vendas externas permanecem futuras. | RF-15–19, RF-26, RN-07–09 |
+| Comércio | Carrinho local, checkout, reserva, pedidos próprios e retirada. Venda externa ADMIN com baixa FEFO, recebimentos e cancelamento restrito. | RF-15–19, RF-26, RN-07–09 |
 | Entrega e pagamentos | Retirada local e Pix manual. Frete, rastreamento e conciliação automática permanecem condicionados. | RF-20–21 |
-| Compras e fornecedores | Cadastro e inativação de fornecedor, compra simples ou kit misto e recebimento integral vinculado ao estoque. Financeiro, análise avançada e agenda permanecem pendentes. | RF-22–25, RN-46 |
+| Compras e fornecedores | Cadastro e inativação, compras simples ou em kit, apresentações, conversões e recebimento integral. | RF-25, RN-46 |
+| Financeiro | Lançamentos manuais, pagamentos a fornecedores, projeção de caixa e posição atual. | RF-22 |
+| Agenda | Calendário mensal, compromissos civis, exclusão lógica e recuperação por tentativa. | RF-24 |
 | Transversal          | Auditoria, relógio, transações, idempotência e erros                                                                                                                                                                                  | RNF-01–10                                  |
 
 ### 3.4 Frontend e experiência
 
 - Implementadas: rotas de cliente para cadastro, login, confirmação e recuperação; homepage pública em `/`, catálogo pesquisável em `/produtos`, e `/admin/login`, `/admin`, `/admin/categorias`, `/admin/produtos`, `/admin/estoque/insumos` (com subrotas administrativas) e `/admin/estoque/produtos-acabados` (incluindo variante) protegidas por `adminAuthGuard`. A loja pública reutiliza o catálogo anônimo da F3.6.1; não altera contratos backend nem expõe componentes administrativos.
-- As telas de estoque oferecem consultas e operações administrativas com proteção de sessão. Compras, Receitas e Produção têm fluxos próprios. A loja oferece carrinho, checkout e consulta dos pedidos próprios.
+- As telas de estoque priorizam saldos consolidados e mantêm ajustes por posição em áreas avançadas. As apresentações são geridas em `/admin/compras/apresentacoes/:id`. As operações administrativas exigem sessão ADMIN. Compras, Receitas e Produção têm fluxos próprios. A loja oferece carrinho, checkout e consulta dos pedidos próprios.
 - Carregar módulos por rota quando apropriado; serviços de API tipados e estados explícitos de `carregando`, `vazio`, `erro` e `sucesso`.
 - Layout mobile-first: navegação simplificada, formulários com rótulos, toque confortável, tabelas adaptadas a cartões no celular e confirmação para ações irreversíveis.
 - Cadastro de produtos oferece `Produto simples` (uma versão e um preço) ou `Produto com variantes`; no modo simples a API recebe internamente a variante ativa padrão chamada `Padrão`, sem exigir que o cliente informe essa identificação e sem campo de tipo no modelo persistido. No modo com variantes, a principal é obrigatória e variantes adicionais podem ser removidas antes do cadastro.
@@ -153,7 +156,7 @@ Na F4.5.4, as escritas Angular usam `POST /api/admin/insumos/{insumoId}/saidas`,
 - UI não calcula valores finais autoritativos, não decide permissões e não confirma pagamento por conta própria.
 - Identidade visual baseada nos arquivos da proprietária: fundo claro, dourado discreto e contraste legível; evitar afirmações clínicas não validadas.
 - A F3.6.2 adiciona layout público independente do workspace ADMIN, com cabeçalho, busca, navegação, categorias dinâmicas, vitrine, apresentação institucional, benefícios e rodapé. A direção visual usa verde, creme, bege e dourado discreto; como não há assets institucionais autorizados no projeto, a arte do hero é uma composição botânica CSS/SVG sem imagens externas ou produtos fictícios.
-- A homepage e `/produtos` são anônimas. O cabeçalho consulta a sessão de cliente e aponta visitantes para `/login` e `/cadastro`; para sessão ativa, oferece a rota real de sessão `/login` e logout existente. As proteções e rotas ADMIN não mudam.
+- A homepage e `/produtos` são anônimas. Checkout exige cliente autenticado. O carrinho é mantido localmente e a reserva nasce no pedido. O cabeçalho consulta a sessão de cliente e aponta visitantes para `/login` e `/cadastro`; para sessão ativa, oferece **Meus pedidos** em `/pedidos` e logout. As proteções e rotas ADMIN não mudam.
 - Categorias e produtos são lidos exclusivamente por `GET /api/catalogo/categorias` e `GET /api/catalogo/produtos`. Busca e categoria são refletidas na URL; `switchMap` cancela consultas anteriores, e “Carregar mais” usa a página seguinte real retornada pela API. Estados de carregamento, vazio, falha recuperável e imagem indisponível são explícitos. As categorias são carregadas uma vez por instância do serviço e compartilhadas entre os componentes da loja.
 - Os cards apresentam foto, nome, categoria, preço, unidades, medidas e disponibilidade. Preços distintos são exibidos como faixa a partir do mínimo. O detalhe valida a opção selecionada antes de adicionar ao carrinho.
 - A F3.6.2 inicialmente não criava link para página individual; a F3.6.3.1 adiciona navegação acessível dos cards para `/produtos/:id`. Nenhuma subetapa da F3 cria carrinho, checkout, pedidos, estoque, disponibilidade ou reserva. Contatos/redes sociais, políticas, entregas e pagamentos não têm URL/dados confirmados no repositório e ficam como pendências, sem links fictícios.
@@ -170,7 +173,7 @@ Na F4.5.4, as escritas Angular usam `POST /api/admin/insumos/{insumoId}/saidas`,
 ### 4.1 Convenções
 
 - Identificadores opacos (GUID sugerido); datas de eventos em UTC, apresentação no fuso do negócio; datas de fabricação/validade como datas civis.
-- Valores monetários em `decimal` com precisão definida no mapeamento; total do servidor prevalece. Arredondamento consistente e snapshots de preço no pedido.
+- Preços cadastrais e custos de aquisição usam `decimal` com precisão explícita. Pedidos, vendas externas e operações financeiras usam centavos inteiros. O Financeiro usa strings de centavos no JSON e `BigInteger`/`BigInt` nos agregados e na apresentação. O servidor é fonte dos totais.
 - Preços de venda em `decimal` com duas casas decimais. Unidades comerciais do catálogo são `UN`, `KIT`, `PAR`, `PCT`, `CX` e `CJ`; unidade-base física de insumo será `g`, `ml` ou `un` inteira. A unidade comercial da variante nunca define sua unidade de estoque.
 - Insumos e produtos acabados são estoques distintos. O saldo de acabado referencia exclusivamente `ProdutoVariante` já existente, sem duplicar produto/variante; nunca agregar saldos de variantes diferentes. Variantes F3 existentes começam sem saldo implícito.
 - Quantidades físicas-base são representadas por `QuantidadeEstoque` em `decimal(18,6)`, intervalo de `0` a `999999999999.999999`; nunca usar `float`/`double`. A validação de escala e magnitude ocorre depois de normalizar para g, ml ou un e rejeita valores não exatos. Unidade `un` é inteira. F4.1.1 usa fatores fixos kg/g e L/ml; F4.1.2 associa fatores positivos e exatos a cada forma de compra pertencente ao insumo. Conversões configuráveis recebem somente quantidade inteira positiva de embalagens e retornam snapshot imutável do nome/ID da forma, quantidade original, fator aplicado e quantidade-base; F4.2.3 persiste esse snapshot na entrada.
@@ -210,7 +213,11 @@ Na F4.5.4, as escritas Angular usam `POST /api/admin/insumos/{insumoId}/saidas`,
 | Entrega                                               | modalidade, valor, endereço snapshot, rastreio, status                                                                                                                                                                                                                                                                                                                                          |
 | VendaExterna / ItemVendaExterna                       | canal, produtos, lote(s), quantidade, preço, recebimento e origem da baixa                                                                                                                                                                                                                                                                                                                      |
 
-As subseções F4.2 abaixo registram a evolução histórica do estoque de insumos. Os estados vigentes de compras, produção e pedidos estão na seção 5.
+| Financeiro | Lançamentos manuais, pagamentos a fornecedores e registros idempotentes. A projeção de caixa agrega eventos das origens sem criar um ledger paralelo. |
+| Agenda | Compromisso e operação idempotente, com data civil, horários locais opcionais, versão e exclusão lógica. |
+| Auditoria / ComandoIdempotente | ator, ação, referência, instante, chave de idempotência e resultado |
+
+As subseções F4.2 abaixo registram a evolução histórica do estoque de insumos. Os estados vigentes estão na seção 5. Os limites dessas subseções históricas descrevem as respectivas entregas.
 
 #### Persistência F4.2.1
 
@@ -231,7 +238,7 @@ As subseções F4.2 abaixo registram a evolução histórica do estoque de insum
 - `SaldosInsumo`: `Id`, `InsumoId`, `LoteId NULL`, quantidade owned em `decimal(18,6)` mais unidade/dimensão e `Versao rowversion`. `LoteId NULL` representa a posição agregada; lote preenchido representa a posição daquele lote. Ausência de registro não é materializada como linha zero. O total físico de itens controlados é calculado pela soma das posições de lote; não é persistido como outra fonte.
 - Índices únicos filtrados permitem no máximo uma linha agregada por insumo e uma posição por lote. FK composta `(InsumoId, LoteId) -> LotesInsumo(InsumoId, Id)` impede associar saldo a lote de outro insumo; FK separada garante proprietário existente. Ambos usam `Restrict`.
 - Constraints de saldo protegem não negatividade, unidade/dimensão física canônica e contagem inteira; `decimal(18,6)` define limite e precisão. `rowversion` em lote e saldo protege atualizações concorrentes futuras. A quantidade do saldo não possui setter/método público positivo; `CriarZero` só cria posição explicitamente zerada. Valores positivos nos testes SQL são preparados por SQL parametrizado tipado em ambiente descartável.
-- O domínio exige lote para insumo controlado, proíbe lote para insumo não controlado, exige validade quando configurada e verifica o mesmo insumo proprietário. Validade é avaliada com `DateOnly` explícito: o dia de vencimento ainda é elegível; a partir do dia seguinte, não. Lote sem validade é permitido se não obrigatória e, por ora, elegível salvo bloqueio; sua seleção/prioridade permanece pendente. Bloquear não altera quantidade física e vencimento não gera baixa automática.
+- **Na entrega F4.2.2:** a política exigia lote para insumo rastreado e validade quando configurada. A data de vencimento já era inclusiva e o bloqueio não alterava o físico. A regra atual para novos lotes e a ordenação estão na seção 5.4.
 - A composição `ControlaLote`/`ValidadeObrigatoria` com registros em outras tabelas não é imponível por `CHECK` simples. A operação transacional introduzida na F4.2.3 confirma ausência de lotes, saldos e movimentos sob lock do insumo antes de alterar a configuração; com histórico, rejeita edição cadastral comum. Nenhuma conversão automática entre modos é implementada. A constraint de validade obrigatória do lote e a unidade do saldo compatível com a unidade-base também requerem validação de domínio/aplicação transacional, pois dependem do insumo proprietário.
 
 #### Entradas, movimentos e custos F4.2.3
@@ -284,9 +291,6 @@ As subseções F4.2 abaixo registram a evolução histórica do estoque de insum
 - `ICalendarioOperacionalEstoque` centraliza a data operacional e compartilha o `TimeProvider` já registrado. `Estoque:Calendario:TimeZoneId` é obrigatória/validada na inicialização; valor técnico padrão: `America/Sao_Paulo`, ainda **proposta não aprovada pela proprietária**. Validade é `DateOnly`, inclusiva durante todo o dia na zona configurada; auditoria segue UTC. Datas históricas não são convertidas ou regravadas. Testes cobrem limite da meia-noite UTC.
 - `server/admin-estoque.http` contém exemplos das rotas para exploração manual. A etapa não implementa telas Angular, reservas, FEFO automático, produção, pedidos, produtos acabados ou disponibilidade pública.
 - Testes HTTP/SQL usam somente a fixture descartável `Xaquiamuni_IntegrationTest_*` em `.\SQLEXPRESS`; a suíte F4 focal cobre papel/antifalsificação, cadastros, entradas, idempotência/snapshots, contagem obsoleta, saídas/estorno, identidade do responsável e calendário. Sem migration nova.
-
-| Receita / Despesa | lançamento financeiro com origem única, se módulo aprovado |
-| Auditoria / ComandoIdempotente | ator, ação, referência, instante, chave de idempotência e resultado |
 
 ### 4.3 Relacionamentos centrais
 
@@ -349,10 +353,10 @@ erDiagram
 - Estoque de insumo nunca é modelado como variante de catálogo. Cada saldo de produto acabado referencia `ProdutoVariante` por FK; unidade comercial (`KIT`, `CX` etc.) não altera a quantidade inteira de unidades acabadas controlada para a variante. Tipos distintos de saldo, reserva e ledger mantêm FKs tipadas, evitando referências polimórficas sem integridade relacional.
 - Quantidades-base em g/ml permitem até seis casas decimais e são convertidas sem arredondamento, limitadas a `decimal(18,6)`. Não converter massa em volume genericamente. F4.1.1 usa fatores fixos kg/g e L/ml; F4.1.2 implementa fatores positivos de compra específicos por insumo, normalizados na unidade-base; unidade `un` rejeita quantidade fracionária, inclusive no fator e no resultado.
 - Saldo projetado e movimento são atualizados na mesma transação. Todo comando de movimento deve ser idempotente; ajuste registra contagem física e diferença calculada pelo servidor. Correção de movimento é compensatória e vinculada, nunca edição/remoção histórica. Nenhuma operação aceita saldo físico negativo.
-- Lote de insumo é opcional por configuração do insumo; validade pode ser obrigatória ou não conforme configuração. Sem lote rastreável, o saldo é agregado. Lotes expirados/bloqueados/danificados/quarentenados permanecem físicos, mas não contribuem ao utilizável/disponível. FEFO ordena lotes elegíveis com validade; na produção, lotes sem validade permitidos seguem depois dos datados, ordenados por data de entrada e ID.
+- A configuração histórica do insumo define saldo agregado ou por lote. O novo comando explícito permite validade nula nos lotes gerados internamente. Vencidos e bloqueados permanecem no físico e fora do utilizável. Perdas, descartes, contagens e estornos continuam condicionados às reservas e à posição.
 - A representação é exclusiva: insumo sem lote usa saldo agregado; insumo com lote controlado usa saldos por lote, sem somar simultaneamente agregação e lotes. Alterar essa configuração com saldo ou histórico deve preservar os registros e não pode gerar saldo duplicado.
 - Custo de entrada é histórico por aquisição/lote; custo ausente é distinto de zero. Não derivar custo médio, valoração definitiva, custo total produzido, margem ou lucro antes de decisão explícita. Estoques iniciais podem ter custo desconhecido.
-- Lote acabado sempre se vincula à variante comercial existente, tem identificador único gerado, fabricação e validade, e saldo inteiro. Prazo padrão é copiado para novos lotes e a validade real pode sobrescrevê-lo; alteração do padrão não reescreve lotes existentes. Produto publicado continua visível sem saldo.
+- Lote acabado referencia a variante, tem código interno, fabricação, validade anulável e saldo inteiro. `SemControle` representa a origem sem validade. Validade informada ou prazo padrão continuam disponíveis nos contratos legados. O estoque histórico mantém datas e condições.
 - Saldo físico, utilizável, reservado e disponível são conceitos distintos. Reserva compromete saldo disponível sem reduzir físico; liberar restaura disponibilidade; consumir reduz físico e encerra a reserva uma única vez. Expiração, bloqueio ou dano de lote reservado não pode fazer a reserva ser descontada duas vezes.
 - Estoque mínimo é mantido por insumo e por variante acabada, e alertas usam saldo disponível elegível. Ações administrativas F4 exigem `ADMIN`; guardas de UI não substituem autorização da API.
 - F4.6 retorna `disponivel` por produto e variante. Produto publicado pode estar visível sem saldo. Quantidade, custo, lote e reserva ficam fora do DTO público.
@@ -369,7 +373,7 @@ erDiagram
 - **Produção:** início reserva todos os materiais ou falha integralmente. Cancelar libera as reservas. A conclusão adquire locks da chave, ordem, insumos ordenados e `finished-variant:{id}`. Baixas, liberação, lote, movimento acabado e ordem concluída são confirmados na mesma transação.
 - **Pedido:** criação e reserva FEFO de acabados na mesma transação. Os locks por variante são compartilhados com movimentações administrativas e entradas de produção.
 - **Pagamento e entrega:** confirmar pagamento mantém a reserva comprometida. Entrega presencial consome reservas e registra baixas físicas atomicamente.
-- **Venda externa (futuro F8):** registrar venda, movimentar lotes e registrar origem financeira em operação consistente; repetição com mesma chave não duplica.
+- **Venda externa:** baixa, itens, posições usadas e recebimento inicial são registrados atomicamente. A alocação usa o mesmo critério FEFO e locks por variante do estoque comercial. Recebimentos posteriores e cancelamento são idempotentes. Cancelar só sem recebimentos e com devolução segura ao lote original.
 - **Expiração:** serviço periódico configurável expira pedidos não pagos e suas reservas na mesma transação, revalidando estado frente à confirmação concorrente.
 - **Cadastro F2:** usuário, perfil/endereço e mensagem inicial da Outbox são salvos na mesma transação; rollback não deixa conta sem a solicitação inicial ou solicitação sem conta.
 - **Reenvio F2:** persistência usa transação SQL curta `READ COMMITTED` e `sp_getapplock` exclusivo por usuário, com proprietário transacional; bloqueia corrida de chamadas, valida limites e cooldown, libera chave de `DeadLetter` e insere nova linha na mesma transação.
@@ -389,7 +393,7 @@ erDiagram
 
 ### 4.6 Migrations e estado do schema
 
-A cadeia de migrations existente no código contém, em ordem:
+A cadeia começa com estas migrations de identidade e catálogo, em ordem:
 
 1. `20261111054514_InitialIdentitySchema`
 2. `20261111060917_AddClientePerfilEEnderecos`
@@ -403,7 +407,20 @@ A cadeia de migrations existente no código contém, em ordem:
 
 O schema modelado inclui tabelas do ASP.NET Core Identity, `ClientePerfis`, `ClienteEnderecos`, `EmailOutbox`, `Categorias`, `Produtos`, `ProdutoVariantes`, `ProdutoCaracteristicas`, `ProdutoCaracteristicaValores`, `ProdutoVarianteCaracteristicaValores`, `ProdutoImagens`, `ProdutoImagemVariantes` e as tabelas F4 de insumos, formas de compra, lotes, saldos, movimentos e idempotência de contagem. A migration de fingerprint adiciona `CredentialGenerationFingerprint binary(32) NULL` e uma constraint que exige `NULL` para `EmailConfirmation` e exatamente 32 bytes para `PasswordReset`. `EmailOutbox` também contém tipo/status, tentativas e timestamps UTC, chave ativa de deduplicação, lease e `RowVersion`; índices e constraints preservam deduplicação ativa e integridade por tipo. `AddCategorias` e `AddProdutosEVariantes` criam as respectivas tabelas e FKs. `AddProdutoCaracteristicasEMedidasFisicas` acrescenta medidas opcionais e estruturas de características sem reescrever registros legados. `AddProdutoImagens` é aditiva, cria apenas as duas tabelas e seus índices/FKs/checks, não cria imagens fictícias, não despublica nem modifica produtos e variantes existentes, inclusive produtos publicados legados sem imagens. As migrations F4 existentes são aditivas, preservam integridade F2/F3 e foram validadas apenas na fixture SQL descartável; F4.2.5/F4.2.6 não alteram schema. Nenhuma migration foi aplicada a `XaquiamuniDev`, Azure ou qualquer banco persistente.
 
-A cadeia administrativa usa as migrations `CadastrarFornecedores`, `CriarComprasMateriasPrimas`, `ReceberComprasMateriasPrimas`, `CadastrarReceitasProducao`, `ReservarMateriasPrimasProducao`, `RegistrarOperacoesOrdensProducao` e `ConcluirOrdensProducao`. `20261119213711_PreservarNomesOrdensProducao` acrescenta nomes opcionais, sem preenchimento retroativo. Quando faltar snapshot, a consulta usa os nomes atuais e sinaliza o fallback. O histórico identifica consumo/entrada de produção pelo vínculo com a ordem ou alocação, preservando tipos internos e bloqueios de estorno.
+A cadeia administrativa posterior usa as migrations `CadastrarFornecedores`, `CriarComprasMateriasPrimas`, `ReceberComprasMateriasPrimas`, `CadastrarReceitasProducao`, `ReservarMateriasPrimasProducao`, `RegistrarOperacoesOrdensProducao` e `ConcluirOrdensProducao`. `20261119213711_PreservarNomesOrdensProducao` acrescenta nomes opcionais, sem preenchimento retroativo. Quando faltar snapshot, a consulta usa os nomes atuais e sinaliza o fallback. O histórico identifica consumo/entrada de produção pelo vínculo com a ordem ou alocação, preservando tipos internos e bloqueios de estorno.
+
+O inventário complementar, após a galeria, é:
+
+| Área | Migrations |
+| --- | --- |
+| Matérias-primas | `PersistirInsumosEFormasCompra`, `PersistirLotesESaldosInsumo`, `RegistrarEntradasInsumos`, `ImplementarSaidasAjustesEEstornosInsumo` |
+| Acabados e pedidos | `PersistirEstoqueProdutosAcabados`, `PersistirReservasProdutoAcabado`, `CompartilharPrazoReservasPorPedido`, `VincularMovimentosRetiradaAsReservas`, `PersistirPedidosCompra`, `IdempotenciaCriacaoPedido` |
+| PIX manual | `ConfigurarPixManual`, `AceitarCnpjNoPixManual` |
+| Compras e fabricação | Migrations administrativas listadas acima, de `CadastrarFornecedores` a `PreservarNomesOrdensProducao` |
+| Vendas externas | `20261120123635_RegistrarVendasExternas` |
+| Financeiro | `20261120130859_CriarNucleoFinanceiro` |
+| Agenda | `20261120144816_CriarAgendaAdministrativa` |
+| Validade opcional de acabados | `20261120192729_PermitirEstoqueSemValidade` torna a validade anulável, atualiza a restrição de origem e preserva datas legadas. O downgrade é bloqueado caso existam lotes sem validade. |
 
 ### 4.7 Armazenamento e processamento de imagens — F3.4.2
 
@@ -518,7 +535,7 @@ Exemplo do PRD: 100 g de base e 5 ml de essência por unidade, com 850 g e 30 ml
 
 ### 5.2 Estados de compra e produção
 
-- **Compra:** `Rascunho → Recebida` ou `Rascunho → Cancelada`. Rascunho não movimenta estoque. Recebimento integral registra uma entrada por componente, cria lote e exige validade conforme o cadastro. Linha simples pode ter custo conhecido, zero ou ausente. Kit mantém o preço do conjunto, com custo individual desconhecido.
+- **Compra:** `Rascunho → Recebida` ou `Rascunho → Cancelada`. Rascunho não movimenta estoque. Recebimento integral registra uma entrada por componente, cria lote interno quando o material é rastreado e dispensa validade na operação comum. Linha simples pode ter custo conhecido, zero ou ausente. Kit mantém o preço do conjunto, com custo individual desconhecido.
 - **Produção:** `EmAndamento → Concluida` ou `EmAndamento → Cancelada`. A ordem nasce com reserva integral. Concluir exige consumo real positivo por material, limitado à reserva elegível, e rendimento real inteiro positivo. Sobras são liberadas e o acabado entra como `Vendavel`, imediatamente sujeito a publicação, validade e saldo livre. Não há cura, quarentena, aprovação adicional ou conclusão parcial.
 
 ### 5.3 Estados de pedido e pagamento
@@ -528,7 +545,7 @@ Exemplo do PRD: 100 g de base e 5 ml de essência por unidade, com 850 g e 30 ml
 
 ### 5.4 Lotes, validade e saldo livre
 
-Lotes são elegíveis até o fim da data civil de vencimento. Lotes vencidos ou bloqueados continuam no físico. Insumo sem lote usa posição agregada. Para insumos com lote, FEFO prioriza validade mais próxima, depois lotes sem validade permitidos, com desempate por entrada e ID. Saídas, perdas, descartes, reduções por contagem, estornos e inativação verificam reservas ativas. A conclusão revalida as posições consumidas. A interface orienta conferir estoque e buscar suporte se for preciso usar uma reserva inelegível. Não há realocação automática. A entrada acabada usa validade explícita ou prazo padrão por variante. Saldo público exclui posições inelegíveis e desconta compromissos comerciais.
+Validade nula remove a restrição temporal, preservando condição, bloqueio e reservas. Posições datadas elegíveis são alocadas por vencimento mais próximo e precedem as sem validade. Nos insumos, usa-se data de entrada e ID como desempate. Nos acabados sem validade, usa-se o primeiro movimento registrado, depois código e ID. Insumo sem lote usa a posição agregada. Reservas reduzem o livre sem baixar o físico. Conclusão e entrega revalidam posições comprometidas. Ajustes técnicos continuam protegidos e nenhuma reserva é realocada silenciosamente.
 
 ### 5.5 Precificação
 
@@ -551,6 +568,12 @@ Na F4.2.3 são preservados custo total `decimal(18,2)` e custo por unidade-base 
 - `EmailOutboxWorker.Enabled` e `ResendEmail.Enabled` têm padrão `false`. O sender HTTP é registrado somente quando Resend está habilitado; o worker exige sender válido.
 - A entrega é **at-least-once**, não exactly-once: se o provedor aceitar o e-mail e o processo falhar antes de gravar `Completed`, uma nova tentativa após a expiração do lease pode causar entrega duplicada.
 
+### 5.7 Vendas externas, Financeiro e Agenda
+
+- Vendas externas mantêm snapshots dos itens, baixas por lote e recebimentos separados. O saldo é a diferença entre o total da venda e o valor recebido. Cancelamento exige venda sem recebimento e reversão segura da baixa.
+- O fluxo de caixa consolida PIX efetivamente confirmado, recebimentos de vendas externas, pagamentos de compras e lançamentos manuais ativos. A data do PIX é a data UTC da confirmação. Os demais eventos usam datas efetivas civis. A posição atual independe do intervalo do fluxo, exclui totais desconhecidos do valor a pagar e conta compras **Valor a conferir**. Receber insumo e consumir material na produção não geram eventos de caixa.
+- Na Agenda, horários são opcionais e civis. Havendo hora final, ela exige início e deve ser posterior no mesmo dia. Exclusão lógica e edição exigem versão. A consulta de tentativa distingue operações gravadas de tentativas ausentes. Conflito de reenvio exige conferir tentativa e compromisso antes de recarregar ou editar.
+
 ## 6. API e contratos preliminares
 
 ### 6.1 Convenções
@@ -565,7 +588,7 @@ Na F4.2.3 são preservados custo total `decimal(18,2)` e custo por unidade-base 
 
 ### 6.2 Endpoints implementados e catálogo de negócio futuro
 
-As rotas F2/F3, F4.2 (estoque de insumos) e F4.3 (estoque de produtos acabados) listadas abaixo estão implementadas. F4.4 (reservas) e F4.6 (disponibilidade pública) permanecem planejadas; seus contratos serão definidos antes da implementação. As rotas administrativas de estoque exigem `ADMIN`; escritas usam antifalsificação.
+As rotas abaixo integram o MVP, salvo as explicitamente condicionadas. As reservas e a disponibilidade foram entregues. Rotas ADMIN usam a política `Administracao` e as escritas aplicáveis exigem antifalsificação.
 
 | Recurso                                    | Exemplos de rotas                                                                                                                                                                          | Acesso                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -592,16 +615,18 @@ As rotas F2/F3, F4.2 (estoque de insumos) e F4.3 (estoque de produtos acabados) 
 | Produtos públicos                          | `GET /api/catalogo/produtos`, `GET /api/catalogo/produtos/{produtoId}`                                                                                                                     | Anônimo; `200`, `400` para filtro/página inválidos e `404` para produto não visível                                                                                                                                                                                                                    |
 | Imagens públicas                           | `GET /api/catalogo/produtos/{produtoId}/imagens/{imagemId}/conteudo`                                                                                                                       | Anônimo; WebP `no-store`; `400`, `404` para produto/imagem privada ou ausente, `503` se armazenamento indisponível                                                                                                                                                                                     |
 | Insumos e movimentos | API administrativa em `/api/admin/insumos`, consumida pelo painel Angular de Matérias-primas | Saldos, políticas de lote, conversões e histórico. As escritas exigem ADMIN e antifalsificação. |
-| Estoque acabado e lotes (F4.3)             | Base `/api/admin/estoque/produtos-acabados/variantes/{varianteId}`: `GET/PUT /politica`; `GET /posicao`, `/lotes`, `/lotes/{loteId}`, `/movimentacoes`, `/movimentacoes/{movimentoId}`; `POST /entradas`, `/saidas`, `/transferencias`, `/contagens`, `/movimentacoes/{movimentoId}/estorno` | Implementado: saldo e lotes vinculados à variante existente; todas as rotas exigem `ADMIN`; escritas com antifalsificação; operações de estoque idempotentes e contagem com versão esperada; painel Angular ADMIN implementado |
+| Estoque acabado e lotes (F4.3)             | Base `/api/admin/estoque/produtos-acabados/variantes/{varianteId}`: `GET/PUT /politica`; `GET /posicao`, `/lotes`, `/lotes/{loteId}`, `/movimentacoes`, `/movimentacoes/{movimentoId}`; `POST /entradas`, `/saidas`, `/saidas-automaticas`, `/transferencias`, `/contagens`, `/movimentacoes/{movimentoId}/estorno` | Implementado: saldo e lotes vinculados à variante existente; todas as rotas exigem `ADMIN`; escritas com antifalsificação; operações de estoque idempotentes e contagem com versão esperada; painel Angular ADMIN implementado |
 | Reservas e disponibilidade interna | Integradas aos comandos e consultas de estoque, produção e pedido. | Alocações produtivas e reservas comerciais são entidades distintas. |
 | Painel de estoque de insumos (F4.5)        | F4.5.1 cadastro/listagem/formas; F4.5.2 entradas; F4.5.3 posição/lotes/histórico; F4.5.4 saídas, perdas, descartes, contagem física e estorno | Rotas protegidas por `ADMIN`; consultas são paginadas no servidor; escritas usam antifalsificação, `Idempotency-Key` e decimais preservados; contagem envia a versão da posição e exige nova conferência após conflito                                                                 |
 | Disponibilidade pública | `GET /api/catalogo/produtos` e `GET /api/catalogo/produtos/{id}` | Estado público por produto e variante. |
 | Fornecedores | `/api/admin/fornecedores` e `/{id}/status` | Cadastro, consulta, edição e inativação/reativação. |
 | Compras | `/api/admin/compras-materias-primas`, `GET /tentativas/{chave}`, `POST /{id}/cancelar` e `/receber` | Consulta de tentativa pelo criador autenticado e versão esperada em alterações. |
 | Receitas | `/api/admin/receitas`, `GET /{id}/versoes/{numero}`, `PATCH /{id}/status` | Versões imutáveis e token de edição. |
-| Produção | `GET/POST /api/admin/producao`, `GET /{id}`, `/previa` e `/tentativas/{chave}`, `POST /{id}/cancelar` e `/concluir` | Conclusão exige versão da ordem e validade quando a política não fornece prazo padrão. |
-| Pedidos | `GET/POST /api/pedidos`, `GET /{id}` e `/{id}/pagamento`, operações ADMIN em `/api/admin/pedidos` | Titularidade na consulta. ADMIN confirma pagamento, cancela, prepara e confirma entrega. |
-| Vendas externas                            | `POST /admin/vendas-externas`, `GET /admin/vendas-externas`                                                                                                                                | Administrativo                                                                                                                                                                                                                                                                                         |
+| Produção | `GET/POST /api/admin/producao`, `GET /{id}`, `/previa` e `/tentativas/{chave}`, `POST /{id}/cancelar` e `/concluir` | Conclusão exige versão da ordem e usa o modo explícito sem validade na rotina. |
+| Pedidos | `GET/POST /api/pedidos`, `GET /{id}` e `/{id}/pagamento`, operações ADMIN em `/api/admin/pedidos` e configuração em `/api/admin/configuracoes/pix-manual` | Titularidade na consulta. ADMIN confirma pagamento, cancela, prepara e confirma entrega. |
+| Vendas externas | `/api/admin/vendas-externas`, detalhe, `/tentativas/{chave}`, `/{id}/recebimentos` e `/{id}/cancelar` | ADMIN, CSRF e UUID nas escritas. |
+| Financeiro | `/api/admin/financeiro/lancamentos`, `/compras/{id}/pagamentos`, `/movimentacoes`, `/resumo` e `/tentativas/{chave}` | ADMIN; centavos em strings; escritas com CSRF e UUID. |
+| Agenda | `/api/admin/agenda`, `/{id}` e `/tentativas/{chave}` | ADMIN; consulta por intervalo civil, inclusão, edição e exclusão protegidas por CSRF, UUID e versão quando aplicável. |
 | Entrega                                    | `POST /checkout/cotacoes`, `GET /admin/entregas`                                                                                                                                           | Conforme operação; condicionado                                                                                                                                                                                                                                                                        |
 | Pagamento                                  | `POST /pedidos/{id}/cobrancas`, `POST /webhooks/pagamentos/{provedor}`                                                                                                                     | Autenticado / webhook autenticado pelo provedor; condicionado                                                                                                                                                                                                                                          |
 | Gestão                                     | `GET /admin/dashboard`, demais consultas                                                                                                                                                   | Administrativo; condicionado                                                                                                                                                                                                                                                                           |
@@ -609,6 +634,8 @@ As rotas F2/F3, F4.2 (estoque de insumos) e F4.3 (estoque de produtos acabados) 
 Os endpoints de autenticação, categorias e produtos administrativos estão implementados; a API administrativa de fotos foi adicionada na F3.4.3.2 e as consultas públicas do catálogo na F3.6.1. A F3.4.1 adicionou somente domínio e persistência de metadados, sem contratos HTTP. As rotas `/api/admin/produtos` preservam cadastro, edição, listagem e detalhes existentes e recebem/devolvem medidas, características, valores e associações de variantes. Os detalhes e a listagem incluem IDs persistidos, valores canônicos e combinações necessárias para reconstruir o formulário. Os contratos públicos e suas regras de visibilidade estão detalhados na seção 4 e não reutilizam DTOs administrativos. Reenvio e recuperação retornam `202 Accepted` com a mesma mensagem genérica para resultados normais elegíveis e não elegíveis, `400` para entrada inválida e `429` ao exceder a política independente da rota, com `Retry-After` quando disponível. As três políticas de reenvio, recuperação e redefinição são fixed-window, cada uma com 10 requisições por minuto por IP e fila zero; a identificação usa `RemoteIpAddress`, sem confiar diretamente em headers de forwarding. Regras adicionais de cooldown/deduplicação/limite de recuperação são aplicadas por conta na Outbox. As rotas administrativas atuais aceitam exclusivamente `ADMIN`; funcionários permanecem sem acesso até haver matriz e política específicas.
 
 As rotas da cadeia usam política `Administracao` e antifalsificação nas escritas. O autor vem da sessão. Criação e recebimento de compras, início, cancelamento e conclusão da produção usam `Idempotency-Key` UUID. A interface guarda tentativas incertas na sessão da aba, consulta o estado e permite reenvio manual compatível, sem POST automático na recarga. A reserva comercial integra a criação idempotente do pedido.
+
+**Compatibilidade de estoque.** A interface manda `semControleValidade: true` em entradas de insumos e acabados, recebimento e conclusão. Em insumos, o modo usa saldo agregado quando o material não controla lotes ou gera lote interno sem validade quando rastreado. Em acabados, cria lote interno com `DataValidade` nula. Validade informada e prazo padrão continuam nos contratos antigos. Omitir o campo mantém a semântica e o fingerprint do legado. Tentativas pendentes preservam os dados originais quando disponíveis. Consulta e recarga não disparam escritas automaticamente. No checkout, a tentativa é mantida no `localStorage`. Compras, produção, Financeiro e Agenda usam a sessão da aba nos fluxos de recuperação correspondentes.
 
 #### Categorias administrativas (F3.2.1)
 
@@ -731,7 +758,7 @@ Cadastro transacional → mensagem inicial `Pending` → claim do worker → ger
 
 O reenvio HTTP delega ao caso de uso, que consulta a conta não confirmada e a Outbox; cooldown de 2 minutos, máximo de 5 solicitações por conta em janela móvel de 1 hora (incluindo cadastro inicial), deduplicação de `Pending`/`Processing` e recuperação de `DeadLetter` são aplicados na transação SQL por usuário. A rota usa fixed window de 10 requisições por minuto por IP, sem confiar em `X-Forwarded-For`.
 
-**Pix manual:** `GET/PUT /api/admin/configuracoes/pix-manual` gerencia instruções. `GET /api/pedidos/{id}/pagamento` valida titularidade e elegibilidade. A confirmação exige ação administrativa após conferência do recebimento.
+**Pix manual:** `GET/PUT /api/admin/configuracoes/pix-manual` gerencia instruções. `GET /api/pedidos/{id}/pagamento` valida titularidade e elegibilidade. São aceitas chaves aleatória, e-mail, telefone e CNPJ. A confirmação exige ação administrativa após conferência do recebimento.
 
 #### Recuperação de senha — implementada
 
@@ -755,7 +782,7 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 - Link de recuperação contém e-mail e token somente no fragmento `/reset-password#...`; o Angular remove esses valores da URL antes de prosseguir e não os grava em armazenamento local. Respostas de autenticação usam `no-store`.
 - Validar CPF no servidor; proteger dados pessoais em logs, respostas e telas; definir finalidade, retenção e procedimentos de exclusão/correção com a proprietária antes do uso real.
 - Autorização por endpoint e caso de uso. A política `Administracao` exige autenticação e papel `ADMIN`; funcionário e cliente não acessam os endpoints administrativos iniciais, inclusive o gerenciamento de categorias. Escritas de categoria exigem antifalsificação. Permissões administrativas de funcionário e a matriz fina permanecem pendentes; cliente acessa apenas seus próprios recursos.
-- A F4.2–F4.5 prevê operações de estoque administrativas somente para `ADMIN`, verificadas na API e nos casos de uso; as rotas Angular serão apenas UX. Disponibilidade pública F4.6 será leitura anônima estritamente resumida, sem devolver quantidades exatas, custos, IDs de lote ou reservas.
+- Operações administrativas de estoque, vendas, Financeiro e Agenda exigem `ADMIN` na API. A vitrine expõe disponibilidade resumida, sem quantidades, custos, posições ou reservas. Consultas de tentativa respeitam a identidade autenticada conforme o contrato de cada operação.
 - Para o cliente navegador da F2, cookie é o modelo selecionado; não há JWT implementado. Outro tipo de cliente exigiria decisão própria antes de adotar mecanismo diferente.
 - Configurações por ambiente e segredos fora do Git; logs estruturados sem tokens, CPF integral ou payload sensível de pagamento.
 - HTTPS em produção, CORS restrito às origens autorizadas, validação de uploads e limites de requisição.
@@ -809,8 +836,8 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 13. Entradas, saídas, perdas, ajustes e reversões preservam movimento imutável; falha não pode deixar saldo atualizado sem ledger ou ledger sem saldo.
 14. Dois comandos simultâneos para a última unidade de insumo/acabado não produzem saldo negativo nem reserva acima da disponibilidade; repetição da chave não duplica efeitos.
 15. Ajuste recebe contagem física, calcula a diferença no servidor e não apaga movimentos anteriores; reversão é compensatória e vinculada.
-16. Lote de insumo sem controle permanece agregado; lote rastreável respeita exigência de validade configurada e FEFO entre elegíveis; lote inelegível permanece físico, mas indisponível.
-17. Lote acabado aponta para variante existente, quantidade inteira e datas obrigatórias; mudança do prazo padrão não altera lotes criados anteriormente.
+16. Insumo sem lote usa saldo agregado. Insumo rastreado pode receber lote interno sem validade na rotina. Lotes bloqueados ou vencidos continuam físicos e indisponíveis.
+17. Lote acabado aponta para variante existente e mantém quantidade inteira. O comando comum gera lote sem validade. A mudança do prazo padrão do contrato legado não altera lotes anteriores.
 18. Reserva reduz disponibilidade, mas não saldo físico; liberar restaura disponibilidade; consumir reduz físico e encerra a reserva idempotentemente.
 19. Público continua consultando produto publicado esgotado; estados de disponibilidade não expõem quantidades, custos, lotes nem reservas.
 
@@ -832,9 +859,9 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 
 **F4.5.4 — validação focada:** suíte Angular dos módulos de estoque aprovou 48 testes, incluindo rotas ADMIN, saída limitada ao disponível, perda em lote bloqueado, quantidade inválida, contagem com `versaoSaldo`, conflito que exige nova conferência, resultado sem diferença, retry idempotente, submissão duplicada e estorno rejeitado pelo servidor. Foram executados testes Angular focados de serviço/utilitários e o conjunto de testes F4 do cliente. Nenhum teste backend/SQL foi executado; não houve alteração de backend, schema, migration ou banco persistente.
 
-**F4.5.5 — validação integrada revisada:** 56 testes Angular focados passaram em 8 arquivos. No backend, 29 testes SQL passaram: autenticação/admin (6), endpoints de estoque (3), consultas/histórico (2) e ledger/entradas/saídas/contagens/estornos (18). Os testes HTTP usam `WebApplicationFactory`; casos de autenticação usam Identity/SQL Server temporário, enquanto endpoints de estoque usam handler de autenticação de teste e SQL Server real descartável. A fixture verificou a instância local `.\SQLEXPRESS`, criou bases `Xaquiamuni_IntegrationTest_*`, aplicou migrations somente nelas e removeu as bases criadas. Não houve acesso a `XaquiamuniDev`, Azure ou outro banco persistente. Os testes Angular usam serviços HTTP simulados; o projeto não oferece suíte E2E de navegador. Assim, a cobertura permanece separada entre UI/HTTP simulado e API/SQL real.
+**F4.5.5 — validação integrada revisada:** 56 testes Angular focados passaram em 8 arquivos. No backend, 29 testes SQL passaram: autenticação/admin (6), endpoints de estoque (3), consultas/histórico (2) e ledger/entradas/saídas/contagens/estornos (18). Os testes HTTP usam `WebApplicationFactory`; casos de autenticação usam Identity/SQL Server temporário, enquanto endpoints de estoque usam handler de autenticação de teste e SQL Server real descartável. A fixture verificou a instância local `.\SQLEXPRESS`, criou bases `Xaquiamuni_IntegrationTest_*`, aplicou migrations somente nelas e removeu as bases criadas. Não houve acesso a `XaquiamuniDev`, Azure ou outro banco persistente. Os testes Angular usam serviços HTTP simulados; a fase não dispunha de suíte E2E de navegador. Naquele gate, a cobertura ficou separada entre UI/HTTP simulado e API/SQL real.
 
-**F4.5.6 — verificação final (aguardando revisão):** um novo teste de integração HTTP/SQL executou aquisição válida sem informar `CustoTotal`. O endpoint retornou sucesso; o movimento e o histórico mantiveram `CustoTotal` e `CustoPorUnidadeBase` como `null`; a consulta HTTP de posição retornou físico/utilizável/disponível `2.123456`; replay da mesma chave/payload retornou o mesmo movimento e o banco confirmou um único movimento e saldo `2.123456`. O teste passou usando a fixture local, que validou `.\SQLEXPRESS`, migrou somente a base aleatória temporária e a removeu. A integração navegador Angular → API em execução não foi executada: a fixture mantém banco e `WebApplicationFactory` dentro do processo de teste, não há suite E2E instalada, e iniciar a API de desenvolvimento sem um harness separado exigiria provisionar/limpar outra base e uma conta ADMIN temporária. Para validação manual: provisionar uma base local única `Xaquiamuni_IntegrationTest_*` e confirmar instância/base; criar um ADMIN temporário pelo provisionador existente; iniciar a API local com `ConnectionStrings__SqlServer` explicitamente apontada somente para essa base e worker/Resend desabilitados; iniciar `npm start` usando o proxy existente, autenticar no navegador, cadastrar insumo, registrar entrada e conferir posição/histórico; ao final, parar os processos, remover apenas a base temporária identificada e verificar que não restou nenhuma `Xaquiamuni_IntegrationTest_*`. F4.5 permanece aberta até revisão.
+**F4.5.6 — verificação final (registro histórico):** a aquisição HTTP/SQL sem custo manteve `CustoTotal` e `CustoPorUnidadeBase` como `null`, com físico, utilizável e disponível de `2.123456`. O replay retornou o movimento original e o SQL confirmou uma única gravação. O teste usou somente a base descartável da fixture. A etapa ainda não exercitava o navegador. O roteiro manual dessa fase foi superado pelo executor e pela demonstração isolada da seção 11.2.
 
 **Integração SQL F2:** testes opt-in via `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION=1`; a fixture valida `.\SQLEXPRESS`, cria bancos temporários `Xaquiamuni_IntegrationTest_*`, aplica migrations somente neles e remove apenas os bancos criados pela própria fixture. O fluxo de Resend integrado usa handler HTTP simulado; o teste do endpoint usa Identity e SQL reais no banco temporário, com worker e Resend desabilitados. A suíte não deve apontar para `XaquiamuniDev` nem para Azure SQL.
 
@@ -855,6 +882,8 @@ O provider dedicado `XaquiamuniPasswordReset` tem validade de 1 hora, separada d
 **Cobertura F8.5:** `CadeiaFabricacaoSqlServerIntegrationTests` usa `HostE2ECompra`, sessões reais em HTTPS local e `SqlServerTestDatabase`. A fixture limita o destino à instância local `.\SQLEXPRESS` e ao banco descartável `Xaquiamuni_IntegrationTest_<GUID>`. O ensaio liga compra recebida a consumo FEFO, entrada acabada e checkout, com concorrência, idempotência e rollback. `SmokeCompraChromeTests.ChromeAuditaSeisTelasAdministrativas` exercita Angular, API e SQL descartável a 375 e 1280 px. É uma execução distinta da cadeia de fabricação via API.
 
 **Regressão F8.5.5:** 906 testes .NET sem SQL, 34 testes SQL descartáveis da cadeia e módulos relacionados e 497 testes Angular passaram. Uma execução dedicada repetiu os seis cenários da cadeia e o ensaio Chrome das seis telas a 375 e 1280 px, todos aprovados. Os builds Release e Angular de produção passaram. `dotnet ef migrations has-pending-model-changes` verificou o modelo sem divergência do snapshot. Nenhum banco persistente foi usado. Permanecem os avisos de orçamento do bundle inicial e três folhas de estilo da loja.
+
+**Regressão F10.7.8 (ambiente local isolado).** Aprovados 917 testes .NET sem SQL, 293 testes SQL descartáveis e 570 testes Angular. O executor Chrome versionado aprovou 11 verificações, sendo oito ensaios de navegador e três de proteção do destino SQL. Dois ensaios suplementares em Chrome aprovaram, a 375 e 1280 px, recebimento e conclusão sem validade, atualização de Movimentações após pagamento e cancelamento e recuperação da Agenda após exclusão concorrente. Builds .NET Release e Angular de produção e a verificação do snapshot EF passaram. O Angular manteve avisos de orçamento. O CSS da home ficou em 7,98 kB para limite de erro de 8 kB. A evidência refere-se ao ambiente ensaiado.
 
 ### 8.2 Metas não definidas
 
@@ -920,7 +949,7 @@ A tabela registra a sequência histórica, com atualização das linhas F4.4–F
 | F10         | Financeiro, análise, agenda, fornecedores, permissões finas e polimento, conforme priorização                                                                                                          | Critérios específicos aprovados                                                                                                                                                                                                                                            |
 | F11         | Teste integrado com proprietária, correções, documentação e demonstração                                                                                                                               | Evidências e pendências registradas                                                                                                                                                                                                                                        |
 
-Gates vigentes: **F8.3** fornecedores, compras e recebimento integral. **F8.4** receitas versionadas e produção transacional. **F8.5** recuperação de tentativas, cadeia integrada por API/SQL e revisão Chrome das seis telas.
+Gates vigentes: **F8.3–F8.5** consolidaram compras e produção; **F10.2–F10.6** entregaram Vendas Externas, Financeiro e Agenda; **F10.7** simplificou estoque e estabilizou navegação e recuperação. A regressão **F10.7.8** está registrada na seção 8.1.
 
 **Método de trabalho:** prompts curtos ao Copilot; uma etapa por vez; revisar retorno e diffs; testes focados durante implementação e suíte completa em gates; nunca solicitar commit/push automático nem apagar testes que falhem. Etapas podem ser reorganizadas por dependência e feedback, mas mudanças de escopo devem ser registradas.
 
@@ -952,13 +981,13 @@ Gates vigentes: **F8.3** fornecedores, compras e recebimento integral. **F8.4** 
 | PT-20 | Prontidão da recuperação          | Endpoint, processor, Outbox, redefinição transacional, invalidação de sessões e UI implementados e validados, inclusive manualmente com Resend real em ambiente isolado; produção pendente | Configurar URL pública HTTPS, Data Protection persistente/compartilhada, proxies confiáveis e segredos; validar operação no ambiente de produção antes de ativar     |
 | PT-21 | Provisionamento ADMIN             | Provisionador interativo atual está restrito a `.\SQLEXPRESS` / `XaquiamuniDev`                                                                                                            | Definir e validar mecanismo controlado e apropriado ao ambiente antes de provisionar administradores fora do desenvolvimento local                                   |
 | PT-22 | Precisão e limites numéricos      | Quantidade-base `decimal(18,6)`; F4.2.3 definiu custo total `decimal(18,2)` e custo unitário `decimal(38,14)` com arredondamento midpoint away from zero                                   | Resolvida tecnicamente na F4.2.3; total e quantidade-base originais permanecem a fonte de verdade, sem método de valoração                                           |
-| PT-23 | Lotes de insumo | Lotes sem validade permitidos conforme política, alocados depois dos datados. | Preservar elegibilidade e proteção de posições reservadas. |
-| PT-24 | Prazo padrão de validade          | F4.3 implementa prazo padrão opcional em dias inteiros não negativos por variante; validade manual informada prevalece, e o lote registra a origem e, quando aplicável, os dias do prazo usado. Sem prazo configurado, exige-se validade manual. | A proprietária ainda precisa definir quais valores configurar por produto/variante; não há prazo universal nem alteração retroativa de lotes existentes |
+| PT-23 | Lotes de insumo | A entrada comum registra lote interno sem validade quando o material é rastreado, preservando a política histórica. | Manter elegibilidade e reservas. |
+| PT-24 | Prazo padrão | Validade explícita ou calculada é compatibilidade legada. A rotina comum usa validade nula. | Preservar as datas e condições existentes. |
 | PT-25 | “Últimas unidades” | Disponibilidade booleana implementada. A faixa baixa e a atualização em tempo real são opcionais. | Avaliar após o MVP. |
 | PT-26 | Reserva inelegível | Conclusão e entrega bloqueiam posição inelegível quando necessária. | Definir procedimento administrativo de exceção. |
 | PT-27 | Calendário de validade de insumos | F4.2.6 centraliza a data operacional em `Estoque:Calendario:TimeZoneId`, com padrão técnico proposto `America/Sao_Paulo`; aprovação da proprietária ainda pendente                         | Confirmar a zona operacional antes do uso em produção; manter datas de validade civis e auditoria em UTC                                                             |
 
-O PRD, seção 13.3, classifica o trabalho restante. Para o MVP operacional, verificar configuração, dados reais de retirada e políticas de validade antes de ativar serviço público. O ensaio local e o pré-voo de homologação não substituem esse aceite.
+O PRD, seção 13.3, classifica o trabalho restante. Para o MVP operacional, verificar configuração, dados reais de retirada e parâmetros operacionais aplicáveis antes de ativar serviço público. O ensaio local e o pré-voo de homologação não substituem esse aceite.
 
 ### 10.1 Mapa de rastreabilidade resumido
 
@@ -969,14 +998,15 @@ O PRD, seção 13.3, classifica o trabalho restante. Para o MVP operacional, ver
 | RF-04–08; RN-01–02, RN-17, RN-38–45 | Catálogo e estoque, unidades, lotes, saldos, reservas e disponibilidade; seções 4–5 | F3; F4.1–F4.6  |
 | RF-09–14; RN-03–06, RN-18 | Produção, reservas e cálculo, seções 4–5 | F8.4–F8.5 |
 | RF-15–19; RN-07, RN-09              | Carrinho, pedidos, pagamentos, seções 5–6                                           | F7, F9         |
-| RF-26; RN-08, RN-19                 | Venda externa e substituição Trienta                                                | F8, F11        |
+| RF-26; RN-08, RN-19 | Vendas externas entregues. Substituição do Trienta depende de migração operacional. | F10.2, F10.7 |
 | RF-25; RN-46 | Fornecedores, compras e recebimento | F8.3–F8.5 |
-| RF-20–24; RN-14–15, RN-20 | Integrações e módulos condicionados | F9–F10, plano original |
+| RF-22, RF-24 | Financeiro de caixa e Agenda administrativa | F10.3–F10.7 |
+| RF-20–21, RF-23; RN-14–15, RN-20 | Pagamento integrado, logística e análise avançada condicionados | Evolução futura |
 | RNF-01–10                           | Segurança, qualidade, UX, histórico e operação                                      | Todos os gates |
 
 ## 11. Referências e validação documental
 
-- `docs/prd.md` — Xaquiamuni, versão 0.27. Fonte das regras, critérios e prioridades remanescentes.
+- [PRD](prd.md) — Xaquiamuni, versão 0.28. Fonte das regras, critérios e prioridades remanescentes.
 - `tdd.md` do professor — exemplo de estrutura e profundidade de um Technical Design Document para locadora; **não** fonte de requisitos da Xaquiamuni.
 - Repositório NoteKeeper informado pelo solicitante — referência de organização e stack, **a conferir** em F0.
 - Entrevistas com a proprietária e esclarecimentos registrados na conversa — decisões de negócio e propostas aceitas como direção inicial.
@@ -984,6 +1014,13 @@ O PRD, seção 13.3, classifica o trabalho restante. Para o MVP operacional, ver
 ### 11.1 Condições de handoff
 
 Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pendências aplicáveis do PRD/TDD; (2) validar as decisões específicas da etapa; (3) definir e executar testes de aceite; (4) configurar Data Protection persistente e compartilhada quando houver múltiplas instâncias; (5) configurar proxies e forwarded headers somente para proxies confiáveis; (6) definir provisionamento de administradores adequado ao ambiente — o comando atual é somente local — e proteger segredos, verificar o domínio e remetente no Resend, configurar URL pública HTTPS e habilitar explicitamente sender e worker no ambiente adequado; (7) avaliar limitador distribuído se houver múltiplas instâncias, pois os rate limiters atuais são por processo. O gate específico de login de `CLIENTE` já está ativo; `RequireConfirmedEmail` global permanece `false`. **Os testes manuais com Resend real ocorreram em ambientes isolados e não homologam produção, Azure, Pix ou Correios.**
+
+### 11.2 Execução e ambientes
+
+- **Demonstração local.** No Windows, a partir da raiz, executar `powershell -File scripts/Iniciar-Demonstracao.ps1` em terminal interativo, com .NET 10, dependências do Angular, Chrome e `.\SQLEXPRESS` disponíveis. O script compila o Angular em produção, abre o host HTTPS em loopback, provisiona contas e dados sintéticos em banco próprio e orienta o uso das contas e do e-mail capturado. Encerrar com `Q` ou `Ctrl+C` para limpar os recursos da execução.
+- **Testes descartáveis.** Integração SQL opt-in por `XAQUIAMUNI_RUN_SQLSERVER_INTEGRATION=1`. O executor Chrome requer adicionalmente `XAQUIAMUNI_RUN_CHROME_E2E=1` e o build Angular. A fixture valida instância e banco efetivos, migra apenas `Xaquiamuni_IntegrationTest_<GUID>` e remove a base criada. O roteiro manual histórico da F4.5.6 foi superado por esse executor e pela demonstração isolada.
+- **Homologação.** `scripts/Testar-PreVooHomologacao.ps1`, com `-ServidorSqlEsperado` e `-BancoSqlEsperado`, faz diagnóstico de configuração após o build Release. Não abre conexão nem valida conectividade, restauração ou implantação.
+- **Produção futura.** Confirmar retirada, remetente e domínio, armazenamento durável de imagens, segredos e Data Protection, backup e restauração. O provisionador histórico de desenvolvimento não é um procedimento de demonstração ou produção.
 
 ## 12. Histórico de versões
 
@@ -1023,3 +1060,4 @@ Antes de novas funcionalidades críticas ou uso em produção: (1) revisar pend�
 | 3.3    | 16/11/2026 | F4.5.5: 56 testes Angular e 29 testes HTTP/SQL Server descartável aprovados; registrados os limites de cobertura e a ausência de E2E; F4.5 não encerrada e aguardando avaliação.                                                                                                                                  |
 | 3.4    | 16/11/2026 | F4.5.6: regressão HTTP/SQL de aquisição sem custo aprovada, com saldo, histórico, `null` e replay idempotente verificados; integração navegador Angular/API não executada; roteiro manual seguro registrado; aguarda revisão final.                                                                                 |
 | 3.5 | 19/11/2026 | F8.5.5: atualizados arquitetura, persistência, estados, endpoints e cobertura da cadeia administrativa e comercial. |
+| 3.6 | 20/11/2026 | F10.8.2: desenho vigente, contratos, migrations, execução isolada e gate F10.7.8 consolidados. |

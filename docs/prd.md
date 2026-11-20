@@ -5,9 +5,9 @@
 | Campo               | Informação                                                                                                                                                                                                                 |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Projeto             | Xaquiamuni — E-commerce e Gestão Artesanal                                                                                                                                                                                 |
-| Versão do documento | 0.27 — F8.5.5, revisão da cadeia administrativa e comercial |
-| Data | 19/11/2026 |
-| Status | Compras, fabricação e checkout implementados no recorte atual. Cadeia validada pela API e SQL descartável na F8.5.3. Seis telas administrativas validadas em Chrome real na F8.5.4. |
+| Versão do documento | 0.28 — F10.8.2, consolidação do MVP validado |
+| Data | 20/11/2026 |
+| Status | MVP validado em ambiente local isolado na F10.7.8. Homologação para uso real pendente. |
 | Contexto            | Trabalho de Conclusão de Curso — Academia do Programador                                                                                                                                                                   |
 | Fonte principal     | Entrevista com a proprietária (53 respostas, cinco esclarecimentos complementares e rodada posterior de decisões sobre cadastro, entregas, estoque e banco), logomarca e capturas do Instagram fornecidas pelo solicitante |
 | Escopo              | Primeira entrega demonstrável e planejamento de evolução, com limites e pendências explícitos                                                                                                                              |
@@ -20,7 +20,7 @@ Desenvolver uma plataforma web responsiva para a **Xaquiamuni Produtos Naturais*
 
 O diferencial do produto será conectar a venda online à **organização da produção artesanal**, apontada pela proprietária como a principal necessidade. A solução deverá apoiar o planejamento de lotes, a reserva de matérias-primas, o cálculo da capacidade de produção e a atualização consistente de produtos acabados.
 
-Pagamentos integrados, entregas, financeiro, análises e agenda compõem a visão de produto, mas sua abrangência na entrega do TCC depende de decisões operacionais e da viabilidade das integrações. Não presumir automações ou serviços externos já contratados.
+O MVP reúne loja com retirada e PIX manual, compras, fabricação, estoque, vendas externas, Financeiro e Agenda. Pagamento integrado, logística externa e análise avançada permanecem condicionados.
 
 Na F2 foram implementados cadastro de clientes com CPF protegido, perfil e endereço; login, logout e sessão autenticada; gate explícito que impede o login de `CLIENTE` não confirmado após credenciais corretas; confirmação e reenvio de e-mail; recuperação e redefinição de senha com invalidação das sessões anteriores; e estados de interface de cadastro concluído, confirmação pendente e sessão ativa. As solicitações de e-mail usam Outbox e processamento assíncrono. O gate final aprovou 638 testes backend e 139 frontend (777 no total), sem falhas ou ignorados, e os builds backend e frontend. Testes manuais anteriores validaram cadastro, bloqueio pré-confirmação, confirmação, reenvio e recuperação com Resend real em ambientes isolados; isso não valida implantação nem operação em produção. `RequireConfirmedEmail` global permanece `false`; o gate específico para `CLIENTE` está ativo. Resend e worker continuam desabilitados por padrão, e os requisitos de produção permanecem pendentes.
 
@@ -57,7 +57,7 @@ O planejamento de produção, os pedidos e os controles operacionais estão dist
 | Cadastro do cliente                | Conta obrigatória antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo com CEP                                        |
 | Confirmação de e-mail              | Cadastro cria conta não confirmada e enfileira solicitação inicial; link válido por 24 horas; reenvio genérico com cooldown e limite por conta |
 | Banco PJ                           | Sicredi; disponibilidade de API Pix e condições contratuais não verificadas                                                                    |
-| Rastreabilidade                    | Variações dos produtos podem exigir fichas técnicas/estoques distintos; registrar fabricação e validade por lote                               |
+| Rastreabilidade | Variantes têm receitas e estoque próprios. A rotina trabalha com saldos consolidados. Lotes internos, datas e condições históricas são preservados. |
 | Precificação                       | Considerar matérias-primas, embalagem, mão de obra, frete, taxas e despesas, distinguindo margem e lucro                                       |
 
 ## 3. Objetivos e indicadores de sucesso
@@ -85,27 +85,29 @@ Não há baseline de tempo economizado, faturamento, volume de pedidos, disponib
 
 ## 5. Escopo e prioridades
 
-### 5.1 Núcleo prioritário da primeira entrega — proposta para validação
+### 5.1 Núcleo prioritário da primeira entrega
 
-1. **Contas e acesso:** cadastro, autenticação por cookie e sessões de cliente, administrador e funcionário; confirmação obrigatória para login de `CLIENTE`; confirmação/reenvio de e-mail e recuperação/redefinição de senha. Permissões administrativas detalhadas e demais operações de negócio continuam futuras.
+1. **Contas e acesso:** cadastro, login com confirmação obrigatória para cliente, recuperação de senha e sessões de cliente e administrador. Funcionários têm papel de base, com permissões por tarefa pendentes.
 2. **Catálogo e vitrine:** cadastro administrativo de produtos, categorias, preços, fotos, situação de publicação e consulta pública de itens disponíveis.
-3. **Carrinho e pedidos:** seleção de quantidades, validação de disponibilidade, conta de cliente obrigatória, endereço ou modalidade de entrega e criação de pedido.
-4. **Estoque de produtos acabados:** entradas, saídas, ajustes auditáveis, lotes com fabricação/validade e disponibilidade real para venda online.
-5. **Estoque de matérias-primas:** unidades coerentes, entradas, ajustes, mínimo cadastrado, saldo físico e saldo reservado.
+3. **Carrinho e pedidos:** carrinho local, checkout para retirada, reserva no pedido, PIX manual e histórico do titular.
+4. **Estoque de produtos acabados:** entradas e saídas comuns sem seleção de lote, saldos consolidados e histórico. Ajustes técnicos permanecem disponíveis.
+5. **Matérias-primas, fornecedores e compras:** unidades-base, apresentações geridas em Compras, conversões, recebimento integral, saldos, mínimos e reservas.
 6. **Fichas técnicas:** vínculo entre produto e quantidades necessárias de cada matéria-prima.
 7. **Ordens de produção:** planejamento, reserva de insumos, acompanhamento, conclusão com entrada de produtos acabados e cancelamento com liberação de reservas.
-8. **Painel operacional mobile-first:** visão de pedidos, produção pendente, materiais em falta e produtos críticos.
-9. **Registro de vendas externas:** lançamento manual de vendas de feira, WhatsApp, Instagram e presencial, com movimentação de estoque e registro financeiro correspondente, sem criar pedido online fictício.
+8. **Operação mobile-first:** telas de pedidos, estoque e produção. Painel consolidado permanece parcial.
+9. **Vendas externas:** ADMIN registra a venda com baixa transacional e recebimentos integrais ou parciais.
 
-Esses itens preservam o escopo-alvo. O recorte operacional demonstrável inclui fornecedores, compras e recebimento, estoque, fabricação e pedidos do site com retirada local e Pix manual. O cliente pode consultar seus próprios pedidos. As funcionalidades ainda pendentes estão na seção 13.3.
+10. **Financeiro e Agenda:** lançamentos, pagamentos a fornecedores, movimentações e visão geral de caixa. Calendário administrativo, com cadastro, edição e exclusão lógica de compromissos.
+
+O núcleo foi validado localmente. A seção 13.3 distingue entregas parciais e pendências.
 
 ### 5.2 Expansões comerciais e de gestão — propostas condicionadas
 
 - **Pix integrado:** geração de cobrança e confirmação automática por provedor, após escolha de fornecedor, custos e contrato.
 - **Frete e entregas:** cálculo de Correios, entrega local e retirada, conforme regras de preço, abrangência e prazos a confirmar.
-- **Financeiro:** registro de receitas provenientes de pedidos online e vendas externas lançadas manualmente, despesas, custos e visão de resultado estimado.
+- **Financeiro avançado:** valoração, margem, lucro e conciliação bancária.
 - **Análise de estoque:** mais vendidos, consumo de insumos, cobertura, alertas e sugestões de mínimo; sugestões não alteram estoque automaticamente.
-- **Agenda e notas:** compromissos, prazos de produção/entrega, lembretes e anotações.
+- **Agenda ampliada:** recorrência, sincronização externa e lembretes.
 - **Notificações:** avisos de novos pedidos e prazos, dependendo do canal escolhido.
 
 As expansões acima dependem de decisão explícita. O fluxo de retirada local e Pix manual já integra o recorte entregue.
@@ -125,7 +127,7 @@ As expansões acima dependem de decisão explícita. O fluxo de retirada local e
 
 ### J-01 — Preparar a operação
 
-A administradora cadastra produtos, fornecedores e matérias-primas. Registra compras com linhas simples ou kits mistos e confere os materiais e as validades antes de receber. Criar, editar ou cancelar o rascunho não altera o estoque.
+A administradora cadastra produtos, fornecedores e matérias-primas, gerencia apresentações em Compras e registra linhas simples ou kits mistos. Confere os materiais antes do recebimento integral, que dispensa entrada de validade na rotina. O rascunho não altera o estoque.
 
 ### J-02 — Planejar produção
 
@@ -137,7 +139,7 @@ A administradora informa a quantidade produzida e o consumo real de todos os mat
 
 ### J-04 — Comprar produto disponível
 
-O cliente escolhe produtos disponíveis, autentica-se ou cria conta, revisa o carrinho e finaliza para retirada local. O servidor revalida preços e estoque e cria o pedido com a reserva. O cliente pode reencontrar o pedido e consultar as instruções de Pix manual quando habilitadas.
+O cliente escolhe produtos disponíveis, autentica-se ou cria conta, revisa o carrinho e finaliza para retirada local. O servidor revalida preços e estoque e cria o pedido com a reserva. O cliente pode reencontrar o pedido e consultar, em **Meus pedidos**, as instruções de PIX manual quando habilitadas.
 
 ### J-05 — Atender pedido
 
@@ -145,11 +147,11 @@ A administradora confere o recebimento do Pix, confirma o pagamento, inicia a pr
 
 ### J-06 — Registrar venda externa
 
-Administrador ou funcionário autorizado registra manualmente produto, quantidade, canal e valores da venda fora do site. A operação movimenta estoque e registra a receita correspondente uma única vez, sem criar um pedido online fictício. Se houver divergência, a correção deve preservar auditoria.
+A administradora registra itens, canal, valores e recebimentos de uma venda externa. A baixa de estoque e a venda são gravadas na mesma transação. Pagamentos parciais deixam saldo a receber. O cancelamento exige ausência de recebimentos e reversão segura do estoque.
 
 ### J-07 — Consultar gestão
 
-Administrador consulta saldos físicos e disponíveis, materiais reservados, ordens em andamento e pedidos online. Indicadores avançados e financeiro dependem do escopo aprovado.
+A administradora consulta estoque, produção e pedidos, acompanha movimentações, fluxo do período e posição atual e registra lançamentos ou pagamentos a fornecedores. Na Agenda, organiza compromissos por dia, com horário opcional.
 
 ### J-08 — Recuperar e redefinir senha
 
@@ -157,20 +159,20 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 
 ## 7. Requisitos funcionais
 
-**Convenção:** os RF abaixo descrevem o escopo-alvo da seção 5.1; os RF condicionados estão identificados separadamente. Detalhes não confirmados são explicitados como pendências e não devem ser decididos silenciosamente na implementação.
+**Convenção:** os RF descrevem escopo entregue e evolução. Itens parciais, condicionados e futuros estão identificados nas regras e na seção 13.3.
 
 ### 7.1 Identidade e permissões
 
-- **RF-01 — Autenticar usuários:** permitir acesso de administrador, funcionário e cliente; exigir autenticação para operações privadas e encerrar sessão com segurança.
-- **RF-02 — Proteger acesso:** cliente consulta apenas seus dados e pedidos; funcionário acessa somente operações autorizadas; administrador configura permissões. A matriz fina de permissões está pendente.
+- **RF-01 — Autenticar usuários:** permitir acesso de administrador e cliente, exigir autenticação para operações privadas e encerrar a sessão. O acesso por tarefa de funcionários permanece futuro.
+- **RF-02 — Proteger acesso:** cliente consulta apenas seus próprios recursos. As operações administrativas exigem `ADMIN`. A matriz de permissões por tarefa permanece pendente.
 - **RF-03 — Cadastrar cliente:** exigir conta antes da compra, com nome completo, CPF, e-mail, telefone e endereço completo (CEP, UF, cidade, bairro, logradouro, número e complemento opcional); validar formato/dígitos do CPF e proteger os dados. A conta nasce não confirmada e a solicitação inicial de confirmação é enfileirada no cadastro. Após cadastro bem-sucedido, a interface apresenta estado de conclusão e ações explícitas para login e confirmação, sem autenticar ou reenviar automaticamente. A necessidade de dados adicionais pelo provedor/logística deve ser reavaliada.
 
 ### 7.2 Catálogo e estoque
 
 - **RF-04 — Gerir produtos:** cadastrar, editar, listar e despublicar produtos com nome, descrição, categoria, preço, fotos e tipo de produção; permitir variantes que alterem estoque, ficha técnica e rastreabilidade, com identidade própria quando necessário. No cadastro administrativo, oferecer produto simples (uma versão e um preço) ou produto com opções, sem persistir essa escolha como tipo distinto. Produtos simples podem ter peso e volume líquidos opcionais; a interface aceita g/kg e ml/L e envia valores canônicos sem arredondamento. O catálogo pode definir características por produto — como peso, volume, cor, fragrância, tamanho ou material — e registrar somente as combinações de valores efetivamente comercializadas. Cada variante mantém identidade, estado, unidade comercial e preço próprios. As unidades comerciais são `UN`, `KIT`, `PAR`, `PCT`, `CX` e `CJ`; composição de kits permanece fora do escopo atual. A interface administrativa reconstrói a edição com IDs persistidos, preserva variantes e oferece referências temporárias para cadastrar todo o agregado em uma única operação. A API e o formulário administrativo suportam características, medidas e combinações. O domínio e o SQL Server modelam metadados e vínculos de imagens; upload, armazenamento e galeria administrativa foram implementados nas F3.4.3.2–F3.4.4.1. A API pública de consulta é F3.6.1, a homepage/listagem é F3.6.2 e a página pública individual é F3.6.3.1. Carrinho e checkout integram a entrega comercial atual.
 - **RF-05 — Consultar vitrine:** exibir produtos publicados, preços, medidas, combinações reais e disponibilidade por opção. Produto publicado esgotado pode continuar visível. A compra revalida o saldo no servidor.
-- **RF-06 — Gerir insumos:** cadastrar matérias-primas, embalagens e outros insumos com unidade-base física, formas de compra específicas, mínimo configurável e política de lote/validade configurável; registrar entradas, saídas e ajustes auditáveis. Criar o cadastro não gera saldo.
-- **RF-07 — Gerir estoque acabado:** controlar quantidades comerciais inteiras por `ProdutoVariante` existente e por lote; registrar identificação, fabricação e validade, entradas, saídas, perdas, descartes e ajustes. Variantes existentes começam sem saldo implícito; lotes vencidos, danificados ou em quarentena não podem ser vendidos.
+- **RF-06 — Gerir insumos:** cadastrar materiais com unidade-base, mínimo opcional e saldos consolidados. Registrar movimentos auditáveis e preservar políticas históricas. Gerir apresentações em Compras. O cadastro não gera saldo.
+- **RF-07 — Gerir estoque acabado:** controlar quantidades inteiras por variante e rastreabilidade interna por lote. Entradas comuns dispensam seleção de lote, fabricação informada e validade. Ajustes por posição ficam em áreas avançadas.
 - **RF-08 — Controlar saldos, reservas e disponibilidade:** distinguir físico, utilizável, reservado e livre. Reservas produtivas comprometem insumos e reservas de pedidos comprometem lotes acabados. O histórico e os saldos são atualizados de forma atômica nas operações de estoque.
 
 - **RF-25 — Gerir fornecedores e compras (implementado):** cadastrar, editar e inativar fornecedores. Registrar compras em rascunho com linhas simples e kits mistos. Confirmar o recebimento integral para registrar entradas vinculadas à compra e preservar valores conhecidos e desconhecidos.
@@ -187,19 +189,19 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 ### 7.4 Compra e pedidos
 
 - **RF-15 — Gerir carrinho:** adicionar/remover itens, ajustar quantidades e recalcular subtotal, sem garantir estoque apenas pela presença no carrinho.
-- **RF-16 — Criar pedido:** validar dados de cliente, preço, disponibilidade, endereço/modalidade de entrega e total no servidor; registrar valores e itens históricos.
+- **RF-16 — Criar pedido:** revalidar cliente, preço, disponibilidade e total no servidor para retirada local, preservando itens e valores históricos.
 - **RF-17 — Controlar estoque do pedido:** reservar ao criar o pedido, liberar ao cancelar ou expirar e realizar a baixa física na entrega presencial, impedindo comprometer a mesma unidade duas vezes.
 - **RF-18 — Acompanhar pedidos:** permitir consulta de pedidos próprios pelo cliente e gestão por usuários autorizados; distinguir estados de pedido, pagamento e entrega.
-- **RF-19 — Registrar andamento:** permitir atualizar preparação, envio/entrega e rastreamento quando aplicável, preservando autoria e histórico.
-- **RF-26 — Registrar vendas externas:** permitir lançamento manual de vendas de outros canais com itens, quantidades, valores, forma de pagamento e origem; atualizar estoque e financeiro de modo consistente, com auditoria e proteção contra duplicidade.
+- **RF-19 — Registrar andamento:** iniciar preparação, liberar retirada e confirmar entrega presencial, preservando autoria e histórico. Envio e rastreamento são futuros.
+- **RF-26 — Registrar vendas externas (implementado):** permitir ao ADMIN registrar itens, canal, valores e recebimentos parciais ou integrais, com baixa de estoque atômica e sem gerar pedido do site.
 
-### 7.5 Recursos condicionados
+### 7.5 Recursos complementares e condicionados
 
 - **RF-20 — Integrar Pix (condicionado):** gerar cobrança pelo provedor escolhido e confirmar somente após verificação confiável do estado junto ao provedor; tratar notificações repetidas e falhas.
 - **RF-21 — Calcular frete (condicionado):** oferecer, para clientes elegíveis de Vacaria, retirada local sem frete ou entrega própria por R$ 10; para demais localidades atendidas, calcular Correios conforme CEP, peso, dimensões e disponibilidade de integração. Confirmar abrangência, endereço de retirada e regras de contingência.
-- **RF-22 — Registrar financeiro (condicionado):** apresentar receitas efetivas de pedidos online e vendas externas lançadas, além de despesas registradas; distinguir faturamento, custos, margem e lucro estimado, evitando lançamento duplicado de receita.
+- **RF-22 — Registrar financeiro (núcleo implementado):** registrar e cancelar lançamentos manuais, pagar compras e consultar Movimentações e Visão geral. O fluxo reúne PIX confirmado, recebimentos de vendas externas, pagamentos de compras e lançamentos manuais ativos. A posição atual de pendências independe do período. Compras de total desconhecido ficam **Valor a conferir**. Recebimento físico e consumo de produção não movimentam caixa. Valoração, margem e lucro permanecem futuros.
 - **RF-23 — Analisar estoque (condicionado):** mostrar itens críticos, consumo, giro e sugestões de mínimo fundamentadas em histórico suficiente, sem alteração automática de mínimos.
-- **RF-24 — Gerir agenda e notas (condicionado):** registrar compromissos, prazos e anotações, com alertas apenas quando canal e mecanismo forem definidos.
+- **RF-24 — Gerir agenda e notas (núcleo implementado):** calendário mensal ADMIN, com compromissos de dia inteiro ou com horário, cadastro, edição e exclusão lógica. Versão e idempotência protegem escritas. Conflitos exigem conferência da situação antes de nova escrita. Recorrência e alertas externos permanecem futuros.
 ### 7.6 Confirmação de e-mail — F2 implementada
 
 - **RF-27 — Confirmar e-mail:** permitir a confirmação anônima da conta por link contendo token de confirmação com validade de 24 horas. O cadastro cria a conta não confirmada e enfileira automaticamente a solicitação inicial, sem iniciar uma sessão. O login de `CLIENTE` com credenciais corretas permanece bloqueado até a confirmação.
@@ -220,16 +222,16 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 - **RN-05 — Histórico da ficha:** mudanças futuras de ficha técnica não alteram silenciosamente quantidades e custos capturados por ordens existentes.
 - **RN-06 — Conclusão consistente:** cada material exige consumo real positivo e dentro da reserva, sem pressupor proporção com o rendimento. A conclusão baixa os insumos, libera sobras e dá entrada ao acabado Vendável atomicamente. Reenvio da mesma conclusão não duplica estoque. Cura, quarentena e aprovação não integram esse fluxo.
 - **RN-07 — Reserva de produto acabado:** carrinho não reserva. O pedido aguarda pagamento por 24 horas. Pagamento confirmado dentro do prazo mantém a reserva até retirada. A baixa física ocorre na entrega presencial. Cancelamento autorizado ou expiração de pedido não pago libera o compromisso.
-- **RN-08 — Vendas externas:** vendas feitas fora do site serão lançadas manualmente no painel; cada lançamento efetivo deve atualizar estoque, histórico e financeiro sem atribuir origem fictícia a pedido online. Não há sincronização automática com canais externos.
+- **RN-08 — Vendas externas:** a venda registrada por ADMIN baixa estoque. Somente recebimentos efetivos entram no caixa. O cancelamento exige ausência de recebimento e reversão segura nas posições de origem.
 - **RN-09 — Preço histórico:** pedido preserva preço unitário, descontos, frete e total aplicados no momento da confirmação; edição de catálogo não altera compras anteriores.
 - **RN-10 — Valores monetários:** usar precisão decimal adequada, regras explícitas de arredondamento e moeda BRL; não usar ponto flutuante binário para cálculos financeiros.
 - **RN-11 — Precificação declarada:** a proprietária informa dividir o custo unitário por `0,3` para margem-alvo de 70%, ou `0,4` para 60%. O custo deverá considerar, quando aplicáveis, matérias-primas, embalagem, mão de obra, frete, taxas e despesas. Distinguir custos por unidade, custos fixos rateados, margem bruta e lucro líquido; validar o método de rateio antes da implementação.
 - **RN-12 — Prazos:** produção sob encomenda leva em média duas semanas segundo a proprietária, mas não gera autorização para venda sem estoque nem prazo garantido para todas as ordens.
 - **RN-13 — Permissões:** autorização deve ser verificada no servidor para cada operação protegida; ocultar botão na interface não constitui proteção suficiente.
-- **RN-14 — Pagamento:** a loja pode configurar instruções de Pix manual. A confirmação é administrativa, após conferência do recebimento. Cobrança integrada e confirmação automática permanecem condicionadas à escolha e homologação do provedor.
+- **RN-14 — Pagamento:** a loja pode configurar instruções de Pix manual. A configuração aceita chave aleatória, e-mail, telefone ou CNPJ. A confirmação é administrativa, após conferência do recebimento. Cobrança integrada e confirmação automática permanecem condicionadas à escolha e homologação do provedor.
 - **RN-15 — Entrega:** o checkout atual oferece retirada local. Entrega própria em Vacaria e Correios para RS/SC permanecem no escopo futuro, conforme decisão operacional e integração. Endereço e horários de retirada precisam de confirmação antes do uso real.
 - **RN-16 — Cadastro e CPF:** compra exige conta com CPF validado, nome, telefone, e-mail e endereço completo; dados pessoais devem ser protegidos e utilizados para finalidades justificadas.
-- **RN-17 — Lotes e validade:** lotes são elegíveis até o fim da data de vencimento no calendário operacional. Lotes vencidos ou bloqueados continuam no físico até movimento apropriado. Na produção, FEFO prioriza lotes elegíveis que vencem primeiro e depois lotes sem validade permitidos. No checkout, FEFO seleciona os lotes acabados elegíveis e livres.
+- **RN-17 — Lotes e validade:** novas operações comuns dispensam validade. Lotes datados legados mantêm elegibilidade até o fim do dia de vencimento. Alocação automática prioriza lotes datados elegíveis, depois lotes sem validade em ordem determinística. Vencidos, danificados, bloqueados ou em quarentena mantêm suas restrições.
 - **RN-18 — Cancelamentos e exceções:** cancelar antes do consumo libera a reserva e preserva o histórico. Uma posição reservada inelegível não pode ser consumida. Conclusão parcial, remanejamento automático de lote e reembolso de pedido pago não fazem parte do fluxo atual.
 - **RN-19 — Trienta:** o novo sistema substituirá o Trienta na operação final; migração inicial poderá ser manual, mediante conferência dos dados e saldos, sem presumir API ou exportação.
 - **RN-20 — Banco e Pix:** Sicredi é o banco da conta PJ, mas não equivale à escolha ou aprovação de provedor de pagamentos. Confirmar disponibilidade de integração, homologação, custos e conciliação antes de ativar cobrança automática.
@@ -249,17 +251,17 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 - **RN-34 — Unidade, preço e medidas físicas do catálogo:** unidades comerciais válidas são `UN`, `KIT`, `PAR`, `PCT`, `CX` e `CJ`. `KIT` nesta etapa identifica apenas a unidade comercial; não representa composição, estoque de componentes nem ficha técnica de kit. Preços são informados em BRL com duas casas decimais. Peso líquido é opcional e canônico em gramas; volume líquido é opcional e canônico em mililitros. Medidas devem ser positivas, ter até três casas decimais e caber no limite persistido. Quando uma variante usa característica física de peso ou volume, o valor numérico canônico da característica é a fonte de verdade; medidas diretas não podem divergir.
 - **RN-35 — Características, combinações e legado:** características e seus valores pertencem ao produto e são normalizados para impedir duplicatas equivalentes. Uma variante pode associar no máximo um valor a cada característica; somente combinações explicitamente cadastradas são comercializadas, sem exigir o produto cartesiano. Combinações iguais no mesmo produto são rejeitadas, inclusive por integridade persistente sob concorrência. Variantes legadas sem características permanecem sem assinatura de combinação; nenhum peso, volume ou característica será inferido a partir de nomes ou identificações antigos. Valores legados da unidade de venda são preservados na migration; as seis unidades comerciais são validadas pelo domínio nas novas operações.
 - **RN-36 — Imagens de produto (F3.4.1):** cada produto pode ter até cinco imagens no total, em uma galeria geral compartilhável com as opções. A primeira imagem é principal; quando houver imagens, o agregado mantém exatamente uma principal e uma ordem de exibição por imagem. Uma imagem pode ser vinculada a várias variantes do mesmo produto, sem duplicar o arquivo nem ocupar novas posições; a variante sem imagem específica utiliza a galeria geral. Produtos não publicados podem não ter imagens. Nova publicação exige ao menos uma imagem principal; a última imagem de um produto publicado não pode ser removida sem despublicá-lo antes. A migration não cria imagens fictícias nem altera produtos publicados legados sem imagens; eles permanecem intactos, mas não podem ser publicados novamente sem imagem. A futura vitrine deverá tratar essa condição sem correção automática de dados. Imagens não indicam disponibilidade de estoque.
-- **RN-37 — Referências de imagens:** o SQL Server guarda somente metadados e chave de armazenamento opaca e única; não guarda bytes, Base64, caminho local absoluto ou URL temporária assinada. O nome original é metadado não confiável e não deve ser usado como caminho nem renderizado sem codificação apropriada. As validações de conteúdo, armazenamento e URLs pertencem a etapas futuras; a F3.4.1 não implementa upload, endpoint ou interface.
-- **RN-38 — Unidades físicas e conversões de estoque:** unidades físicas são g, kg, ml, L e `un`, separadas das unidades comerciais e medidas descritivas do catálogo. Unidade-base é g, ml ou `un`; conversões exatas padrão são permitidas somente dentro da mesma dimensão (kg/g e L/ml). A fundação F4.1.1 representa quantidade-base com `decimal(18,6)`, intervalo de zero a `999999999999.999999`, validado após conversão sem arredondamento; contagem é inteira e não negativa. F4.1.2 implementa no domínio formas de compra pertencentes ao insumo, com fator positivo exato normalizado à unidade-base, quantidade inteira positiva de embalagens e snapshot imutável do fator aplicado na conversão. Futuras movimentações conservam quantidade original, unidade de origem e fator aplicado. Cadastro de insumo não cria saldo.
-- **RN-39 — Lotes de insumos:** o controle de lote é configurável por insumo; a exigência de validade também é configurável. Sem controle de lote, o saldo é agregado; com controle, o saldo é por lote. Registrar identificação, data de entrada, fornecedor quando informado e validade quando exigida. A identificação externa não é chave única: cada lote tem ID interno próprio e códigos iguais podem ocorrer entre fornecedores. Lote com validade é elegível durante a data de vencimento e fica inelegível no dia seguinte; a avaliação usa data de referência explícita. Lote sem validade é permitido quando não obrigatória; sua elegibilidade por ausência de validade não define prioridade de seleção. FEFO seleciona primeiro o lote elegível que vence antes. Lotes vencidos ou bloqueados contam no físico, mas não podem ser usados nem são baixados automaticamente. Perda/descarte gera movimento auditável.
+- **RN-37 — Referências de imagens:** o SQL Server guarda somente metadados e chave de armazenamento opaca e única; não guarda bytes, Base64, caminho local absoluto ou URL temporária assinada. O nome original é metadado não confiável e não deve ser usado como caminho nem renderizado sem codificação apropriada. As operações de upload validam e processam o conteúdo. As URLs públicas servem o conteúdo sem revelar o caminho de armazenamento.
+- **RN-38 — Unidades físicas e conversões de estoque:** unidades físicas são g, kg, ml, L e `un`, separadas das unidades comerciais e medidas descritivas do catálogo. Unidade-base é g, ml ou `un`; conversões exatas padrão são permitidas somente dentro da mesma dimensão (kg/g e L/ml). A fundação F4.1.1 representa quantidade-base com `decimal(18,6)`, intervalo de zero a `999999999999.999999`, validado após conversão sem arredondamento; contagem é inteira e não negativa. F4.1.2 implementa no domínio formas de compra pertencentes ao insumo, com fator positivo exato normalizado à unidade-base, quantidade inteira positiva de embalagens e snapshot imutável do fator aplicado na conversão. Movimentações conservam quantidade original, unidade de origem e fator aplicado. Cadastro de insumo não cria saldo.
+- **RN-39 — Lotes de insumos:** a política histórica conserva o saldo agregado ou por lote. Entradas e recebimentos comuns de materiais rastreados geram lote interno sem validade, mesmo com exigência cadastrada no legado. Saldos vencidos ou bloqueados ficam no físico e fora do utilizável.
 - **RN-40 — Custos de aquisição:** entradas de insumos podem registrar custo total e custo por unidade-base, preservados historicamente por entrada/lote. Custo desconhecido é diferente de custo zero; estoque inicial pode não ter custo conhecido. Precisão técnica implementada: total BRL `decimal(18,2)`; custo unitário derivado `decimal(38,14)`, midpoint away from zero a 14 casas. Total e quantidade-base originais são fonte de verdade. Custo médio ponderado, valoração definitiva, custo completo de produção e margem não estão definidos.
-- **RN-41 — Lotes de produto acabado:** estoque acabado é vinculado por FK à `ProdutoVariante`, inclusive à variante interna `Padrão`; quantidades são inteiras por variante e lote. Cada lote exige identificação única gerada de modo seguro sob concorrência, fabricação e validade. Pode haver prazo padrão por produto ou variante, calculado para cada novo lote e substituível pela validade real informada; mudanças futuras não alteram lotes existentes. Não há prazo universal para sabonetes ou velas. Produtos/variantes F3 começam sem saldo implícito; KIT não tem composição nesta fase.
+- **RN-41 — Lotes de produto acabado:** quantidades inteiras são vinculadas à variante e ao lote interno. O sistema registra identificação e fabricação dos novos lotes na rotina comum, com validade ausente. Datas e condições históricas são preservadas.
 - **RN-42 — Movimentações e ajustes:** alterar saldo exige movimento auditável e atômico. Contagens com diferença gravam ajuste e exigem versão da posição; diferença zero não gera movimento. Reversões são compensatórias e limitadas pela integridade do saldo. Movimentos vinculados a compras e produção não admitem estorno avulso. Saída administrativa automática de acabados usa FEFO; operações de insumos que exigem posição continuam identificando-a.
 - **RN-43 — Saldos e reservas:** saldo físico, utilizável, reservado e livre são distintos. A reserva vincula origem e posição de estoque e não baixa o físico. A disponibilidade é apurada por posição elegível, descontando os compromissos aplicáveis. Catálogo e carrinho não criam reservas.
 - **RN-44 — Mínimos e autorização de estoque:** estoque mínimo é configurável por insumo e por variante de produto acabado. Consultas internas F4.2.5 classificam sobre saldo disponível: zero é `SemEstoque` (precedência mesmo sem mínimo ou com mínimo zero); com mínimo configurado, saldo positivo menor ou igual ao mínimo é `AbaixoOuNoMinimo` e acima é `Normal`; saldo positivo sem mínimo é `MinimoNaoConfigurado`. Alertas administrativos futuros usam saldo disponível, descontando reservas e quantidades inelegíveis. Operações administrativas de estoque na F4 são restritas a `ADMIN`.
 - **RN-45 — Disponibilidade pública (F4.6):** um produto publicado pode continuar visível esgotado. A disponibilidade é verdadeira se ao menos uma variante ativa tiver saldo livre em lote elegível. O detalhe informa a disponibilidade de cada variante. A consulta pública não divulga quantidades, custos, lotes ou reservas e o checkout revalida o saldo.
 
-- **RN-46 — Compras de matérias-primas:** receber uma compra registra todas as entradas de uma vez, com lote e validade conforme a política do insumo. Quantidades e conversões são preservadas no histórico. O custo total do kit é mantido sem rateio implícito. Custo individual desconhecido permanece sem valor.
+- **RN-46 — Compras de matérias-primas:** o recebimento integral registra as entradas de uma vez, sem exigir validade na rotina. Apresentações, fatores e quantidades são preservados no histórico. O custo conjunto de kits permanece sem rateio implícito. Recebimento físico e pagamento são operações distintas.
 
 ## 9. Requisitos não funcionais
 
@@ -278,24 +280,24 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 
 | ID        | Referências            | Cenário verificável                                                                                                                                                                   |
 | --------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **CA-01** | RF-01–03, RNF-01–02    | Cliente não acessa pedido de outro; funcionário não executa operação proibida mesmo chamando a API diretamente; credenciais inválidas são rejeitadas.                                 |
+| **CA-01** | RF-01–03, RNF-01–02 | Cliente só acessa pedidos próprios. A API administrativa exige `ADMIN` e recusa funcionário e cliente. Credenciais inválidas são rejeitadas. Permissões por tarefa para funcionário permanecem futuras. |
 | **CA-02** | RF-04–05, RN-01        | Produto publicado com 3 unidades permite até 3 unidades disponíveis; produto zerado não pode ser comprado; despublicado não aparece como comprável.                                   |
 | **CA-03** | RF-06–08, RN-02, RN-38 | Entradas e ajustes preservam histórico; kg/g e L/ml convertem dentro da mesma dimensão; massa e volume não são somados nem convertidos genericamente.                                 |
-| **CA-04** | RF-09–10, RN-04        | Ficha com 100 g de base e 5 ml de essência por unidade, saldos livres 850 g e 30 ml, resulta em capacidade de 6 unidades.                                                             |
+| **CA-04** | RF-09–10, RN-04 | **Parcial:** a prévia calcula necessidades para a quantidade escolhida. A consulta de capacidade máxima permanece futura. Exemplo de aceite futuro: 100 g e 5 ml por unidade, com 850 g e 30 ml livres, resultam em 6 unidades. |
 | **CA-05** | RF-11, RN-03           | Duas ordens concorrentes não reservam mais material que o saldo disponível; criação rejeitada não deixa reserva parcial.                                                              |
 | **CA-06** | RF-13–14, RN-05–06     | Conclusão válida consome a reserva e aumenta estoque acabado uma vez; repetição não duplica; cancelamento permitido libera reserva remanescente.                                      |
 | **CA-07** | RF-15–17, RN-07        | Carrinho não garante saldo; duas tentativas simultâneas sobre a última unidade não resultam em duas compras confirmadas.                                                              |
 | **CA-08** | RF-16–19, RN-09        | Pedido registra preço e quantidade originais; mudança posterior no catálogo não modifica histórico; cliente vê somente seus pedidos.                                                  |
-| **CA-09** | RF-06–08, RF-26, RN-08 | Venda externa lançada manualmente reduz saldo vendável e registra receita uma única vez, sem criar pedido online fictício; lançamento repetido não duplica movimentações.             |
+| **CA-09** | RF-06–08, RF-26, RN-08 | Venda baixa estoque uma vez. Recebimentos parciais reduzem a pendência e entram no caixa pelos valores efetivos. Cancelamento somente sem recebimento e com reversão segura. |
 | **CA-10** | RF-20, RN-14           | **Se integração aprovada:** notificação válida confirma cobrança correspondente; notificação duplicada não duplica pagamento/baixa; comprovante enviado não confirma automaticamente. |
-| **CA-11** | RF-21, RN-15           | Para endereço elegível em Vacaria, checkout oferece retirada sem frete ou entrega local de R$ 10; para Correios, preço e prazo dependem de cotação válida antes da confirmação.       |
-| **CA-12** | RF-22–25               | **Se módulos aprovados:** indicadores conferem com dados de origem, sugestões não alteram mínimo e alertas não são prometidos sem canal configurado.                                  |
+| **CA-11** | RF-21, RN-15           | **Condicionado:** para endereço elegível em Vacaria, checkout oferece retirada sem frete ou entrega local de R$ 10; para Correios, preço e prazo dependem de cotação válida antes da confirmação.       |
+| **CA-12** | RF-22–25 | Conciliar movimentações com as origens, fluxo do período e posição atual. Validar compra recebida e Agenda com conflito de versão recuperável. Sugestões de mínimo e alertas externos seguem futuros. |
 | **CA-13** | RNF-04–05, RNF-10      | Jornadas principais são utilizáveis no celular, com campos identificados, foco e estados de erro compreensíveis.                                                                      |
-| **CA-14** | RN-10–11, RNF-07       | Cálculo de preço/margem usa valores monetários consistentes e distingue margem de materiais de lucro líquido; histórico não muda com novos custos.                                    |
+| **CA-14** | RN-10–11, RNF-07 | **Parcial:** valores de venda e caixa preservam centavos e histórico. Preço sugerido, margem e lucro aguardam regras de custeio. |
 
 | **CA-15** | RF-03, RN-16 | Cadastro exige conta, CPF válido, nome, e-mail, telefone e endereço completo; cliente não acessa CPF/endereço de outro cliente. |
 | **CA-16** | RF-07, RN-17 | Lotes preservam fabricação e validade; lote vencido não compõe estoque vendável. |
-| **CA-17** | RF-17, RN-07 | Carrinho não reserva; ao finalizar pedido, reserva acontece uma vez; cancelamento libera somente reserva remanescente. Prazo de expiração e baixa aguardam decisão da fase de pedidos. |
+| **CA-17** | RF-17, RN-07 | Carrinho não reserva; ao finalizar pedido, reserva acontece uma vez; cancelamento libera somente reserva remanescente. O pedido não pago expira em 24 horas. A baixa física ocorre na entrega presencial. |
 | **CA-18** | RF-03, RF-27–28, RN-21–28 | Cadastro deixa a conta não confirmada e cria uma solicitação inicial; link expira em 24 horas; reenvio não enumera contas, respeita cooldown/limite, evita duplicação e preserva histórico ao recuperar `DeadLetter`; credenciais corretas de `CLIENTE` não confirmado resultam em HTTP `403`/`EMAIL_NOT_CONFIRMED`, sem sessão. |
 | **CA-19** | RF-29–30, RN-29–32 | Solicitação válida sempre apresenta resposta genérica; apenas conta confirmada pode receber recuperação; link de 1 hora redefine a senha uma única vez, invalida sessões anteriores e exige novo login. |
 | **CA-20** | RF-31, RNF-04–05 | Os cinco campos de senha começam ocultos; controles independentes mostram/ocultam sem alterar valor, validação ou submeter formulário; acessibilidade por teclado e foco visível; limpeza/sucesso restaura ocultação. |
@@ -304,7 +306,7 @@ Uma pessoa não autenticada solicita recuperação informando o e-mail. A interf
 | **CA-23** | RF-06, RN-38 | Conversões físicas compatíveis são exatas e normalizadas em unidade-base; quantidade-base obedece a `decimal(18,6)` sem arredondamento. Contagem fracionada, quantidade negativa e conversão entre dimensões são rejeitadas. Formas de compra são tratadas na F4.1.2. |
 | **CA-24** | RF-06, RN-39 | Insumo sem lotes mantém saldo agregado; insumo controlado mantém saldo por lote; FEFO escolhe lote elegível com vencimento mais próximo; vencido/bloqueado permanece físico, mas não utilizável. |
 | **CA-25** | RF-06, RN-40 | Entrada distingue custo desconhecido de custo zero e preserva custo histórico; saldo inicial sem custo conhecido é aceito; nenhum método de valorização não aprovado é inferido. |
-| **CA-26** | RF-07, RN-41 | Lote acabado vincula variante existente, mantém quantidade inteira, validade aplicada ao lote e identificador único mesmo sob concorrência; alterar prazo padrão não altera lotes anteriores. |
+| **CA-26** | RF-07, RN-41 | Entrada comum gera lote interno único para variante existente e quantidade inteira, com validade ausente. Datas e condições legadas permanecem intactas. |
 | **CA-27** | RF-06–08, RN-42–44 | Ajuste compara contagem física com saldo, identificando lote quando aplicável; repetição idempotente não duplica movimento; saldo e histórico são atômicos e saldo físico não fica negativo. Mínimos alertam pelo disponível. |
 | **CA-28** | RF-05, RN-45 | Produto publicado segue visível quando esgotado. Disponibilidade por produto e variante, sem divulgar quantidade, custo, lote ou reserva. |
 
@@ -325,11 +327,11 @@ Os números dos cenários são **exemplos de teste a executar**, não resultados
 | Ordem de produção | Variante, nomes históricos quando disponíveis, quantidade planejada, versão de receita, estado, reservas, consumo e rendimento real. |
 | Reserva / movimentação                | Origem, quantidade, unidade, motivo, instante e responsável                              |
 | Carrinho / pedido / item              | Cliente, produto, quantidade, preços capturados, estados e totais                        |
-| Venda externa / item                  | Canal, produtos, quantidades, valores, pagamento, movimentações e receita correspondente |
+| Venda externa / item / recebimento | Canal, itens, baixa de estoque, valores, recebimentos e saldo pendente. |
 | Pagamento                             | Pedido, método, estado, referência do provedor e eventos, se integrado                   |
 | Entrega                               | Modalidade, endereço, frete, rastreamento e estado                                       |
 | Fornecedor / compra | Origem, linhas simples e kits mistos, quantidades, conversões, custos conhecidos e vínculos com recebimentos. |
-| Despesa / agenda / nota               | Registros administrativos, se aprovados                                                  |
+| Financeiro / Agenda | Lançamentos manuais, pagamentos de compras, projeção de caixa e compromissos administrativos. |
 | Auditoria                             | Ator, ação, instante e referência da operação                                            |
 
 O esquema físico, índices, migrações e contratos serão definidos no TDD, não neste PRD.
@@ -371,7 +373,7 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 | P-03        | **Conta e CPF obrigatórios**, com nome completo, e-mail, telefone e endereço completo com CEP.                                                                                                                                                                                                                                                                                                          |
 | P-06        | Banco PJ identificado: **Sicredi**; **provedor/API Pix ainda pendente**.                                                                                                                                                                                                                                                                                                                                |
 | P-07        | **Vacaria: entrega própria R$ 10 ou retirada local sem frete**; CEPs, horários e local exato pendentes.                                                                                                                                                                                                                                                                                                 |
-| P-11        | Variações afetam ficha técnica/estoque; lotes acabados exigem fabricação/validade, validade até o fim do dia, FEFO futuro; insumos podem configurar controle de lote e exigência de validade.                                                                                                                                                                                                           |
+| P-11        | Variações afetam ficha técnica/estoque; lotes internos e FEFO preservados. A exigência operacional inicial de validade foi superada na F10.7.5–F10.7.6.                                                                                                                                                                                                           |
 | P-12        | **Vendas externas serão registradas manualmente no sistema**, com estoque e financeiro; não apenas ajustes sem origem.                                                                                                                                                                                                                                                                                  |
 | P-13        | Trienta contém catálogo, valores e descrições; **substituição total** confirmada; exportação não comprovada.                                                                                                                                                                                                                                                                                            |
 | P-14        | Precificação deve considerar embalagem, mão de obra, frete, taxas e despesas; entradas de insumos preservam custo de aquisição, sem método definitivo de valorização.                                                                                                                                                                                                                                   |
@@ -398,9 +400,9 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 | **P-08** | CEP de origem, dimensões, peso, modalidade Correios e contingência                 | Confirmar com proprietária e verificar serviços disponíveis.                                                                                                                                                                                                                                                                                                                                |
 | **P-09** | Insuficiência e cancelamento da produção | Implementados início com reserva integral e cancelamento antes de consumo. Produção parcial permanece fora do recorte atual. |
 | **P-10** | Consumo e rendimento real | Implementados no encerramento único. Regras para produção parcial permanecem futuras. |
-| **P-11** | Seleção de lotes sem validade | Resolvida para produção: após lotes elegíveis datados, por data de entrada e ID. |
+| **P-11** | Seleção de lotes sem validade | Resolvida. A alocação automática prioriza posições datadas elegíveis e usa ordem determinística para as posições sem validade. |
 | **P-13** | Possibilidade de exportação do Trienta e método de conferência dos saldos iniciais | Validar exportação; senão, cadastrar e conferir manualmente.                                                                                                                                                                                                                                                                                                                                |
-| **P-15** | Quais módulos condicionados integrarão a entrega e em qual ordem                   | Definir conforme evolução do projeto, sem declarar implementações antecipadamente.                                                                                                                                                                                                                                                                                                          |
+| **P-15** | Escopo do MVP | Vendas Externas, Financeiro de caixa e Agenda administrativa foram entregues. As extensões condicionadas seguem na seção 5.2. |
 | **P-16** | Notificações além dos alertas internos                                             | Definir necessidade de e-mail, WhatsApp ou push posteriormente.                                                                                                                                                                                                                                                                                                                             |
 | **P-17** | Permissões por operação para funcionários                                          | Definir após o fluxo administrativo da proprietária.                                                                                                                                                                                                                                                                                                                                        |
 | **P-18** | Regras de rateio de despesas e apresentação de margem/lucro                        | Validar com proprietária antes de automatizar sugestão de preços.                                                                                                                                                                                                                                                                                                                           |
@@ -409,7 +411,7 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 | **P-22** | Informações institucionais públicas                                                | Confirmar contatos oficiais, URLs de redes sociais e informações de atendimento antes de publicar links ou compromissos comerciais; não inventar dados.                                                                                                                                                                                                                                     |
 | **P-23** | Indicação de “Últimas unidades” | Opcional. A API atual informa disponibilidade booleana, sem faixa de estoque baixo nem atualização em tempo real. |
 | **P-24** | Precisão SQL de custos                                                             | **Resolvida tecnicamente na F4.2.3:** total BRL `decimal(18,2)`; custo por unidade-base derivado em `decimal(38,14)`, arredondado a 14 casas com midpoint away from zero. Total e quantidade-base originais são fonte de verdade; esse custo unitário não define método de valorização.                                                                                                     |
-| **P-25** | Prazos padrão de validade por produto/variante                                     | F4.3 implementa prazo padrão opcional em dias inteiros não negativos por variante. Ao criar lote, a validade informada prevalece; se omitida, aplica-se fabricação + prazo configurado e registram-se a origem e, quando aplicável, os dias usados. Sem data informada nem prazo configurado, a entrada é rejeitada. A proprietária ainda precisa definir quais valores configurar por produto/variante; não há prazo universal. |
+| **P-25** | Prazo padrão de validade | Compatibilidade para operações legadas. A rotina de novas entradas, recebimentos e conclusão dispensa prazo padrão ou validade informada. |
 | **P-26** | Calendário de validade de insumos                                                  | A API resolve uma data operacional centralizada por `Estoque:Calendario:TimeZoneId`, padrão técnico proposto `America/Sao_Paulo`; o lote é elegível durante toda a data de vencimento nessa zona. A proprietária ainda precisa aprovar a zona operacional antes do uso em produção; instantes de auditoria continuam UTC e datas históricas não são reescritas.                             |
 
 **Regra de governança:** propostas acima são hipóteses de projeto aceitas como direção inicial pelo solicitante, mas ainda exigem detalhamento/validação antes de fluxos financeiros ou de estoque em produção.
@@ -418,9 +420,9 @@ O esquema físico, índices, migrações e contratos serão definidos no TDD, n�
 
 | Classe | Pendência e evidência |
 | --- | --- |
-| A — Necessária para o MVP operacional | Homologar ambiente, e-mail e armazenamento duráveis e confirmar retirada, calendário e validades por variante (P-07, P-20, P-21, P-25 e P-26). Os ensaios atuais usam infraestrutura local e dados sintéticos. |
-| B — Importante, adiável | Capacidade máxima, permissões por tarefa, conciliação de pagamentos tardios e tratamentos de estoque/venda fora do site (RF-10, P-05, P-17 e RF-26). A interface atual oferece prévia por quantidade, acesso administrativo exclusivo e checkout para retirada. |
-| C — Opcional | Pix integrado, frete externo, financeiro avançado, agenda e kits vendidos (RF-20–24 e seção 5.3). As rotas atuais oferecem Pix manual, retirada e kits apenas nas compras de insumos. |
+| A — Necessária para uso real | Confirmar retirada e homologar e-mail, domínio, armazenamento durável, segredos, backup e restauração. |
+| B — Parcial ou futura | Capacidade máxima, permissões por tarefa, painel operacional consolidado, conciliação tardia e reembolsos. |
+| C — Condicionada ou opcional | PIX integrado, entrega própria, Correios, rastreamento, análise avançada, valoração, margem, lucro, recorrência da Agenda e kits vendidos. |
 
 ## 14. Encerramento da F2, F3 e situação atual
 
@@ -436,7 +438,7 @@ As subseções 14.1 a 14.4 registram os gates anteriores. As restrições e pend
 
 ### 14.2 Próximos passos
 
-1. **F4.5.6 — verificação final, aguardando revisão:** o teste HTTP/SQL de aquisição sem custo passou; resposta e histórico preservam custo `null`, posição registra `2.123456` e replay idempotente retorna o mesmo movimento sem duplicação. A prova navegador Angular → API em execução não foi realizada: fixture SQL e `WebApplicationFactory` mantêm o banco/host dentro do processo de teste, e não há harness E2E existente. O roteiro manual requer banco temporário explícito, ADMIN temporário, API com connection string isolada, Angular via proxy e remoção confirmada do banco ao final. F4.5 não está encerrada. Não houve alteração de backend/schema nem acesso a banco persistente. A zona operacional `America/Sao_Paulo` continua sendo proposta técnica e requer aprovação antes da operação real.
+1. **Registro histórico F4.5.6:** aquisição sem custo e replay foram verificados por HTTP/SQL. O movimento preservou custo `null`, físico de `2.123456` e um único registro após reenvio. O roteiro manual original foi superado pela demonstração isolada e pelos ensaios de navegador da F10.7.8.
 2. O planejamento original da F4 tratava a vitrine, o checkout e a produção como fases posteriores. O recorte entregue e suas pendências estão nas seções 13.3 e 14.5.
 3. Antes da implantação, resolver armazenamento de imagens em produção (**P-21**), dados institucionais públicos (**P-22**) e os requisitos operacionais de autenticação/e-mail aplicáveis.
 
@@ -482,6 +484,9 @@ A tabela acima registra o plano original da F4. O estado vigente da cadeia está
 - **F8.4:** receitas versionadas e ordens com prévia, reserva, cancelamento e conclusão, com entrada imediatamente vendável.
 - **F8.5:** recuperação de criação de compras após resposta incerta, ensaio encadeado por API .NET/SQL descartável e estabilização do histórico. A F8.5.4 verificou as seis telas administrativas em Chrome real a 375 e 1280 px. A fabricação encadeada até a reserva no checkout foi validada pela API, em execução distinta da verificação visual.
 
+- **F10.2–F10.6:** Vendas Externas, Financeiro e Agenda administrativa entregues.
+- **F10.7:** estoque simplificado, apresentações em Compras e recuperação financeira e da Agenda estabilizadas. A regressão F10.7.8 foi aprovada em ambiente local isolado. Consulte a seção 8.1 do [TDD](tdd.md#81-cenários-críticos-de-aceite) para os resultados por camada.
+
 ## 15. Histórico de versões
 
 | Versão | Data       | Alterações                                                                                                                                                                                                                                                                                                                                       |
@@ -511,3 +516,4 @@ A tabela acima registra o plano original da F4. O estado vigente da cadeia está
 | 0.25   | 16/11/2026 | F4.5.5: 56 testes Angular e 29 testes HTTP/SQL Server aprovados usando somente bases temporárias da fixture local; sem E2E de navegador ou API real conectada a Angular; pendente avaliação, F4.5 não encerrada.                                                                                                                                        |
 | 0.26   | 16/11/2026 | F4.5.6: teste HTTP/SQL de aquisição sem custo, posição, histórico e replay idempotente aprovado; navegador Angular/API não executado por falta de harness isolado; roteiro manual e revisão final pendentes.                                                                                                                                                 |
 | 0.27 | 19/11/2026 | F8.5.5: sincronização do fluxo de compras, fabricação, estoque e checkout com o comportamento validado. |
+| 0.28 | 20/11/2026 | F10.8.2: consolidação do MVP validado até F10.7.8 e das pendências de uso real. |
