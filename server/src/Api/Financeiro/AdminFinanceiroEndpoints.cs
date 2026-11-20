@@ -18,6 +18,7 @@ public static class AdminFinanceiroEndpoints
             return next(ctx);
         });
 
+        grupo.MapGet("/movimentacoes", ListarMovimentacoesAsync);
         grupo.MapGet("/tentativas/{chave:guid}", async Task<IResult> (Guid chave, HttpContext ctx,
             IGerenciarFinanceiro financeiro, CancellationToken ct) =>
         {
@@ -58,6 +59,27 @@ public static class AdminFinanceiroEndpoints
     }
 
     private static bool PaginaValida(int? pagina) => pagina is null or (>= 1 and <= 10000);
+
+    private static async Task<IResult> ListarMovimentacoesAsync(DateOnly? dataInicial, DateOnly? dataFinal,
+        string? tipo, string? origem, int? pagina, IGerenciarFinanceiro financeiro, CancellationToken ct)
+    {
+        if (!LerFiltro(tipo, out TipoMovimentacaoFinanceira? tipoFiltro) ||
+            !LerFiltro(origem, out OrigemMovimentacaoFinanceira? origemFiltro))
+            return Invalida("Confira o tipo e a origem da movimentação.");
+
+        var filtro = new FiltroMovimentacoesFinanceiras(dataInicial, dataFinal, tipoFiltro, origemFiltro, pagina ?? 1);
+        if (!filtro.Valido) return Invalida("Confira o período e a página solicitada.");
+        return Results.Ok(await financeiro.ListarMovimentacoesAsync(filtro, ct));
+    }
+
+    private static bool LerFiltro<T>(string? texto, out T? filtro) where T : struct, Enum
+    {
+        filtro = null;
+        if (texto is null) return true;
+        if (!Enum.TryParse<T>(texto, out var valor) || !Enum.IsDefined(valor) || texto != valor.ToString()) return false;
+        filtro = valor;
+        return true;
+    }
 
     private static async Task<IResult> OperarAsync<T>(HttpContext ctx, Func<Guid, Guid, Task<ResultadoFinanceiro<T>>> executar,
         Func<T, string>? local = null)

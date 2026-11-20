@@ -8,7 +8,7 @@ using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class EfFinanceiroRepository(XaquiamuniDbContext db, TimeProvider relogio) : IGerenciarFinanceiro
+public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeProvider relogio) : IGerenciarFinanceiro
 {
     private const int TamanhoPagina = 50;
     private DbSet<PagamentoFornecedor> Pagamentos => db.Set<PagamentoFornecedor>();
