@@ -21,7 +21,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     private const string Pedidos = "/api/pedidos";
 
     [SqlServerIntegrationFact]
-    public async Task CadeiaFabricacao_CompraRecebidaOriginaLoteReservadoNoCheckout()
+    public async Task CadeiaFabricacao_ConciliaCompraProducaoCheckoutVendaExternaEFinanceiro()
     {
         await using var ambiente = await Ambiente.CriarAsync();
         using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
@@ -55,6 +55,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(dados.Recebimento.Validades[1].DataValidade, lotes[loteMaisCurto].DataValidade);
         Assert.True(lotes[loteMaisCurto].DataValidade < lotes[loteMaisLongo].DataValidade);
         await ConferirFisicoAsync(db, dados, 200, 18, 6);
+        var pagamentoFornecedor = await PagarCompraDaCadeiaAsync(admin, db, dados);
 
         var receita = await CriarReceitaAsync(admin, dados);
         var previa = await PreviaAsync(admin, receita.Resumo.Id);
@@ -132,6 +133,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var entradaHistorico = Assert.Single(historicoAcabado.EnumerateArray());
         Assert.Equal("EntradaManual", entradaHistorico.GetProperty("tipo").GetString());
         Assert.Equal(ordem.Resumo.Id, entradaHistorico.GetProperty("ordemProducaoId").GetGuid());
+        await ConciliarComercioEFinanceiroAsync(admin, db, dados, pedidoId, concluida.LoteId, pagamentoFornecedor);
     }
 
     [SqlServerIntegrationFact]
