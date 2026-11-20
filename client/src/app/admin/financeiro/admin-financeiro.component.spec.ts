@@ -43,6 +43,7 @@ const compra: CompraFinanceira = {
 describe('AdminFinanceiroComponent', () => {
   let fixture: ComponentFixture<AdminFinanceiroComponent>;
   const api = {
+    resumo: vi.fn(),
     movimentacoes: vi.fn(),
     consultarTentativa: vi.fn(),
     lancamentos: vi.fn(),
@@ -67,6 +68,7 @@ describe('AdminFinanceiroComponent', () => {
   beforeEach(() => {
     sessionStorage.removeItem(chaveStorage);
     vi.resetAllMocks();
+    api.resumo.mockReturnValue(of(null));
     api.movimentacoes.mockReturnValue(
       of({ pagina: 1, tamanhoPagina: 50, temProxima: false, itens: [] }),
     );
@@ -103,16 +105,28 @@ describe('AdminFinanceiroComponent', () => {
     await atualizar();
     if (
       abrirLancamentos &&
-      !botao('Movimentações')?.disabled &&
-      botao('Movimentações')?.getAttribute('aria-current') === 'page'
+      !botao('Visão geral')?.disabled &&
+      botao('Visão geral')?.getAttribute('aria-current') === 'page'
     ) {
       await clicar('Lançamentos');
     }
   }
 
-  it('abre Movimentações por padrão e consulta somente o histórico consolidado', async () => {
+  it('abre Visão geral e preserva as outras seções e o estado de Movimentações', async () => {
     await render(false);
+    expect(botao('Visão geral')?.getAttribute('aria-current')).toBe('page');
+    expect(botao('Lançamentos')).toBeDefined();
+    expect(botao('Pagamentos de compras')).toBeDefined();
+    expect(api.resumo).toHaveBeenCalledTimes(1);
+    expect(api.movimentacoes).not.toHaveBeenCalled();
+    await clicar('Movimentações');
     expect(botao('Movimentações')?.getAttribute('aria-current')).toBe('page');
+    const historico = fixture.nativeElement.querySelector('app-admin-movimentacoes-financeiras');
+    await clicar('Visão geral');
+    await clicar('Movimentações');
+    expect(fixture.nativeElement.querySelector('app-admin-movimentacoes-financeiras')).toBe(
+      historico,
+    );
     expect(api.movimentacoes).toHaveBeenCalledTimes(1);
     expect(api.lancamentos).not.toHaveBeenCalled();
     expect(api.enviar).not.toHaveBeenCalled();

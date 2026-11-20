@@ -192,6 +192,25 @@ try {
       await call('Emulation.setDeviceMetricsOverride', {
         width, height: 900, mobile: false, deviceScaleFactor: 1,
       }, a.sessionId);
+      await a.ev(`(${botaoFinanceiro('Visão geral')}).click()`);
+      await waitFor(() => a.ev(`document.querySelector('app-admin-visao-financeira')
+        ?.textContent.includes('R$ 123,45')`), 'Visão geral não exibiu o total real');
+      const posicao = await a.ev(`document.querySelector('[aria-labelledby="posicao-financeira-titulo"]').textContent`);
+      await a.ev(`(() => {
+        const campo = document.querySelector('app-admin-visao-financeira input[name="dataInicial"]');
+        campo.value = '2026-11-21';
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+        (${botaoFinanceiro('Aplicar período')}).click();
+      })()`);
+      await waitFor(() => a.ev(`document.querySelector('app-admin-visao-financeira')
+        ?.textContent.includes('Nenhuma movimentação no período selecionado')`), 'Período não atualizou o fluxo');
+      assert.equal(await a.ev(`document.querySelector('[aria-labelledby="posicao-financeira-titulo"]').textContent`), posicao);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev(`(${botaoFinanceiro('Todo o período')}).click()`);
+      await waitFor(() => a.ev(`document.querySelector('app-admin-visao-financeira')
+        ?.textContent.includes('R$ 123,45')`), 'Fluxo não retornou após abrir o período');
+      await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
+      console.log('Visão geral em ' + width + ' px: total real, filtro de fluxo, posição atual e ausência de rolagem horizontal.');
       await waitFor(() => a.ev(`!!(${botaoFinanceiro('Ver lançamento')})
         && document.querySelector('app-admin-movimentacoes-financeiras').textContent.includes('+ R$ 123,45')`),
         'Movimentação consolidada ausente no Chrome');

@@ -4,6 +4,14 @@
     <nav class="acoes" aria-label="Seções do financeiro">
       <button
         type="button"
+        [attr.aria-current]="secao === 'visao' ? 'page' : null"
+        [disabled]="ocupado || !!pendente"
+        (click)="mudarSecao('visao')"
+      >
+        Visão geral
+      </button>
+      <button
+        type="button"
         [attr.aria-current]="secao === 'movimentacoes' ? 'page' : null"
         [disabled]="ocupado || !!pendente"
         (click)="mudarSecao('movimentacoes')"
@@ -85,6 +93,10 @@
           Descartar tentativa
         </button>
       </section>
+    }
+
+    @if (secao === 'visao' && sessaoConfirmada) {
+      <app-admin-visao-financeira />
     }
 
     @if (movimentacoesAbertas) {

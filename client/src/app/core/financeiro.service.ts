@@ -99,11 +99,40 @@ export interface PaginaMovimentacoes {
   itens: MovimentacaoFinanceira[];
 }
 
+export interface PeriodoFinanceiro {
+  dataInicial: string;
+  dataFinal: string;
+}
+
+export interface ResumoFinanceiro {
+  fluxoPeriodo: {
+    dataInicial: string | null;
+    dataFinal: string | null;
+    entradasRecebidasCentavos: string;
+    saidasPagasCentavos: string;
+    movimentacaoLiquidaCentavos: string;
+  };
+  posicaoAtual: {
+    aReceberCentavos: string;
+    aPagarCentavos: string;
+    comprasValorAConferir: number;
+  };
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceiroService {
   private readonly http = inject(HttpClient);
   private readonly csrf = inject(CsrfService);
   private readonly base = '/api/admin/financeiro';
+
+  resumo({ dataInicial, dataFinal }: PeriodoFinanceiro) {
+    return this.http.get<ResumoFinanceiro>(this.base + '/resumo', {
+      params: {
+        ...(dataInicial ? { dataInicial } : {}),
+        ...(dataFinal ? { dataFinal } : {}),
+      },
+    });
+  }
 
   movimentacoes(filtros: FiltroMovimentacoes, pagina: number) {
     const params: Record<string, string | number> = { pagina };

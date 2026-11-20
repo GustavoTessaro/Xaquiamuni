@@ -1,0 +1,110 @@
+<section class="financeiro" aria-labelledby="visao-financeira-titulo">
+  <h2 id="visao-financeira-titulo" class="text-lg font-semibold">Visão geral do caixa</h2>
+  <form class="cartao" aria-label="Período do fluxo de caixa" (ngSubmit)="aplicar()">
+    <fieldset class="dados" [disabled]="carregando()">
+      <label
+        >Data inicial
+        <input
+          type="date"
+          name="dataInicial"
+          [(ngModel)]="periodo.dataInicial"
+          [attr.aria-invalid]="erroPeriodo() ? 'true' : null"
+          [attr.aria-describedby]="erroPeriodo() ? 'resumo-periodo-erro' : null"
+        />
+      </label>
+      <label
+        >Data final
+        <input
+          type="date"
+          name="dataFinal"
+          [(ngModel)]="periodo.dataFinal"
+          [attr.aria-invalid]="erroPeriodo() ? 'true' : null"
+          [attr.aria-describedby]="erroPeriodo() ? 'resumo-periodo-erro' : null"
+        />
+      </label>
+      <div class="acoes sm:col-span-2">
+        <button type="submit" class="primario">Aplicar período</button>
+        <button type="button" (click)="atalho('atual')">Mês atual</button>
+        <button type="button" (click)="atalho('anterior')">Mês anterior</button>
+        <button type="button" (click)="atalho('todo')">Todo o período</button>
+      </div>
+    </fieldset>
+    @if (erroPeriodo()) {
+      <p id="resumo-periodo-erro" role="alert" class="mensagem erro">{{ erroPeriodo() }}</p>
+    }
+  </form>
+  @if (carregando()) {
+    <p role="status">Carregando indicadores financeiros…</p>
+  } @else if (erro()) {
+    <p role="alert" class="mensagem erro">{{ erro() }}</p>
+    <button type="button" (click)="carregar()">Tentar novamente</button>
+  } @else if (resumo(); as dadosResumo) {
+    @let fluxo = dadosResumo.fluxoPeriodo;
+    @let posicao = dadosResumo.posicaoAtual;
+    <section class="financeiro" aria-labelledby="fluxo-financeiro-titulo">
+      <header>
+        <h3 id="fluxo-financeiro-titulo" class="font-semibold">Indicadores do período</h3>
+        <p class="text-sm text-slate-600" aria-live="polite">
+          @if (fluxo.dataInicial && fluxo.dataFinal) {
+            {{ civil(fluxo.dataInicial) }} a {{ civil(fluxo.dataFinal) }}
+          } @else if (fluxo.dataInicial) {
+            A partir de {{ civil(fluxo.dataInicial) }}
+          } @else if (fluxo.dataFinal) {
+            Até {{ civil(fluxo.dataFinal) }}
+          } @else {
+            Todo o período
+          }
+        </p>
+      </header>
+      @if (fluxo.entradasRecebidasCentavos === '0' && fluxo.saidasPagasCentavos === '0') {
+        <p role="status">Nenhuma movimentação no período selecionado.</p>
+      }
+      <dl class="grid gap-3 lg:grid-cols-3">
+        <div class="cartao">
+          <dt>Entradas recebidas</dt>
+          <dd class="text-lg text-emerald-800">{{ moeda(fluxo.entradasRecebidasCentavos) }}</dd>
+        </div>
+        <div class="cartao">
+          <dt>Saídas pagas</dt>
+          <dd class="text-lg">{{ moeda(fluxo.saidasPagasCentavos) }}</dd>
+        </div>
+        <div class="cartao">
+          <dt>Movimentação líquida</dt>
+          <dd class="text-lg">{{ moeda(fluxo.movimentacaoLiquidaCentavos) }}</dd>
+        </div>
+      </dl>
+      <p class="text-sm text-slate-600">
+        Movimentação líquida = entradas recebidas menos saídas pagas. Não representa lucro nem saldo
+        bancário.
+      </p>
+      <p class="text-sm text-slate-600">
+        Pedidos usam a data de confirmação do PIX em UTC. As demais movimentações usam a data
+        efetiva registrada.
+      </p>
+    </section>
+    <section class="financeiro" aria-labelledby="posicao-financeira-titulo">
+      <h3 id="posicao-financeira-titulo" class="font-semibold">
+        Posição atual — independente do período selecionado
+      </h3>
+      <dl class="grid gap-3 lg:grid-cols-3">
+        <div class="cartao">
+          <dt>A receber de vendas externas</dt>
+          <dd class="text-lg">{{ moeda(posicao.aReceberCentavos) }}</dd>
+        </div>
+        <div class="cartao">
+          <dt>A pagar a fornecedores</dt>
+          <dd class="text-lg">{{ moeda(posicao.aPagarCentavos) }}</dd>
+        </div>
+        <div class="cartao">
+          <dt>Compras com valor a conferir</dt>
+          <dd class="text-lg">{{ posicao.comprasValorAConferir }}</dd>
+        </div>
+      </dl>
+      @if (posicao.comprasValorAConferir > 0) {
+        <p class="text-sm text-slate-600">
+          Existem compras com valor a conferir; o total a pagar não inclui esses valores.
+        </p>
+      }
+    </section>
+  }
+</section>
