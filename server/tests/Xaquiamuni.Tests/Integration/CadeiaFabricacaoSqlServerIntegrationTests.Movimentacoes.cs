@@ -95,6 +95,21 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(3, await db.Set<LancamentoFinanceiro>().CountAsync());
         Assert.Equal(2, await db.Set<PagamentoFornecedor>().CountAsync());
         Assert.Equal(2, await db.Set<RecebimentoVendaExterna>().CountAsync());
+
+        var resumoUrl = Financeiro + "/resumo";
+        using var resumoBloqueado = await cliente.Http.GetAsync(resumoUrl);
+        Assert.Equal(HttpStatusCode.Forbidden, resumoBloqueado.StatusCode);
+        var resumo = await ObterResumoAsync(admin, "?dataInicial=2026-10-01&dataFinal=2026-10-02");
+        Assert.Equal(new FluxoFinanceiroDto(inicio, fim, "9223372036854781307", "2500", "9223372036854778807"),
+            resumo.FluxoPeriodo);
+        Assert.Equal(new PosicaoFinanceiraDto("3000", "4650", 0), resumo.PosicaoAtual);
+        var apenasFim = await ObterResumoAsync(admin, "?dataInicial=2026-10-02&dataFinal=2026-10-02");
+        Assert.Equal(new FluxoFinanceiroDto(fim, fim, "5000", "1600", "3400"), apenasFim.FluxoPeriodo);
+        Assert.Equal(resumo.PosicaoAtual, apenasFim.PosicaoAtual);
+        Assert.Equal(3, await db.Set<LancamentoFinanceiro>().CountAsync());
+        Assert.Equal(2, await db.Set<PagamentoFornecedor>().CountAsync());
+        Assert.Equal(2, await db.Set<RecebimentoVendaExterna>().CountAsync());
+        Assert.Equal(4, await db.Pedidos.CountAsync());
     }
 
     [SqlServerIntegrationFact]

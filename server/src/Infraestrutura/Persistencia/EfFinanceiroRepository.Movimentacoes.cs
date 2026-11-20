@@ -14,6 +14,18 @@ public sealed partial class EfFinanceiroRepository
     public async Task<PaginaMovimentacoesFinanceiras> ListarMovimentacoesAsync(
         FiltroMovimentacoesFinanceiras filtro, CancellationToken ct)
     {
+        var movimentos = NoPeriodo(MovimentosCaixa(), filtro.DataInicial, filtro.DataFinal);
+        if (filtro.Tipo is { } tipo) movimentos = movimentos.Where(m => m.Tipo == tipo);
+        if (filtro.Origem is { } origem) movimentos = movimentos.Where(m => m.Origem == origem);
+
+        const int limite = FiltroMovimentacoesFinanceiras.TamanhoPagina;
+        var linhas = await movimentos.OrderByDescending(m => m.Data).ThenByDescending(m => m.EventoId)
+            .ThenBy(m => m.Origem).Skip((filtro.Pagina - 1) * limite).Take(limite + 1).ToListAsync(ct);
+        return new(filtro.Pagina, limite, linhas.Count > limite, linhas.Take(limite).Select(l => l.Dto()).ToArray());
+    }
+
+    private IQueryable<LinhaCaixa> MovimentosCaixa()
+    {
         var pedidos = db.Pedidos.AsNoTracking()
             .Where(p => p.PagamentoConfirmadoEmUtc.HasValue &&
                 (p.Situacao == SituacaoPedido.PagamentoConfirmado || p.Situacao == SituacaoPedido.EmPreparacao ||
@@ -47,16 +59,14 @@ public sealed partial class EfFinanceiroRepository
                 Data = l.Data, Valor = l.ValorCentavos, Descricao = l.Descricao, Meio = l.Meio.ToString()
             });
 
-        var movimentos = pedidos.Concat(vendas).Concat(fornecedores).Concat(manuais);
-        if (filtro.DataInicial is { } inicio) movimentos = movimentos.Where(m => m.Data >= inicio);
-        if (filtro.DataFinal is { } fim) movimentos = movimentos.Where(m => m.Data <= fim);
-        if (filtro.Tipo is { } tipo) movimentos = movimentos.Where(m => m.Tipo == tipo);
-        if (filtro.Origem is { } origem) movimentos = movimentos.Where(m => m.Origem == origem);
+        return pedidos.Concat(vendas).Concat(fornecedores).Concat(manuais);
+    }
 
-        const int limite = FiltroMovimentacoesFinanceiras.TamanhoPagina;
-        var linhas = await movimentos.OrderByDescending(m => m.Data).ThenByDescending(m => m.EventoId)
-            .ThenBy(m => m.Origem).Skip((filtro.Pagina - 1) * limite).Take(limite + 1).ToListAsync(ct);
-        return new(filtro.Pagina, limite, linhas.Count > limite, linhas.Take(limite).Select(l => l.Dto()).ToArray());
+    private static IQueryable<LinhaCaixa> NoPeriodo(IQueryable<LinhaCaixa> movimentos, DateOnly? inicio, DateOnly? fim)
+    {
+        if (inicio.HasValue) movimentos = movimentos.Where(m => m.Data >= inicio.Value);
+        if (fim.HasValue) movimentos = movimentos.Where(m => m.Data <= fim.Value);
+        return movimentos;
     }
 
     private sealed class LinhaCaixa

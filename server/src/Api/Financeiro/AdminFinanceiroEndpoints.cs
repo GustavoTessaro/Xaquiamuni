@@ -19,6 +19,11 @@ public static class AdminFinanceiroEndpoints
         });
 
         grupo.MapGet("/movimentacoes", ListarMovimentacoesAsync);
+        grupo.MapGet("/resumo", async Task<IResult> (DateOnly? dataInicial, DateOnly? dataFinal,
+            IGerenciarFinanceiro financeiro, CancellationToken ct) =>
+            dataInicial > dataFinal
+                ? Invalida("A data inicial deve ser anterior ou igual à data final.")
+                : Results.Ok(await financeiro.ResumirAsync(dataInicial, dataFinal, ct)));
         grupo.MapGet("/tentativas/{chave:guid}", async Task<IResult> (Guid chave, HttpContext ctx,
             IGerenciarFinanceiro financeiro, CancellationToken ct) =>
         {
