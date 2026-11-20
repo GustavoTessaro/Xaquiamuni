@@ -5,6 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
+using Xaquiamuni.Aplicacao.Agenda;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Aplicacao.Catalogo;
@@ -92,6 +93,7 @@ public static class DependencyInjection
         services.AddScoped<IRegistrarSaidaAutomaticaProdutoAcabado, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IGerenciarVendasExternas, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IGerenciarFinanceiro, EfFinanceiroRepository>();
+        services.AddScoped<IGerenciarAgenda, EfAgendaRepository>();
         services.AddScoped<IContarProdutoAcabado, ContarProdutoAcabado>();
         services.AddScoped<IEstornarMovimentoProdutoAcabado, EstornarMovimentoProdutoAcabado>();
         services.AddScoped<IConfigurarPoliticaEstoqueProdutoAcabado, ConfigurarPoliticaEstoqueProdutoAcabado>();

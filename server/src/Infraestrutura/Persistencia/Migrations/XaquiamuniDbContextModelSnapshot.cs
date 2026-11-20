@@ -153,6 +153,67 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("AspNetUserTokens", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Agenda.CompromissoAgenda", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AtualizadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AtualizadoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Categoria")
+                        .HasMaxLength(80)
+                        .HasColumnType("nvarchar(80)");
+
+                    b.Property<DateTimeOffset>("CriadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Descricao")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<DateTimeOffset?>("ExcluidoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("ExcluidoPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<TimeOnly?>("HorarioFinal")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("HorarioInicial")
+                        .HasColumnType("time");
+
+                    b.Property<string>("Titulo")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("Versao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Data", "HorarioInicial", "Id")
+                        .HasFilter("[ExcluidoEmUtc] IS NULL");
+
+                    b.ToTable("CompromissosAgenda", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CompromissosAgenda_Horarios", "[HorarioFinal] IS NULL OR ([HorarioInicial] IS NOT NULL AND [HorarioFinal] > [HorarioInicial])");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Categoria", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2302,6 +2363,35 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoAgenda", b =>
+                {
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Operacao")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("ResponsavelId", "Chave")
+                        .HasName("PK_OperacoesAgenda");
+
+                    b.ToTable("OperacoesAgenda", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoFinanceira", b =>
