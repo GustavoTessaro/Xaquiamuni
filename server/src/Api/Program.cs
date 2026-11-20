@@ -106,6 +106,7 @@ app.MapAdminFornecedorEndpoints();
 app.MapAdminComprasMateriasPrimasEndpoints();
 app.MapAdminReceitasProducaoEndpoints();
 app.MapAdminOrdensProducaoEndpoints();
+app.MapAdminVendasExternasEndpoints();
 app.MapAdminProdutoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();

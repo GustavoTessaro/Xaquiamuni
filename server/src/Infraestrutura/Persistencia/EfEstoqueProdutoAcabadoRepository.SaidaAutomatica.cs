@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Estoque;
+using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Estoque;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
@@ -54,37 +55,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IRegistrarSaidaA
 
             // O mesmo instante define o dia civil, as reservas que comprometem saldo e a auditoria.
             var agora = await _dbContext.ObterAgoraReservasUtcAsync(cancellationToken);
-            var data = _calendario.ObterDataEm(agora);
-            var comprometidas = _dbContext.ReservasProdutoAcabado.ComprometidasEm(agora)
-                .Where(r => r.ProdutoVarianteId == input.VarianteId)
-                .GroupBy(r => r.LoteId)
-                .Select(g => new { LoteId = g.Key, Quantidade = g.Sum(r => (long)r.Quantidade) });
-            var posicoes = await (
-                from lote in _dbContext.LotesProdutoAcabado
-                join saldo in _dbContext.SaldosProdutoAcabado
-                    on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
-                join reserva in comprometidas on lote.Id equals reserva.LoteId into reservas
-                from reserva in reservas.DefaultIfEmpty()
-                where lote.ProdutoVarianteId == input.VarianteId && lote.DataValidade >= data
-                    && saldo.QuantidadeVendavel > ((long?)reserva.Quantidade ?? 0)
-                orderby lote.DataValidade, lote.Codigo, lote.Id
-                select new { Lote = lote, Saldo = saldo, Livre = saldo.QuantidadeVendavel - ((long?)reserva.Quantidade ?? 0) })
-                .ToListAsync(cancellationToken);
-            if (posicoes.Sum(p => p.Livre) < input.Quantidade)
+            var movimentos = await AplicarSaidaFefoAsync(variante, input.Quantidade, input.ResponsavelId,
+                motivo, agora, fingerprint, indice => indice == 0 ? chave : FormattableString.Invariant($"{prefixo}{indice:D10}"),
+                cancellationToken);
+            if (movimentos is null)
                 return new(OperacaoProdutoAcabadoStatus.SaldoInsuficiente, [],
                     Erro: "Saldo disponível insuficiente para registrar a saída. Confira a posição antes de tentar novamente.");
-
-            var restante = input.Quantidade;
-            var movimentos = new List<MovimentoProdutoAcabado>();
-            foreach (var posicao in posicoes)
-            {
-                var quantidade = (int)Math.Min(restante, posicao.Livre);
-                var chaveMovimento = movimentos.Count == 0 ? chave : FormattableString.Invariant($"{prefixo}{movimentos.Count:D10}");
-                movimentos.Add(posicao.Saldo.RegistrarSaidaManual(variante, posicao.Lote, quantidade, data,
-                    input.ResponsavelId, motivo, agora, chaveMovimento, fingerprint));
-                restante -= quantidade;
-                if (restante == 0) break;
-            }
 
             _dbContext.MovimentosProdutoAcabado.AddRange(movimentos);
             await _dbContext.SaveChangesAsync(cancellationToken);
@@ -110,5 +86,43 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IRegistrarSaidaA
         {
             _dbContext.ChangeTracker.Clear();
         }
+    }
+    // O chamador controla a transação e detém o lock da variante.
+    private async Task<List<MovimentoProdutoAcabado>?> AplicarSaidaFefoAsync(
+        ProdutoVariante variante, int quantidadeSolicitada, Guid responsavel,
+        string motivo, DateTimeOffset agora, byte[] fingerprint, Func<int, string> chaveMovimentoPorIndice,
+        CancellationToken cancellationToken)
+    {
+        var data = _calendario.ObterDataEm(agora);
+        var comprometidas = _dbContext.ReservasProdutoAcabado.ComprometidasEm(agora)
+            .Where(r => r.ProdutoVarianteId == variante.Id)
+            .GroupBy(r => r.LoteId)
+            .Select(g => new { LoteId = g.Key, Quantidade = g.Sum(r => (long)r.Quantidade) });
+        var posicoes = await (
+            from lote in _dbContext.LotesProdutoAcabado
+            join saldo in _dbContext.SaldosProdutoAcabado
+                on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
+            join reserva in comprometidas on lote.Id equals reserva.LoteId into reservas
+            from reserva in reservas.DefaultIfEmpty()
+            where lote.ProdutoVarianteId == variante.Id && lote.DataValidade >= data
+                && saldo.QuantidadeVendavel > ((long?)reserva.Quantidade ?? 0)
+            orderby lote.DataValidade, lote.Codigo, lote.Id
+            select new { Lote = lote, Saldo = saldo, Livre = saldo.QuantidadeVendavel - ((long?)reserva.Quantidade ?? 0) })
+            .ToListAsync(cancellationToken);
+        if (posicoes.Sum(p => p.Livre) < quantidadeSolicitada) return null;
+
+        var restante = quantidadeSolicitada;
+        var movimentos = new List<MovimentoProdutoAcabado>();
+        foreach (var posicao in posicoes)
+        {
+            var quantidade = (int)Math.Min(restante, posicao.Livre);
+            var chaveMovimento = chaveMovimentoPorIndice(movimentos.Count);
+            movimentos.Add(posicao.Saldo.RegistrarSaidaManual(variante, posicao.Lote, quantidade, data,
+                responsavel, motivo, agora, chaveMovimento, fingerprint));
+            restante -= quantidade;
+            if (restante == 0) break;
+        }
+
+        return movimentos;
     }
 }

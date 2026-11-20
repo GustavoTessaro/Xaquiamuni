@@ -1113,6 +1113,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                 original.ProdutoVarianteId,
                 cancellationToken).ConfigureAwait(false);
 
+            if (await _dbContext.Set<BaixaVendaExterna>().AnyAsync(b => b.MovimentoId == original.Id
+                || b.MovimentoCancelamentoId == original.Id, cancellationToken).ConfigureAwait(false))
+                return await ReverterEstornoComFalhaAsync(transaction, OperacaoProdutoAcabadoStatus.ConflitoConcorrencia,
+                    "Este movimento pertence a uma venda externa. Use a operação de cancelamento da venda.").ConfigureAwait(false);
+
             if (await _dbContext.OrdensProducao.AnyAsync(o => o.MovimentoAcabadoId == original.Id, cancellationToken)
                 .ConfigureAwait(false))
                 return await ReverterEstornoComFalhaAsync(transaction, OperacaoProdutoAcabadoStatus.MovimentoNaoEncontrado,

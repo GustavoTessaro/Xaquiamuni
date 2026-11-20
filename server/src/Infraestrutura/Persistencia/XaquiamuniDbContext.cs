@@ -81,6 +81,7 @@ public sealed class XaquiamuniDbContext
         base.OnModelCreating(builder);
         builder.MapearReceitasProducao();
         builder.MapearOrdensProducao();
+        builder.MapearVendasExternas();
         builder.MapearComprasMateriasPrimas();
         builder.Entity<Fornecedor>(fornecedor =>
         {

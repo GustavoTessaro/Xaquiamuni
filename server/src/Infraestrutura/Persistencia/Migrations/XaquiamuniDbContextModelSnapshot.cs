@@ -878,6 +878,40 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.BaixaVendaExterna", b =>
+                {
+                    b.Property<Guid>("MovimentoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ItemId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("LoteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("MovimentoCancelamentoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.HasKey("MovimentoId");
+
+                    b.HasIndex("LoteId");
+
+                    b.HasIndex("MovimentoCancelamentoId")
+                        .IsUnique()
+                        .HasFilter("[MovimentoCancelamentoId] IS NOT NULL");
+
+                    b.HasIndex("ItemId", "LoteId")
+                        .IsUnique();
+
+                    b.ToTable("BaixasVendaExterna", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_BaixasVendaExterna_Quantidade", "[Quantidade] > 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ComponenteCompraMateriaPrima", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1211,6 +1245,58 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ItensReceitaProducao", null, t =>
                         {
                             t.HasCheckConstraint("CK_ItensReceitaProducao_Quantidade", "[Quantidade] > 0 AND ([UnidadeBase] IN ('Grama','Mililitro') OR ([UnidadeBase] = 'Unidade' AND [Quantidade] = FLOOR([Quantidade])))");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ItemVendaExterna", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("DescontoCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("NomeProduto")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("NomeVariante")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<long>("PrecoUnitarioCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("ProdutoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Quantidade")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SubtotalCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("VarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("VendaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoId");
+
+                    b.HasIndex("VarianteId");
+
+                    b.HasIndex("VendaId", "VarianteId")
+                        .IsUnique();
+
+                    b.ToTable("ItensVendaExterna", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ItensVendaExterna_Valores", "[Quantidade] > 0 AND [PrecoUnitarioCentavos] >= 0 AND [DescontoCentavos] >= 0 AND [SubtotalCentavos] >= 0");
                         });
                 });
 
@@ -1728,6 +1814,48 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.RecebimentoVendaExterna", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateOnly>("Data")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Meio")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<DateTimeOffset>("RegistradoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<long>("ValorCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("VendaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("VendaId");
+
+                    b.HasIndex("ResponsavelId", "Chave")
+                        .IsUnique();
+
+                    b.ToTable("RecebimentosVendaExterna", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_RecebimentosVendaExterna_Valor", "[ValorCentavos] > 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducao", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1947,6 +2075,69 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.VendaExterna", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Canal")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<DateTimeOffset?>("CanceladaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("CanceladaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Comprador")
+                        .HasMaxLength(160)
+                        .HasColumnType("nvarchar(160)");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateOnly>("DataVenda")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DescricaoCanal")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("MotivoCancelamento")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Situacao")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<long>("TotalCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly?>("Vencimento")
+                        .HasColumnType("date");
+
+                    b.Property<Guid>("Versao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DataVenda", "Id");
+
+                    b.ToTable("VendasExternas", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_VendasExternas_Total", "[TotalCentavos] > 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2013,6 +2204,40 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoVendaExterna", b =>
+                {
+                    b.Property<Guid>("ResponsavelId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("nvarchar(1024)");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<Guid>("VendaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("ResponsavelId", "Chave");
+
+                    b.HasIndex("VendaId");
+
+                    b.ToTable("OperacoesVendaExterna", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
@@ -2370,6 +2595,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("Saldo");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.BaixaVendaExterna", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.ItemVendaExterna", null)
+                        .WithMany()
+                        .HasForeignKey("ItemId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.LoteProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("LoteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoCancelamentoId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.MovimentoProdutoAcabado", null)
+                        .WithMany()
+                        .HasForeignKey("MovimentoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ComponenteCompraMateriaPrima", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Estoque.FormaCompraInsumo", null)
@@ -2507,6 +2758,27 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasOne("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", null)
                         .WithMany("Itens")
                         .HasForeignKey("VersaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ItemVendaExterna", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Produto", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
+                        .WithMany()
+                        .HasForeignKey("VarianteId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.VendaExterna", null)
+                        .WithMany("Itens")
+                        .HasForeignKey("VendaId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
@@ -2833,6 +3105,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasConstraintName("FK_PoliticasEstoqueProdutoVariante_ProdutoVariantes_ProdutoVarianteId");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.RecebimentoVendaExterna", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.VendaExterna", null)
+                        .WithMany("Recebimentos")
+                        .HasForeignKey("VendaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducao", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", "Variante")
@@ -2920,6 +3201,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasConstraintName("FK_SaldosProdutoAcabado_LotesProdutoAcabado_ProdutoVarianteId_LoteId");
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoVendaExterna", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Estoque.VendaExterna", null)
+                        .WithMany()
+                        .HasForeignKey("VendaId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.Outbox.EmailOutboxMessage", b =>
                 {
                     b.HasOne("Xaquiamuni.Infraestrutura.Identidade.XaquiamuniUser", null)
@@ -2986,6 +3276,13 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.ReceitaProducaoVersao", b =>
                 {
                     b.Navigation("Itens");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.VendaExterna", b =>
+                {
+                    b.Navigation("Itens");
+
+                    b.Navigation("Recebimentos");
                 });
 #pragma warning restore 612, 618
         }
