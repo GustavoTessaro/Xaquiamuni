@@ -1,0 +1,242 @@
+<app-admin-workspace activePage="agenda">
+  <section class="agenda" aria-labelledby="agenda-titulo">
+    <h1 id="agenda-titulo" class="text-2xl font-semibold">Agenda</h1>
+    @if (ocupado) {
+      <p role="status">Aguarde…</p>
+    }
+    @if (erro) {
+      <p role="alert" class="aviso erro">{{ erro }}</p>
+    }
+    @if (sucesso) {
+      <p role="status" class="aviso">{{ sucesso }}</p>
+    }
+
+    @if (pendente || semPayload) {
+      <section class="cartao" aria-labelledby="agenda-tentativa">
+        <h2 id="agenda-tentativa">Tentativa pendente</h2>
+        @if (pendente) {
+          <p>
+            {{
+              tentativaAusente
+                ? 'O servidor ainda não encontrou a tentativa. Você pode reenviar a mesma operação.'
+                : 'Consulte o servidor antes de tentar novamente.'
+            }}
+          </p>
+          <div class="acoes">
+            <button type="button" (click)="conferir()" [disabled]="ocupado">
+              Conferir tentativa
+            </button>
+            <button type="button" (click)="reenviar()" [disabled]="ocupado || !tentativaAusente">
+              Reenviar tentativa
+            </button>
+          </div>
+        } @else {
+          <p>Os dados originais da tentativa não estão disponíveis. O reenvio foi bloqueado.</p>
+        }
+        <label class="check"
+          ><input type="checkbox" [(ngModel)]="confirmarDescarte" [disabled]="ocupado" /> Entendo
+          que a operação pode já ter sido gravada.</label
+        >
+        <button type="button" (click)="descartar()" [disabled]="ocupado || !confirmarDescarte">
+          Descartar tentativa
+        </button>
+      </section>
+    }
+
+    <div class="colunas">
+      <section class="cartao" aria-labelledby="agenda-mes">
+        <h2 id="agenda-mes" aria-live="polite" class="capitalize">{{ mes.titulo }}</h2>
+        <nav class="acoes" aria-label="Navegação do calendário">
+          <button
+            type="button"
+            (click)="navegar(-1)"
+            [disabled]="ocupado || !!pendente || mes.inicio === '0001-01-01'"
+          >
+            Mês anterior
+          </button>
+          <button type="button" (click)="navegar(0)" [disabled]="ocupado || !!pendente">
+            Hoje
+          </button>
+          <button
+            type="button"
+            (click)="navegar(1)"
+            [disabled]="ocupado || !!pendente || mes.inicio === '9999-12-01'"
+          >
+            Próximo mês
+          </button>
+        </nav>
+        <div class="grade">
+          @for (nome of semana; track nome) {
+            <abbr [title]="nome" class="semana">{{ nome.slice(0, 3) }}</abbr>
+          }
+          @for (espaco of mes.espacos; track espaco) {
+            <span aria-hidden="true"></span>
+          }
+          @for (item of mes.dias; track item.data) {
+            @let quantidade = porDia.get(item.data)?.length ?? 0;
+            <button
+              type="button"
+              class="dia"
+              [disabled]="ocupado || !!pendente"
+              [attr.aria-pressed]="dia === item.data"
+              [attr.aria-current]="agora === item.data ? 'date' : null"
+              [attr.aria-label]="
+                rotuloDia(item.data) +
+                (quantidade
+                  ? ', ' + quantidade + (quantidade === 1 ? ' compromisso' : ' compromissos')
+                  : '')
+              "
+              (click)="selecionar(item.data)"
+            >
+              {{ item.numero }}
+              @if (quantidade) {
+                <span class="marcador" aria-hidden="true"></span>
+              }
+            </button>
+          }
+        </div>
+        @if (!carregado && !ocupado && erro && !pendente) {
+          <button type="button" (click)="carregar()">Atualizar calendário</button>
+        }
+      </section>
+
+      <section class="cartao" aria-labelledby="agenda-dia">
+        <h2 id="agenda-dia">Compromissos de {{ rotuloDia(dia) }}</h2>
+        <button
+          type="button"
+          class="primario"
+          (click)="novo()"
+          [disabled]="ocupado || !!pendente || semPayload"
+        >
+          Novo compromisso
+        </button>
+        @if (carregado) {
+          <ul class="itens">
+            @for (item of porDia.get(dia) ?? []; track item.id) {
+              <li class="resumo">
+                <h3>{{ item.titulo }}</h3>
+                <p>
+                  {{ horario(item) }}
+                  @if (item.categoria) {
+                    · {{ item.categoria }}
+                  }
+                </p>
+                @if (item.descricao) {
+                  <p class="descricao">{{ item.descricao }}</p>
+                }
+                <div class="acoes">
+                  <button
+                    type="button"
+                    (click)="abrir(item.id, 'ver')"
+                    [disabled]="ocupado || !!pendente"
+                  >
+                    Visualizar
+                  </button>
+                  <button
+                    type="button"
+                    (click)="abrir(item.id, 'editar')"
+                    [disabled]="ocupado || !!pendente || semPayload"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    type="button"
+                    (click)="abrir(item.id, 'excluir')"
+                    [disabled]="ocupado || !!pendente || semPayload"
+                  >
+                    Excluir
+                  </button>
+                </div>
+              </li>
+            } @empty {
+              <li>Nenhum compromisso neste dia.</li>
+            }
+          </ul>
+        }
+      </section>
+    </div>
+
+    @if (modo === 'criar' || modo === 'editar') {
+      <form class="cartao" aria-labelledby="agenda-form" (ngSubmit)="salvar()">
+        <h2 id="agenda-form" #tituloEditor tabindex="-1">
+          {{ modo === 'criar' ? 'Novo compromisso' : 'Editar compromisso' }}
+        </h2>
+        <fieldset class="campos" [disabled]="ocupado || !!pendente || semPayload || conflito">
+          <label
+            >Título <input name="titulo" [(ngModel)]="titulo" [maxlength]="limites.titulo" required
+          /></label>
+          <label>Data <input type="date" name="data" [(ngModel)]="data" required /></label>
+          <label
+            >Categoria (opcional)
+            <input name="categoria" [(ngModel)]="categoria" [maxlength]="limites.categoria"
+          /></label>
+          <label
+            >Descrição (opcional)
+            <textarea
+              name="descricao"
+              [(ngModel)]="descricao"
+              [maxlength]="limites.descricao"
+            ></textarea>
+          </label>
+          <label
+            >Horário inicial (opcional) <input type="time" name="inicio" [(ngModel)]="inicio"
+          /></label>
+          <label>Horário final (opcional) <input type="time" name="fim" [(ngModel)]="fim" /></label>
+          <button type="submit" class="primario">Salvar compromisso</button>
+        </fieldset>
+        <div class="acoes">
+          @if (conflito && atual) {
+            <button type="button" (click)="abrir(atual.id, 'editar')" [disabled]="ocupado">
+              Recarregar compromisso
+            </button>
+          }
+          <button type="button" (click)="modo = null" [disabled]="ocupado || !!pendente">
+            Voltar
+          </button>
+        </div>
+      </form>
+    } @else if (atual; as item) {
+      @if (modo === 'ver' || modo === 'excluir') {
+        <section class="cartao" aria-labelledby="agenda-detalhe">
+          <h2 id="agenda-detalhe" #tituloEditor tabindex="-1">
+            {{ modo === 'excluir' ? 'Excluir compromisso' : item.titulo }}
+          </h2>
+          @if (modo === 'excluir') {
+            <p>
+              Confirma a exclusão de <strong>{{ item.titulo }}</strong
+              >?
+            </p>
+          }
+          <p>
+            {{ rotuloDia(item.data) }} · {{ horario(item) }}
+            @if (item.categoria) {
+              · {{ item.categoria }}
+            }
+          </p>
+          @if (item.descricao) {
+            <p class="descricao">{{ item.descricao }}</p>
+          }
+          <div class="acoes">
+            @if (modo === 'excluir') {
+              <button
+                type="button"
+                (click)="excluir()"
+                [disabled]="ocupado || !!pendente || semPayload || conflito"
+              >
+                Confirmar exclusão
+              </button>
+              @if (conflito) {
+                <button type="button" (click)="abrir(item.id, 'excluir')" [disabled]="ocupado">
+                  Recarregar compromisso
+                </button>
+              }
+            }
+            <button type="button" (click)="modo = null" [disabled]="ocupado || !!pendente">
+              Voltar
+            </button>
+          </div>
+        </section>
+      }
+    }
+  </section>
+</app-admin-workspace>

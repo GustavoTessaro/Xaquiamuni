@@ -159,6 +159,65 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
+  if (dados.agenda) {
+    assert.equal(await c.ev('fetch("/api/admin/agenda").then(r => r.status)'), 403);
+    const botaoAgenda = rotulo => `[...document.querySelectorAll('main button')]
+      .find(b => b.textContent.trim() === ${JSON.stringify(rotulo)} && !b.disabled && b.getClientRects().length)`;
+    const clicarAgenda = async rotulo => {
+      await waitFor(() => a.ev(`(() => {
+        const botao = ${botaoAgenda(rotulo)};
+        if (!botao) return false;
+        botao.click();
+        return true;
+      })()`), 'Botão da Agenda indisponível: ' + rotulo);
+    };
+    const preencherAgenda = (nome, valor) => a.ev(`(() => {
+      const campo = document.querySelector('main [name="' + ${JSON.stringify(nome)} + '"]');
+      campo.value = ${JSON.stringify(valor)};
+      campo.dispatchEvent(new Event('input', { bubbles: true }));
+    })()`);
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', {
+        width, height: 900, mobile: false, deviceScaleFactor: 1,
+      }, a.sessionId);
+      await a.ir('/admin/agenda');
+      await waitFor(() => a.ev(`document.querySelector('main h1')?.textContent.trim() === 'Agenda'`), 'Agenda não abriu');
+      await clicarAgenda('Novo compromisso');
+      await waitFor(() => a.ev('!!document.querySelector("#agenda-form")'), 'Cadastro não abriu');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      assert.equal(await a.ev('document.activeElement?.id'), 'agenda-form');
+      await preencherAgenda('titulo', 'Compromisso E2E');
+      await preencherAgenda('inicio', '09:00');
+      await preencherAgenda('fim', '09:30');
+      await clicarAgenda('Salvar compromisso');
+      await waitFor(async () => {
+        const erro = await a.ev(`document.querySelector('main [role="alert"]')?.textContent.trim()`);
+        if (erro) throw new Error('Agenda: ' + erro + ' HTTP: ' + respostas.get('/api/admin/agenda'));
+        return a.ev(`document.querySelector('main .resumo h3')?.textContent.trim() === 'Compromisso E2E'
+        && document.querySelector('main [aria-pressed="true"] .marcador')
+        && document.querySelector('main .resumo').textContent.includes('09:00 a 09:30')`);
+      }, 'Compromisso não apareceu').catch(async erro => {
+        const estado = await a.ev(`({
+          texto: document.querySelector('main .agenda')?.innerText.slice(0, 1000),
+          campos: [...document.querySelectorAll('main form input')].map(x => [x.name, x.value, x.validity.valid]),
+          dataMarcada: document.querySelector('main [aria-pressed="true"]')?.getAttribute('aria-label'),
+        })`);
+        throw new Error(erro.message + ': ' + JSON.stringify(estado) + ' HTTP: ' + respostas.get('/api/admin/agenda'));
+      });
+      await clicarAgenda('Editar');
+      await waitFor(() => a.ev('!!document.querySelector("#agenda-form")'), 'Edição não abriu');
+      await preencherAgenda('titulo', 'Compromisso editado');
+      await clicarAgenda('Salvar compromisso');
+      await waitFor(() => a.ev(`document.querySelector('main .resumo h3')?.textContent.trim() === 'Compromisso editado'`), 'Edição não persistiu');
+      await clicarAgenda('Excluir');
+      await clicarAgenda('Confirmar exclusão');
+      await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Nenhum compromisso neste dia')
+        && !document.querySelector('main [aria-pressed="true"] .marcador')`), 'Exclusão não atualizou a grade');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      console.log('Agenda em ' + width + ' px: cadastro, horários, edição, exclusão e nenhuma rolagem horizontal.');
+    }
+  }
+
   if (dados.financeiro) {
     const adminId = JSON.stringify(admin.Id);
     assert.equal(await a.ev(`(async () => {

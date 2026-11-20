@@ -145,6 +145,12 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/agenda',
+    loadComponent: () =>
+      import('./admin/agenda/admin-agenda.component').then((module) => module.AdminAgendaComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/financeiro',
     loadComponent: () =>
       import('./admin/financeiro/admin-financeiro.component').then(

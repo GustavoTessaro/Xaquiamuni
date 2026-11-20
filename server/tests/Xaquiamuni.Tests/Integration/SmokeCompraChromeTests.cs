@@ -53,6 +53,10 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
 
     [ChromeCompraFact]
     [Trait("Category", "SqlServerIntegration")]
+    public Task ChromeAgendaAdministrativa() => ExecutarChromeAsync(jornada: false, agenda: true);
+
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
     public Task JornadaChromePixManualComConciliacao() => ExecutarChromeAsync(jornada: true, pixManual: true);
 
     [ChromeCompraFact]
@@ -104,7 +108,8 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         output.WriteLine("Demonstração encerrada: HTTPS indisponível, banco e diretório removidos.");
     }
 
-    private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false, bool auditoriaAdmin = false, bool financeiro = false)
+    private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false, bool auditoriaAdmin = false,
+        bool financeiro = false, bool agenda = false)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -154,7 +159,7 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
                     {
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
-                        outroCliente, seed, pixManual, varianteAuditoria, financeiro,
+                        outroCliente, seed, pixManual, varianteAuditoria, financeiro, agenda,
                     }, fluxo);
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }
