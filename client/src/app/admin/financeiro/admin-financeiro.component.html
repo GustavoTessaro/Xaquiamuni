@@ -1,0 +1,406 @@
+<app-admin-workspace activePage="finance">
+  <section class="financeiro" aria-labelledby="financeiro-titulo">
+    <h1 id="financeiro-titulo" class="text-2xl font-semibold">Financeiro</h1>
+    <nav class="acoes" aria-label="Seções do financeiro">
+      <button
+        type="button"
+        [attr.aria-current]="secao === 'lancamentos' ? 'page' : null"
+        [disabled]="ocupado || !!pendente"
+        (click)="mudarSecao('lancamentos')"
+      >
+        Lançamentos
+      </button>
+      <button
+        type="button"
+        [attr.aria-current]="secao === 'compras' ? 'page' : null"
+        [disabled]="ocupado || !!pendente"
+        (click)="mudarSecao('compras')"
+      >
+        Pagamentos de compras
+      </button>
+    </nav>
+    @if (ocupado) {
+      <p role="status">Aguarde…</p>
+    }
+    @if (erro) {
+      <p role="alert" class="mensagem erro">{{ erro }}</p>
+    }
+    @if (sucesso) {
+      <p role="status" class="mensagem">{{ sucesso }}</p>
+    }
+
+    @if (pendente || armazenamentoInvalido) {
+      <section class="cartao" aria-labelledby="tentativa">
+        <h2 id="tentativa">Tentativa pendente</h2>
+        @if (pendente; as tentativa) {
+          @switch (tentativa.tipo) {
+            @case ('criar') {
+              <p>{{ tentativa.corpo.descricao }} · {{ moeda(tentativa.corpo.valorCentavos) }}</p>
+            }
+            @case ('pagar') {
+              <p>Pagamento a fornecedor · {{ moeda(tentativa.corpo.valorCentavos) }}</p>
+            }
+            @case ('cancelar') {
+              <p>Cancelamento · {{ tentativa.corpo.motivo }}</p>
+            }
+          }
+          <p>
+            A consulta mostra o estado atual, mas não identifica esta tentativa. Reenviar usa a
+            mesma chave e os mesmos dados.
+          </p>
+          <div class="acoes">
+            <button type="button" (click)="conferir()" [disabled]="ocupado">Conferir estado</button>
+            <button
+              type="button"
+              class="primario"
+              (click)="reenviar()"
+              [disabled]="ocupado || !conferida"
+            >
+              Reenviar tentativa
+            </button>
+          </div>
+        } @else {
+          <p>
+            Não foi possível ler a tentativa guardada nesta aba. Confira o histórico antes de
+            continuar.
+          </p>
+        }
+        <label class="check"
+          ><input type="checkbox" [(ngModel)]="confirmarDescarte" [disabled]="ocupado" /> Entendo
+          que a operação pode ter sido gravada e que uma nova tentativa pode duplicá-la.</label
+        >
+        <button type="button" (click)="descartar()" [disabled]="ocupado || !confirmarDescarte">
+          Descartar tentativa
+        </button>
+      </section>
+    }
+
+    @if (secao === 'lancamentos') {
+      <p>
+        Use lançamentos manuais apenas para movimentações que não foram registradas em vendas ou
+        pagamentos de compras.
+      </p>
+      @if (detalhe; as item) {
+        <article class="cartao" aria-labelledby="lancamento-titulo">
+          <h2 id="lancamento-titulo">{{ item.descricao }}</h2>
+          <p>
+            {{ item.tipo === 'Entrada' ? 'Entrada' : 'Saída' }} ·
+            {{ item.canceladoEmUtc ? 'Cancelado' : 'Ativo' }}
+          </p>
+          <dl class="dados">
+            <div>
+              <dt>Categoria</dt>
+              <dd>{{ item.categoria }}</dd>
+            </div>
+            <div>
+              <dt>Valor</dt>
+              <dd>{{ moeda(item.valorCentavos) }}</dd>
+            </div>
+            <div>
+              <dt>Data efetiva</dt>
+              <dd>{{ civil(item.data) }}</dd>
+            </div>
+            <div>
+              <dt>Meio</dt>
+              <dd>{{ rotuloMeio(item.meio) }}</dd>
+            </div>
+            <div>
+              <dt>Registrado em</dt>
+              <dd>{{ item.criadoEmUtc | date: 'dd/MM/yyyy HH:mm' }}</dd>
+            </div>
+            <div>
+              <dt>Responsável (ID)</dt>
+              <dd>{{ item.responsavelId }}</dd>
+            </div>
+            @if (item.canceladoEmUtc) {
+              <div>
+                <dt>Cancelado em</dt>
+                <dd>{{ item.canceladoEmUtc | date: 'dd/MM/yyyy HH:mm' }}</dd>
+              </div>
+              <div>
+                <dt>Cancelado por (ID)</dt>
+                <dd>{{ item.canceladoPorId }}</dd>
+              </div>
+              <div>
+                <dt>Motivo</dt>
+                <dd>{{ item.motivoCancelamento }}</dd>
+              </div>
+            }
+          </dl>
+          <div class="acoes">
+            <button type="button" [disabled]="ocupado || !!pendente" (click)="voltarLancamentos()">
+              Voltar à lista
+            </button>
+            @if (!item.canceladoEmUtc && !formulario && !pendente && !armazenamentoInvalido) {
+              <button type="button" (click)="abrirFormulario('cancelar')">
+                Cancelar lançamento
+              </button>
+            }
+          </div>
+        </article>
+      } @else if (!formulario) {
+        @if (!pendente && !armazenamentoInvalido) {
+          <button
+            type="button"
+            class="primario"
+            [disabled]="ocupado"
+            (click)="abrirFormulario('criar')"
+          >
+            Novo lançamento
+          </button>
+        }
+        @if (carregado) {
+          <ul class="historico">
+            @for (item of lista; track item.id) {
+              <li class="cartao">
+                <p>
+                  <strong>{{ item.tipo === 'Entrada' ? 'Entrada' : 'Saída' }}</strong> ·
+                  {{ civil(item.data) }} · {{ item.canceladoEmUtc ? 'Cancelado' : 'Ativo' }}
+                </p>
+                <h2>{{ item.descricao }}</h2>
+                <p>
+                  {{ item.categoria }} · {{ rotuloMeio(item.meio) }} ·
+                  <strong>{{ moeda(item.valorCentavos) }}</strong>
+                </p>
+                <button type="button" [disabled]="ocupado" (click)="abrirLancamento(item.id)">
+                  Ver detalhe
+                </button>
+              </li>
+            } @empty {
+              <li>Nenhum lançamento nesta página.</li>
+            }
+          </ul>
+          <nav class="acoes" aria-label="Paginação de lançamentos">
+            <button
+              type="button"
+              [disabled]="ocupado || pagina === 1"
+              (click)="carregar(pagina - 1)"
+            >
+              Anterior
+            </button>
+            <span>Página {{ pagina }}</span>
+            <button
+              type="button"
+              [disabled]="ocupado || lista.length < 50 || pagina === 10000"
+              (click)="carregar(pagina + 1)"
+            >
+              Próxima
+            </button>
+          </nav>
+        } @else if (!ocupado && erro && !pendente) {
+          <button type="button" (click)="carregar()">Tentar novamente</button>
+        }
+      }
+    } @else {
+      @if (!compraSelecionada) {
+        <section class="cartao" aria-labelledby="selecionar-compra">
+          <h2 id="selecionar-compra">Consultar uma compra</h2>
+          <label
+            >Compra
+            <select #seletor [disabled]="ocupado || !compras.length">
+              <option value="">Selecione uma compra</option>
+              @for (opcao of compras; track opcao.id) {
+                <option [value]="opcao.id">
+                  {{ opcao.nomeFornecedor }} · {{ civil(opcao.dataCompra) }} ·
+                  {{ opcao.id.slice(0, 8) }}
+                </option>
+              }
+            </select>
+          </label>
+          @if (carregado && !compras.length) {
+            <p>Nenhuma compra cadastrada.</p>
+          }
+          <button
+            type="button"
+            [disabled]="ocupado || !compras.length"
+            (click)="abrirCompra(seletor.value)"
+          >
+            Consultar compra
+          </button>
+          @if (!carregado && !ocupado && erro) {
+            <button type="button" (click)="carregar()">Tentar novamente</button>
+          }
+        </section>
+      }
+      @if (compra; as item) {
+        <section class="cartao" aria-labelledby="compra-titulo">
+          <h2 id="compra-titulo">{{ item.nomeFornecedor }}</h2>
+          <p>
+            Compra {{ item.compraId.slice(0, 8) }} · {{ civil(item.dataCompra) }} ·
+            {{ item.situacaoCompra }}
+          </p>
+          <dl class="dados">
+            <div>
+              <dt>Situação financeira</dt>
+              <dd>{{ situacoes[item.situacaoFinanceira] }}</dd>
+            </div>
+            <div>
+              <dt>Total</dt>
+              <dd>{{ moeda(item.totalCentavos) }}</dd>
+            </div>
+            <div>
+              <dt>Pago</dt>
+              <dd>{{ moeda(item.pagoCentavos) }}</dd>
+            </div>
+            <div>
+              <dt>Saldo a pagar</dt>
+              <dd>
+                {{ item.situacaoFinanceira === 'Cancelada' ? '—' : moeda(item.saldoCentavos) }}
+              </dd>
+            </div>
+          </dl>
+          @if (item.situacaoFinanceira === 'ValorAConferir') {
+            <p>
+              É preciso conferir o total da compra antes de registrar um pagamento ou uma quitação.
+            </p>
+          }
+          <div class="acoes">
+            @if (podePagar() && !formulario && !pendente && !armazenamentoInvalido) {
+              <button
+                type="button"
+                class="primario"
+                [disabled]="ocupado"
+                (click)="abrirFormulario('pagar')"
+              >
+                Registrar pagamento
+              </button>
+            }
+            <button
+              type="button"
+              [disabled]="ocupado || !!pendente"
+              (click)="mudarSecao('compras')"
+            >
+              Outra compra
+            </button>
+            <button type="button" [disabled]="ocupado || !!pendente" (click)="abrirCompra()">
+              Atualizar compra
+            </button>
+          </div>
+        </section>
+        <section class="cartao" aria-labelledby="historico-pagamentos">
+          <h2 id="historico-pagamentos">Histórico de pagamentos</h2>
+          <ul class="historico">
+            @for (pagamento of pagamentos; track pagamento.id) {
+              <li>
+                <strong>{{ moeda(pagamento.valorCentavos) }}</strong> ·
+                {{ civil(pagamento.data) }} · {{ rotuloMeio(pagamento.meio) }}
+                @if (pagamento.referencia) {
+                  <p>{{ pagamento.referencia }}</p>
+                }
+              </li>
+            } @empty {
+              <li>Nenhum pagamento nesta página.</li>
+            }
+          </ul>
+          @if (paginaPagamentos > 1 || pagamentos.length === 50) {
+            <nav class="acoes" aria-label="Paginação de pagamentos">
+              <button
+                type="button"
+                [disabled]="ocupado || paginaPagamentos === 1"
+                (click)="abrirCompra(item.compraId, paginaPagamentos - 1)"
+              >
+                Anterior
+              </button>
+              <span>Página {{ paginaPagamentos }}</span>
+              <button
+                type="button"
+                [disabled]="ocupado || pagamentos.length < 50 || paginaPagamentos === 10000"
+                (click)="abrirCompra(item.compraId, paginaPagamentos + 1)"
+              >
+                Próxima
+              </button>
+            </nav>
+          }
+        </section>
+      } @else if (compraSelecionada && !ocupado && erro && !pendente) {
+        <div class="acoes">
+          <button type="button" (click)="abrirCompra()">Tentar novamente</button>
+          <button type="button" (click)="mudarSecao('compras')">Outra compra</button>
+        </div>
+      }
+    }
+
+    @if (formulario) {
+      <form class="cartao" (ngSubmit)="salvar()" aria-labelledby="formulario-financeiro">
+        <h2 id="formulario-financeiro" #tituloFormulario tabindex="-1">
+          {{
+            formulario === 'criar'
+              ? 'Novo lançamento'
+              : formulario === 'pagar'
+                ? 'Registrar pagamento'
+                : 'Cancelar lançamento'
+          }}
+        </h2>
+        <fieldset class="campos" [disabled]="ocupado || !!pendente || armazenamentoInvalido">
+          @if (formulario === 'cancelar') {
+            <label
+              >Motivo
+              <textarea name="motivo" [(ngModel)]="motivo" maxlength="500" required></textarea>
+            </label>
+            <label class="check"
+              ><input type="checkbox" name="confirmacao" [(ngModel)]="confirmacao" /> Confirmo o
+              cancelamento. O lançamento ficará no histórico.</label
+            >
+          } @else {
+            @if (formulario === 'criar') {
+              <label
+                >Tipo
+                <select name="tipo" [(ngModel)]="tipo">
+                  <option value="Entrada">Entrada</option>
+                  <option value="Saida">Saída</option>
+                </select></label
+              >
+              <label
+                >Categoria <input name="categoria" [(ngModel)]="categoria" maxlength="80" required
+              /></label>
+              <label
+                >Descrição
+                <textarea
+                  name="descricao"
+                  [(ngModel)]="descricao"
+                  maxlength="300"
+                  required
+                ></textarea>
+              </label>
+            }
+            <label
+              >Valor (R$)
+              <input name="valor" inputmode="decimal" maxlength="27" [(ngModel)]="valor" required
+            /></label>
+            @if (formulario === 'pagar') {
+              <button type="button" (click)="preencherSaldo()">Usar saldo total</button>
+            }
+            <label
+              >{{ formulario === 'pagar' ? 'Data do pagamento' : 'Data efetiva' }}
+              <input type="date" name="data" [(ngModel)]="data" required
+            /></label>
+            <label
+              >Meio
+              <select name="meio" [(ngModel)]="meio">
+                @for (opcao of meios; track opcao) {
+                  <option [value]="opcao">{{ rotuloMeio(opcao) }}</option>
+                }
+              </select></label
+            >
+            @if (formulario === 'pagar') {
+              <label
+                >Referência ou observação (opcional)
+                <input name="referencia" [(ngModel)]="referencia" maxlength="300"
+              /></label>
+            }
+          }
+          <div class="acoes">
+            <button
+              type="submit"
+              class="primario"
+              [disabled]="formulario === 'cancelar' && (!confirmacao || !motivo.trim())"
+            >
+              Confirmar
+            </button>
+            <button type="button" (click)="formulario = null">Voltar</button>
+          </div>
+        </fieldset>
+      </form>
+    }
+  </section>
+</app-admin-workspace>

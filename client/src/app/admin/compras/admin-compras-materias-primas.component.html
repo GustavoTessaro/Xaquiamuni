@@ -134,6 +134,13 @@
             Data da compra: {{ detalhe.resumo.dataCompra.split('-').reverse().join('/') }} ·
             {{ detalhe.resumo.situacao }}
           </p>
+          <a
+            routerLink="/admin/financeiro"
+            [queryParams]="{ compra: detalhe.resumo.id }"
+            class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+          >
+            Ver pagamentos desta compra
+          </a>
           @if (detalhe.recebidaEmUtc) {
             <p class="text-sm">
               Recebimento: {{ detalhe.recebidaEmUtc | date: 'dd/MM/yyyy HH:mm' }}

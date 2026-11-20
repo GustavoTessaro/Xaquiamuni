@@ -1,0 +1,106 @@
+.financeiro {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  color: #0f172a;
+  overflow-wrap: anywhere;
+}
+.acoes {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.cartao,
+.mensagem {
+  display: grid;
+  min-width: 0;
+  gap: 0.6rem;
+  padding: 1rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.75rem;
+  background: white;
+}
+.cartao h2 {
+  font-weight: 700;
+}
+.mensagem {
+  background: #ecfdf5;
+}
+.erro {
+  color: #991b1b;
+  background: #fef2f2;
+}
+button {
+  width: fit-content;
+  min-height: 44px;
+  padding: 0.4rem 0.75rem;
+  border: 1px solid #047857;
+  border-radius: 0.5rem;
+  color: #064e3b;
+}
+button:hover:not(:disabled),
+button[aria-current] {
+  background: #ecfdf5;
+}
+.primario,
+.primario:hover:not(:disabled) {
+  background: #065f46;
+  color: white;
+}
+button:disabled {
+  opacity: 0.55;
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #047857;
+  outline-offset: 2px;
+}
+.campos,
+.dados,
+.historico {
+  display: grid;
+  min-width: 0;
+  gap: 0.75rem;
+}
+.campos {
+  max-width: 36rem;
+}
+label {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+.check {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+}
+input:not([type='checkbox']),
+select,
+textarea {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 44px;
+  border: 1px solid #64748b;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  background: white;
+  color: inherit;
+}
+dt {
+  font-size: 0.875rem;
+  color: #475569;
+}
+dd {
+  font-weight: 600;
+}
+@media (min-width: 640px) {
+  .dados {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

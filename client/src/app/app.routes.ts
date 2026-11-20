@@ -145,6 +145,14 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/financeiro',
+    loadComponent: () =>
+      import('./admin/financeiro/admin-financeiro.component').then(
+        (module) => module.AdminFinanceiroComponent,
+      ),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/compras',
     loadComponent: () => import('./admin/compras/admin-compras-materias-primas.component').then(
       (module) => module.AdminComprasMateriasPrimasComponent,
