@@ -52,8 +52,8 @@ public sealed class EstoqueProdutoAcabadoTests
         Assert.Equal(new DateOnly(2027, 2, 15), lote.DataValidade);
         Assert.Equal(OrigemValidadeLoteProdutoAcabado.PrazoPadrao, lote.OrigemValidade);
         Assert.Equal(90, lote.PrazoValidadeAplicadoDias);
-        Assert.True(lote.EstaValidoEm(lote.DataValidade));
-        Assert.False(lote.EstaValidoEm(lote.DataValidade.AddDays(1)));
+        Assert.True(lote.EstaValidoEm(lote.DataValidade!.Value));
+        Assert.False(lote.EstaValidoEm(lote.DataValidade!.Value.AddDays(1)));
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public sealed class EstoqueProdutoAcabadoTests
             variante,
             lote,
             1,
-            lote.DataValidade,
+            lote.DataValidade!.Value,
             ResponsavelId,
             "Saída",
             RegistradoEmUtc,
@@ -246,7 +246,7 @@ public sealed class EstoqueProdutoAcabadoTests
             variante,
             lote,
             2,
-            lote.DataValidade,
+            lote.DataValidade!.Value,
             ResponsavelId,
             "Saída manual",
             RegistradoEmUtc,
@@ -259,7 +259,7 @@ public sealed class EstoqueProdutoAcabadoTests
             variante,
             lote,
             1,
-            lote.DataValidade.AddDays(1),
+            lote.DataValidade!.Value.AddDays(1),
             ResponsavelId,
             "Lote vencido",
             RegistradoEmUtc,
@@ -286,7 +286,7 @@ public sealed class EstoqueProdutoAcabadoTests
             varianteInativa,
             loteInativo,
             1,
-            loteInativo.DataValidade,
+            loteInativo.DataValidade!.Value,
             ResponsavelId,
             "Variante inativa",
             RegistradoEmUtc,

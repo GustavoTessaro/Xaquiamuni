@@ -19,7 +19,7 @@ public sealed partial class EfEstoqueInsumoRepository : IConcluirOrdemProducao
             var itens = string.Join('|', consumos.OrderBy(c => c.Key).Select(c =>
                 FormattableString.Invariant($"{c.Key:D}:{c.Value.UnidadeBase}:{c.Value.ValorBase:0.######}")));
             var digest = SHA256.HashData(Encoding.UTF8.GetBytes(FormattableString.Invariant(
-                $"{id:D}|{input.Versao:D}|{input.QuantidadeProduzida}|{input.DataFabricacao:yyyy-MM-dd}|{input.DataValidade:yyyy-MM-dd}|{itens}")));
+                $"{id:D}|{input.Versao:D}|{input.QuantidadeProduzida}|{input.DataFabricacao:yyyy-MM-dd}|{input.DataValidade:yyyy-MM-dd}|{itens}{(input.SemControleValidade ? "|sem-controle-validade" : "")}")));
             var impressao = Convert.ToHexString(digest);
 
             await AdquirirLockAsync($"production-finish-key:{autor:D}:{chave:D}", ct);
@@ -101,7 +101,7 @@ public sealed partial class EfEstoqueInsumoRepository : IConcluirOrdemProducao
             await _dbContext.SaveChangesAsync(ct);
             var acabados = new EfEstoqueProdutoAcabadoRepository(_dbContext, _timeProvider, _calendario);
             var entrada = await acabados.AplicarEntradaProducaoAsync(ordem.ProdutoVarianteId, input.QuantidadeProduzida,
-                input.DataFabricacao, input.DataValidade, data, agora, autor, id, digest, ct);
+                input.DataFabricacao, input.DataValidade, input.SemControleValidade, data, agora, autor, id, digest, ct);
             ordem.Concluir(input.QuantidadeProduzida, entrada.Id, autor, chave, impressao, agora);
             return new(OperacaoProducaoStatus.Sucesso, id);
         }, ct);

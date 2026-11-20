@@ -182,8 +182,8 @@ public sealed class ReservaProdutoAcabadoTests
             reserva.Consumir(variante, lote, saldo, DiaOperacional, confirmadaEm.AddTicks(-1)));
 
         var encerradaEm = CriadaEm.AddDays(3);
-        Assert.True(reserva.Consumir(variante, lote, saldo, lote.DataValidade, encerradaEm));
-        Assert.False(reserva.Consumir(variante, lote, saldo, lote.DataValidade, encerradaEm));
+        Assert.True(reserva.Consumir(variante, lote, saldo, lote.DataValidade!.Value, encerradaEm));
+        Assert.False(reserva.Consumir(variante, lote, saldo, lote.DataValidade!.Value, encerradaEm));
         Assert.Throws<InvalidOperationException>(() => reserva.ConfirmarCompromisso(confirmadaEm));
         Assert.Equal(EstadoReservaProdutoAcabado.Consumida, reserva.Estado);
         Assert.Equal(confirmadaEm, reserva.ConfirmadaEmUtc);
@@ -219,7 +219,7 @@ public sealed class ReservaProdutoAcabadoTests
     {
         var (variante, lote, saldo) = CriarEstoque();
         var reserva = ReservaProdutoAcabado.Criar(PedidoId, variante.Id, lote.Id, 2, CriadaEm);
-        var outroLote = LoteProdutoAcabado.Criar(variante, null, DiaOperacional, lote.DataValidade);
+        var outroLote = LoteProdutoAcabado.Criar(variante, null, DiaOperacional, lote.DataValidade!.Value);
         Assert.True(reserva.ConfirmarCompromisso(CriadaEm));
         Assert.Throws<ArgumentException>(() =>
             reserva.Consumir(variante, lote, SaldoLoteProdutoAcabado.CriarZero(outroLote), DiaOperacional, CriadaEm));

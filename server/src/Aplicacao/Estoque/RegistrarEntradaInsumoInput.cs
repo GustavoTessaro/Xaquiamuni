@@ -17,4 +17,5 @@ public sealed record RegistrarEntradaInsumoInput(
     bool NovoLoteBloqueado,
     decimal? CustoTotal,
     string ChaveIdempotencia,
-    string? Observacao = null);
+    string? Observacao = null,
+    bool SemControleValidade = false);

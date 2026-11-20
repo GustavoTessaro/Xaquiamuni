@@ -492,7 +492,7 @@ public static class AdminEstoqueInsumoEndpoints
                 request.NovoLoteBloqueado,
                 request.CustoTotal,
                 context.Request.Headers["Idempotency-Key"].ToString(),
-                request.Observacao),
+                request.Observacao, request.SemControleValidade),
             cancellationToken).ConfigureAwait(false);
         if (!result.Sucesso)
         {
@@ -1039,6 +1039,7 @@ public sealed record EntradaInsumoAdminRequest
 
     /// <summary>Data de validade de calendário do lote novo.</summary>
     public DateOnly? DataValidadeNovoLote { get; init; }
+    public bool SemControleValidade { get; init; }
 
     /// <summary>Fornecedor opcional do lote novo.</summary>
     public string? FornecedorNovoLote { get; init; }

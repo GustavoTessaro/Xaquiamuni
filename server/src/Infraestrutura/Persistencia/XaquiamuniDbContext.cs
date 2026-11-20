@@ -377,9 +377,10 @@ public sealed class XaquiamuniDbContext
                         "[DataValidade] >= [DataFabricacao]");
                     table.HasCheckConstraint(
                         "CK_LotesProdutoAcabado_ValidadeOrigem_Valid",
-                        "([OrigemValidade] = 1 AND [PrazoValidadeAplicadoDias] IS NOT NULL "
+                        "([OrigemValidade] = 1 AND [DataValidade] IS NOT NULL AND [PrazoValidadeAplicadoDias] IS NOT NULL "
                         + "AND [PrazoValidadeAplicadoDias] >= 0) OR "
-                        + "([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL)");
+                        + "([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL AND [DataValidade] IS NOT NULL) OR "
+                        + "([OrigemValidade] = 3 AND [PrazoValidadeAplicadoDias] IS NULL AND [DataValidade] IS NULL)");
                 });
                 lote.HasKey(entity => entity.Id);
                 lote.Property(entity => entity.Id)
@@ -394,8 +395,7 @@ public sealed class XaquiamuniDbContext
                     .HasColumnType("date")
                     .IsRequired();
                 lote.Property(entity => entity.DataValidade)
-                    .HasColumnType("date")
-                    .IsRequired();
+                    .HasColumnType("date");
                 lote.Property(entity => entity.OrigemValidade)
                     .HasConversion<short>()
                     .HasColumnType("smallint")

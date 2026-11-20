@@ -11,7 +11,7 @@ public sealed class LoteProdutoAcabado
         Guid produtoVarianteId,
         string codigo,
         DateOnly dataFabricacao,
-        DateOnly dataValidade,
+        DateOnly? dataValidade,
         OrigemValidadeLoteProdutoAcabado origemValidade,
         int? prazoValidadeAplicadoDias)
     {
@@ -32,7 +32,7 @@ public sealed class LoteProdutoAcabado
     public Guid ProdutoVarianteId { get; private set; }
     public string Codigo { get; private set; } = null!;
     public DateOnly DataFabricacao { get; private set; }
-    public DateOnly DataValidade { get; private set; }
+    public DateOnly? DataValidade { get; private set; }
     public OrigemValidadeLoteProdutoAcabado OrigemValidade { get; private set; }
     public int? PrazoValidadeAplicadoDias { get; private set; }
 
@@ -40,7 +40,7 @@ public sealed class LoteProdutoAcabado
         ProdutoVariante? variante,
         PoliticaEstoqueProdutoVariante? politica,
         DateOnly dataFabricacao,
-        DateOnly? dataValidadeInformada = null)
+        DateOnly? dataValidadeInformada = null, bool semControleValidade = false)
     {
         ArgumentNullException.ThrowIfNull(variante);
         if (variante.Id == Guid.Empty)
@@ -57,10 +57,18 @@ public sealed class LoteProdutoAcabado
                 nameof(politica));
         }
 
-        DateOnly dataValidade;
+        DateOnly? dataValidade;
         OrigemValidadeLoteProdutoAcabado origem;
         int? prazoAplicado;
-        if (dataValidadeInformada is not null)
+        if (semControleValidade)
+        {
+            if (dataValidadeInformada.HasValue)
+                throw new ArgumentException("A validade deve estar ausente no modo sem controle.");
+            dataValidade = null;
+            origem = OrigemValidadeLoteProdutoAcabado.SemControle;
+            prazoAplicado = null;
+        }
+        else if (dataValidadeInformada is not null)
         {
             dataValidade = dataValidadeInformada.Value;
             origem = OrigemValidadeLoteProdutoAcabado.InformadaManualmente;
@@ -107,7 +115,7 @@ public sealed class LoteProdutoAcabado
             prazoAplicado);
     }
 
-    public bool EstaValidoEm(DateOnly dataReferencia) => DataValidade >= dataReferencia;
+    public bool EstaValidoEm(DateOnly dataReferencia) => DataValidade is null || DataValidade >= dataReferencia;
 
     private static string GerarCodigo(DateOnly dataFabricacao, Guid id) =>
         $"PA-{dataFabricacao:yyyyMMdd}-{id:N}".ToUpperInvariant();

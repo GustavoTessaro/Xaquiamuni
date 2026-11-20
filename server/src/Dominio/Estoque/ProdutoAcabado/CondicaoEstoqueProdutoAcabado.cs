@@ -22,5 +22,6 @@ public enum TipoMovimentoProdutoAcabado : short
 public enum OrigemValidadeLoteProdutoAcabado : short
 {
     PrazoPadrao = 1,
-    InformadaManualmente = 2
+    InformadaManualmente = 2,
+    SemControle = 3
 }

@@ -7,11 +7,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia;
 public sealed partial class EfEstoqueProdutoAcabadoRepository
 {
     private async Task<LoteProdutoAcabado> CriarLoteEntradaAsync(ProdutoVariante variante, DateOnly fabricacao,
-        DateOnly? validade, CancellationToken ct)
+        DateOnly? validade, bool semControleValidade, CancellationToken ct)
     {
         var politica = await _dbContext.PoliticasEstoqueProdutoVariante
             .SingleOrDefaultAsync(p => p.ProdutoVarianteId == variante.Id, ct);
-        return LoteProdutoAcabado.Criar(variante, politica, fabricacao, validade);
+        return LoteProdutoAcabado.Criar(variante, politica, fabricacao, validade, semControleValidade);
     }
 
     private MovimentoProdutoAcabado AplicarEntradaAcabado(SaldoLoteProdutoAcabado saldo, LoteProdutoAcabado lote,
@@ -26,7 +26,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository
 
     // O chamador detém o lock da variante e controla a transação.
     internal async Task<MovimentoProdutoAcabado> AplicarEntradaProducaoAsync(Guid varianteId, int quantidade,
-        DateOnly? fabricacao, DateOnly? validade, DateOnly dataOperacional, DateTimeOffset agora,
+        DateOnly? fabricacao, DateOnly? validade, bool semControleValidade, DateOnly dataOperacional, DateTimeOffset agora,
         Guid autor, Guid ordemId, byte[] fingerprint, CancellationToken ct)
     {
         var variante = await _dbContext.ProdutoVariantes
@@ -36,7 +36,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository
         var dataFabricacao = fabricacao ?? dataOperacional;
         if (dataFabricacao == default || dataFabricacao > dataOperacional)
             throw new ArgumentException("Informe uma data de fabricação válida, sem usar uma data futura.");
-        var lote = await CriarLoteEntradaAsync(variante, dataFabricacao, validade, ct);
+        var lote = await CriarLoteEntradaAsync(variante, dataFabricacao, validade, semControleValidade, ct);
         if (!lote.EstaValidoEm(dataOperacional))
             throw new ArgumentException("O lote produzido precisa estar dentro da validade.");
         var saldo = SaldoLoteProdutoAcabado.CriarZero(lote);

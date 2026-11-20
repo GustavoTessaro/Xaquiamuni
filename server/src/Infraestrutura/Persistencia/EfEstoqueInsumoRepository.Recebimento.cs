@@ -16,6 +16,8 @@ public sealed partial class EfEstoqueInsumoRepository : IReceberCompraMateriaPri
         if (id == Guid.Empty || autor == Guid.Empty || chave == Guid.Empty || input.Versao == Guid.Empty)
             return new(CompraMateriaPrimaStatus.Invalida, Erro: "Informe compra, responsável, versão e chave válidos.");
 
+        if (input.SemControleValidade && input.Validades is { Count: > 0 })
+            return new(CompraMateriaPrimaStatus.Invalida, Erro: "O recebimento sem controle de validade nao recebe datas de validade.");
         if (input.Validades is { Count: > 1500 })
             return new(CompraMateriaPrimaStatus.Invalida, Erro: "A lista de validades excede o limite da compra.");
 
@@ -29,7 +31,7 @@ public sealed partial class EfEstoqueInsumoRepository : IReceberCompraMateriaPri
 
         var dadosValidade = string.Join('|', validades.OrderBy(v => v.Key)
             .Select(v => FormattableString.Invariant($"{v.Key:D}:{v.Value:yyyy-MM-dd}")));
-        var impressao = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{id:D}|{input.Versao:D}|{dadosValidade}")));
+        var impressao = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes($"{id:D}|{input.Versao:D}|{dadosValidade}{(input.SemControleValidade ? "|sem-controle-validade" : "")}")));
 
         await using var transacao = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
         try
@@ -87,7 +89,7 @@ public sealed partial class EfEstoqueInsumoRepository : IReceberCompraMateriaPri
                     componente.Quantidade, componente.ApresentacaoId is null ? componente.UnidadeBase : null,
                     componente.ApresentacaoId, null, controlaLote ? $"Compra {compra.Id:N}/{componente.Id:N}" : null,
                     controlaLote ? data : null, validade, controlaLote ? compra.NomeFornecedor : null,
-                    false, linha.Kit is null ? linha.ValorTotal : null, chaveMovimento);
+                    false, linha.Kit is null ? linha.ValorTotal : null, chaveMovimento, SemControleValidade: input.SemControleValidade);
 
                 var resultado = await AplicarEntradaAsync(entrada, chaveMovimento, CalcularFingerprint(entrada),
                     ct, componente, data, agora, insumo);

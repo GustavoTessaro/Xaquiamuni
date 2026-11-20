@@ -112,14 +112,15 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IReservaProdutoA
             .Select(grupo => new { LoteId = grupo.Key, Quantidade = grupo.Sum(reserva => (long)reserva.Quantidade) });
 
         var lotes = await (
-            from lote in _dbContext.LotesProdutoAcabado
+            from candidato in LotesParaAlocacao()
+            let lote = candidato.Lote
             join saldo in _dbContext.SaldosProdutoAcabado
                 on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
             join comprometido in comprometidoPorLote on lote.Id equals comprometido.LoteId into compromissos
             from comprometido in compromissos.DefaultIfEmpty()
             where lote.ProdutoVarianteId == input.ProdutoVarianteId
-                && lote.DataValidade >= dataOperacional && saldo.QuantidadeVendavel > 0
-            orderby lote.DataValidade, lote.Codigo
+                && (lote.DataValidade == null || lote.DataValidade >= dataOperacional) && saldo.QuantidadeVendavel > 0
+            orderby lote.DataValidade == null, lote.DataValidade, candidato.Entrada, lote.Codigo, lote.Id
             select new
             {
                 lote.Id,

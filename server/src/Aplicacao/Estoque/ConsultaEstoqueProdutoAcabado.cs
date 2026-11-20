@@ -56,7 +56,7 @@ public sealed record PosicaoLoteProdutoAcabadoConsulta(
     Guid LoteId,
     string Codigo,
     DateOnly DataFabricacao,
-    DateOnly DataValidade,
+    DateOnly? DataValidade,
     OrigemValidadeLoteProdutoAcabado OrigemValidade,
     int? PrazoValidadeAplicadoDias,
     bool Valido,

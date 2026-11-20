@@ -13,7 +13,8 @@ public sealed record RegistrarEntradaProdutoAcabadoInput(
     Guid? LoteId = null,
     DateOnly? DataFabricacaoNovoLote = null,
     DateOnly? DataValidadeNovoLote = null,
-    string? Observacao = null);
+    string? Observacao = null,
+    bool SemControleValidade = false);
 
 public enum RegistrarEntradaProdutoAcabadoStatus : byte
 {

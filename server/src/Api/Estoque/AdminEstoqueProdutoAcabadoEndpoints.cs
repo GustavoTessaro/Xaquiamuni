@@ -316,7 +316,7 @@ public static class AdminEstoqueProdutoAcabadoEndpoints
                 request.LoteId,
                 request.DataFabricacao,
                 request.DataValidade,
-                request.Observacao),
+                request.Observacao, request.SemControleValidade),
             cancellationToken).ConfigureAwait(false);
         if (!result.Sucesso)
         {
@@ -740,7 +740,7 @@ public sealed record LoteProdutoAcabadoAdminResponse(
     Guid LoteId,
     string Codigo,
     DateOnly DataFabricacao,
-    DateOnly DataValidade,
+    DateOnly? DataValidade,
     [property: JsonConverter(typeof(JsonStringEnumConverter))]
     OrigemValidadeLoteProdutoAcabado OrigemValidade,
     int? PrazoValidadeAplicadoDias,
@@ -888,6 +888,7 @@ public sealed record EntradaProdutoAcabadoAdminRequest
     public Guid? LoteId { get; init; }
     public DateOnly? DataFabricacao { get; init; }
     public DateOnly? DataValidade { get; init; }
+    public bool SemControleValidade { get; init; }
     public string? Motivo { get; init; }
     public string? Observacao { get; init; }
 }

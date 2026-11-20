@@ -80,7 +80,7 @@ public sealed class EfCatalogoPublicoRepository(
             from lote in dbContext.LotesProdutoAcabado
             join saldo in dbContext.SaldosProdutoAcabado on new { lote.ProdutoVarianteId, LoteId = lote.Id }
                 equals new { saldo.ProdutoVarianteId, saldo.LoteId }
-            where variantes.Contains(lote.ProdutoVarianteId) && lote.DataValidade >= dataOperacional
+            where variantes.Contains(lote.ProdutoVarianteId) && (lote.DataValidade == null || lote.DataValidade >= dataOperacional)
                 && dbContext.ProdutoVariantes.Any(variante => variante.Id == lote.ProdutoVarianteId && variante.Ativa)
                 && saldo.QuantidadeVendavel > 0
                 && saldo.QuantidadeVendavel > compromissos

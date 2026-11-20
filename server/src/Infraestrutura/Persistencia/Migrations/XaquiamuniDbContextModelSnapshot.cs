@@ -1458,7 +1458,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<DateOnly>("DataFabricacao")
                         .HasColumnType("date");
 
-                    b.Property<DateOnly>("DataValidade")
+                    b.Property<DateOnly?>("DataValidade")
                         .HasColumnType("date");
 
                     b.Property<short>("OrigemValidade")
@@ -1486,7 +1486,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         {
                             t.HasCheckConstraint("CK_LotesProdutoAcabado_Codigo_NotBlank", "LEN(LTRIM(RTRIM([Codigo]))) > 0");
 
-                            t.HasCheckConstraint("CK_LotesProdutoAcabado_ValidadeOrigem_Valid", "([OrigemValidade] = 1 AND [PrazoValidadeAplicadoDias] IS NOT NULL AND [PrazoValidadeAplicadoDias] >= 0) OR ([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL)");
+                            t.HasCheckConstraint("CK_LotesProdutoAcabado_ValidadeOrigem_Valid", "([OrigemValidade] = 1 AND [DataValidade] IS NOT NULL AND [PrazoValidadeAplicadoDias] IS NOT NULL AND [PrazoValidadeAplicadoDias] >= 0) OR ([OrigemValidade] = 2 AND [PrazoValidadeAplicadoDias] IS NULL AND [DataValidade] IS NOT NULL) OR ([OrigemValidade] = 3 AND [PrazoValidadeAplicadoDias] IS NULL AND [DataValidade] IS NULL)");
 
                             t.HasCheckConstraint("CK_LotesProdutoAcabado_Validade_NotBeforeFabricacao", "[DataValidade] >= [DataFabricacao]");
                         });

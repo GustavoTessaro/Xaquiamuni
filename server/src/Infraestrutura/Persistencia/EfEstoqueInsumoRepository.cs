@@ -1531,6 +1531,7 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
             Escrever(writer, input.NovoLoteBloqueado);
             Escrever(writer, input.CustoTotal);
             Escrever(writer, input.Observacao);
+            if (input.SemControleValidade) writer.Write(true);
         }
 
         return SHA256.HashData(stream.ToArray());

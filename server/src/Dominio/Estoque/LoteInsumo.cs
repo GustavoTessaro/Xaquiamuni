@@ -43,7 +43,7 @@ public sealed class LoteInsumo
         DateOnly dataEntrada,
         DateOnly? dataValidade = null,
         string? fornecedor = null,
-        bool bloqueado = false)
+        bool bloqueado = false, bool semControleValidade = false)
     {
         ArgumentNullException.ThrowIfNull(insumo);
 
@@ -63,7 +63,9 @@ public sealed class LoteInsumo
             FornecedorMaxLength,
             nameof(fornecedor));
 
-        if (insumo.ValidadeObrigatoria && dataValidade is null)
+        if (semControleValidade && dataValidade.HasValue)
+            throw new ArgumentException("A validade deve estar ausente no modo sem controle.");
+        if (!semControleValidade && insumo.ValidadeObrigatoria && dataValidade is null)
         {
             throw new ArgumentException(
                 "Este insumo exige data de validade para cada lote.",

@@ -30,7 +30,9 @@ public sealed partial class EfEstoqueInsumoRepository
                 "Insumos inativos não recebem novas entradas.");
         }
 
-        var validacao = ValidarTipoQuantidadeEObservacao(input);
+        var validacao = input.SemControleValidade && (input.LoteId.HasValue || input.DataValidadeNovoLote.HasValue)
+            ? "O modo sem controle cria estoque novo sem validade."
+            : ValidarTipoQuantidadeEObservacao(input);
         if (validacao is not null)
         {
             return RegistrarEntradaInsumoResult.Failure(
@@ -102,8 +104,9 @@ public sealed partial class EfEstoqueInsumoRepository
         }
         else
         {
-            if (string.IsNullOrWhiteSpace(input.IdentificacaoNovoLote)
-                || input.DataEntradaNovoLote is null)
+            var identificacao = input.IdentificacaoNovoLote ?? (input.SemControleValidade ? $"Entrada {Guid.NewGuid():N}" : null);
+            var dataEntrada = input.DataEntradaNovoLote ?? (input.SemControleValidade ? dataOperacional ?? _calendario.ObterDataAtual() : (DateOnly?)null);
+            if (string.IsNullOrWhiteSpace(identificacao) || dataEntrada is null)
             {
                 return RegistrarEntradaInsumoResult.Failure(
                     RegistrarEntradaInsumoStatus.EntradaInvalida,
@@ -114,11 +117,11 @@ public sealed partial class EfEstoqueInsumoRepository
             {
                 lote = LoteInsumo.Criar(
                     insumo,
-                    input.IdentificacaoNovoLote,
-                    input.DataEntradaNovoLote.Value,
+                    identificacao,
+                    dataEntrada.Value,
                     input.DataValidadeNovoLote,
                     input.FornecedorNovoLote,
-                    input.NovoLoteBloqueado);
+                    input.NovoLoteBloqueado, input.SemControleValidade);
                 loteCriado = true;
             }
             catch (ArgumentException exception)

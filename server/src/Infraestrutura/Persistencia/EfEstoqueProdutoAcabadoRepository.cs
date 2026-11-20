@@ -224,7 +224,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
             var loteCriado = input.LoteId is null;
             if (input.LoteId is Guid loteId)
             {
-                if (input.DataFabricacaoNovoLote is not null || input.DataValidadeNovoLote is not null)
+                if (input.DataFabricacaoNovoLote is not null || input.DataValidadeNovoLote is not null || input.SemControleValidade)
                 {
                     return await ReverterComFalhaAsync(
                         transaction,
@@ -256,7 +256,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
             }
             else
             {
-                if (input.DataFabricacaoNovoLote is not DateOnly dataFabricacao)
+                var fabricacao = input.DataFabricacaoNovoLote ?? (input.SemControleValidade ? _calendario.ObterDataAtual() : (DateOnly?)null);
+                if (fabricacao is not DateOnly dataFabricacao)
                 {
                     return await ReverterComFalhaAsync(
                         transaction,
@@ -268,7 +269,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                 try
                 {
                     lote = await CriarLoteEntradaAsync(variante, dataFabricacao, input.DataValidadeNovoLote,
-                        cancellationToken).ConfigureAwait(false);
+                        input.SemControleValidade, cancellationToken).ConfigureAwait(false);
                 }
                 catch (ArgumentException exception)
                 {
@@ -1366,6 +1367,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
             EscreverDataOpcional(writer, input.DataValidadeNovoLote);
             EscreverTextoOpcional(writer, input.Motivo);
             EscreverTextoOpcional(writer, input.Observacao);
+            if (input.SemControleValidade) writer.Write(true);
         }
 
         return SHA256.HashData(stream.ToArray());

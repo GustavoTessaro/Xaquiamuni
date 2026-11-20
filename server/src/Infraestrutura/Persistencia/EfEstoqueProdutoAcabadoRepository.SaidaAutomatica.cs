@@ -99,14 +99,15 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IRegistrarSaidaA
             .GroupBy(r => r.LoteId)
             .Select(g => new { LoteId = g.Key, Quantidade = g.Sum(r => (long)r.Quantidade) });
         var posicoes = await (
-            from lote in _dbContext.LotesProdutoAcabado
+            from candidato in LotesParaAlocacao()
+            let lote = candidato.Lote
             join saldo in _dbContext.SaldosProdutoAcabado
                 on new { lote.ProdutoVarianteId, LoteId = lote.Id } equals new { saldo.ProdutoVarianteId, saldo.LoteId }
             join reserva in comprometidas on lote.Id equals reserva.LoteId into reservas
             from reserva in reservas.DefaultIfEmpty()
-            where lote.ProdutoVarianteId == variante.Id && lote.DataValidade >= data
+            where lote.ProdutoVarianteId == variante.Id && (lote.DataValidade == null || lote.DataValidade >= data)
                 && saldo.QuantidadeVendavel > ((long?)reserva.Quantidade ?? 0)
-            orderby lote.DataValidade, lote.Codigo, lote.Id
+            orderby lote.DataValidade == null, lote.DataValidade, candidato.Entrada, lote.Codigo, lote.Id
             select new { Lote = lote, Saldo = saldo, Livre = saldo.QuantidadeVendavel - ((long?)reserva.Quantidade ?? 0) })
             .ToListAsync(cancellationToken);
         if (posicoes.Sum(p => p.Livre) < quantidadeSolicitada) return null;
@@ -125,4 +126,19 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IRegistrarSaidaA
 
         return movimentos;
     }
+    private sealed class LoteParaAlocacao
+    {
+        public required LoteProdutoAcabado Lote { get; init; }
+        public DateTimeOffset? Entrada { get; init; }
+    }
+
+    private IQueryable<LoteParaAlocacao> LotesParaAlocacao() =>
+        _dbContext.LotesProdutoAcabado.Select(lote => new LoteParaAlocacao
+        {
+            Lote = lote, Entrada = lote.DataValidade == null
+                ? _dbContext.MovimentosProdutoAcabado.Where(m => m.LoteId == lote.Id)
+                    .Min(m => (DateTimeOffset?)m.RegistradoEmUtc)
+                : null
+        });
+
 }
