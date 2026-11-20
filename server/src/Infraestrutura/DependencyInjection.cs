@@ -11,6 +11,7 @@ using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Aplicacao.Catalogo.Imagens;
 using Xaquiamuni.Aplicacao.Catalogo.Publico;
 using Xaquiamuni.Aplicacao.Estoque;
+using Xaquiamuni.Aplicacao.Financeiro;
 using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Aplicacao.Outbox;
 using Xaquiamuni.Aplicacao.Pedidos;
@@ -90,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IRegistrarOperacaoProdutoAcabado, RegistrarOperacaoProdutoAcabado>();
         services.AddScoped<IRegistrarSaidaAutomaticaProdutoAcabado, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IGerenciarVendasExternas, EfEstoqueProdutoAcabadoRepository>();
+        services.AddScoped<IGerenciarFinanceiro, EfFinanceiroRepository>();
         services.AddScoped<IContarProdutoAcabado, ContarProdutoAcabado>();
         services.AddScoped<IEstornarMovimentoProdutoAcabado, EstornarMovimentoProdutoAcabado>();
         services.AddScoped<IConfigurarPoliticaEstoqueProdutoAcabado, ConfigurarPoliticaEstoqueProdutoAcabado>();

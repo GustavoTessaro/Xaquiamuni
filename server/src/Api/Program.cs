@@ -1,6 +1,7 @@
 using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Catalogo;
 using Xaquiamuni.Api.Estoque;
+using Xaquiamuni.Api.Financeiro;
 using Xaquiamuni.Api.Middleware;
 using Xaquiamuni.Api.Pedidos;
 using Xaquiamuni.Api.Autorizacao;
@@ -107,6 +108,7 @@ app.MapAdminComprasMateriasPrimasEndpoints();
 app.MapAdminReceitasProducaoEndpoints();
 app.MapAdminOrdensProducaoEndpoints();
 app.MapAdminVendasExternasEndpoints();
+app.MapAdminFinanceiroEndpoints();
 app.MapAdminProdutoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();

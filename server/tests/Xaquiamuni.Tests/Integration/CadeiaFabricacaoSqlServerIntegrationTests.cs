@@ -14,7 +14,7 @@ using static Xaquiamuni.Tests.Integration.ReservarProdutoAcabadoSqlServerIntegra
 namespace Xaquiamuni.Tests.Integration;
 
 [Trait("Category", "SqlServerIntegration")]
-public sealed class CadeiaFabricacaoSqlServerIntegrationTests
+public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
 {
     private const string Compras = "/api/admin/compras-materias-primas";
     private const string Producao = "/api/admin/producao";
@@ -299,7 +299,7 @@ public sealed class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(1, await db.MovimentosProdutoAcabado.CountAsync());
     }
 
-    private static async Task<Dados> PrepararCompraAsync(Sessao admin, XaquiamuniDbContext db)
+    private static async Task<Dados> PrepararCompraAsync(Sessao admin, XaquiamuniDbContext db, bool custoParcial = false)
     {
         var fornecedor = await admin.PostAsync<JsonElement>("/api/admin/fornecedores",
             new { nome = "Fornecedora sintética" }, HttpStatusCode.Created);
@@ -316,7 +316,7 @@ public sealed class CadeiaFabricacaoSqlServerIntegrationTests
         var compra = await admin.PostAsync<AdminComprasMateriasPrimasEndpoints.DetalheCompra>(Compras,
             new CompraMateriaPrimaInput(fornecedorId, hoje, [
                 new(null, 2, 24, [new(extrato.Id, forma.Id, 2, null)]),
-                new(null, 10, 5, [new(erva.Id, null, 10, null)]),
+                new(null, 10, custoParcial ? null : 5m, [new(erva.Id, null, 10, null)]),
                 new("Kit sintético", 1, 17.5m, [new(erva.Id, null, 8, null), new(baseG.Id, null, 6, null)]),
             ], null), HttpStatusCode.Created, Guid.NewGuid());
         var recebimento = new ReceberCompraMateriaPrimaInput(compra.Versao, [

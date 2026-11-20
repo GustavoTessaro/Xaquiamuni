@@ -4,6 +4,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Dominio.Estoque;
+using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -61,18 +62,23 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
     public async Task<CompraMateriaPrimaResult> EditarAsync(Guid id, CompraMateriaPrimaInput input,
         Guid autor, CancellationToken ct)
     {
+        await using var transacao = await db.Database.BeginTransactionAsync(ct);
+        await LockFinanceiroSql.CompraAsync(db, id, ct);
         var compra = await Detalhes().SingleOrDefaultAsync(c => c.Id == id, ct);
         if (compra is null) return new(CompraMateriaPrimaStatus.Ausente);
         if (compra.Situacao != SituacaoCompraMateriaPrima.Rascunho)
             return new(CompraMateriaPrimaStatus.Conflito, Erro: "Apenas rascunhos podem ser editados.");
         if (compra.Versao != input.Versao) return Conflito();
+        if (await PossuiPagamentosAsync(id, ct)) return ConflitoPagamento();
 
         try
         {
             var (fornecedor, linhas) = await PrepararAsync(input, compra, ct);
             compra.Editar(fornecedor, input.DataCompra, linhas, autor, relogio.GetUtcNow());
             db.AddRange(linhas);
-            return await GravarAsync(compra, ct);
+            var resultado = await GravarAsync(compra, ct);
+            if (resultado.Status == CompraMateriaPrimaStatus.Sucesso) await transacao.CommitAsync(ct);
+            return resultado;
         }
         catch (ArgumentException erro)
         {
@@ -82,6 +88,8 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
 
     public async Task<CompraMateriaPrimaResult> CancelarAsync(Guid id, Guid versao, Guid autor, CancellationToken ct)
     {
+        await using var transacao = await db.Database.BeginTransactionAsync(ct);
+        await LockFinanceiroSql.CompraAsync(db, id, ct);
         var compra = await Detalhes().SingleOrDefaultAsync(c => c.Id == id, ct);
         if (compra is null) return new(CompraMateriaPrimaStatus.Ausente);
         if (compra.Situacao == SituacaoCompraMateriaPrima.Cancelada)
@@ -89,9 +97,18 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
         if (compra.Situacao != SituacaoCompraMateriaPrima.Rascunho)
             return new(CompraMateriaPrimaStatus.Conflito, Erro: "Apenas rascunhos podem ser cancelados.");
         if (compra.Versao != versao) return Conflito();
+        if (await PossuiPagamentosAsync(id, ct)) return ConflitoPagamento();
         compra.Cancelar(autor, relogio.GetUtcNow());
-        return await GravarAsync(compra, ct);
+        var resultado = await GravarAsync(compra, ct);
+        if (resultado.Status == CompraMateriaPrimaStatus.Sucesso) await transacao.CommitAsync(ct);
+        return resultado;
     }
+
+    private Task<bool> PossuiPagamentosAsync(Guid id, CancellationToken ct) =>
+        db.Set<PagamentoFornecedor>().AnyAsync(p => p.CompraId == id, ct);
+
+    private static CompraMateriaPrimaResult ConflitoPagamento() =>
+        new(CompraMateriaPrimaStatus.Conflito, Erro: "Compras com pagamentos registrados não podem ser editadas ou canceladas.");
 
     private IQueryable<CompraMateriaPrima> Detalhes() => db.ComprasMateriasPrimas
         .Include(c => c.Linhas).ThenInclude(l => l.Componentes);
