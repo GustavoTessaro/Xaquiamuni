@@ -31,6 +31,7 @@ import {
   meiosFinanceiros,
 } from '../../core/financeiro.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
+import { AdminMovimentacoesFinanceirasComponent } from './admin-movimentacoes-financeiras.component';
 import { decimalEscalado, decimalTexto, exibirReais } from '../compras/compra-decimais';
 import { dataCivilValida } from '../compras/recebimento-pendente';
 
@@ -95,7 +96,7 @@ function tentativaIntegra(tentativa: TentativaFinanceira): boolean {
 }
 
 @Component({
-  imports: [AdminWorkspaceComponent, FormsModule, DatePipe],
+  imports: [AdminWorkspaceComponent, FormsModule, DatePipe, AdminMovimentacoesFinanceirasComponent],
   templateUrl: './admin-financeiro.component.html',
   styleUrl: './admin-financeiro.component.css',
 })
@@ -112,7 +113,8 @@ export class AdminFinanceiroComponent {
   private readonly tituloFormulario = viewChild<ElementRef<HTMLElement>>('tituloFormulario');
   private chaveStorage = '';
 
-  protected secao: 'lancamentos' | 'compras' = 'lancamentos';
+  protected secao: 'movimentacoes' | 'lancamentos' | 'compras' = 'movimentacoes';
+  protected movimentacoesAbertas = false;
   protected lista: LancamentoFinanceiro[] = [];
   protected compras: ResumoCompra[] = [];
   protected compraSelecionada = '';
@@ -173,11 +175,13 @@ export class AdminFinanceiroComponent {
             this.armazenamentoInvalido = true;
           }
           const compraId = this.route.snapshot.queryParamMap.get('compra');
-          if (this.pendente) this.conferir();
-          else if (compraId && uuid.test(compraId)) {
+          if (this.pendente) {
+            this.secao = this.pendente.tipo === 'pagar' ? 'compras' : 'lancamentos';
+            this.conferir();
+          } else if (compraId && uuid.test(compraId)) {
             this.secao = 'compras';
             this.abrirCompra(compraId);
-          } else this.carregar();
+          } else this.movimentacoesAbertas = true;
           this.cdr.markForCheck();
         },
         error: (erro) => {
@@ -187,15 +191,25 @@ export class AdminFinanceiroComponent {
       });
   }
 
-  protected mudarSecao(secao: 'lancamentos' | 'compras'): void {
+  protected mudarSecao(secao: 'movimentacoes' | 'lancamentos' | 'compras'): void {
     this.secao = secao;
     this.detalhe = this.compra = null;
     this.compraSelecionada = '';
     this.formulario = null;
-    this.carregar();
+    if (secao === 'movimentacoes') {
+      this.movimentacoesAbertas = !!this.chaveStorage;
+      this.erro = this.sucesso = '';
+    } else this.carregar();
+  }
+
+  protected abrirOrigem(recurso: { secao: 'lancamentos' | 'compras'; id: string }): void {
+    this.secao = recurso.secao;
+    if (recurso.secao === 'lancamentos') this.abrirLancamento(recurso.id);
+    else this.abrirCompra(recurso.id);
   }
 
   protected carregar(pagina = this.pagina): void {
+    if (this.secao === 'movimentacoes') return;
     this.carregado = false;
     if (this.secao === 'compras') {
       this.executar(this.comprasApi.listar(), (compras) => {

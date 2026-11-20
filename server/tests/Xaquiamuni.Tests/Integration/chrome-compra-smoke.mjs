@@ -184,6 +184,35 @@ try {
     assert.equal(postsFinanceiros, 1);
     assert.equal(await a.ev('fetch("/api/admin/financeiro/lancamentos").then(r => r.json()).then(r => r.length)'), 1);
     console.log('Financeiro: chave recuperada, detalhe aberto e um único lançamento no SQL descartável.');
+
+    const botaoFinanceiro = rotulo => `[...document.querySelectorAll('main button')]
+      .find(b => b.textContent.trim() === ${JSON.stringify(rotulo)} && !b.disabled && b.getClientRects().length)`;
+    await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', {
+        width, height: 900, mobile: false, deviceScaleFactor: 1,
+      }, a.sessionId);
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Ver lançamento')})
+        && document.querySelector('app-admin-movimentacoes-financeiras').textContent.includes('+ R$ 123,45')`),
+        'Movimentação consolidada ausente no Chrome');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev(`(() => {
+        const campo = document.querySelector('app-admin-movimentacoes-financeiras select[name="tipo"]');
+        campo.value = 'Saida';
+        campo.dispatchEvent(new Event('change', { bubbles: true }));
+        (${botaoFinanceiro('Aplicar filtros')}).click();
+      })()`);
+      await waitFor(() => a.ev(`document.querySelector('app-admin-movimentacoes-financeiras')
+        .textContent.includes('Nenhuma movimentação para os filtros')`), 'Filtro de saída não aplicado');
+      await a.ev(`(${botaoFinanceiro('Limpar filtros')}).click()`);
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro('Ver lançamento')})`), 'Lançamento não voltou após limpar filtro');
+      await a.ev(`(${botaoFinanceiro('Ver lançamento')}).click()`);
+      await waitFor(() => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === 'Aporte de teste'`),
+        'Origem da movimentação não abriu');
+      await a.ev(`(${botaoFinanceiro('Movimentações')}).click()`);
+      console.log('Movimentações em ' + width + ' px: filtro, centavos, origem e ausência de rolagem horizontal.');
+    }
+    assert.equal(postsFinanceiros, 1);
   }
 
   if (dados.varianteAuditoria) {

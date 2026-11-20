@@ -4,6 +4,14 @@
     <nav class="acoes" aria-label="Seções do financeiro">
       <button
         type="button"
+        [attr.aria-current]="secao === 'movimentacoes' ? 'page' : null"
+        [disabled]="ocupado || !!pendente"
+        (click)="mudarSecao('movimentacoes')"
+      >
+        Movimentações
+      </button>
+      <button
+        type="button"
         [attr.aria-current]="secao === 'lancamentos' ? 'page' : null"
         [disabled]="ocupado || !!pendente"
         (click)="mudarSecao('lancamentos')"
@@ -77,6 +85,13 @@
           Descartar tentativa
         </button>
       </section>
+    }
+
+    @if (movimentacoesAbertas) {
+      <app-admin-movimentacoes-financeiras
+        [hidden]="secao !== 'movimentacoes'"
+        (recurso)="abrirOrigem($event)"
+      />
     }
 
     @if (secao === 'lancamentos') {
@@ -195,7 +210,7 @@
           <button type="button" (click)="carregar()">Tentar novamente</button>
         }
       }
-    } @else {
+    } @else if (secao === 'compras') {
       @if (!compraSelecionada) {
         <section class="cartao" aria-labelledby="selecionar-compra">
           <h2 id="selecionar-compra">Consultar uma compra</h2>

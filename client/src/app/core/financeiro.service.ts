@@ -69,11 +69,49 @@ export type ResultadoTentativaFinanceira =
   | { operacao: 'criar' | 'cancelar'; recursoId: string; resultado: LancamentoFinanceiro }
   | { operacao: 'pagar'; recursoId: string; resultado: PagamentoFornecedor };
 
+export type TipoMovimentacao = 'Entrada' | 'Saida';
+export type OrigemMovimentacao =
+  'PedidoSite' | 'VendaExterna' | 'PagamentoCompra' | 'LancamentoManual';
+
+export interface FiltroMovimentacoes {
+  dataInicial: string;
+  dataFinal: string;
+  tipo: TipoMovimentacao | '';
+  origem: OrigemMovimentacao | '';
+}
+
+export interface MovimentacaoFinanceira {
+  eventoId: string;
+  recursoId: string;
+  tipo: TipoMovimentacao;
+  origem: OrigemMovimentacao;
+  data: string;
+  naturezaData: 'ConfirmacaoUtc' | 'Efetiva';
+  valorCentavos: string;
+  descricao: string;
+  meio: MeioFinanceiro | null;
+}
+
+export interface PaginaMovimentacoes {
+  pagina: number;
+  tamanhoPagina: number;
+  temProxima: boolean;
+  itens: MovimentacaoFinanceira[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class FinanceiroService {
   private readonly http = inject(HttpClient);
   private readonly csrf = inject(CsrfService);
   private readonly base = '/api/admin/financeiro';
+
+  movimentacoes(filtros: FiltroMovimentacoes, pagina: number) {
+    const params: Record<string, string | number> = { pagina };
+    for (const [nome, valor] of Object.entries(filtros)) {
+      if (valor) params[nome] = valor;
+    }
+    return this.http.get<PaginaMovimentacoes>(this.base + '/movimentacoes', { params });
+  }
 
   consultarTentativa(chave: string) {
     return this.http.get<ResultadoTentativaFinanceira>(

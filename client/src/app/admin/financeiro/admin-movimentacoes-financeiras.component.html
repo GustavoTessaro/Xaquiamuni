@@ -1,0 +1,136 @@
+<section class="financeiro" aria-labelledby="movimentacoes-titulo">
+  <h2 id="movimentacoes-titulo" class="text-lg font-semibold">Movimentações de caixa</h2>
+  <form class="cartao" (ngSubmit)="aplicar()" aria-label="Filtros de movimentações">
+    <fieldset class="dados" [disabled]="carregando()">
+      <label
+        >Data inicial
+        <input
+          type="date"
+          name="dataInicial"
+          [(ngModel)]="filtros.dataInicial"
+          [attr.aria-invalid]="erroFiltro() ? 'true' : null"
+          [attr.aria-describedby]="erroFiltro() ? 'movimentacoes-intervalo' : null"
+        />
+      </label>
+      <label
+        >Data final
+        <input
+          type="date"
+          name="dataFinal"
+          [(ngModel)]="filtros.dataFinal"
+          [attr.aria-invalid]="erroFiltro() ? 'true' : null"
+          [attr.aria-describedby]="erroFiltro() ? 'movimentacoes-intervalo' : null"
+        />
+      </label>
+      <label
+        >Tipo
+        <select name="tipo" [(ngModel)]="filtros.tipo">
+          <option value="">Todas</option>
+          <option value="Entrada">Entradas</option>
+          <option value="Saida">Saídas</option>
+        </select>
+      </label>
+      <label
+        >Origem
+        <select name="origem" [(ngModel)]="filtros.origem">
+          <option value="">Todas</option>
+          @for (opcao of codigosOrigem; track opcao) {
+            <option [value]="opcao">{{ origens[opcao] }}</option>
+          }
+        </select>
+      </label>
+      <div class="acoes">
+        <button type="submit" class="primario">Aplicar filtros</button>
+        <button type="button" (click)="limpar()">Limpar filtros</button>
+      </div>
+    </fieldset>
+    @if (erroFiltro()) {
+      <p id="movimentacoes-intervalo" role="alert" class="mensagem erro">{{ erroFiltro() }}</p>
+    }
+  </form>
+
+  @if (carregando()) {
+    <p role="status">Carregando movimentações…</p>
+  } @else if (erro()) {
+    <p role="alert" class="mensagem erro">{{ erro() }}</p>
+    <button type="button" (click)="carregar()">Tentar novamente</button>
+  } @else if (resultado(); as pagina) {
+    @if (pagina.itens.length === 0) {
+      <p role="status">
+        {{
+          temFiltros()
+            ? 'Nenhuma movimentação para os filtros selecionados nesta página.'
+            : 'Nenhuma movimentação nesta página.'
+        }}
+      </p>
+    } @else {
+      <ul class="historico" aria-label="Movimentações financeiras">
+        @for (item of pagina.itens; track item.origem + ':' + item.eventoId) {
+          <li class="cartao">
+            <div class="acoes justify-between">
+              <h3 class="font-semibold">{{ item.descricao }}</h3>
+              <strong [class.text-emerald-800]="item.tipo === 'Entrada'">{{ valor(item) }}</strong>
+            </div>
+            <p>
+              {{ item.tipo === 'Entrada' ? 'Entrada' : 'Saída' }} · {{ origens[item.origem] }}
+              @if (item.meio) {
+                · {{ meio(item.meio) }}
+              }
+            </p>
+            <p>
+              <time [attr.datetime]="item.data">{{ data(item.data) }}</time> ·
+              {{
+                item.naturezaData === 'ConfirmacaoUtc' ? 'Confirmação do PIX (UTC)' : 'Data efetiva'
+              }}
+            </p>
+            <div class="acoes">
+              @switch (item.origem) {
+                @case ('PedidoSite') {
+                  <a
+                    class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+                    [routerLink]="['/admin/pedidos', item.recursoId]"
+                    >Ver pedido</a
+                  >
+                }
+                @case ('PagamentoCompra') {
+                  <button
+                    type="button"
+                    (click)="recurso.emit({ secao: 'compras', id: item.recursoId })"
+                  >
+                    Ver compra
+                  </button>
+                }
+                @case ('LancamentoManual') {
+                  <button
+                    type="button"
+                    (click)="recurso.emit({ secao: 'lancamentos', id: item.recursoId })"
+                  >
+                    Ver lançamento
+                  </button>
+                }
+                @case ('VendaExterna') {
+                  <span>Referência da venda {{ item.recursoId }}</span>
+                }
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+    @if (pagina.pagina > 1 || pagina.temProxima) {
+      <nav aria-label="Paginação de movimentações" class="acoes">
+        <button type="button" [disabled]="pagina.pagina <= 1" (click)="carregar(pagina.pagina - 1)">
+          Anterior
+        </button>
+        <span>Página {{ pagina.pagina }}</span>
+        <button
+          type="button"
+          [disabled]="!pagina.temProxima || pagina.pagina >= 10000"
+          (click)="carregar(pagina.pagina + 1)"
+        >
+          Próxima
+        </button>
+      </nav>
+    }
+  }
+</section>

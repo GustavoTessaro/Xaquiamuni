@@ -43,6 +43,7 @@ const compra: CompraFinanceira = {
 describe('AdminFinanceiroComponent', () => {
   let fixture: ComponentFixture<AdminFinanceiroComponent>;
   const api = {
+    movimentacoes: vi.fn(),
     consultarTentativa: vi.fn(),
     lancamentos: vi.fn(),
     lancamento: vi.fn(),
@@ -66,6 +67,9 @@ describe('AdminFinanceiroComponent', () => {
   beforeEach(() => {
     sessionStorage.removeItem(chaveStorage);
     vi.resetAllMocks();
+    api.movimentacoes.mockReturnValue(
+      of({ pagina: 1, tamanhoPagina: 50, temProxima: false, itens: [] }),
+    );
     sessao.userId = 'admin';
     api.consultarTentativa.mockReturnValue(
       throwError(() => new HttpErrorResponse({ status: 404 })),
@@ -94,10 +98,25 @@ describe('AdminFinanceiroComponent', () => {
   });
   afterEach(() => sessionStorage.removeItem(chaveStorage));
 
-  async function render() {
+  async function render(abrirLancamentos = true) {
     fixture = TestBed.createComponent(AdminFinanceiroComponent);
     await atualizar();
+    if (
+      abrirLancamentos &&
+      !botao('Movimentações')?.disabled &&
+      botao('Movimentações')?.getAttribute('aria-current') === 'page'
+    ) {
+      await clicar('Lançamentos');
+    }
   }
+
+  it('abre Movimentações por padrão e consulta somente o histórico consolidado', async () => {
+    await render(false);
+    expect(botao('Movimentações')?.getAttribute('aria-current')).toBe('page');
+    expect(api.movimentacoes).toHaveBeenCalledTimes(1);
+    expect(api.lancamentos).not.toHaveBeenCalled();
+    expect(api.enviar).not.toHaveBeenCalled();
+  });
   async function atualizar() {
     fixture.detectChanges();
     await fixture.whenStable();
@@ -105,7 +124,7 @@ describe('AdminFinanceiroComponent', () => {
   }
   function botao(rotulo: string) {
     return Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('button')).find(
-      (el) => el.textContent?.trim() === rotulo,
+      (el) => el.textContent?.trim() === rotulo && !el.closest('[hidden]'),
     );
   }
   async function clicar(rotulo: string) {
@@ -114,9 +133,11 @@ describe('AdminFinanceiroComponent', () => {
     await atualizar();
   }
   async function campo(nome: string, valor: string) {
-    const el = (fixture.nativeElement as HTMLElement).querySelector<HTMLInputElement>(
-      '[name="' + nome + '"]',
-    )!;
+    const el = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLInputElement>(
+        '[name="' + nome + '"]',
+      ),
+    ).find((campo) => !campo.closest('[hidden]'))!;
     el.value = valor;
     el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input'));
     await atualizar();
@@ -192,9 +213,9 @@ describe('AdminFinanceiroComponent', () => {
   it('seleciona uma compra existente e mostra a obrigação pendente', async () => {
     await render();
     await clicar('Pagamentos de compras');
-    const seletor = (fixture.nativeElement as HTMLElement).querySelector<HTMLSelectElement>(
-      'select',
-    )!;
+    const seletor = Array.from(
+      (fixture.nativeElement as HTMLElement).querySelectorAll('select'),
+    ).find((campo) => !campo.closest('[hidden]'))!;
     seletor.value = id;
     await clicar('Consultar compra');
     expect(texto()).toContain('Pendente');
