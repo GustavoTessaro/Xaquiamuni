@@ -14,13 +14,17 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IGerenciarVendas
         .Include(v => v.Itens).Include(v => v.Recebimentos).AsSingleQuery();
 
     public async Task<IReadOnlyList<ResumoVendaExterna>> ListarAsync(CanalVendaExterna? canal,
-        SituacaoVendaExterna? situacao, int pagina, CancellationToken ct)
+        SituacaoVendaExterna? situacao, string? pagamento, int pagina, CancellationToken ct)
     {
         var vendas = await _dbContext.Set<VendaExterna>().AsNoTracking().Include(v => v.Recebimentos)
             .Where(v => (!canal.HasValue || v.Canal == canal) && (!situacao.HasValue || v.Situacao == situacao))
+            .Where(v => pagamento == null || (v.Situacao == SituacaoVendaExterna.Registrada &&
+                (pagamento == "Pendente" ? !v.Recebimentos.Any() :
+                 pagamento == "Paga" ? v.Recebimentos.Sum(r => r.ValorCentavos) == v.TotalCentavos :
+                 v.Recebimentos.Any() && v.Recebimentos.Sum(r => r.ValorCentavos) < v.TotalCentavos)))
             .OrderByDescending(v => v.DataVenda).ThenByDescending(v => v.Id)
             .Skip((pagina - 1) * 50).Take(50).ToListAsync(ct);
-        return vendas.Select(ResumoVendaExterna.De).ToArray();
+        return vendas.Select(v => ResumoVendaExterna.De(v) with { Comprador = v.Comprador }).ToArray();
     }
 
     public async Task<DetalheVendaExterna?> ConsultarAsync(Guid id, CancellationToken ct)
@@ -41,11 +45,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IGerenciarVendas
                 b.MovimentoCancelamentoId)).ToArray());
     }
 
-    public async Task<ResumoVendaExterna?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct)
+    public async Task<ResumoVendaExterna?> ConsultarTentativaAsync(Guid autor, Guid chave, string operacao, CancellationToken ct)
     {
-        var operacao = await _dbContext.Set<OperacaoVendaExterna>().AsNoTracking()
-            .SingleOrDefaultAsync(o => o.ResponsavelId == autor && o.Chave == chave && o.Tipo == "criar", ct);
-        return operacao is null ? null : JsonSerializer.Deserialize<ResumoVendaExterna>(operacao.Resultado);
+        var tentativa = await _dbContext.Set<OperacaoVendaExterna>().AsNoTracking()
+            .SingleOrDefaultAsync(o => o.ResponsavelId == autor && o.Chave == chave && o.Tipo == operacao, ct);
+        return tentativa is null ? null : JsonSerializer.Deserialize<ResumoVendaExterna>(tentativa.Resultado);
     }
 
     public Task<VendaExternaResultado> CriarAsync(CriarVendaExternaInput input, Guid autor, Guid chave, CancellationToken ct) =>

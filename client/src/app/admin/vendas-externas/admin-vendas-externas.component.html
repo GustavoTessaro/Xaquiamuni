@@ -1,0 +1,606 @@
+<app-admin-workspace activePage="external-sales">
+  <section class="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-labelledby="vendas-titulo">
+    <header class="flex flex-wrap items-center justify-between gap-3">
+      <h1 id="vendas-titulo" class="text-2xl font-semibold">Vendas externas</h1>
+      @if (!nova() && !detalhe() && !pendente() && !armazenamentoInvalido()) {
+        <button
+          type="button"
+          class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2"
+          [disabled]="ocupado() || !sessao()"
+          (click)="novaVenda()"
+        >
+          Nova venda
+        </button>
+      }
+    </header>
+    @if (erro()) {
+      <p role="alert" class="rounded-lg bg-red-50 p-3 text-red-900">{{ erro() }}</p>
+    }
+    @if (sucesso()) {
+      <p role="status" class="text-emerald-900">{{ sucesso() }}</p>
+    }
+    @if (ocupado()) {
+      <p role="status">Aguarde…</p>
+    }
+
+    @if (pendente() || armazenamentoInvalido()) {
+      <section
+        aria-labelledby="tentativa-titulo"
+        class="space-y-3 rounded-xl border border-amber-300 bg-amber-50 p-4"
+      >
+        <h2 id="tentativa-titulo" class="font-semibold">Tentativa pendente</h2>
+        @if (armazenamentoInvalido()) {
+          <p>Não foi possível ler a tentativa guardada. Confira o histórico antes de descartar.</p>
+        } @else if (reenviavel()) {
+          <p>O servidor ainda não confirmou a operação. Você pode reenviar os mesmos dados.</p>
+        } @else {
+          <p>Confira o resultado no servidor antes de tentar novamente.</p>
+        }
+        <div class="flex flex-wrap gap-3">
+          @if (pendente()) {
+            <button
+              type="button"
+              class="min-h-11 underline focus-visible:outline-2"
+              (click)="conferir()"
+              [disabled]="ocupado()"
+            >
+              Conferir situação
+            </button>
+          }
+          @if (reenviavel()) {
+            <button
+              type="button"
+              class="min-h-11 rounded-lg bg-emerald-800 px-3 text-white focus-visible:outline-2"
+              (click)="reenviar()"
+              [disabled]="ocupado()"
+            >
+              Reenviar tentativa
+            </button>
+          }
+          <button
+            type="button"
+            class="min-h-11 underline focus-visible:outline-2"
+            (click)="confirmaDescarte.set(true)"
+            [disabled]="ocupado()"
+          >
+            Descartar tentativa
+          </button>
+        </div>
+        @if (confirmaDescarte()) {
+          <p role="alert">
+            A operação pode já ter sido gravada. Confira o histórico para evitar registrar a mesma
+            venda ou pagamento duas vezes.
+          </p>
+          <button
+            type="button"
+            class="min-h-11 font-semibold text-red-900 underline focus-visible:outline-2"
+            (click)="descartar()"
+            [disabled]="ocupado()"
+          >
+            Confirmar descarte
+          </button>
+        }
+      </section>
+    }
+
+    @if (nova()) {
+      <form
+        (ngSubmit)="salvar()"
+        class="space-y-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4"
+      >
+        <h2 class="text-lg font-semibold">Registrar venda</h2>
+        <fieldset class="grid min-w-0 gap-3 sm:grid-cols-2" [disabled]="ocupado() || !!pendente()">
+          <label class="grid min-w-0 gap-1"
+            >Canal
+            <select
+              name="canal"
+              [(ngModel)]="canal"
+              class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            >
+              @for (opcao of canais; track opcao) {
+                <option [value]="opcao">{{ opcao }}</option>
+              }
+            </select>
+          </label>
+          @if (canal === 'Outro') {
+            <label class="grid min-w-0 gap-1"
+              >Descrição do canal
+              <input
+                name="descricao"
+                [(ngModel)]="descricao"
+                required
+                maxlength="100"
+                class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+              />
+            </label>
+          }
+          <label class="grid min-w-0 gap-1"
+            >Data da venda
+            <input
+              type="date"
+              name="dataVenda"
+              [(ngModel)]="dataVenda"
+              required
+              class="min-h-11 min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            />
+          </label>
+          <label class="grid min-w-0 gap-1"
+            >Nome ou referência do comprador
+            {{ pagamento === 'integral' ? '(opcional)' : '(obrigatório)' }}
+            <input
+              name="comprador"
+              [(ngModel)]="comprador"
+              [required]="pagamento !== 'integral'"
+              maxlength="160"
+              class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            />
+          </label>
+          <label class="grid min-w-0 gap-1"
+            >Vencimento (opcional)
+            <input
+              type="date"
+              name="vencimento"
+              [(ngModel)]="vencimento"
+              class="min-h-11 min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            />
+          </label>
+        </fieldset>
+
+        <fieldset class="min-w-0 space-y-3" [disabled]="ocupado() || !!pendente()">
+          <legend class="font-semibold">Produtos</legend>
+          <div class="flex flex-wrap items-end gap-2">
+            <label class="grid min-w-0 flex-1 basis-56 gap-1"
+              >Produto e variante
+              <select
+                name="produto"
+                [(ngModel)]="selecionada"
+                class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+              >
+                <option value="">Selecione</option>
+                @for (opcao of opcoes(); track opcao.id) {
+                  <option [value]="opcao.id" [disabled]="jaAdicionada(opcao.id)">
+                    {{ opcao.nome }}
+                  </option>
+                }
+              </select>
+            </label>
+            <button
+              type="button"
+              class="min-h-11 rounded-lg border border-emerald-800 px-3 focus-visible:outline-2"
+              (click)="adicionar()"
+              [disabled]="!selecionada || linhas().length >= 50"
+            >
+              Adicionar item
+            </button>
+          </div>
+          @for (linha of linhas(); track linha.opcao.id; let i = $index) {
+            <div class="min-w-0 space-y-2 rounded-lg border border-slate-200 p-3">
+              <p class="font-semibold">{{ linha.opcao.nome }}</p>
+              @if (saldos()[linha.opcao.id] !== undefined) {
+                <p class="text-sm">Saldo livre na consulta: {{ saldos()[linha.opcao.id] }} un.</p>
+              }
+              <div class="grid gap-2 sm:grid-cols-3">
+                <label class="grid min-w-0 gap-1"
+                  >Quantidade
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    [name]="'quantidade-' + i"
+                    [attr.name]="'quantidade-' + i"
+                    [ngModel]="linha.quantidade"
+                    (ngModelChange)="atualizar(linha.opcao.id, { quantidade: $event })"
+                    class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                  />
+                </label>
+                <label class="grid min-w-0 gap-1"
+                  >Preço unitário (R$)
+                  <input
+                    inputmode="decimal"
+                    [name]="'preco-' + i"
+                    [attr.name]="'preco-' + i"
+                    [ngModel]="linha.preco"
+                    (ngModelChange)="atualizar(linha.opcao.id, { preco: $event })"
+                    class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                  />
+                </label>
+                <label class="grid min-w-0 gap-1"
+                  >Desconto do item (R$)
+                  <input
+                    inputmode="decimal"
+                    [name]="'desconto-' + i"
+                    [attr.name]="'desconto-' + i"
+                    [ngModel]="linha.desconto"
+                    (ngModelChange)="atualizar(linha.opcao.id, { desconto: $event })"
+                    class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                  />
+                </label>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p>Subtotal estimado: {{ brl(totais().subtotais[i]) }}</p>
+                <button
+                  type="button"
+                  class="min-h-11 underline focus-visible:outline-2"
+                  (click)="remover(linha.opcao.id)"
+                  [attr.aria-label]="'Remover ' + linha.opcao.nome"
+                >
+                  Remover
+                </button>
+              </div>
+            </div>
+          } @empty {
+            <p>Nenhum item adicionado.</p>
+          }
+          <p class="font-semibold">Total estimado: {{ brl(totais().total) }}</p>
+          <p class="text-sm">
+            O servidor confirma os valores e confere o estoque ao registrar a venda.
+          </p>
+        </fieldset>
+
+        <fieldset class="grid min-w-0 gap-3 sm:grid-cols-2" [disabled]="ocupado() || !!pendente()">
+          <legend class="font-semibold">Pagamento inicial</legend>
+          <label class="grid gap-1"
+            >Situação
+            <select
+              name="pagamento"
+              [(ngModel)]="pagamento"
+              class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+            >
+              <option value="pendente">Ainda não pagou</option>
+              <option value="parcial">Pago parcialmente</option>
+              <option value="integral">Pago integralmente</option>
+            </select>
+          </label>
+          @if (pagamento !== 'pendente') {
+            @if (pagamento === 'parcial') {
+              <label class="grid gap-1"
+                >Valor recebido (R$)
+                <input
+                  name="valor"
+                  inputmode="decimal"
+                  [(ngModel)]="valor"
+                  class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                />
+              </label>
+            } @else {
+              <p class="self-end">Valor recebido: {{ brl(totais().total) }}</p>
+            }
+            <label class="grid gap-1"
+              >Meio de pagamento
+              <select
+                name="meio"
+                [(ngModel)]="meio"
+                class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+              >
+                @for (opcao of meios; track opcao) {
+                  <option [value]="opcao">{{ rotuloMeio(opcao) }}</option>
+                }
+              </select>
+            </label>
+            <label class="grid min-w-0 gap-1"
+              >Data do recebimento
+              <input
+                type="date"
+                name="dataRecebimento"
+                [(ngModel)]="dataRecebimento"
+                class="min-h-11 min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+              />
+            </label>
+          }
+          <p class="font-semibold">Saldo a receber estimado: {{ brl(saldoEstimado()) }}</p>
+        </fieldset>
+        <div class="flex flex-wrap gap-3">
+          <button
+            type="submit"
+            [disabled]="ocupado() || !!pendente()"
+            class="min-h-11 rounded-lg bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2"
+          >
+            Registrar venda
+          </button>
+          <button
+            type="button"
+            [disabled]="ocupado() || !!pendente()"
+            (click)="voltar()"
+            class="min-h-11 underline focus-visible:outline-2"
+          >
+            Voltar à lista
+          </button>
+        </div>
+      </form>
+    } @else if (detalhe(); as venda) {
+      <article class="min-w-0 space-y-4 rounded-xl border border-slate-200 bg-white p-3 sm:p-4">
+        <div>
+          <h2 class="text-lg font-semibold">Venda de {{ civil(venda.resumo.dataVenda) }}</h2>
+          <p>
+            {{ venda.resumo.canal }}
+            @if (venda.descricaoCanal) {
+              · {{ venda.descricaoCanal }}
+            }
+          </p>
+          @if (venda.comprador) {
+            <p>Comprador: {{ venda.comprador }}</p>
+          }
+          @if (venda.vencimento) {
+            <p>Vencimento: {{ civil(venda.vencimento) }}</p>
+          }
+          @if (venda.motivoCancelamento) {
+            <p>Motivo do cancelamento: {{ venda.motivoCancelamento }}</p>
+          }
+          <p class="font-semibold">{{ venda.resumo.situacaoPagamento }}</p>
+        </div>
+        <dl class="grid gap-2 rounded-lg bg-emerald-50 p-3 sm:grid-cols-3">
+          <div>
+            <dt>Total</dt>
+            <dd class="font-semibold">{{ brl(venda.resumo.totalCentavos) }}</dd>
+          </div>
+          <div>
+            <dt>Recebido</dt>
+            <dd class="font-semibold">{{ brl(venda.resumo.recebidoCentavos) }}</dd>
+          </div>
+          <div>
+            <dt>Saldo a receber</dt>
+            <dd class="font-semibold">{{ brl(venda.resumo.saldoCentavos) }}</dd>
+          </div>
+        </dl>
+        <section aria-labelledby="itens-venda" class="space-y-2">
+          <h3 id="itens-venda" class="font-semibold">Produtos vendidos e estoque</h3>
+          <ul class="grid gap-2 sm:grid-cols-2">
+            @for (item of venda.itens; track item.id) {
+              <li class="min-w-0 rounded-lg border border-slate-200 p-3">
+                <p class="font-semibold">{{ item.nomeProduto }} · {{ item.nomeVariante }}</p>
+                <p>
+                  {{ item.quantidade }} un. × {{ brl(item.precoUnitarioCentavos) }} · desconto
+                  {{ brl(item.descontoCentavos) }}
+                </p>
+                <p>Subtotal: {{ brl(item.subtotalCentavos) }}</p>
+                @for (baixa of baixasDoItem(venda, item.id); track baixa.movimentoId) {
+                  <p class="text-sm">
+                    {{ baixa.quantidade }} un. baixadas
+                    @if (baixa.movimentoCancelamentoId) {
+                      · baixa compensada
+                    }
+                  </p>
+                }
+                @if (baixasDoItem(venda, item.id).length) {
+                  <a
+                    class="inline-flex min-h-11 items-center text-emerald-900 underline focus-visible:outline-2"
+                    [routerLink]="['/admin/estoque/produtos-acabados', item.varianteId]"
+                    fragment="finished-history-title"
+                    >Ver histórico de estoque</a
+                  >
+                }
+              </li>
+            }
+          </ul>
+        </section>
+        <section aria-labelledby="recebimentos-venda">
+          <h3 id="recebimentos-venda" class="font-semibold">Recebimentos</h3>
+          <ul class="space-y-2">
+            @for (recebimento of venda.recebimentos; track recebimento.id) {
+              <li>
+                {{ civil(recebimento.data) }} · {{ rotuloMeio(recebimento.meio) }} ·
+                {{ brl(recebimento.valorCentavos) }}
+              </li>
+            } @empty {
+              <li>Nenhum recebimento registrado.</li>
+            }
+          </ul>
+        </section>
+        @if (venda.resumo.situacao === 'Registrada' && !pendente() && !armazenamentoInvalido()) {
+          <div class="flex flex-wrap gap-3">
+            @if (venda.resumo.saldoCentavos !== '0') {
+              <button
+                type="button"
+                class="min-h-11 rounded-lg bg-emerald-800 px-3 text-white focus-visible:outline-2"
+                (click)="abrirAcao('receber')"
+                [disabled]="ocupado()"
+              >
+                Registrar recebimento
+              </button>
+            }
+            @if (!venda.recebimentos.length) {
+              <button
+                type="button"
+                class="min-h-11 text-red-900 underline focus-visible:outline-2"
+                (click)="abrirAcao('cancelar')"
+                [disabled]="ocupado()"
+              >
+                Cancelar venda
+              </button>
+            }
+          </div>
+          @if (acao) {
+            <form
+              (ngSubmit)="confirmarAcao()"
+              class="space-y-3 rounded-lg border border-slate-300 p-3"
+            >
+              <h3 class="font-semibold">
+                {{ acao === 'receber' ? 'Conferir recebimento' : 'Conferir cancelamento' }}
+              </h3>
+              @if (acao === 'receber') {
+                <div class="grid gap-2 sm:grid-cols-3">
+                  <label class="grid gap-1"
+                    >Valor recebido (R$)
+                    <input
+                      name="valorPosterior"
+                      [(ngModel)]="valor"
+                      inputmode="decimal"
+                      required
+                      class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                    />
+                  </label>
+                  <label class="grid gap-1"
+                    >Meio de pagamento
+                    <select
+                      name="meioPosterior"
+                      [(ngModel)]="meio"
+                      class="min-h-11 w-full rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                    >
+                      @for (opcao of meios; track opcao) {
+                        <option [value]="opcao">{{ rotuloMeio(opcao) }}</option>
+                      }
+                    </select>
+                  </label>
+                  <label class="grid min-w-0 gap-1"
+                    >Data do recebimento
+                    <input
+                      type="date"
+                      name="dataPosterior"
+                      [(ngModel)]="dataRecebimento"
+                      required
+                      class="min-h-11 min-w-0 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+                    />
+                  </label>
+                </div>
+              } @else {
+                <p>
+                  Cancelar reverte a venda e tenta devolver as unidades aos lotes originais. Se o
+                  estoque não puder ser restaurado com segurança, a venda permanece registrada.
+                </p>
+                <label class="grid gap-1"
+                  >Motivo do cancelamento
+                  <textarea
+                    name="motivo"
+                    [(ngModel)]="motivo"
+                    required
+                    maxlength="500"
+                    class="min-h-20 rounded-lg border border-slate-400 p-2 focus-visible:outline-2"
+                  ></textarea>
+                </label>
+              }
+              <label class="flex min-h-11 items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="confirmado"
+                  [(ngModel)]="confirmado"
+                  class="focus-visible:outline-2"
+                />
+                {{
+                  acao === 'receber'
+                    ? 'Confirmo que recebi este valor.'
+                    : 'Confirmo o cancelamento integral desta venda.'
+                }}
+              </label>
+              <button
+                type="submit"
+                [disabled]="ocupado() || !confirmado || (acao === 'cancelar' && !motivo.trim())"
+                class="min-h-11 rounded-lg bg-emerald-800 px-3 font-semibold text-white focus-visible:outline-2 disabled:opacity-50"
+              >
+                {{ acao === 'receber' ? 'Confirmar recebimento' : 'Confirmar cancelamento' }}
+              </button>
+            </form>
+          }
+        }
+        <button
+          type="button"
+          [disabled]="ocupado()"
+          (click)="voltar()"
+          class="min-h-11 underline focus-visible:outline-2"
+        >
+          Voltar à lista
+        </button>
+      </article>
+    } @else if (!pendente() && !armazenamentoInvalido()) {
+      <fieldset [disabled]="ocupado() || !sessao()" class="grid min-w-0 gap-3 sm:grid-cols-2">
+        <label class="grid gap-1"
+          >Filtrar por canal
+          <select
+            name="filtroCanal"
+            [ngModel]="filtroCanal"
+            (ngModelChange)="filtroCanal = $event; carregar(1)"
+            [disabled]="ocupado()"
+            class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+          >
+            <option value="">Todos os canais</option>
+            @for (opcao of canais; track opcao) {
+              <option [value]="opcao">{{ opcao }}</option>
+            }
+          </select>
+        </label>
+        <label class="grid gap-1"
+          >Filtrar por situação
+          <select
+            name="filtroSituacao"
+            [ngModel]="filtroSituacao"
+            (ngModelChange)="filtroSituacao = $event; carregar(1)"
+            [disabled]="ocupado()"
+            class="min-h-11 rounded-lg border border-slate-400 px-2 focus-visible:outline-2"
+          >
+            <option value="">Todas as situações</option>
+            @for (opcao of estados; track opcao) {
+              <option [value]="opcao">{{ opcao }}</option>
+            }
+          </select>
+        </label>
+      </fieldset>
+      @if (falhaLista()) {
+        <button
+          type="button"
+          (click)="carregar()"
+          class="min-h-11 underline focus-visible:outline-2"
+        >
+          Tentar novamente
+        </button>
+      } @else {
+        <ul class="grid gap-3 sm:grid-cols-2">
+          @for (venda of lista(); track venda.id) {
+            <li class="min-w-0 space-y-2 rounded-xl border border-slate-200 bg-white p-3">
+              <p class="font-semibold">{{ civil(venda.dataVenda) }} · {{ venda.canal }}</p>
+              @if (venda.comprador) {
+                <p>{{ venda.comprador }}</p>
+              }
+              <p
+                class="w-fit rounded-md px-2 py-1 text-sm font-semibold"
+                [class.bg-amber-100]="venda.saldoCentavos !== '0'"
+                [class.bg-slate-100]="venda.saldoCentavos === '0'"
+              >
+                {{ venda.situacaoPagamento }}
+              </p>
+              <dl class="grid grid-cols-2 gap-1 text-sm">
+                <dt>Total</dt>
+                <dd>{{ brl(venda.totalCentavos) }}</dd>
+                <dt>Recebido</dt>
+                <dd>{{ brl(venda.recebidoCentavos) }}</dd>
+                <dt>Saldo a receber</dt>
+                <dd>{{ brl(venda.saldoCentavos) }}</dd>
+              </dl>
+              <button
+                type="button"
+                [disabled]="ocupado()"
+                (click)="abrir(venda.id)"
+                class="min-h-11 text-emerald-900 underline focus-visible:outline-2"
+              >
+                Abrir venda
+              </button>
+            </li>
+          } @empty {
+            @if (!ocupado()) {
+              <li role="status">Nenhuma venda encontrada nesta página.</li>
+            }
+          }
+        </ul>
+        @if (pagina() > 1 || lista().length === 50) {
+          <nav aria-label="Paginação de vendas" class="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              [disabled]="pagina() === 1 || ocupado()"
+              (click)="carregar(pagina() - 1)"
+              class="min-h-11 underline focus-visible:outline-2 disabled:opacity-50"
+            >
+              Anterior
+            </button>
+            <span>Página {{ pagina() }}</span>
+            <button
+              type="button"
+              [disabled]="lista().length < 50 || pagina() === 10000 || ocupado()"
+              (click)="carregar(pagina() + 1)"
+              class="min-h-11 underline focus-visible:outline-2 disabled:opacity-50"
+            >
+              Próxima
+            </button>
+          </nav>
+        }
+      }
+    }
+  </section>
+</app-admin-workspace>

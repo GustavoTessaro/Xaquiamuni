@@ -82,7 +82,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         using var alheia = await outro.GetAsync(tentativa);
         Assert.Equal(HttpStatusCode.NotFound, alheia.StatusCode);
         var lista = (await admin.GetFromJsonAsync<ResumoVendaExterna[]>(VendasUrl + "?canal=Feira&situacao=Registrada"))!;
-        Assert.Equal(resumo, Assert.Single(lista));
+        Assert.Equal(resumo with { Comprador = comando.Comprador }, Assert.Single(lista));
         var estorno = await Repositorio(db).EstornarAsync(new(fefo[0].Id, Responsavel, "Teste", Guid.NewGuid().ToString("N")));
         Assert.Equal(OperacaoProdutoAcabadoStatus.ConflitoConcorrencia, estorno.Status);
         Assert.Single(await db.Set<VendaExterna>().ToListAsync());
@@ -106,6 +106,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         var parcial = (await criada.Content.ReadFromJsonAsync<ResumoVendaExterna>())!;
         Assert.Equal("Parcial", parcial.SituacaoPagamento);
         Assert.Equal("600", parcial.SaldoCentavos);
+        var filtradas = (await admin.GetFromJsonAsync<ResumoVendaExterna[]>(VendasUrl + "?pagamento=Parcial"))!;
+        Assert.Equal(parcial.Id, Assert.Single(filtradas).Id);
         var url = $"{VendasUrl}/{parcial.Id:D}";
         using var pagaInvalida = await EnviarVendaAsync(admin, url + "/recebimentos", new ReceberVendaExternaInput(601, Hoje, "Pix"), Guid.NewGuid(), token);
         Assert.Equal(HttpStatusCode.Conflict, pagaInvalida.StatusCode);
@@ -123,6 +125,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         var chaveAceita = ReferenceEquals(aceita, respostas[0]) ? chaves[0] : chaves[1];
         using var replayPagamento = await EnviarVendaAsync(admin, url + "/recebimentos", pagamento, chaveAceita, token);
         Assert.Equal(paga, await replayPagamento.Content.ReadFromJsonAsync<ResumoVendaExterna>());
+        Assert.Equal(paga, await admin.GetFromJsonAsync<ResumoVendaExterna>(
+            $"{VendasUrl}/tentativas/{chaveAceita:D}?operacao=receber"));
+        Assert.Empty((await admin.GetFromJsonAsync<ResumoVendaExterna[]>(VendasUrl + "?pagamento=Parcial"))!);
         using var replayCriacao = await EnviarVendaAsync(admin, VendasUrl, dados, chaveCriar, token);
         Assert.Equal(parcial, await replayCriacao.Content.ReadFromJsonAsync<ResumoVendaExterna>());
         using var cancelarPaga = await EnviarVendaAsync(admin, url + "/cancelar", new { motivo = "Teste" }, Guid.NewGuid(), token);

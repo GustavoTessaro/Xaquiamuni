@@ -22,10 +22,11 @@ public static class AdminVendasExternasEndpoints
         group.MapGet("", ListarAsync);
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, IGerenciarVendasExternas vendas, CancellationToken ct) =>
             await vendas.ConsultarAsync(id, ct) is { } venda ? Results.Ok(venda) : Results.NotFound());
-        group.MapGet("/tentativas/{chave:guid}", async Task<IResult> (Guid chave, HttpContext ctx, IGerenciarVendasExternas vendas, CancellationToken ct) =>
+        group.MapGet("/tentativas/{chave:guid}", async Task<IResult> (Guid chave, string? operacao, HttpContext ctx, IGerenciarVendasExternas vendas, CancellationToken ct) =>
         {
             if (!Autor(ctx, out var autor)) return Results.Forbid();
-            return await vendas.ConsultarTentativaAsync(autor, chave, ct) is { } venda ? Results.Ok(venda) : Results.NotFound();
+            if (operacao is not (null or "criar" or "receber" or "cancelar")) return Invalida("Informe uma operação válida.");
+            return await vendas.ConsultarTentativaAsync(autor, chave, operacao ?? "criar", ct) is { } venda ? Results.Ok(venda) : Results.NotFound();
         });
         group.MapPost("", (CriarVendaExternaInput input, HttpContext ctx, IGerenciarVendasExternas vendas, CancellationToken ct) =>
             OperarAsync(ctx, (autor, chave) => vendas.CriarAsync(input, autor, chave, ct), criar: true))
@@ -38,13 +39,13 @@ public static class AdminVendasExternasEndpoints
             .RequireXaquiamuniAntiforgery();
     }
 
-    private static async Task<IResult> ListarAsync(string? canal, string? situacao, int? pagina,
+    private static async Task<IResult> ListarAsync(string? canal, string? situacao, string? pagamento, int? pagina,
         IGerenciarVendasExternas vendas, CancellationToken ct)
     {
         if (!Filtro(canal, out CanalVendaExterna? filtroCanal) || !Filtro(situacao, out SituacaoVendaExterna? filtroSituacao)
-            || pagina is < 1 or > 10000)
+            || pagamento is not (null or "Pendente" or "Parcial" or "Paga") || pagina is < 1 or > 10000)
             return Invalida("Confira canal, situação e página.");
-        return Results.Ok(await vendas.ListarAsync(filtroCanal, filtroSituacao, pagina ?? 1, ct));
+        return Results.Ok(await vendas.ListarAsync(filtroCanal, filtroSituacao, pagamento, pagina ?? 1, ct));
     }
 
     private static bool Filtro<T>(string? texto, out T? filtro) where T : struct, Enum

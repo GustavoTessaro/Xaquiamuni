@@ -19,6 +19,8 @@ public sealed record CancelarVendaExternaInput(string? Motivo);
 public sealed record ResumoVendaExterna(Guid Id, Guid Versao, DateOnly DataVenda, string Canal,
     string Situacao, string SituacaoPagamento, string TotalCentavos, string RecebidoCentavos, string SaldoCentavos)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Comprador { get; init; }
     public static ResumoVendaExterna De(VendaExterna v) => new(v.Id, v.Versao, v.DataVenda, v.Canal.ToString(),
         v.Situacao.ToString(), v.SituacaoPagamento, v.TotalCentavos.ToString(System.Globalization.CultureInfo.InvariantCulture),
         v.RecebidoCentavos.ToString(System.Globalization.CultureInfo.InvariantCulture),
@@ -45,9 +47,9 @@ public sealed record VendaExternaResultado(VendaExternaStatus Status, ResumoVend
 public interface IGerenciarVendasExternas
 {
     Task<IReadOnlyList<ResumoVendaExterna>> ListarAsync(CanalVendaExterna? canal, SituacaoVendaExterna? situacao,
-        int pagina, CancellationToken ct);
+        string? pagamento, int pagina, CancellationToken ct);
     Task<DetalheVendaExterna?> ConsultarAsync(Guid id, CancellationToken ct);
-    Task<ResumoVendaExterna?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct);
+    Task<ResumoVendaExterna?> ConsultarTentativaAsync(Guid autor, Guid chave, string operacao, CancellationToken ct);
     Task<VendaExternaResultado> CriarAsync(CriarVendaExternaInput input, Guid autor, Guid chave, CancellationToken ct);
     Task<VendaExternaResultado> ReceberAsync(Guid id, ReceberVendaExternaInput input, Guid autor, Guid chave, CancellationToken ct);
     Task<VendaExternaResultado> CancelarAsync(Guid id, CancelarVendaExternaInput input, Guid autor, Guid chave, CancellationToken ct);
