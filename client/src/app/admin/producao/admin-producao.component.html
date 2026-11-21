@@ -1,6 +1,6 @@
 <app-admin-workspace activePage="production">
   <section class="space-y-4" aria-labelledby="producao-titulo" [attr.aria-busy]="ocupado()">
-    <header class="flex flex-wrap items-center justify-between gap-3">
+    <header class="admin-page-heading flex flex-wrap items-center justify-between gap-3">
       <h1 id="producao-titulo" class="text-2xl font-semibold">Produção</h1>
       @if (!nova() && !detalhe()) {
         <button

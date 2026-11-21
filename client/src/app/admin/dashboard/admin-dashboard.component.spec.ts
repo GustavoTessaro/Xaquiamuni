@@ -50,8 +50,16 @@ describe('AdminDashboardComponent', () => {
     expect(fixture.nativeElement.querySelector('a[href="/admin/categorias"]').textContent).toContain('Categorias');
   });
 
+  it('groups modules and marks the overview as the current page', () => {
+    const nav = fixture.nativeElement.querySelector('.admin-sidebar nav') as HTMLElement;
+    expect(nav.querySelectorAll('a')).toHaveLength(14);
+    expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);
+    expect(nav.querySelector('[aria-current="page"]')?.getAttribute('href')).toBe('/admin');
+    expect(nav.querySelectorAll('.admin-nav__label')).toHaveLength(6);
+  });
+
   it('logs out and returns to the administrative login', () => {
-    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    const button = fixture.nativeElement.querySelector('.admin-signout') as HTMLButtonElement;
     button.click();
     fixture.detectChanges();
 
@@ -61,7 +69,7 @@ describe('AdminDashboardComponent', () => {
 
   it('keeps the panel visible and reports a logout failure', () => {
     logout.mockReturnValue(throwError(() => new Error('network failure')));
-    const button = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    const button = fixture.nativeElement.querySelector('.admin-signout') as HTMLButtonElement;
     button.click();
     fixture.detectChanges();
 

@@ -8,12 +8,12 @@
   gap: 0.85rem;
 }
 .agenda {
-  color: #0f172a;
+  color: var(--color-slate-900);
   overflow-wrap: anywhere;
 }
 .cartao,
 .aviso {
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--admin-border);
   border-radius: 0.75rem;
   padding: clamp(0.5rem, 2vw, 1rem);
   background: white;
@@ -35,24 +35,24 @@ button {
   width: fit-content;
   min-height: 44px;
   padding: 0.35rem 0.7rem;
-  border: 1px solid #047857;
+  border: 1px solid var(--color-emerald-700);
   border-radius: 0.5rem;
-  color: #064e3b;
+  color: var(--color-emerald-900);
 }
 button:not(:disabled):hover,
 button[aria-pressed='true'] {
-  background: #d1fae5;
+  background: var(--color-emerald-100);
 }
 .primario,
 .primario:not(:disabled):hover {
   color: white;
-  background: #065f46;
+  background: var(--color-emerald-800);
 }
 button:disabled {
   opacity: 0.55;
 }
 :where(button, input, textarea):focus-visible {
-  outline: 2px solid #047857;
+  outline: 2px solid var(--color-emerald-700);
   outline-offset: 2px;
 }
 .grade {
@@ -72,11 +72,11 @@ button:disabled {
   width: 100%;
   min-width: 0;
   padding: 0;
-  border-color: #cbd5e1;
+  border-color: var(--admin-border);
 }
 .dia[aria-pressed='true'] {
   font-weight: 700;
-  border-color: #047857;
+  border-color: var(--color-emerald-700);
 }
 .dia[aria-current='date'] {
   text-decoration: underline;
@@ -87,11 +87,11 @@ button:disabled {
   width: 0.32rem;
   height: 0.32rem;
   border-radius: 100%;
-  background: #065f46;
+  background: var(--color-emerald-800);
 }
 .resumo {
   padding-block: 0.7rem;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--admin-border);
 }
 .resumo p {
   margin-block: 0.3rem;

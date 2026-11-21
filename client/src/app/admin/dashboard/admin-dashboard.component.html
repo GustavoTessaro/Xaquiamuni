@@ -1,12 +1,15 @@
 <app-admin-workspace activePage="overview">
-  <section class="rounded-2xl border border-emerald-950/10 bg-white p-6 shadow-sm sm:p-8"
-    aria-labelledby="admin-welcome-title">
-    <p class="text-sm font-medium text-emerald-800">Área administrativa</p>
-    <h1 id="admin-welcome-title" class="mt-2 text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
-      Bem-vinda à administração da Xaquiamuni
-    </h1>
-    <p class="mt-4 max-w-2xl text-sm leading-6 text-slate-600">
-      O acesso administrativo, o gerenciamento de categorias e de produtos já estão disponíveis.
-    </p>
+  <section class="admin-welcome" aria-labelledby="admin-welcome-title">
+    <h1 id="admin-welcome-title">Bem-vinda à administração</h1>
+    <p>Acompanhe pedidos, prepare produções e mantenha o catálogo atualizado.</p>
+  </section>
+
+  <section class="admin-shortcuts" aria-labelledby="admin-shortcuts-title">
+    <h2 id="admin-shortcuts-title">Acesso rápido</h2>
+    <div>
+      <a routerLink="/admin/pedidos"><strong>Pedidos</strong><span>Consulte pagamentos e retiradas.</span></a>
+      <a routerLink="/admin/produtos"><strong>Produtos</strong><span>Gerencie opções e estoque.</span></a>
+      <a routerLink="/admin/producao"><strong>Produção</strong><span>Acompanhe as ordens de fabricação.</span></a>
+    </div>
   </section>
 </app-admin-workspace>

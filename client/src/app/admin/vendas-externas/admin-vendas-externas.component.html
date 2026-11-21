@@ -1,6 +1,6 @@
 <app-admin-workspace activePage="external-sales">
   <section class="min-w-0 space-y-4 [overflow-wrap:anywhere]" aria-labelledby="vendas-titulo">
-    <header class="flex flex-wrap items-center justify-between gap-3">
+    <header class="admin-page-heading flex flex-wrap items-center justify-between gap-3">
       <h1 id="vendas-titulo" class="text-2xl font-semibold">Vendas externas</h1>
       @if (!nova() && !detalhe() && !pendente() && !armazenamentoInvalido()) {
         <button

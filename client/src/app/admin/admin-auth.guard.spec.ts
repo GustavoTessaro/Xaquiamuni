@@ -424,6 +424,5 @@ function expectStockLinks(harness: RouterTestingHarness, active: 'insumos' | nul
 
 function expectSelectedLink(link: HTMLAnchorElement, selected: boolean): void {
   expect(link.getAttribute('aria-current')).toBe(selected ? 'page' : null);
-  expect(link.classList.contains('bg-emerald-50')).toBe(selected);
-  expect(link.classList.contains('text-emerald-900')).toBe(selected);
+  expect(link.classList.contains('is-current')).toBe(selected);
 }
