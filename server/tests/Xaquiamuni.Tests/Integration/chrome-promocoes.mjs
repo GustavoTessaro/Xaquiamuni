@@ -79,6 +79,14 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   await cliente.ir('/admin/promocoes');
   await waitFor(() => cliente.ev('location.pathname === "/admin/login"'), 'Guarda ADMIN');
   assert.equal((await api(cliente, promocoes)).status, 403);
+  const alternarAdmin = async modo => {
+    const seletor = ".admin-shell";
+    await waitFor(() => admin.ev(`!!document.querySelector('${seletor}')`), 'Shell de promoções');
+    if (await admin.ev(`document.querySelector('${seletor}').dataset.adminTheme`) !== modo)
+      await admin.ev("document.querySelector('.admin-theme-toggle').click()");
+    await waitFor(() => admin.ev(`getComputedStyle(document.querySelector('${seletor}')).colorScheme === '${modo}'`), modo);
+    await cabe(admin);
+  };
   await largura(admin, 375);
   await admin.ir('/admin/promocoes');
   await clicar(admin, 'Nova promoção');
@@ -87,12 +95,18 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   await tem(admin, '11,12');
   await tem(admin, '16,00');
   await tem(admin, '20% OFF');
+  await alternarAdmin('dark');
+  await tem(admin, '20% OFF');
+  await alternarAdmin('light');
   await cabe(admin);
   await clicar(admin, 'Salvar como inativa');
   await clicar(admin, 'Ativar após revisão');
   await tem(admin, 'Situação: Ativa');
   const geral = (await api(admin, promocoes)).body.find(p => p.escopo === 'TodasVariantes');
   assert.equal(geral.ativa, true);
+  await alternarAdmin('dark');
+  await tem(admin, 'Situação: Ativa');
+  await alternarAdmin('light');
 
   await largura(admin, 1280);
   await clicar(admin, 'Nova promoção');
@@ -108,8 +122,14 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   })()`), 'Variante Lavanda');
   await tem(admin, '14,38% OFF');
   await tem(admin, 'desconto menor');
+  await alternarAdmin('dark');
+  await tem(admin, '14,38% OFF');
+  await alternarAdmin('light');
   await cabe(admin);
   await clicar(admin, 'Salvar como inativa');
+  await alternarAdmin('dark');
+  await tem(admin, 'Situação: Inativa');
+  await alternarAdmin('light');
   await clicar(admin, 'Ativar após revisão');
   await tem(admin, 'Situação: Agendada');
   const especifica = (await api(admin, promocoes)).body.find(p => p.escopo === 'VariantesSelecionadas');

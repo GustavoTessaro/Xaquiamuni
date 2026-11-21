@@ -1,3 +1,4 @@
+import { validarModoAdmin } from './chrome-modo-admin.mjs';
 import { createInterface } from 'node:readline';
 import { validarJornada } from './chrome-compra-jornada.mjs';
 import { validarPromocoes } from './chrome-promocoes.mjs';
@@ -893,6 +894,9 @@ try {
       'Confirmação pelo e-mail capturado localmente');
     console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');
   }
+
+  if (dados.modoAdmin)
+    await validarModoAdmin({ a, c, call, waitFor, login, dados, admin });
 
   const cookies = [];
   for (const { sessionId } of [c, a]) {
