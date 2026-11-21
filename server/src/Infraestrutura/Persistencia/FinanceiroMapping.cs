@@ -4,7 +4,8 @@ using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-internal sealed record OperacaoFinanceira(Guid ResponsavelId, Guid Chave, string Impressao, string Resultado);
+internal sealed record OperacaoFinanceira(Guid ResponsavelId, Guid Chave, string Impressao, string Resultado,
+    string? Operacao = null);
 
 internal static class FinanceiroMapping
 {
@@ -12,13 +13,29 @@ internal static class FinanceiroMapping
     {
         model.Entity<LancamentoFinanceiro>(e =>
         {
-            e.ToTable("LancamentosFinanceiros", t => t.HasCheckConstraint("CK_LancamentosFinanceiros_Valor", "[ValorCentavos] > 0"));
+            e.ToTable("LancamentosFinanceiros", t =>
+            {
+                t.HasCheckConstraint("CK_LancamentosFinanceiros_Valor", "[ValorCentavos] > 0");
+                t.HasCheckConstraint("CK_LancamentosFinanceiros_Realizacao", """
+                    ([Data] IS NULL AND [Meio] IS NULL AND [Vencimento] IS NOT NULL
+                        AND [QuitadoPorId] IS NULL AND [QuitadoEmUtc] IS NULL)
+                    OR ([Data] IS NOT NULL AND [Meio] IS NOT NULL
+                        AND (([Vencimento] IS NULL AND [QuitadoPorId] IS NULL AND [QuitadoEmUtc] IS NULL)
+                            OR ([Vencimento] IS NOT NULL AND [QuitadoPorId] IS NOT NULL AND [QuitadoEmUtc] IS NOT NULL
+                                AND [CanceladoEmUtc] IS NULL)))
+                    """);
+            });
+            e.Ignore(x => x.Situacao);
             e.Property(x => x.Tipo).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Meio).HasConversion<string>().HasMaxLength(20);
             e.Property(x => x.Categoria).HasMaxLength(80);
             e.Property(x => x.Descricao).HasMaxLength(300);
             e.Property(x => x.MotivoCancelamento).HasMaxLength(500);
+            e.Property(x => x.Contraparte).HasMaxLength(150);
+            e.Property(x => x.Observacoes).HasMaxLength(500);
             e.HasIndex(x => new { x.Data, x.Id });
+            e.HasIndex(x => new { x.Tipo, x.Vencimento, x.Id })
+                .HasFilter("[Data] IS NULL AND [CanceladoEmUtc] IS NULL");
         });
         model.Entity<PagamentoFornecedor>(e =>
         {
@@ -33,6 +50,7 @@ internal static class FinanceiroMapping
             e.ToTable("OperacoesFinanceiras");
             e.HasKey(x => new { x.ResponsavelId, x.Chave });
             e.Property(x => x.Impressao).HasMaxLength(64).IsFixedLength();
+            e.Property(x => x.Operacao).HasMaxLength(20);
         });
     }
 }

@@ -1,43 +1,61 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Aplicacao.Financeiro;
 using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeProvider relogio) : IGerenciarFinanceiro
+public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeProvider relogio,
+    ICalendarioOperacionalEstoque calendario) : IGerenciarFinanceiro
 {
     private const int TamanhoPagina = 50;
     private DbSet<PagamentoFornecedor> Pagamentos => db.Set<PagamentoFornecedor>();
 
     public async Task<TentativaFinanceiraDto?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct)
     {
-        var resultado = await db.Set<OperacaoFinanceira>().AsNoTracking()
+        var registro = await db.Set<OperacaoFinanceira>().AsNoTracking()
             .Where(o => o.ResponsavelId == autor && o.Chave == chave)
-            .Select(o => o.Resultado).SingleOrDefaultAsync(ct);
-        if (resultado is null) return null;
+            .SingleOrDefaultAsync(ct);
+        if (registro is null) return null;
 
         // O snapshot original conserva o tipo e o estado no momento da operação.
-        using var snapshot = JsonDocument.Parse(resultado);
+        using var snapshot = JsonDocument.Parse(registro.Resultado);
         if (snapshot.RootElement.TryGetProperty(nameof(PagamentoFornecedorDto.CompraId), out _))
         {
             var pagamento = snapshot.RootElement.Deserialize<PagamentoFornecedorDto>()!;
-            return new("pagar", pagamento.CompraId, pagamento);
+            return new(registro.Operacao ?? "pagar", pagamento.CompraId, pagamento);
         }
 
         var lancamento = snapshot.RootElement.Deserialize<LancamentoDto>()!;
-        return new(lancamento.CanceladoEmUtc.HasValue ? "cancelar" : "criar", lancamento.Id, lancamento);
+        return new(registro.Operacao ?? (lancamento.CanceladoEmUtc.HasValue ? "cancelar" : "criar"), lancamento.Id, lancamento);
     }
 
-    public async Task<IReadOnlyList<LancamentoDto>> ListarAsync(int pagina, CancellationToken ct)
+    public async Task<IReadOnlyList<LancamentoDto>> ListarAsync(int pagina, CancellationToken ct,
+        SituacaoLancamento? situacao = null, TipoLancamento? tipo = null)
     {
-        var lista = await db.Set<LancamentoFinanceiro>().AsNoTracking().OrderByDescending(x => x.Data)
-            .ThenByDescending(x => x.Id).Skip((pagina - 1) * TamanhoPagina).Take(TamanhoPagina).ToListAsync(ct);
+        var consulta = db.Set<LancamentoFinanceiro>().AsNoTracking();
+        if (tipo is not null) consulta = consulta.Where(x => x.Tipo == tipo);
+        consulta = situacao switch
+        {
+            SituacaoLancamento.Pendente => Pendentes(consulta),
+            SituacaoLancamento.Realizado => consulta.Where(x => x.CanceladoEmUtc == null && x.Data != null),
+            SituacaoLancamento.Cancelado => consulta.Where(x => x.CanceladoEmUtc != null),
+            _ => consulta
+        };
+        var ordenada = situacao == SituacaoLancamento.Pendente
+            ? consulta.OrderBy(x => x.Vencimento).ThenBy(x => x.Id)
+            : consulta.OrderByDescending(x => x.Data ?? x.Vencimento).ThenByDescending(x => x.Id);
+        var lista = await ordenada.Skip((pagina - 1) * TamanhoPagina).Take(TamanhoPagina).ToListAsync(ct);
         return lista.Select(De).ToArray();
     }
+
+    private static IQueryable<LancamentoFinanceiro> Pendentes(IQueryable<LancamentoFinanceiro> consulta) =>
+        consulta.Where(x => x.Data == null && x.CanceladoEmUtc == null);
 
     public async Task<LancamentoDto?> ConsultarAsync(Guid id, CancellationToken ct) =>
         await db.Set<LancamentoFinanceiro>().AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct) is { } registro
@@ -79,9 +97,33 @@ public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeP
         ExecutarAsync<LancamentoDto>("criar", null, input, autor, chave, () =>
         {
             var registro = LancamentoFinanceiro.Criar(Interpretar<TipoLancamento>(input.Tipo), input.Categoria,
-                input.Descricao, input.ValorCentavos, input.Data, Interpretar<MeioFinanceiro>(input.Meio), autor, relogio.GetUtcNow());
+                input.Descricao, input.ValorCentavos, input.Data, Interpretar<MeioFinanceiro>(input.Meio), autor,
+                relogio.GetUtcNow(), input.Contraparte, input.Observacoes);
             db.Add(registro);
             return Task.FromResult<LancamentoDto?>(De(registro));
+        }, ct);
+
+    public Task<ResultadoFinanceiro<LancamentoDto>> CriarPendenteAsync(CriarLancamentoPendenteInput input,
+        Guid autor, Guid chave, CancellationToken ct) =>
+        ExecutarAsync<LancamentoDto>("criar-pendente", null, input, autor, chave, () =>
+        {
+            var registro = LancamentoFinanceiro.CriarPendente(Interpretar<TipoLancamento>(input.Tipo), input.Categoria,
+                input.Descricao, input.ValorCentavos, input.Vencimento, autor, relogio.GetUtcNow(),
+                input.Contraparte, input.Observacoes);
+            db.Add(registro);
+            return Task.FromResult<LancamentoDto?>(De(registro));
+        }, ct);
+
+    public Task<ResultadoFinanceiro<LancamentoDto>> QuitarAsync(Guid id, QuitarLancamentoInput input,
+        Guid autor, Guid chave, CancellationToken ct) =>
+        ExecutarAsync<LancamentoDto>("quitar", id, input, autor, chave, async () =>
+        {
+            await LockFinanceiroSql.AdquirirAsync(db, $"finance-entry:{id:D}", ct);
+            var registro = await db.Set<LancamentoFinanceiro>().SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (registro is null) return null;
+            var agora = relogio.GetUtcNow();
+            registro.Quitar(input.Data, Interpretar<MeioFinanceiro>(input.Meio), autor, agora, calendario.ObterDataEm(agora));
+            return De(registro);
         }, ct);
 
     public Task<ResultadoFinanceiro<LancamentoDto>> CancelarAsync(Guid id, CancelarLancamentoInput input,
@@ -115,6 +157,23 @@ public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeP
     private async Task<ResultadoFinanceiro<T>> ExecutarAsync<T>(string operacao, Guid? id, object input, Guid autor,
         Guid chave, Func<Task<T?>> executar, CancellationToken ct) where T : class
     {
+        try
+        {
+            return await ExecutarEmTransacaoAsync(operacao, id, input, autor, chave, executar, ct);
+        }
+        catch (SqlException erro) when (operacao != "pagar" && erro.Number is 1205 or 1222 or 51000)
+        {
+            return new(StatusFinanceiro.Conflito, Erro: "Outra operação está em andamento. Tente novamente com a mesma chave.");
+        }
+        catch (DbUpdateException erro) when (operacao != "pagar" && erro.InnerException is SqlException { Number: 1205 or 1222 })
+        {
+            return new(StatusFinanceiro.Conflito, Erro: "Outra operação está em andamento. Tente novamente com a mesma chave.");
+        }
+    }
+
+    private async Task<ResultadoFinanceiro<T>> ExecutarEmTransacaoAsync<T>(string operacao, Guid? id, object input, Guid autor,
+        Guid chave, Func<Task<T?>> executar, CancellationToken ct) where T : class
+    {
         if (autor == Guid.Empty || chave == Guid.Empty)
             return new(StatusFinanceiro.Invalida, Erro: "Informe responsável e chave de idempotência válidos.");
         var impressao = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { operacao, id, input })));
@@ -130,7 +189,7 @@ public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeP
         catch (ArgumentException erro) { return new(StatusFinanceiro.Invalida, Erro: erro.Message); }
         catch (ConflitoFinanceiroException erro) { return new(StatusFinanceiro.Conflito, Erro: erro.Message); }
         if (resultado is null) return new(StatusFinanceiro.Ausente);
-        db.Add(new OperacaoFinanceira(autor, chave, impressao, JsonSerializer.Serialize(resultado)));
+        db.Add(new OperacaoFinanceira(autor, chave, impressao, JsonSerializer.Serialize(resultado), operacao));
         await db.SaveChangesAsync(ct);
         await transacao.CommitAsync(ct);
         return new(StatusFinanceiro.Sucesso, resultado);
@@ -143,8 +202,9 @@ public sealed partial class EfFinanceiroRepository(XaquiamuniDbContext db, TimeP
     private static long? Centavos(decimal? reais) => reais is decimal valor ? checked((long)(valor * 100m)) : null;
     private static string Texto(long valor) => valor.ToString(CultureInfo.InvariantCulture);
     private static LancamentoDto De(LancamentoFinanceiro x) =>
-        new(x.Id, x.Tipo.ToString(), x.Categoria, x.Descricao, Texto(x.ValorCentavos), x.Data, x.Meio.ToString(),
-            x.ResponsavelId, x.CriadoEmUtc, x.CanceladoPorId, x.CanceladoEmUtc, x.MotivoCancelamento);
+        new(x.Id, x.Tipo.ToString(), x.Categoria, x.Descricao, Texto(x.ValorCentavos), x.Data, x.Meio?.ToString(),
+            x.ResponsavelId, x.CriadoEmUtc, x.CanceladoPorId, x.CanceladoEmUtc, x.MotivoCancelamento,
+            x.Vencimento, x.Contraparte, x.Observacoes, x.QuitadoPorId, x.QuitadoEmUtc);
     private static PagamentoFornecedorDto De(PagamentoFornecedor x) =>
         new(x.Id, x.CompraId, Texto(x.ValorCentavos), x.Data, x.Meio.ToString(), x.Referencia, x.ResponsavelId, x.CriadoEmUtc);
 }

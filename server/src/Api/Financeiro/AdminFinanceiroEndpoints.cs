@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Aplicacao.Financeiro;
+using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Api.Financeiro;
 
@@ -33,15 +34,21 @@ public static class AdminFinanceiroEndpoints
             return await financeiro.ConsultarTentativaAsync(autor, chave, ct) is { } tentativa
                 ? Results.Ok(tentativa) : Results.NotFound();
         });
-        grupo.MapGet("/lancamentos", async Task<IResult> (int? pagina, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
-            PaginaValida(pagina)
-                ? Results.Ok(await financeiro.ListarAsync(pagina ?? 1, ct))
-                : Invalida("Informe uma página entre 1 e 10000."));
+        grupo.MapGet("/lancamentos", ListarLancamentosAsync);
         grupo.MapGet("/lancamentos/{id:guid}", async Task<IResult> (Guid id, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
             await financeiro.ConsultarAsync(id, ct) is { } dados ? Results.Ok(dados) : Results.NotFound());
         grupo.MapPost("/lancamentos", (CriarLancamentoInput input, HttpContext ctx, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
             OperarAsync(ctx, (autor, chave) => financeiro.CriarAsync(input, autor, chave, ct),
                 dados => $"{Rota}/lancamentos/{dados.Id:D}"))
+            .RequireXaquiamuniAntiforgery();
+        grupo.MapPost("/lancamentos/pendentes",
+            (CriarLancamentoPendenteInput input, HttpContext ctx, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
+                OperarAsync(ctx, (autor, chave) => financeiro.CriarPendenteAsync(input, autor, chave, ct),
+                    dados => $"{Rota}/lancamentos/{dados.Id:D}"))
+            .RequireXaquiamuniAntiforgery();
+        grupo.MapPost("/lancamentos/{id:guid}/quitar",
+            (Guid id, QuitarLancamentoInput input, HttpContext ctx, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
+                OperarAsync(ctx, (autor, chave) => financeiro.QuitarAsync(id, input, autor, chave, ct)))
             .RequireXaquiamuniAntiforgery();
         grupo.MapPost("/lancamentos/{id:guid}/cancelar",
             (Guid id, CancelarLancamentoInput input, HttpContext ctx, IGerenciarFinanceiro financeiro, CancellationToken ct) =>
@@ -64,6 +71,16 @@ public static class AdminFinanceiroEndpoints
     }
 
     private static bool PaginaValida(int? pagina) => pagina is null or (>= 1 and <= 10000);
+
+    private static async Task<IResult> ListarLancamentosAsync(int? pagina, string? situacao, string? tipo,
+        IGerenciarFinanceiro financeiro, CancellationToken ct)
+    {
+        if (!PaginaValida(pagina)) return Invalida("Informe uma página entre 1 e 10000.");
+        if (!LerFiltro(situacao, out SituacaoLancamento? situacaoFiltro) ||
+            !LerFiltro(tipo, out TipoLancamento? tipoFiltro))
+            return Invalida("Confira a situação e o tipo do lançamento.");
+        return Results.Ok(await financeiro.ListarAsync(pagina ?? 1, ct, situacaoFiltro, tipoFiltro));
+    }
 
     private static async Task<IResult> ListarMovimentacoesAsync(DateOnly? dataInicial, DateOnly? dataFinal,
         string? tipo, string? origem, int? pagina, IGerenciarFinanceiro financeiro, CancellationToken ct)

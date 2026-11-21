@@ -3,6 +3,7 @@ using System.Numerics;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Financeiro;
 using Xaquiamuni.Dominio.Estoque;
+using Xaquiamuni.Dominio.Financeiro;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -37,7 +38,13 @@ public sealed partial class EfFinanceiroRepository
         // Separe quociente e resto para que o CAST padrão do EF para decimal(18,2)
         // acomode qualquer valor bigint. SUM(decimal) acumula as partes sem o limite de bigint.
         const long baseSoma = 1000;
-        var totais = await fluxo.Concat(aReceber).Concat(aPagar).Concat(aConferir)
+        var manuaisPendentes = Pendentes(db.Set<LancamentoFinanceiro>().AsNoTracking())
+            .Select(x => new
+            {
+                Indicador = x.Tipo == TipoLancamento.Entrada ? Indicador.AReceber : Indicador.APagar,
+                Valor = x.ValorCentavos
+            });
+        var totais = await fluxo.Concat(aReceber).Concat(aPagar).Concat(aConferir).Concat(manuaisPendentes)
             .GroupBy(m => m.Indicador)
             .Select(g => new
             {

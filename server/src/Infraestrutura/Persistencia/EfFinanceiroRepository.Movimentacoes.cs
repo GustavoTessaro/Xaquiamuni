@@ -51,12 +51,13 @@ public sealed partial class EfFinanceiroRepository
             EventoId = p.Id, RecursoId = p.CompraId, Origem = Origem.PagamentoCompra, Tipo = Tipo.Saida,
             Data = p.Data, Valor = p.ValorCentavos, Descricao = null, Meio = p.Meio.ToString()
         });
-        var manuais = db.Set<LancamentoFinanceiro>().AsNoTracking().Where(l => l.CanceladoEmUtc == null)
+        var manuais = db.Set<LancamentoFinanceiro>().AsNoTracking()
+            .Where(l => l.CanceladoEmUtc == null && l.Data != null)
             .Select(l => new LinhaCaixa
             {
                 EventoId = l.Id, RecursoId = l.Id, Origem = Origem.LancamentoManual,
                 Tipo = l.Tipo == TipoLancamento.Entrada ? Tipo.Entrada : Tipo.Saida,
-                Data = l.Data, Valor = l.ValorCentavos, Descricao = l.Descricao, Meio = l.Meio.ToString()
+                Data = l.Data!.Value, Valor = l.ValorCentavos, Descricao = l.Descricao, Meio = l.Meio!.Value.ToString()
             });
 
         return pedidos.Concat(vendas).Concat(fornecedores).Concat(manuais);

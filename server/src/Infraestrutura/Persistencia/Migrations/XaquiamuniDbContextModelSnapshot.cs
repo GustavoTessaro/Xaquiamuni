@@ -2337,10 +2337,14 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("nvarchar(80)");
 
+                    b.Property<string>("Contraparte")
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)");
+
                     b.Property<DateTimeOffset>("CriadoEmUtc")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<DateOnly>("Data")
+                    b.Property<DateOnly?>("Data")
                         .HasColumnType("date");
 
                     b.Property<string>("Descricao")
@@ -2349,13 +2353,22 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("nvarchar(300)");
 
                     b.Property<string>("Meio")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("MotivoCancelamento")
                         .HasMaxLength(500)
                         .HasColumnType("nvarchar(500)");
+
+                    b.Property<string>("Observacoes")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
+
+                    b.Property<DateTimeOffset?>("QuitadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("QuitadoPorId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("ResponsavelId")
                         .HasColumnType("uniqueidentifier");
@@ -2368,12 +2381,20 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<long>("ValorCentavos")
                         .HasColumnType("bigint");
 
+                    b.Property<DateOnly?>("Vencimento")
+                        .HasColumnType("date");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Data", "Id");
 
+                    b.HasIndex("Tipo", "Vencimento", "Id")
+                        .HasFilter("[Data] IS NULL AND [CanceladoEmUtc] IS NULL");
+
                     b.ToTable("LancamentosFinanceiros", null, t =>
                         {
+                            t.HasCheckConstraint("CK_LancamentosFinanceiros_Realizacao", "([Data] IS NULL AND [Meio] IS NULL AND [Vencimento] IS NOT NULL\n    AND [QuitadoPorId] IS NULL AND [QuitadoEmUtc] IS NULL)\nOR ([Data] IS NOT NULL AND [Meio] IS NOT NULL\n    AND (([Vencimento] IS NULL AND [QuitadoPorId] IS NULL AND [QuitadoEmUtc] IS NULL)\n        OR ([Vencimento] IS NOT NULL AND [QuitadoPorId] IS NOT NULL AND [QuitadoEmUtc] IS NOT NULL\n            AND [CanceladoEmUtc] IS NULL)))");
+
                             t.HasCheckConstraint("CK_LancamentosFinanceiros_Valor", "[ValorCentavos] > 0");
                         });
                 });
@@ -2528,6 +2549,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("nchar(64)")
                         .IsFixedLength();
+
+                    b.Property<string>("Operacao")
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
 
                     b.Property<string>("Resultado")
                         .IsRequired()

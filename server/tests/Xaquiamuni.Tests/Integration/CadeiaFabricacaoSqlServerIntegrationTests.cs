@@ -401,9 +401,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         public SqlServerTestDatabase Banco { get; } = banco;
         public HostE2ECompra Host { get; } = host;
 
-        public static async Task<Ambiente> CriarAsync()
+        public static async Task<Ambiente> CriarAsync(string? migration = null)
         {
-            var banco = await SqlServerTestDatabase.CreateAsync();
+            var banco = await SqlServerTestDatabase.CreateAsync(targetMigration: migration);
             DirectoryInfo? diretorio = null;
             try
             {
