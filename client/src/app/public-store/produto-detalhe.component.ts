@@ -20,6 +20,7 @@ import {
 } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
 import { CarrinhoService } from './carrinho.service';
+import { StorefrontContext } from './storefront-context';
 
 type ProdutoResult =
   | { id: string; product: ProdutoCatalogoDetalhe; failed: false }
@@ -33,6 +34,7 @@ type ProdutoResult =
   templateUrl: './produto-detalhe.component.html',
 })
 export class ProdutoDetalheComponent implements OnInit {
+  protected readonly contexto = inject(StorefrontContext);
   protected readonly product = signal<ProdutoCatalogoDetalhe | null>(null);
   protected readonly loading = signal(true);
   protected readonly notFound = signal(false);
@@ -72,7 +74,7 @@ export class ProdutoDetalheComponent implements OnInit {
 
   private readonly route = inject(ActivatedRoute);
   private readonly catalogService = inject(CatalogoPublicoService);
-  private readonly carrinho = inject(CarrinhoService);
+  private readonly carrinho = this.contexto.preview ? null : inject(CarrinhoService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly retryRequests = new Subject<string>();
   private currentProductId: string | null = null;
@@ -124,7 +126,7 @@ export class ProdutoDetalheComponent implements OnInit {
   protected adicionarAoCarrinho(): void {
     const produto = this.product();
     const opcao = this.selectedOption();
-    if (!produto || !opcao) {
+    if (!this.carrinho || !produto || !opcao) {
       return;
     }
     const resultado = this.carrinho.adicionar(produto, opcao.id);
@@ -229,13 +231,13 @@ export class ProdutoDetalheComponent implements OnInit {
     this.loading.set(false);
     if (result.failed) {
       this.notFound.set(result.error instanceof HttpErrorResponse && result.error.status === 404);
-      this.carrinho.sinalizarDisponibilidade(result.id, this.notFound() ? false : null);
+      this.carrinho?.sinalizarDisponibilidade(result.id, this.notFound() ? false : null);
       this.requestError.set(!this.notFound());
       return;
     }
 
     this.product.set(result.product);
-    this.carrinho.atualizarDisponibilidade(result.product);
+    this.carrinho?.atualizarDisponibilidade(result.product);
     const defaultOption =
       result.product.opcoes.find((option) => option.id === result.product.opcaoPrincipalId) ??
       result.product.opcoes.find((option) => option.principal) ??

@@ -19,6 +19,7 @@ import {
   ProdutoCatalogoResumo,
 } from './catalogo-publico.service';
 import { PublicProductCardComponent } from './public-product-card.component';
+import { StorefrontContext } from './storefront-context';
 
 interface ProductRequest {
   generation: number;
@@ -41,6 +42,7 @@ interface ProductRequestResult {
   templateUrl: './catalogo-produtos.component.html',
 })
 export class CatalogoProdutosComponent implements OnInit {
+  protected readonly contexto = inject(StorefrontContext);
   readonly homePage = input(false);
   protected readonly products = signal<ProdutoCatalogoResumo[]>([]);
   protected readonly categories = signal<CategoriaCatalogoPublico[]>([]);

@@ -1,4 +1,5 @@
-import { Routes } from '@angular/router';
+import { inject } from '@angular/core';
+import { Router, Routes } from '@angular/router';
 import { adminAuthGuard } from './admin/admin-auth.guard';
 import { AdminDashboardComponent } from './admin/dashboard/admin-dashboard.component';
 import { AdminCategoriasComponent } from './admin/categorias/admin-categorias.component';
@@ -8,6 +9,31 @@ import { ConfirmEmailComponent } from './confirm-email/confirm-email.component';
 import { ForgotPasswordComponent } from './forgot-password/forgot-password.component';
 import { LoginComponent } from './login/login.component';
 import { ResetPasswordComponent } from './reset-password/reset-password.component';
+import { CatalogoPublicoService } from './public-store/catalogo-publico.service';
+import { buscarManifestoTemaLoja } from './public-store/manifestos-tema-loja';
+
+const paginasVitrine: Routes = [
+  {
+    path: '',
+    loadComponent: () =>
+      import('./public-store/store-home.component').then((module) => module.StoreHomeComponent),
+    pathMatch: 'full',
+  },
+  {
+    path: 'produtos/:id',
+    loadComponent: () =>
+      import('./public-store/produto-detalhe.component').then(
+        (module) => module.ProdutoDetalheComponent,
+      ),
+  },
+  {
+    path: 'produtos',
+    loadComponent: () =>
+      import('./public-store/catalogo-publico.component').then(
+        (module) => module.CatalogoPublicoComponent,
+      ),
+  },
+];
 
 export const routes: Routes = [
   { path: 'admin/login', component: AdminLoginComponent },
@@ -150,6 +176,19 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/temas/previa/:tema',
+    loadComponent: () => import('./public-store/store-layout.component').then(m => m.StoreLayoutComponent),
+    data: { storePreview: true },
+    providers: [CatalogoPublicoService],
+    canActivate: [route => buscarManifestoTemaLoja(route.paramMap.get('tema'))
+      ? true : inject(Router).createUrlTree(['/admin/temas'])],
+    canActivateChild: [adminAuthGuard],
+    children: [
+      ...paginasVitrine.map(page => ({ ...page, runGuardsAndResolvers: 'always' as const })),
+      { path: '**', redirectTo: '/admin/temas' },
+    ],
+  },
+  {
     path: 'admin/temas',
     loadComponent: () => import('./admin/temas/admin-temas.component').then(m => m.AdminTemasComponent),
     canActivate: [adminAuthGuard],
@@ -224,26 +263,7 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./public-store/carrinho.component').then((module) => module.CarrinhoComponent),
       },
-      {
-        path: '',
-        loadComponent: () =>
-          import('./public-store/store-home.component').then((module) => module.StoreHomeComponent),
-        pathMatch: 'full',
-      },
-      {
-        path: 'produtos/:id',
-        loadComponent: () =>
-          import('./public-store/produto-detalhe.component').then(
-            (module) => module.ProdutoDetalheComponent,
-          ),
-      },
-      {
-        path: 'produtos',
-        loadComponent: () =>
-          import('./public-store/catalogo-publico.component').then(
-            (module) => module.CatalogoPublicoComponent,
-          ),
-      },
+      ...paginasVitrine,
     ],
   },
   { path: '**', redirectTo: 'cadastro' },

@@ -1,3 +1,12 @@
+@if (contexto.preview) {
+  <aside class="store-preview" aria-label="Prévia administrativa">
+    <div>
+      <strong>Prévia administrativa · {{ manifestoPrevia()?.nome }}</strong>
+      <p>Apenas visualização. A loja publicada não foi alterada.</p>
+    </div>
+    <a routerLink="/admin/temas">Sair da prévia</a>
+  </aside>
+}
 <app-store-header />
 <main class="store-main">
   <router-outlet />

@@ -1,7 +1,7 @@
 <footer class="store-footer">
   <div class="store-footer__inner">
     <section class="store-footer__brand" aria-label="Sobre a Xaquiamuni">
-      <a routerLink="/" class="store-footer__name">
+      <a [routerLink]="contexto.link()" class="store-footer__name">
         <span class="brand-crop brand-crop--symbol">
           <img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" />
         </span>
@@ -12,14 +12,16 @@
       <p>Sabonetes artesanais e velas aromáticas feitos com carinho desde 2021.</p>
     </section>
     <nav class="store-footer__links" aria-label="Links do rodapé">
-      <a routerLink="/">Início</a>
-      <a routerLink="/produtos">Produtos</a>
-      <a routerLink="/" fragment="sobre-nos">Sobre nós</a>
+      <a [routerLink]="contexto.link()">Início</a>
+      <a [routerLink]="contexto.link('produtos')">Produtos</a>
+      <a [routerLink]="contexto.link()" fragment="sobre-nos">Sobre nós</a>
     </nav>
-    <section class="store-footer__account" aria-label="Acesso à conta">
-      <a routerLink="/login">Entrar</a>
-      <a routerLink="/cadastro">Criar conta</a>
-    </section>
+    @if (!contexto.preview) {
+      <section class="store-footer__account" aria-label="Acesso à conta">
+        <a routerLink="/login">Entrar</a>
+        <a routerLink="/cadastro">Criar conta</a>
+      </section>
+    }
   </div>
   <div class="store-footer__bottom">
     <span>© {{ currentYear }} Xaquiamuni Produtos Naturais</span>

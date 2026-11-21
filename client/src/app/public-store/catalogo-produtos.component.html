@@ -8,7 +8,7 @@
     @if (showCatalogLink) {
       <a
         class="catalog-section__all"
-        routerLink="/produtos"
+        [routerLink]="contexto.link('produtos')"
         [queryParams]="{
           busca: currentSearch() || null,
           categoriaId: selectedCategoryId() || null,

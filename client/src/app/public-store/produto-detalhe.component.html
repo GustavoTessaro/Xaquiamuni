@@ -8,7 +8,7 @@
     <section class="product-detail__state" aria-labelledby="product-not-found">
       <h1 id="product-not-found">Produto não encontrado</h1>
       <p>Este produto não está disponível no catálogo público.</p>
-      <a routerLink="/produtos" [queryParams]="returnFilters()">Voltar ao catálogo</a>
+      <a [routerLink]="contexto.link('produtos')" [queryParams]="returnFilters()">Voltar ao catálogo</a>
     </section>
   } @else if (requestError()) {
     <section class="product-detail__state" aria-labelledby="product-load-error">
@@ -18,16 +18,16 @@
     </section>
   } @else if (product(); as item) {
     <nav class="product-detail__breadcrumb" aria-label="Navegação estrutural">
-      <a routerLink="/">Início</a>
+      <a [routerLink]="contexto.link()">Início</a>
       <span aria-hidden="true">/</span>
-      <a routerLink="/produtos" [queryParams]="{ categoriaId: item.categoriaId }">
+      <a [routerLink]="contexto.link('produtos')" [queryParams]="{ categoriaId: item.categoriaId }">
         {{ item.categoriaNome }}
       </a>
       <span aria-hidden="true">/</span>
       <span aria-current="page">{{ item.nome }}</span>
     </nav>
 
-    <a class="product-detail__back" routerLink="/produtos" [queryParams]="returnFilters()">
+    <a class="product-detail__back" [routerLink]="contexto.link('produtos')" [queryParams]="returnFilters()">
       <span aria-hidden="true">←</span> Voltar ao catálogo
     </a>
 
@@ -134,15 +134,17 @@
               }
             </p>
           }
-          <button
-            type="button"
-            class="product-detail__add-to-cart"
-            [disabled]="option.disponivel !== true"
-            (click)="adicionarAoCarrinho()"
-          >
-            Adicionar ao carrinho
-          </button>
-          <p class="product-detail__cart-message" role="status">{{ mensagemCarrinho() }}</p>
+          @if (!contexto.preview) {
+            <button
+              type="button"
+              class="product-detail__add-to-cart"
+              [disabled]="option.disponivel !== true"
+              (click)="adicionarAoCarrinho()"
+            >
+              Adicionar ao carrinho
+            </button>
+            <p class="product-detail__cart-message" role="status">{{ mensagemCarrinho() }}</p>
+          }
         } @else if (item.requerSelecaoDeOpcao) {
           <p class="product-detail__choose-option" role="status">
             Escolha uma opção para ver o preço e as medidas.

@@ -11,6 +11,7 @@ import { RouterLink } from '@angular/router';
 import { catchError, of } from 'rxjs';
 import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-publico.service';
 import { CatalogoProdutosComponent } from './catalogo-produtos.component';
+import { StorefrontContext } from './storefront-context';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -20,6 +21,7 @@ import { CatalogoProdutosComponent } from './catalogo-produtos.component';
   templateUrl: './store-home.component.html',
 })
 export class StoreHomeComponent implements OnInit {
+  protected readonly contexto = inject(StorefrontContext);
   protected readonly categories = signal<CategoriaCatalogoPublico[]>([]);
   protected readonly categoriesLoading = signal(true);
   protected readonly categoriesError = signal('');

@@ -10,3 +10,27 @@
 .store-main {
   flex: 1;
 }
+
+.store-preview {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .5rem 1rem;
+  padding: .65rem var(--brand-gutter);
+  background: var(--brand-green-hover);
+  color: var(--brand-white);
+  font-size: .875rem;
+}
+
+.store-preview a {
+  color: var(--brand-gold-light);
+  text-decoration: underline;
+}
+
+.store-preview a:focus-visible {
+  outline-color: var(--brand-gold-light);
+}

@@ -1,9 +1,10 @@
+import { RouterLink } from '@angular/router';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { finalize } from 'rxjs';
 import { CatalogoTemasAdmin, TemaLojaAdmin, TemasLojaService } from '../../core/temas-loja.service';
-import { TEMA_ORIGINAL } from '../../public-store/manifestos-tema-loja';
+import { buscarManifestoTemaLoja, TEMA_ORIGINAL } from '../../public-store/manifestos-tema-loja';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 
 interface TentativaPublicacao {
@@ -14,13 +15,14 @@ interface TentativaPublicacao {
 
 @Component({
   selector: 'app-admin-temas',
-  imports: [AdminWorkspaceComponent],
+  imports: [AdminWorkspaceComponent, RouterLink],
   templateUrl: './admin-temas.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminTemasComponent {
   private readonly api = inject(TemasLojaService);
   private readonly destroyRef = inject(DestroyRef);
+  protected readonly buscarManifesto = buscarManifestoTemaLoja;
   protected readonly original = TEMA_ORIGINAL;
   protected readonly catalogo = signal<CatalogoTemasAdmin | null>(null);
   protected readonly nomePublicado = computed(() => {

@@ -1,6 +1,6 @@
 <header class="store-header">
   <div class="store-header__inner">
-    <a class="store-brand" routerLink="/" aria-label="Xaquiamuni Produtos Naturais, início">
+    <a class="store-brand" [routerLink]="contexto.link()" aria-label="Xaquiamuni Produtos Naturais, início">
       <span class="brand-crop brand-crop--symbol"><img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" /></span>
       <span class="brand-crop brand-crop--wordmark"><img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="Xaquiamuni Produtos Naturais" /></span>
     </a>
@@ -23,35 +23,37 @@
       </button>
     </form>
 
-    <div class="store-account">
-      <a
-        class="store-account__cart"
-        routerLink="/carrinho"
-        routerLinkActive="is-active"
-        ariaCurrentWhenActive="page"
-        [attr.aria-label]="
-          'Carrinho, ' + quantidadeCarrinho() + (quantidadeCarrinho() === 1 ? ' item' : ' itens')
-        "
-      >
-        Carrinho <span aria-hidden="true">{{ quantidadeCarrinho() }}</span>
-      </a>
-      @if (sessionLoading()) {
-        <span class="store-account__status" role="status">Verificando conta...</span>
-      } @else if (session()) {
-        <a class="store-account__link" routerLink="/pedidos">Meus pedidos</a>
-        <button
-          type="button"
-          class="store-account__logout"
-          (click)="logout()"
-          [disabled]="signingOut()"
+    @if (!contexto.preview) {
+      <div class="store-account">
+        <a
+          class="store-account__cart"
+          routerLink="/carrinho"
+          routerLinkActive="is-active"
+          ariaCurrentWhenActive="page"
+          [attr.aria-label]="
+            'Carrinho, ' + quantidadeCarrinho() + (quantidadeCarrinho() === 1 ? ' item' : ' itens')
+          "
         >
-          {{ signingOut() ? 'Saindo...' : 'Sair' }}
-        </button>
-      } @else {
-        <a class="store-account__link" routerLink="/login">Entrar</a>
-        <a class="store-account__register" routerLink="/cadastro">Criar conta</a>
-      }
-    </div>
+          Carrinho <span aria-hidden="true">{{ quantidadeCarrinho() }}</span>
+        </a>
+        @if (sessionLoading()) {
+          <span class="store-account__status" role="status">Verificando conta...</span>
+        } @else if (session()) {
+          <a class="store-account__link" routerLink="/pedidos">Meus pedidos</a>
+          <button
+            type="button"
+            class="store-account__logout"
+            (click)="logout()"
+            [disabled]="signingOut()"
+          >
+            {{ signingOut() ? 'Saindo...' : 'Sair' }}
+          </button>
+        } @else {
+          <a class="store-account__link" routerLink="/login">Entrar</a>
+          <a class="store-account__register" routerLink="/cadastro">Criar conta</a>
+        }
+      </div>
+    }
   </div>
 
   @if (sessionError()) {
@@ -66,19 +68,19 @@
 
   <nav class="store-nav" aria-label="Navegação da loja">
     <div class="store-nav__inner">
-      <a routerLink="/" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"
+      <a [routerLink]="contexto.link()" routerLinkActive="is-active" [routerLinkActiveOptions]="{ exact: true }"
         >Início</a
       >
-      <a routerLink="/produtos" routerLinkActive="is-active">Produtos</a>
+      <a [routerLink]="contexto.link('produtos')" routerLinkActive="is-active">Produtos</a>
       <details #categoryMenu class="store-nav__categories">
         <summary>Categorias</summary>
         <div class="store-nav__dropdown">
-          <a routerLink="/" fragment="categorias" (click)="closeNavigation()"
+          <a [routerLink]="contexto.link()" fragment="categorias" (click)="closeNavigation()"
             >Todas as categorias</a
           >
           @for (category of categories(); track category.id) {
             <a
-              [routerLink]="['/produtos']"
+              [routerLink]="contexto.link('produtos')"
               [queryParams]="{ categoriaId: category.id }"
               queryParamsHandling="merge"
               (click)="closeNavigation()"
@@ -91,24 +93,24 @@
           }
         </div>
       </details>
-      <a routerLink="/" fragment="sobre-nos">Sobre nós</a>
+      <a [routerLink]="contexto.link()" fragment="sobre-nos">Sobre nós</a>
     </div>
   </nav>
 
   <details #mobileNav class="store-mobile-nav">
     <summary>Menu da loja</summary>
     <nav aria-label="Navegação móvel da loja">
-      <a routerLink="/" (click)="closeNavigation()">Início</a>
-      <a routerLink="/produtos" (click)="closeNavigation()">Produtos</a>
+      <a [routerLink]="contexto.link()" (click)="closeNavigation()">Início</a>
+      <a [routerLink]="contexto.link('produtos')" (click)="closeNavigation()">Produtos</a>
       <details #mobileCategories class="store-mobile-nav__categories">
         <summary>Categorias</summary>
         <nav aria-label="Categorias da loja">
-          <a routerLink="/" fragment="categorias" (click)="closeNavigation()"
+          <a [routerLink]="contexto.link()" fragment="categorias" (click)="closeNavigation()"
             >Todas as categorias</a
           >
           @for (category of categories(); track category.id) {
             <a
-              [routerLink]="['/produtos']"
+              [routerLink]="contexto.link('produtos')"
               [queryParams]="{ categoriaId: category.id }"
               queryParamsHandling="merge"
               (click)="closeNavigation()"
@@ -121,12 +123,14 @@
           }
         </nav>
       </details>
-      <a routerLink="/" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
-      @if (session()) {
-        <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
-      } @else {
-        <a routerLink="/login" (click)="closeNavigation()">Entrar</a>
-        <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
+      <a [routerLink]="contexto.link()" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
+      @if (!contexto.preview) {
+        @if (session()) {
+          <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
+        } @else {
+          <a routerLink="/login" (click)="closeNavigation()">Entrar</a>
+          <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
+        }
       }
     </nav>
   </details>

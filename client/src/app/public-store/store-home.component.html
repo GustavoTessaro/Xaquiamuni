@@ -6,7 +6,7 @@
       <p class="store-hero__description">
         Sabonetes artesanais e velas aromáticas feitos com carinho para quem se cuida com amor.
       </p>
-      <a class="store-hero__cta" routerLink="/" fragment="produtos">
+      <a class="store-hero__cta" [routerLink]="contexto.link()" fragment="produtos">
         Conheça nossos produtos
         <span aria-hidden="true">→</span>
       </a>
@@ -45,7 +45,7 @@
         <a
           class="category-card"
           [class.category-card--sage]="index % 2 === 0"
-          [routerLink]="['/']"
+          [routerLink]="contexto.link()"
           [queryParams]="{ categoriaId: category.id }"
           fragment="produtos"
         >
@@ -150,7 +150,7 @@
       com amor desde 2021.
     </p>
     <p>Cada produto nasce da nossa produção própria, com dedicação e carinho em cada etapa.</p>
-    <a routerLink="/produtos"
+    <a [routerLink]="contexto.link('produtos')"
       >Encontre seu próximo momento de cuidado <span aria-hidden="true">→</span></a
     >
   </div>

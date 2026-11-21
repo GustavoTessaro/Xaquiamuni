@@ -23,6 +23,7 @@ import { catchError, filter, finalize, of } from 'rxjs';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
 import { CarrinhoService } from './carrinho.service';
 import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-publico.service';
+import { StorefrontContext } from './storefront-context';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +33,7 @@ import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-pub
   templateUrl: './store-header.component.html',
 })
 export class StoreHeaderComponent implements OnInit {
+  protected readonly contexto = inject(StorefrontContext);
   protected readonly categories = signal<CategoriaCatalogoPublico[]>([]);
   protected readonly categoryError = signal('');
   protected readonly session = signal<AuthSession | null>(null);
@@ -40,9 +42,9 @@ export class StoreHeaderComponent implements OnInit {
   protected readonly signingOut = signal(false);
   protected readonly accountError = signal('');
   protected readonly searchTerm = signal('');
-  protected readonly quantidadeCarrinho = inject(CarrinhoService).quantidadeTotal;
+  protected readonly quantidadeCarrinho = this.contexto.preview ? () => 0 : inject(CarrinhoService).quantidadeTotal;
 
-  private readonly authService = inject(AuthService);
+  private readonly authService = this.contexto.preview ? null : inject(AuthService);
   private readonly catalogService = inject(CatalogoPublicoService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -77,8 +79,7 @@ export class StoreHeaderComponent implements OnInit {
         next: (categories) => this.categories.set(categories),
       });
 
-    this.authService
-      .obterSessao()
+    this.authService?.obterSessao()
       .pipe(
         catchError((error: unknown) => {
           if (error instanceof HttpErrorResponse && error.status === 403) {
@@ -154,7 +155,7 @@ export class StoreHeaderComponent implements OnInit {
 
   protected search(): void {
     const categoryId = this.route.snapshot.queryParamMap.get('categoriaId');
-    void this.router.navigate(['/produtos'], {
+    void this.router.navigate(this.contexto.link('produtos'), {
       queryParams: {
         busca: this.searchTerm().trim() || null,
         categoriaId: categoryId,
@@ -163,7 +164,7 @@ export class StoreHeaderComponent implements OnInit {
   }
 
   protected logout(): void {
-    if (this.signingOut()) {
+    if (!this.authService || this.signingOut()) {
       return;
     }
 

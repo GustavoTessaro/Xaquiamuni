@@ -1,6 +1,6 @@
 <a
   class="product-card"
-  [routerLink]="['/produtos', product().id]"
+  [routerLink]="contexto.link('produtos', product().id)"
   [queryParams]="returnQueryParams"
 >
   <div class="product-card__image">

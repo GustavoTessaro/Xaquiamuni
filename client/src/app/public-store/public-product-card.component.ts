@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, effect, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, inject, Component, effect, input, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { CatalogoPublicoRetorno, ProdutoCatalogoResumo } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
+import { StorefrontContext } from './storefront-context';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -11,6 +12,7 @@ import { formatarUnidadeVenda } from './catalogo-formatacao';
   templateUrl: './public-product-card.component.html',
 })
 export class PublicProductCardComponent {
+  protected readonly contexto = inject(StorefrontContext);
   readonly product = input.required<ProdutoCatalogoResumo>();
   readonly catalogReturn = input<CatalogoPublicoRetorno | null>(null);
   readonly availabilityKnown = input(true);

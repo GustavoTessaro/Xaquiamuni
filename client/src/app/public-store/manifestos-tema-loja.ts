@@ -27,6 +27,10 @@ const manifestos: ReadonlyMap<string, ManifestoTemaLoja> = new Map([
   [TEMA_ORIGINAL, { chave: TEMA_ORIGINAL, nome: 'Original', descricao: 'Identidade visual da Xaquiamuni.' }],
 ]);
 
+export function buscarManifestoTemaLoja(chave: unknown): ManifestoTemaLoja | undefined {
+  return typeof chave === 'string' ? manifestos.get(chave) : undefined;
+}
+
 export function resolverTemaLoja(chave: unknown): string {
-  return typeof chave === 'string' ? manifestos.get(chave)?.chave ?? TEMA_ORIGINAL : TEMA_ORIGINAL;
+  return buscarManifestoTemaLoja(chave)?.chave ?? TEMA_ORIGINAL;
 }
