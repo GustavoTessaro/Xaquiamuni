@@ -99,6 +99,26 @@ public sealed class XaquiamuniDbContext
             fornecedor.HasIndex(f => f.NomeNormalizado).IsUnique().HasDatabaseName("UX_Fornecedores_NomeNormalizado");
         });
         PedidoMapping.Configurar(builder);
+        builder.Entity<EnvioComprovantePix>(e =>
+        {
+            e.ToTable("EnviosComprovantePix");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Id).ValueGeneratedNever();
+            e.Property(x => x.Tipo).HasMaxLength(20);
+            e.Property(x => x.Sha256).HasMaxLength(64).IsFixedLength();
+            e.HasIndex(x => new { x.ClienteId, x.Chave }).IsUnique();
+            e.HasOne<Pedido>().WithMany().HasForeignKey(x => x.PedidoId).OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<ComprovantePixAtivo>(e =>
+        {
+            e.ToTable("ComprovantesPixAtivos");
+            e.HasKey(x => x.PedidoId);
+            e.Property(x => x.PedidoId).ValueGeneratedNever();
+            e.Property(x => x.EnvioId).IsConcurrencyToken();
+            e.Property(x => x.Bytes).HasColumnType("varbinary(max)");
+            e.HasOne<Pedido>().WithOne().HasForeignKey<ComprovantePixAtivo>(x => x.PedidoId).OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.Envio).WithOne().HasForeignKey<ComprovantePixAtivo>(x => x.EnvioId).OnDelete(DeleteBehavior.Restrict);
+        });
         builder.Entity<ConfiguracaoTemaLoja>(tema =>
         {
             tema.ToTable("ConfiguracoesTemaLoja", tabela =>

@@ -123,6 +123,7 @@ app.MapTemaLojaEndpoints();
 app.MapPedidosClienteEndpoints();
 app.MapAdminPedidosEndpoints();
 app.MapPagamentoPixManualEndpoints();
+app.MapComprovantesPixEndpoints();
 
 app.Run();
 

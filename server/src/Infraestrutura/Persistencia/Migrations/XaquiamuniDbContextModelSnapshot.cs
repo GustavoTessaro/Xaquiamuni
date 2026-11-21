@@ -2507,6 +2507,71 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.ComprovantePixAtivo", b =>
+                {
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<byte[]>("Bytes")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<Guid>("EnvioId")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("PedidoId");
+
+                    b.HasIndex("EnvioId")
+                        .IsUnique();
+
+                    b.ToTable("ComprovantesPixAtivos", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.EnvioComprovantePix", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("EnviadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Sha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<int>("TamanhoBytes")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<Guid?>("VersaoAnterior")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PedidoId");
+
+                    b.HasIndex("ClienteId", "Chave")
+                        .IsUnique();
+
+                    b.ToTable("EnviosComprovantePix", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoAgenda", b =>
                 {
                     b.Property<Guid>("ResponsavelId")
@@ -3612,6 +3677,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasOne("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", null)
                         .WithMany()
                         .HasForeignKey("CompraId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.ComprovantePixAtivo", b =>
+                {
+                    b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.EnvioComprovantePix", "Envio")
+                        .WithOne()
+                        .HasForeignKey("Xaquiamuni.Infraestrutura.Persistencia.ComprovantePixAtivo", "EnvioId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithOne()
+                        .HasForeignKey("Xaquiamuni.Infraestrutura.Persistencia.ComprovantePixAtivo", "PedidoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Envio");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.EnvioComprovantePix", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithMany()
+                        .HasForeignKey("PedidoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
