@@ -220,7 +220,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(1, await context.MovimentosProdutoAcabado.CountAsync());
     }
 
-    private static WebApplicationFactory<Program> CriarApiPedidos(SqlServerTestDatabase database)
+    private static WebApplicationFactory<Program> CriarApiPedidos(
+        SqlServerTestDatabase database,
+        RelogioSqlControlado? relogio = null)
     {
         using var context = database.CreateVerificationContext();
         var connectionString = context.Database.GetConnectionString()
@@ -238,7 +240,14 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
             builder.ConfigureTestServices(services =>
             {
                 services.RemoveAll<IDbContextOptionsConfiguration<XaquiamuniDbContext>>();
-                services.AddDbContext<XaquiamuniDbContext>(options => options.UseSqlServer(connectionString));
+                services.AddDbContext<XaquiamuniDbContext>(options =>
+                {
+                    options.UseSqlServer(connectionString);
+                    if (relogio is not null)
+                    {
+                        options.AddInterceptors(relogio);
+                    }
+                });
                 services.AddDataProtection().UseEphemeralDataProtectionProvider();
                 services.AddAuthentication(options =>
                 {

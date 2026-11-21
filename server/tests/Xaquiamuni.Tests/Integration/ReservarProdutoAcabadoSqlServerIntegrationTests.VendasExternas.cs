@@ -18,7 +18,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public async Task VendasExternas_ApiValidaAcessoFefoAtomicidadeEReplay()
     {
-        await using var banco = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: new RelogioSqlControlado { Agora = Agora });
+        var relogio = new RelogioSqlControlado { Agora = Agora };
+        await using var banco = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: relogio);
         await using var db = banco.CreateVerificationContext();
         var (produto, variante, alternativa) = await CriarProdutoCompravelAsync(db);
         var outraVariante = ProdutoVariante.Criar("Unidade", "UN", 8m, padrao: true);
@@ -30,7 +31,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await EntrarAsync(db, outraVariante.Id, 1);
         await EntrarAsync(db, alternativa.Id, 1, Hoje.AddDays(-1));
         await EntrarAsync(db, alternativa.Id, 1, condicao: CondicaoEstoqueProdutoAcabado.Quarentena);
-        using var factory = CriarApiPedidos(banco);
+        using var factory = CriarApiPedidos(banco, relogio);
         using var admin = ClienteHttpPedidos(factory, Responsavel, XaquiamuniRoles.Administrador);
         using var outro = ClienteHttpPedidos(factory, Guid.NewGuid(), XaquiamuniRoles.Administrador);
         using var anonimo = ClienteHttpPedidos(factory);
