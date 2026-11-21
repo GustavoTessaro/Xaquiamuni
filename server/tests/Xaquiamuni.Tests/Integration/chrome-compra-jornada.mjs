@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente, admin, outroCliente, seed, pixManual, pixCnpj, origin }) {
+export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente, admin, outroCliente, seed, pixManual, pixCnpj, origin, demonstracao }) {
   const c = await abrir(pixCnpj ? '/login' : '/cadastro');
   const a = await abrir('/admin/login');
   let etapa = 'cadastro';
@@ -76,7 +76,8 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     console.log('Estoque físico/reservado/disponível: ' + [fisico, reservado, disponivel].join('/'));
   }
   async function novoPedido(quantidade = 1) {
-    const payload = JSON.stringify({ itens: [{ produtoId: seed.produto, produtoVarianteId: seed.variante, quantidade }] });
+    const payload = JSON.stringify({ itens: [{ produtoId: seed.produto, produtoVarianteId: seed.variante, quantidade,
+      ...(demonstracao ? { precoAceitoCentavos: '1390' } : {}) }] });
     const chave = await c.ev('crypto.randomUUID()');
     const r = await api(c, '/api/pedidos', 'POST', payload, chave);
     assert.equal(r.status, 201);

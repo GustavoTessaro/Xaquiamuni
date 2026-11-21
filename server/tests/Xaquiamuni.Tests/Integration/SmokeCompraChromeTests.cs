@@ -2,11 +2,14 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Outbox;
 using Xaquiamuni.Infraestrutura.Pedidos;
+using Xaquiamuni.Infraestrutura.Persistencia;
+using Microsoft.Extensions.Options;
 using Xaquiamuni.Dominio.Estoque;
 using Xunit.Abstractions;
 
@@ -84,6 +87,14 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
             Assert.DoesNotContain(demo.Host.Services.GetServices<IHostedService>(), worker =>
                 worker is ExpiracaoPedidosBackgroundService or EmailOutboxBackgroundService);
             Assert.Null(await demo.ProximaConfirmacaoAsync(CancellationToken.None));
+            Assert.True(demo.Host.Services.GetRequiredService<IOptions<PromocoesComerciaisOptions>>().Value.Habilitadas);
+            await using (var escopo = demo.Host.Services.CreateAsyncScope())
+            {
+                var database = escopo.ServiceProvider.GetRequiredService<XaquiamuniDbContext>().Database;
+                Assert.Empty(await database.GetPendingMigrationsAsync());
+                Assert.Contains("20261121094657_CriarPromocoes", await database.GetAppliedMigrationsAsync());
+                Assert.Contains("20261121101248_RegistrarPrecoAceitoPedido", await database.GetAppliedMigrationsAsync());
+            }
             var script = Path.Combine(EncontrarRepositorio(), "server", "tests", "Xaquiamuni.Tests", "Integration", "chrome-compra-smoke.mjs");
             var outroCliente = cnpj ? await demo.Host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
             await RodarChromeAsync(script, new

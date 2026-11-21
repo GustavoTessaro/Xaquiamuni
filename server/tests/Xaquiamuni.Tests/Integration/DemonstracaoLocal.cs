@@ -201,7 +201,8 @@ internal sealed class AmbienteDemonstracao(
         try
         {
             banco = await SqlServerTestDatabase.CreateAsync();
-            host = new HostE2ECompra(banco, angular, temporario);
+            // Este host só aceita o banco descartável que acabou de ser criado.
+            host = new HostE2ECompra(banco, angular, temporario, promocoesComerciais: true);
             var admin = await host.CriarContaAsync(XaquiamuniRoles.Administrador);
             var cliente = await host.CriarContaAsync(XaquiamuniRoles.Cliente);
             var dados = new JornadaCompraE2E(host, new RelogioJornadaCompra(), admin.Id, cliente.Email);
