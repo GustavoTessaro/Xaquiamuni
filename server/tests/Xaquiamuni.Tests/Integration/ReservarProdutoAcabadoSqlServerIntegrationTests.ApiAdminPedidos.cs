@@ -1,11 +1,13 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Pedidos;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Infraestrutura.Identidade;
+using Xaquiamuni.Infraestrutura.Persistencia;
 
 namespace Xaquiamuni.Tests.Integration;
 
@@ -151,8 +153,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public async Task ApiAdminPedidosConfirmaECancelaComIdempotenciaEConflitosSemBaixa()
     {
-        await using var database = await SqlServerTestDatabase.CreateAsync();
-        await using var context = database.CreateVerificationContext();
+        var relogio = new RelogioSqlControlado { Agora = Agora };
+        await using var database = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: relogio);
+        var context = database.Services.GetRequiredService<XaquiamuniDbContext>();
         var (pedido, variante) = await CriarPedidoParaPagamentoAsync(context, variosLotes: true);
         await EntrarAsync(context, variante.Id, 1);
         var compra = await Compra(context).ExecuteAsync(new(pedido.ClienteId, Guid.NewGuid(),
@@ -168,7 +171,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         var adminId = await CriarAdministradorPagamentoAsync(context);
-        using var factory = CriarApiPedidos(database);
+        using var factory = CriarApiPedidos(database, relogio);
         using var admin = ClienteHttpPedidos(factory, adminId, XaquiamuniRoles.Administrador);
         var token = await CsrfPedidosAsync(admin);
 
