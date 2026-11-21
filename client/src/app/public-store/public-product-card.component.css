@@ -7,11 +7,10 @@
   display: block;
   height: 100%;
   overflow: hidden;
-  border: 1px solid #e8e4d7;
-  border-radius: 1rem;
-  background: #fff;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius);
+  background: var(--brand-white);
   color: inherit;
-  box-shadow: 0 8px 22px rgb(34 54 39 / 5%);
   text-decoration: none;
   transition:
     transform 180ms ease,
@@ -19,20 +18,20 @@
 }
 
 .product-card:focus-visible {
-  outline: 3px solid #9a8450;
+  outline: 3px solid var(--brand-focus);
   outline-offset: 3px;
 }
 
 .product-card:hover {
   transform: translateY(-3px);
-  box-shadow: 0 14px 28px rgb(34 54 39 / 10%);
+  box-shadow: var(--brand-shadow);
 }
 
 .product-card__image {
   position: relative;
   aspect-ratio: 1 / 0.88;
   overflow: hidden;
-  background: #f0eee3;
+  background: var(--brand-sand);
 }
 
 .product-card__image img {
@@ -52,8 +51,8 @@
   gap: 0.45rem;
   background:
     radial-gradient(ellipse at 50% 35%, rgb(218 223 202 / 85%), transparent 48%),
-    linear-gradient(140deg, #f3f0e5, #e7eadf);
-  color: #63806b;
+    linear-gradient(140deg, var(--brand-bg), var(--brand-sage));
+  color: var(--brand-green);
 }
 
 .product-card__placeholder svg {
@@ -62,7 +61,7 @@
 }
 
 .product-card__placeholder span {
-  color: #677568;
+  color: var(--brand-muted);
   font-size: 0.72rem;
 }
 
@@ -73,7 +72,7 @@
   max-width: calc(100% - 1.4rem);
   overflow: hidden;
   padding: 0.37rem 0.62rem;
-  border-radius: 999px;
+  border-radius: var(--brand-radius-pill);
   background: rgb(255 253 248 / 92%);
   color: #345640;
   font-size: 0.68rem;
@@ -90,8 +89,8 @@
 
 .product-card h3 {
   margin: 0;
-  color: #263d2e;
-  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--brand-green);
+  font-family: var(--brand-display);
   font-size: clamp(1.02rem, 1.4vw, 1.17rem);
   font-weight: 600;
   line-height: 1.35;
@@ -102,7 +101,7 @@
   flex-wrap: wrap;
   gap: 0.4rem;
   margin: 0.55rem 0 0;
-  color: #687365;
+  color: var(--brand-muted);
   font-size: 0.74rem;
 }
 
@@ -124,22 +123,22 @@
   display: grid;
   gap: 0.1rem;
   margin: 0;
-  color: #1c4a32;
+  color: var(--brand-green);
   font-size: 1.12rem;
   font-weight: 700;
 }
 
 .product-card__from {
-  color: #72796b;
+  color: var(--brand-muted);
   font-size: 0.68rem;
   font-weight: 500;
 }
 
 .product-card__options {
   padding: 0.28rem 0.48rem;
-  border-radius: 999px;
-  background: #f2f1e8;
-  color: #5e6f5f;
+  border-radius: var(--brand-radius-pill);
+  background: var(--brand-sage);
+  color: var(--brand-muted);
   font-size: 0.65rem;
   white-space: nowrap;
 }

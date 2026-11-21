@@ -1,0 +1,74 @@
+@layer base {
+  :root {
+    --brand-white: #fff;
+    --brand-bg: #faf7f0;
+    --brand-surface: #fffdf8;
+    --brand-sand: #e9e0d0;
+    --brand-sage: #e8ede4;
+    --brand-ink: #292a25;
+    --brand-muted: #53594d;
+    --brand-green: #244737;
+    --brand-green-hover: #173629;
+    --brand-gold: #b69a59;
+    --brand-gold-light: #e9d49c;
+    --brand-line: #dcd4c3;
+    --brand-control-line: #918778;
+    --brand-focus: #776026;
+    --brand-error: #9b3029;
+    --brand-error-bg: #fff1ed;
+    --brand-disabled: #5b6055;
+    --brand-action: var(--brand-green);
+    --brand-action-hover: var(--brand-green-hover);
+    --brand-link: var(--brand-green);
+    --brand-display: Georgia, 'Times New Roman', serif;
+    --brand-text: ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+    --brand-radius-sm: .625rem;
+    --brand-radius: 1rem;
+    --brand-radius-pill: 999px;
+    --brand-shadow: 0 12px 32px rgb(36 71 55 / 9%);
+    --brand-gutter: clamp(1rem, 4vw, 3rem);
+    --brand-section-space: clamp(2.75rem, 6vw, 5.5rem);
+    --brand-width: 74rem;
+  }
+}
+.brand-crop {
+  position: relative;
+  display: block;
+  flex: none;
+  overflow: hidden;
+}
+.brand-crop img {
+  position: absolute;
+  max-width: none;
+  height: auto;
+}
+.brand-crop--wordmark {
+  width: var(--brand-wordmark-width, 145px);
+  aspect-ratio: 744 / 180;
+}
+.brand-crop--wordmark img {
+  width: 137.635%;
+  left: -18.817%;
+  top: -356%;
+}
+.brand-crop--symbol {
+  width: var(--brand-symbol-width, 29px);
+  aspect-ratio: 340 / 462;
+  mix-blend-mode: multiply;
+}
+.brand-crop--symbol img {
+  width: 301.177%;
+  left: -100.882%;
+  top: -35.5%;
+}
+.brand-auth-page {
+  background: var(--brand-bg);
+  color: var(--brand-ink);
+}
+.brand-auth-panel {
+  background: var(--brand-green);
+}
+:where(app-store-layout, .brand-auth-page) :focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+}

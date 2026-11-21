@@ -1,7 +1,14 @@
 <footer class="store-footer">
   <div class="store-footer__inner">
     <section class="store-footer__brand" aria-label="Sobre a Xaquiamuni">
-      <a routerLink="/" class="store-footer__name">Xaquiamuni</a>
+      <a routerLink="/" class="store-footer__name">
+        <span class="brand-crop brand-crop--symbol">
+          <img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" />
+        </span>
+        <span class="brand-crop brand-crop--wordmark">
+          <img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="Xaquiamuni Produtos Naturais" />
+        </span>
+      </a>
       <p>Sabonetes artesanais e velas aromáticas feitos com carinho desde 2021.</p>
     </section>
     <nav class="store-footer__links" aria-label="Links do rodapé">
@@ -13,9 +20,6 @@
       <a routerLink="/login">Entrar</a>
       <a routerLink="/cadastro">Criar conta</a>
     </section>
-    <p class="store-footer__future">
-      Informações de contato, entregas e pagamentos serão adicionadas quando estiverem definidas.
-    </p>
   </div>
   <div class="store-footer__bottom">
     <span>© {{ currentYear }} Xaquiamuni Produtos Naturais</span>

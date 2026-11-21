@@ -36,6 +36,10 @@ describe('StoreHeaderComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
+    const brand = element.querySelector<HTMLAnchorElement>('.store-brand');
+    expect(brand?.getAttribute('href')).toBe('/');
+    expect(brand?.querySelector('img[alt="Xaquiamuni Produtos Naturais"]')?.getAttribute('src'))
+      .toBe('/logo-xaquiamuni.jpeg');
     expect(element.textContent).toContain('Meus pedidos');
     const accountLink = element.querySelector('.store-account__link') as HTMLAnchorElement;
     expect(accountLink.getAttribute('href')).toBe('/pedidos');

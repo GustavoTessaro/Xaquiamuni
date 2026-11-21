@@ -1,21 +1,8 @@
 <header class="store-header">
   <div class="store-header__inner">
     <a class="store-brand" routerLink="/" aria-label="Xaquiamuni Produtos Naturais, início">
-      <span class="store-brand__mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none">
-          <path
-            d="M12 21v-9m0 4c-4.5 0-7-2.5-7-7 4.5 0 7 2.5 7 7Zm0-4c0-4.5 2.5-7 7-7 0 4.5-2.5 7-7 7Z"
-            stroke="currentColor"
-            stroke-width="1.7"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          />
-        </svg>
-      </span>
-      <span class="store-brand__copy">
-        <strong>Xaquiamuni</strong>
-        <small>PRODUTOS NATURAIS</small>
-      </span>
+      <span class="brand-crop brand-crop--symbol"><img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" /></span>
+      <span class="brand-crop brand-crop--wordmark"><img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="Xaquiamuni Produtos Naturais" /></span>
     </a>
 
     <form class="store-search" role="search" (ngSubmit)="search()">

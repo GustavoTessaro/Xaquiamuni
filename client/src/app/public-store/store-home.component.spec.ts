@@ -43,6 +43,8 @@ describe('StoreHomeComponent', () => {
     fixture.detectChanges();
 
     const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('.store-hero__art[aria-hidden="true"] img[alt=""]')
+      ?.getAttribute('src')).toBe('/logo-xaquiamuni.jpeg');
     const icons = Array.from(element.querySelectorAll<HTMLElement>('[data-category-icon]'));
     expect(icons.map((icon) => icon.dataset['categoryIcon'])).toEqual([
       'soap',

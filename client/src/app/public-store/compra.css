@@ -1,15 +1,16 @@
 .compra {
-  width: min(1200px, calc(100% - 2rem));
+  width: min(var(--brand-width), 100% - 2 * var(--brand-gutter));
   margin-inline: auto;
   padding-block: 2rem 4rem;
-  color: #173c2c;
+  color: var(--brand-green);
   display: grid;
   gap: 1rem;
 }
 
 h1 {
   font-size: clamp(1.75rem, 4vw, 2.5rem);
-  font-weight: 700;
+  font-family: var(--brand-display);
+  font-weight: 400;
 }
 
 h2 {
@@ -28,9 +29,9 @@ h2 {
   gap: 0.75rem;
   min-width: 0;
   padding: 1rem;
-  border: 1px solid #e8e4d7;
-  border-radius: 1rem;
-  background: #fffdf8;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius);
+  background: var(--brand-surface);
   overflow-wrap: anywhere;
 }
 
@@ -46,7 +47,7 @@ h2 {
 }
 
 .linhas li + li {
-  border-top: 1px solid #e8e4d7;
+  border-top: 1px solid var(--brand-line);
   padding-top: 0.75rem;
 }
 
@@ -68,31 +69,36 @@ h2 {
 }
 
 .aviso {
-  color: #7a371f;
+  color: var(--brand-error);
 }
 
 a {
   justify-self: start;
+  color: var(--brand-link);
   text-decoration: underline;
 }
 
 .principal {
   justify-self: start;
   min-height: 44px;
-  border-radius: 0.55rem;
-  background: #1c4a32;
-  color: #fffdf8;
+  border-radius: var(--brand-radius-sm);
+  background: var(--brand-action);
+  color: var(--brand-surface);
   padding: 0.5rem 0.85rem;
   cursor: pointer;
 }
 
+.principal:hover:not(:disabled) {
+  background: var(--brand-action-hover);
+}
+
 .principal:disabled {
-  opacity: 0.65;
+  background: var(--brand-disabled);
   cursor: default;
 }
 
 :is(a, button):focus-visible {
-  outline: 2px solid #345b40;
+  outline: 2px solid var(--brand-green);
   outline-offset: 3px;
 }
 

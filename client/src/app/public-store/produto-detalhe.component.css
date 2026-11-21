@@ -1,5 +1,5 @@
 .product-detail {
-  width: min(1200px, calc(100% - 3rem));
+  width: min(var(--brand-width), 100% - 2 * var(--brand-gutter));
   margin: 0 auto;
   padding: 1.5rem 0 5rem;
 }
@@ -9,7 +9,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  color: #647064;
+  color: var(--brand-muted);
   font-size: 0.83rem;
 }
 
@@ -20,7 +20,7 @@
 
 .product-detail__breadcrumb a,
 .product-detail__back {
-  color: #345b40;
+  color: var(--brand-green);
   text-decoration: none;
 }
 
@@ -43,9 +43,9 @@
   aspect-ratio: 1 / 0.9;
   overflow: hidden;
   place-items: center;
-  border: 1px solid #e8e4d7;
+  border: 1px solid var(--brand-line);
   border-radius: 1.25rem;
-  background: #f3f0e7;
+  background: var(--brand-sand);
 }
 
 .product-detail__main-image img {
@@ -60,7 +60,7 @@
   height: 100%;
   align-content: center;
   justify-items: center;
-  color: #73806c;
+  color: var(--brand-muted);
   text-align: center;
 }
 
@@ -78,19 +78,19 @@
   padding: 0;
   border: 2px solid transparent;
   border-radius: 0.7rem;
-  background: #f3f0e7;
+  background: var(--brand-sand);
   cursor: pointer;
 }
 
 .product-detail__thumbnails button.is-selected {
-  border-color: #42684b;
+  border-color: var(--brand-green);
 }
 
 .product-detail__thumbnails button:focus-visible,
 .product-detail__state a:focus-visible,
 .product-detail__state button:focus-visible,
 .product-detail__back:focus-visible {
-  outline: 3px solid #a48f5d;
+  outline: 3px solid var(--brand-focus);
   outline-offset: 3px;
 }
 
@@ -109,8 +109,8 @@
 .product-detail__information h1,
 .product-detail__state h1 {
   margin: 0;
-  color: #263d2e;
-  font-family: Georgia, 'Times New Roman', serif;
+  color: var(--brand-green);
+  font-family: var(--brand-display);
   font-size: clamp(2rem, 4vw, 3.2rem);
   font-weight: 500;
   line-height: 1.12;
@@ -118,7 +118,7 @@
 
 .product-detail__description {
   margin: 1.2rem 0 1.7rem;
-  color: #606b5e;
+  color: var(--brand-muted);
   line-height: 1.7;
   white-space: pre-line;
 }
@@ -131,14 +131,14 @@
 
 .product-detail__selectors h2 {
   margin: 0;
-  color: #344536;
+  color: var(--brand-green);
   font-size: 1rem;
 }
 
 .product-detail__selectors label {
   display: grid;
   gap: 0.4rem;
-  color: #485548;
+  color: var(--brand-muted);
   font-size: 0.85rem;
   font-weight: 600;
 }
@@ -147,10 +147,10 @@
   width: min(100%, 390px);
   min-height: 46px;
   padding: 0.65rem 0.8rem;
-  border: 1px solid #d5d9cd;
+  border: 1px solid var(--brand-line);
   border-radius: 0.65rem;
-  background: #fffefa;
-  color: #344536;
+  background: var(--brand-surface);
+  color: var(--brand-green);
   font: inherit;
 }
 
@@ -169,7 +169,7 @@
 }
 
 .product-detail__fixed-value strong {
-  color: #344536;
+  color: var(--brand-green);
 }
 
 .product-detail__price {
@@ -178,7 +178,7 @@
   flex-wrap: wrap;
   gap: 0.7rem;
   margin-top: 1.6rem;
-  color: #1c4a32;
+  color: var(--brand-green);
 }
 
 .product-detail__price strong {
@@ -190,14 +190,14 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   margin: 0.65rem 0 0;
-  color: #5e6f5f;
+  color: var(--brand-muted);
   font-size: 0.9rem;
 }
 
 .product-detail__measures span {
   padding: 0.35rem 0.65rem;
-  border-radius: 999px;
-  background: #f0f0e7;
+  border-radius: var(--brand-radius-pill);
+  background: var(--brand-sage);
 }
 
 .product-detail__add-to-cart {
@@ -205,26 +205,26 @@
   margin-top: 1rem;
   padding: 0.55rem 1rem;
   border-radius: 0.55rem;
-  background: #1c4a32;
-  color: #fffdf8;
+  background: var(--brand-green);
+  color: var(--brand-surface);
   font-weight: 650;
   cursor: pointer;
 }
 
 .product-detail__add-to-cart:disabled {
-  background: #e4e8df;
-  color: #556257;
+  background: var(--brand-line);
+  color: var(--brand-muted);
   cursor: default;
 }
 
 .product-detail__add-to-cart:focus-visible {
-  outline: 2px solid #345b40;
+  outline: 2px solid var(--brand-green);
   outline-offset: 3px;
 }
 
 .product-detail__cart-message:not(:empty) {
   margin-top: 0.5rem;
-  color: #345b40;
+  color: var(--brand-green);
 }
 
 .product-detail__state {
@@ -233,7 +233,7 @@
   align-content: center;
   justify-items: center;
   gap: 0.75rem;
-  color: #59695b;
+  color: var(--brand-muted);
   text-align: center;
 }
 
@@ -244,10 +244,10 @@
 .product-detail__state a,
 .product-detail__state button {
   padding: 0.7rem 1rem;
-  border: 1px solid #42684b;
-  border-radius: 999px;
-  background: #42684b;
-  color: #fff;
+  border: 1px solid var(--brand-green);
+  border-radius: var(--brand-radius-pill);
+  background: var(--brand-green);
+  color: var(--brand-white);
   font: inherit;
   text-decoration: none;
   cursor: pointer;
@@ -256,8 +256,8 @@
 .product-detail__spinner {
   width: 30px;
   height: 30px;
-  border: 3px solid #e3e5dc;
-  border-top-color: #42684b;
+  border: 3px solid var(--brand-line);
+  border-top-color: var(--brand-green);
   border-radius: 50%;
   animation: product-detail-spin 800ms linear infinite;
 }
