@@ -209,11 +209,9 @@ describe('ProdutoDetalheComponent', () => {
     return harness;
   }
 
-  function choose(harness: RouterTestingHarness, characteristicId: string, valueId: string): void {
-    const select = harness.fixture.nativeElement.querySelector(
-      `[data-characteristic-id="${characteristicId}"]`,
-    ) as HTMLSelectElement;
-    select.value = valueId;
+  function choose(harness: RouterTestingHarness, optionId: string): void {
+    const select = harness.fixture.nativeElement.querySelector('#produto-opcao') as HTMLSelectElement;
+    select.value = optionId;
     select.dispatchEvent(new Event('change', { bubbles: true }));
     harness.fixture.detectChanges();
   }
@@ -260,15 +258,10 @@ describe('ProdutoDetalheComponent', () => {
         ?.getAttribute('src'),
     ).toBe(candleMainImage.conteudoUrl);
 
-    const weightSelect = harness.fixture.nativeElement.querySelector(
-      '[data-characteristic-id="characteristic-weight"]',
-    ) as HTMLSelectElement;
-    expect([...weightSelect.options].map((option) => option.value)).toEqual([
-      'value-100g',
-      'value-200g',
-    ]);
-
-    choose(harness, 'characteristic-weight', 'value-200g');
+    const select = harness.fixture.nativeElement.querySelector('#produto-opcao') as HTMLSelectElement;
+    expect(select.labels?.[0]?.textContent?.trim()).toMatch(/^Opção/);
+    expect([...select.options].map((option) => option.value)).toEqual(candleProduct.opcoes.map(o => o.id));
+    choose(harness, 'candle-large-option');
     expect(disponibilidade.textContent).toContain('Disponível');
     expect(adicionar.disabled).toBe(false);
     expect(text(harness)).toContain('R$ 55,00');
@@ -279,10 +272,6 @@ describe('ProdutoDetalheComponent', () => {
         .querySelector('.product-detail__main-image img')
         ?.getAttribute('src'),
     ).toBe(candleLargeImage.conteudoUrl);
-    expect(
-      harness.fixture.nativeElement.querySelector('[data-characteristic-id="characteristic-color"]')
-        .value,
-    ).toBe('value-pink');
     const variantThumbnails = [
       ...harness.fixture.nativeElement.querySelectorAll('.product-detail__thumbnails img'),
     ].map((image) => image.getAttribute('src'));
@@ -311,25 +300,18 @@ describe('ProdutoDetalheComponent', () => {
     ).toBeNull();
   });
 
-  it('resolves an incompatible choice to a real active combination', async () => {
-    const harness = await createPage(
-      vi.fn(() => of(candleProduct)),
-      '/produtos/candle',
-    );
-
-    choose(harness, 'characteristic-weight', 'value-200g');
-    choose(harness, 'characteristic-color', 'value-white');
-
-    expect(text(harness)).toContain('R$ 35,00');
-    expect(text(harness)).toContain('100 g');
-    expect(
-      harness.fixture.nativeElement.querySelector(
-        '[data-characteristic-id="characteristic-fragrance"]',
-      ).value,
-    ).toBe('value-lavender');
-    expect(text(harness)).toContain(
-      'As outras escolhas foram ajustadas para uma combinação cadastrada.',
-    );
+  it('uses the current shared feature label and falls back to option after the configuration changes', async () => {
+    const peso = { ...candleProduct, opcoes: candleProduct.opcoes.map((opcao) => ({
+      ...opcao, caracteristicas: opcao.caracteristicas.filter((c) => c.caracteristicaId === 'characteristic-weight'),
+    })) };
+    const consultar = vi.fn().mockReturnValueOnce(of(peso)).mockReturnValueOnce(of(candleProduct));
+    const harness = await createPage(consultar, '/produtos/candle');
+    const seletor = () => harness.fixture.nativeElement.querySelector('#produto-opcao') as HTMLSelectElement;
+    expect(seletor().labels?.[0]?.textContent?.trim()).toMatch(/^Peso/);
+    expect([...seletor().options].map(o => o.textContent?.trim())).toEqual(['100 g', '200 g']);
+    await harness.navigateByUrl('/produtos/candle-atualizado', ProdutoDetalheComponent);
+    harness.fixture.detectChanges();
+    expect(seletor().labels?.[0]?.textContent?.trim()).toMatch(/^Opção/);
   });
 
   it('selects thumbnails and provides a fallback when the selected image fails', async () => {

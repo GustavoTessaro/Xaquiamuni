@@ -20,12 +20,12 @@ import {
   AdminProdutoCadastroRequest,
   AdminProdutoCaracteristicaRequest,
   AdminProdutoEdicaoRequest,
-  AdminProdutoVariante,
   AdminProdutoVarianteCaracteristicaRequest,
   AdminProdutoVarianteRequest,
 } from '../../core/admin-produtos/produtos.service';
 import { BrlCurrencyInputComponent } from './brl-currency-input.component';
 import {
+  converterMedida,
   currencyPrecision,
   MAX_PRECO_VARIANTE,
   nonWhitespace,
@@ -96,7 +96,8 @@ const UNIDADES: ReadonlyArray<{ codigo: string; nome: string }> = [
 
 export type ProdutoFormSubmission =
   | { mode: 'create'; request: AdminProdutoCadastroRequest }
-  | { mode: 'edit'; request: AdminProdutoEdicaoRequest };
+  | { mode: 'edit'; request: AdminProdutoEdicaoRequest }
+  | { mode: 'features'; request: { caracteristicas: AdminProdutoCaracteristicaRequest[] } };
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -107,6 +108,7 @@ export type ProdutoFormSubmission =
 export class AdminProdutoFormComponent {
   readonly categorias = input<AdminCategoria[]>([]);
   readonly produto = input<AdminProduto | null>(null);
+  readonly editarCaracteristicas = input(false);
   readonly salvando = input(false);
   readonly mensagemErro = input('');
   readonly salvar = output<ProdutoFormSubmission>();
@@ -119,14 +121,7 @@ export class AdminProdutoFormComponent {
   protected readonly caracteristicas = signal<CaracteristicaDraft[]>([]);
   protected readonly variantes = signal<VarianteDraft[]>([]);
   protected readonly unidadesVenda = UNIDADES;
-  protected readonly modoAtual = computed(() => {
-    const produto = this.produto();
-    return produto && (produto.caracteristicas.length > 0 || produto.variantes.length > 1)
-      ? 'opcoes'
-      : produto
-        ? 'simples'
-        : this.modoCadastro();
-  });
+  protected readonly modoAtual = this.modoCadastro.asReadonly();
   protected readonly temCategoriaAtiva = computed(() =>
     this.categorias().some((categoria) => categoria.ativa),
   );
@@ -188,7 +183,7 @@ export class AdminProdutoFormComponent {
       this.caracteristicas.set([]);
       this.variantes.set([]);
       this.referenciaSequencial = 0;
-      if (produto) {
+      if (produto && this.editarCaracteristicas()) {
         this.carregarProduto(produto);
       }
     });
@@ -569,47 +564,40 @@ export class AdminProdutoFormComponent {
       return;
     }
     this.enviado.set(true);
+    if (this.editarCaracteristicas()) {
+      if (this.validarCaracteristicas()) {
+        this.salvar.emit({ mode: 'features', request: { caracteristicas: this.toCaracteristicasRequest() } });
+      }
+      return;
+    }
     this.produtoForm.markAllAsTouched();
     if (this.produtoForm.invalid) {
       return;
     }
     const { nome, descricao, categoriaId } = this.produtoForm.getRawValue();
     const normalizedDescription = descricao.trim() || null;
-    const produtoAtual = this.produto();
+    if (this.produto()) {
+      this.salvar.emit({ mode: 'edit', request: { nome: nome.trim(), descricao: normalizedDescription, categoriaId } });
+      return;
+    }
 
     if (this.modoAtual() === 'simples') {
       this.variantePadraoForm.markAllAsTouched();
       if (this.variantePadraoForm.invalid || !this.medidasSimplesValidas()) {
         return;
       }
-      const simpleVariant = this.toVariantRequest(this.variantePadraoForm, {
-        usarNomePadrao: !produtoAtual,
-        varianteExistente: produtoAtual?.variantes[0],
-        includeDirectMeasurements: true,
+      const simpleVariant = this.toSimpleVariantRequest();
+      this.salvar.emit({
+        mode: 'create',
+        request: {
+          nome: nome.trim(),
+          descricao: normalizedDescription,
+          categoriaId,
+          simples: true,
+          variantePadrao: simpleVariant,
+          variantes: [],
+        },
       });
-      if (produtoAtual) {
-        this.salvar.emit({
-          mode: 'edit',
-          request: {
-            nome: nome.trim(),
-            descricao: normalizedDescription,
-            categoriaId,
-            variantes: [simpleVariant],
-          },
-        });
-      } else {
-        this.salvar.emit({
-          mode: 'create',
-          request: {
-            nome: nome.trim(),
-            descricao: normalizedDescription,
-            categoriaId,
-            simples: true,
-            variantePadrao: simpleVariant,
-            variantes: [],
-          },
-        });
-      }
       return;
     }
 
@@ -621,20 +609,6 @@ export class AdminProdutoFormComponent {
     const variantRequests = this.variantes()
       .filter((item) => !this.isDefaultForCreate(item))
       .map((item) => this.toDraftVariantRequest(item));
-    if (produtoAtual) {
-      this.salvar.emit({
-        mode: 'edit',
-        request: {
-          nome: nome.trim(),
-          descricao: normalizedDescription,
-          categoriaId,
-          caracteristicas,
-          variantes: this.variantes().map((item) => this.toDraftVariantRequest(item, true)),
-        },
-      });
-      return;
-    }
-
     const defaultVariant = variants.find((item) => item.padrao && item.ativa.value);
     if (!defaultVariant) {
       this.erroConfiguracao.set('Escolha uma combinação ativa para apresentar primeiro.');
@@ -686,50 +660,30 @@ export class AdminProdutoFormComponent {
     if (!valor.trim()) {
       return true;
     }
-    const canonical = this.converterMedida(valor, unidade);
+    const canonical = converterMedida(valor, unidade);
     return canonical !== null && canonical > 0;
   }
 
   protected medidaObrigatoriaValida(valor: string, unidade: UnidadeMedida): boolean {
-    const canonical = this.converterMedida(valor, unidade);
+    const canonical = converterMedida(valor, unidade);
     return canonical !== null && canonical > 0;
   }
 
   protected canonicalDaVariante(variante: VarianteDraft, tipo: TipoMedida): number | null {
     if (tipo === 'PesoLiquido') {
       return variante.peso.value.trim()
-        ? this.converterMedida(variante.peso.value, variante.pesoUnidade.value)
+        ? converterMedida(variante.peso.value, variante.pesoUnidade.value)
         : null;
     }
     if (tipo === 'VolumeLiquido') {
       return variante.volume.value.trim()
-        ? this.converterMedida(variante.volume.value, variante.volumeUnidade.value)
+        ? converterMedida(variante.volume.value, variante.volumeUnidade.value)
         : null;
     }
     return null;
   }
 
   private carregarProduto(produto: AdminProduto): void {
-    const variante = produto.variantes.find((item) => item.padrao) ?? produto.variantes[0];
-    if (this.modoAtual() === 'simples' && variante) {
-      this.variantePadraoForm.reset({
-        identificacao: variante.identificacao,
-        unidadeVenda: variante.unidadeVenda,
-        precoVenda: variante.precoVenda,
-        peso: variante.pesoLiquidoGramas?.toString() ?? '',
-        pesoUnidade: 'G',
-        volume: variante.volumeLiquidoMililitros?.toString() ?? '',
-        volumeUnidade: 'ML',
-      });
-      this.variantePadraoForm.controls.identificacao.disable({ emitEvent: false });
-      this.variantePadraoForm.controls.unidadeVenda.setValidators([
-        Validators.required,
-        (control) => validSaleUnit(control, variante.unidadeVenda),
-      ]);
-      this.variantePadraoForm.controls.unidadeVenda.updateValueAndValidity({ emitEvent: false });
-      return;
-    }
-
     const features = produto.caracteristicas.map((item) => {
       const reference = item.id;
       return {
@@ -947,9 +901,8 @@ export class AdminProdutoFormComponent {
     return result;
   }
 
-  private validarOpcoes(): boolean {
+  private validarCaracteristicas(): boolean {
     const features = this.caracteristicas().filter((item) => !item.removida);
-    const variants = this.variantes();
     for (const feature of features) {
       feature.nome.markAsTouched();
       const values = feature.valores.filter((item) => !item.removido);
@@ -998,6 +951,13 @@ export class AdminProdutoFormComponent {
       }
       names.add(normalized);
     }
+    return true;
+  }
+
+  private validarOpcoes(): boolean {
+    if (!this.validarCaracteristicas()) return false;
+    const features = this.caracteristicas().filter((item) => !item.removida);
+    const variants = this.variantes();
     if ((features.length === 0 && !this.produto()) || variants.length === 0) {
       this.erroConfiguracao.set('Adicione ao menos uma característica e uma combinação de venda.');
       return false;
@@ -1081,47 +1041,21 @@ export class AdminProdutoFormComponent {
     return true;
   }
 
-  private toVariantRequest(
-    form: FormGroup<VarianteControls>,
-    options: {
-      usarNomePadrao?: boolean;
-      varianteExistente?: AdminProdutoVariante;
-      includeDirectMeasurements?: boolean;
-    } = {},
-  ): AdminProdutoVarianteRequest {
-    const value = form.getRawValue();
-    const unit = value.unidadeVenda.trim().toUpperCase();
-    const request: AdminProdutoVarianteRequest = {
-      unidadeVenda: unit,
-      precoVenda: value.precoVenda!,
+  private toSimpleVariantRequest(): AdminProdutoVarianteRequest {
+    const { unidadeVenda, precoVenda, peso, pesoUnidade, volume, volumeUnidade } =
+      this.variantePadraoForm.getRawValue();
+    const pesoLiquidoGramas = converterMedida(peso, pesoUnidade);
+    const volumeLiquidoMililitros = converterMedida(volume, volumeUnidade);
+    return {
+      unidadeVenda: unidadeVenda.trim().toUpperCase(),
+      precoVenda: precoVenda!,
+      ...(pesoLiquidoGramas !== null ? { pesoLiquidoGramas } : {}),
+      ...(volumeLiquidoMililitros !== null ? { volumeLiquidoMililitros } : {}),
     };
-    if (options.varianteExistente) {
-      request.id = options.varianteExistente.id;
-      request.identificacao = options.varianteExistente.identificacao;
-      request.atualizarMedidas = true;
-    } else if (!options.usarNomePadrao) {
-      request.identificacao = value.identificacao.trim();
-    }
-    if (options.includeDirectMeasurements || options.varianteExistente) {
-      const weight = this.converterMedida(value.peso, value.pesoUnidade);
-      const volume = this.converterMedida(value.volume, value.volumeUnidade);
-      if (weight !== null || options.varianteExistente) {
-        request.pesoLiquidoGramas = weight;
-      }
-      if (volume !== null || options.varianteExistente) {
-        request.volumeLiquidoMililitros = volume;
-      }
-    }
-    if (options.varianteExistente) {
-      request.ativa = options.varianteExistente.ativa;
-      request.padrao = options.varianteExistente.padrao;
-    }
-    return request;
   }
 
   private toDraftVariantRequest(
     variante: VarianteDraft,
-    forEdit = false,
   ): AdminProdutoVarianteRequest {
     const weight = this.medidaDerivada(variante, 'PesoLiquido')
       ? null
@@ -1135,17 +1069,13 @@ export class AdminProdutoFormComponent {
       precoVenda: variante.precoVenda.value!,
       caracteristicas: this.toAssociations(variante),
     };
-    if (weight !== null || forEdit) {
+    if (weight !== null) {
       request.pesoLiquidoGramas = weight;
     }
-    if (volume !== null || forEdit) {
+    if (volume !== null) {
       request.volumeLiquidoMililitros = volume;
     }
-    if (forEdit) {
-      request.ativa = variante.ativa.value;
-      request.padrao = variante.padrao;
-      request.atualizarMedidas = true;
-    } else if (!variante.ativa.value) {
+    if (!variante.ativa.value) {
       request.ativa = false;
     }
     if (variante.id) {
@@ -1217,30 +1147,7 @@ export class AdminProdutoFormComponent {
 
   private valorMedidaCanonico(valor: ValorDraft, tipo: Exclude<TipoMedida, null>): number | null {
     const unit: UnidadeMedida = tipo === 'PesoLiquido' ? valor.unidade.value : valor.unidade.value;
-    return this.converterMedida(valor.medida.value, unit);
-  }
-
-  private converterMedida(valor: string, unidade: UnidadeMedida): number | null {
-    const trimmed = valor.trim().replace(',', '.');
-    if (!trimmed) {
-      return null;
-    }
-    if (!/^(?:\d+)(?:\.\d{1,6})?$/.test(trimmed)) {
-      return null;
-    }
-    const [whole, fraction = ''] = trimmed.split('.');
-    const scale = 10n ** BigInt(fraction.length);
-    const input = BigInt(whole) * scale + BigInt(fraction || '0');
-    const factor = unidade === 'KG' || unidade === 'L' ? 1000n : 1n;
-    const canonicalScaled = input * factor * 1000n;
-    if (canonicalScaled % scale !== 0n) {
-      return null;
-    }
-    const canonical = canonicalScaled / scale;
-    if (canonical <= 0n || canonical > 999_999_999_999n) {
-      return null;
-    }
-    return Number(canonical) / 1000;
+    return converterMedida(valor.medida.value, unit);
   }
 
   private formatarMedida(valor: number, tipo: Exclude<TipoMedida, null>): string {

@@ -13,11 +13,9 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Subject, catchError, distinctUntilChanged, filter, map, merge, of, switchMap } from 'rxjs';
 import {
   CatalogoPublicoRetorno,
-  ProdutoCatalogoCaracteristica,
   ProdutoCatalogoDetalhe,
   ProdutoCatalogoImagem,
   ProdutoCatalogoOpcao,
-  ProdutoCatalogoValor,
   CatalogoPublicoService,
 } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
@@ -42,9 +40,7 @@ export class ProdutoDetalheComponent implements OnInit {
   protected readonly imageUnavailable = signal(false);
   protected readonly unavailableThumbnailIds = signal<ReadonlySet<string>>(new Set());
   protected readonly selectedOptionId = signal<string | null>(null);
-  protected readonly selectedValues = signal<Record<string, string>>({});
   protected readonly selectedImageId = signal<string | null>(null);
-  protected readonly selectionNotice = signal('');
   protected readonly mensagemCarrinho = signal('');
   protected readonly returnFilters = signal<CatalogoPublicoRetorno>({});
   protected readonly selectedOption = computed(() => {
@@ -163,34 +159,17 @@ export class ProdutoDetalheComponent implements OnInit {
     return result;
   }
 
-  protected availableValues(characteristicId: string): ProdutoCatalogoValor[] {
-    const product = this.product();
-    if (!product) {
-      return [];
-    }
-
-    const available = new Map<string, ProdutoCatalogoValor>();
-    for (const option of product.opcoes) {
-      const selectedValue = option.caracteristicas.find(
-        (characteristic) => characteristic.caracteristicaId === characteristicId,
-      );
-      if (selectedValue) {
-        available.set(selectedValue.valorId, {
-          id: selectedValue.valorId,
-          nome: selectedValue.valorNome,
-          valorMedidaCanonico: selectedValue.valorMedidaCanonico,
-        });
-      }
-    }
-    return [...available.values()];
-  }
-
-  protected selectedValueName(characteristic: ProdutoCatalogoCaracteristica): string {
-    const valueId = this.selectedValues()[characteristic.id];
-    return characteristic.valores.find((value) => value.id === valueId)?.nome ?? '';
-  }
+  protected readonly caracteristicaUnica = computed(() => {
+    const opcoes = this.product()?.opcoes ?? [];
+    const primeira = opcoes[0]?.caracteristicas[0];
+    return primeira && opcoes.every((opcao) =>
+      opcao.caracteristicas.length === 1 &&
+      opcao.caracteristicas[0].caracteristicaId === primeira.caracteristicaId)
+      ? primeira : null;
+  });
 
   protected optionLabel(option: ProdutoCatalogoOpcao, index: number): string {
+    if (this.caracteristicaUnica()) return option.caracteristicas[0].valorNome;
     const identification = option.identificacao?.trim();
     if (
       !identification ||
@@ -199,57 +178,12 @@ export class ProdutoDetalheComponent implements OnInit {
         .replace(/\p{Diacritic}/gu, '')
         .toLowerCase() === 'padrao'
     ) {
-      return `Opção ${index + 1}`;
+      return option.caracteristicas.map((item) => item.valorNome).join(', ') || `Opção ${index + 1}`;
     }
     return identification;
   }
 
-  protected selectCharacteristic(characteristicId: string, event: Event): void {
-    const target = event.target;
-    if (!(target instanceof HTMLSelectElement) || !target.value) {
-      return;
-    }
-    const product = this.product();
-    if (!product) {
-      return;
-    }
-
-    const previousValues = this.selectedValues();
-    const candidates = product.opcoes.filter((option) =>
-      option.caracteristicas.some(
-        (characteristic) =>
-          characteristic.caracteristicaId === characteristicId &&
-          characteristic.valorId === target.value,
-      ),
-    );
-    const matchingSelection = candidates.find((option) =>
-      option.caracteristicas.every(
-        (characteristic) =>
-          characteristic.caracteristicaId === characteristicId ||
-          previousValues[characteristic.caracteristicaId] === undefined ||
-          previousValues[characteristic.caracteristicaId] === characteristic.valorId,
-      ),
-    );
-    const nextOption = matchingSelection ?? candidates[0];
-    if (!nextOption) {
-      return;
-    }
-
-    const selectionWasAdjusted = Object.entries(previousValues).some(
-      ([id, valueId]) =>
-        id !== characteristicId &&
-        nextOption.caracteristicas.find((item) => item.caracteristicaId === id)?.valorId !==
-          valueId,
-    );
-    this.applyOption(nextOption);
-    this.selectionNotice.set(
-      selectionWasAdjusted
-        ? 'As outras escolhas foram ajustadas para uma combinação cadastrada.'
-        : '',
-    );
-  }
-
-  protected selectLegacyOption(event: Event): void {
+  protected selecionarOpcao(event: Event): void {
     const target = event.target;
     if (!(target instanceof HTMLSelectElement)) {
       return;
@@ -287,9 +221,7 @@ export class ProdutoDetalheComponent implements OnInit {
     this.imageUnavailable.set(false);
     this.unavailableThumbnailIds.set(new Set());
     this.selectedOptionId.set(null);
-    this.selectedValues.set({});
     this.selectedImageId.set(null);
-    this.selectionNotice.set('');
     this.mensagemCarrinho.set('');
   }
 
@@ -318,12 +250,6 @@ export class ProdutoDetalheComponent implements OnInit {
   private applyOption(option: ProdutoCatalogoOpcao): void {
     this.mensagemCarrinho.set('');
     this.selectedOptionId.set(option.id);
-    this.selectedValues.set(
-      Object.fromEntries(
-        option.caracteristicas.map((item) => [item.caracteristicaId, item.valorId]),
-      ),
-    );
-    this.selectionNotice.set('');
 
     const product = this.product();
     if (!product) {

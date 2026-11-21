@@ -6,7 +6,7 @@
     <div>
       <p class="text-sm font-medium text-emerald-800">Catálogo</p>
       <h2 id="product-form-title" class="mt-1 text-xl font-semibold text-slate-900">
-        {{ produto() ? 'Editar produto' : 'Novo produto' }}
+        {{ editarCaracteristicas() ? 'Configurar características' : produto() ? 'Editar produto' : 'Novo produto' }}
       </h2>
     </div>
     <button
@@ -35,6 +35,7 @@
     (ngSubmit)="submit()"
     novalidate
   >
+    @if (!editarCaracteristicas()) {
     <div class="sm:col-span-2">
       <label for="product-name" class="block text-sm font-semibold text-slate-800"
         >Nome do produto</label
@@ -102,6 +103,8 @@
         </p>
       }
     </div>
+
+    }
 
     @if (!produto()) {
       <fieldset class="sm:col-span-2 rounded-xl border border-emerald-950/10 bg-emerald-50/50 p-4">
@@ -183,19 +186,9 @@
           </div>
         }
       </fieldset>
-    } @else {
-      <div class="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-        <p class="text-sm font-semibold text-slate-800">
-          {{ modoAtual() === 'simples' ? 'Produto simples' : 'Produto com opções' }}
-        </p>
-        <p class="mt-1 text-sm text-slate-600">
-          O formato atual é mantido na edição para preservar as combinações e os vínculos
-          existentes. Você pode alterar os dados sem recriar as opções.
-        </p>
-      </div>
     }
 
-    @if (modoAtual() === 'simples') {
+    @if (!produto() && modoAtual() === 'simples') {
       <fieldset
         [formGroup]="variantePadraoForm"
         class="sm:col-span-2 rounded-xl border border-slate-200 p-4 sm:p-5"
@@ -340,7 +333,7 @@
           </div>
         </div>
       </fieldset>
-    } @else {
+    } @else if (!produto() || editarCaracteristicas()) {
       <section class="sm:col-span-2" aria-labelledby="features-title">
         <div class="rounded-xl border border-emerald-950/10 bg-emerald-50/40 p-4 sm:p-5">
           <h3 id="features-title" class="text-base font-semibold text-emerald-950">
@@ -553,6 +546,7 @@
         }
       </section>
 
+      @if (!produto()) {
       <section class="sm:col-span-2" aria-labelledby="combinations-title">
         <div class="flex flex-wrap items-end justify-between gap-3">
           <div>
@@ -844,6 +838,7 @@
           </fieldset>
         }
       </section>
+      }
     }
 
     @if (erroConfiguracao()) {

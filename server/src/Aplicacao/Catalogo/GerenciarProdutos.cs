@@ -81,7 +81,9 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             return Invalid("produto", "Os dados do produto são obrigatórios.");
         }
 
-        if (input.CategoriaId is null || input.CategoriaId.Value == Guid.Empty)
+        var somenteCaracteristicas = input.Nome is null && input.Descricao is null
+            && input.CategoriaId is null && input.Caracteristicas is not null && input.Variantes is null;
+        if (!somenteCaracteristicas && (input.CategoriaId is null || input.CategoriaId.Value == Guid.Empty))
         {
             return Invalid("categoriaId", "A categoria é obrigatória.");
         }
@@ -95,7 +97,7 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
             }
 
             Categoria? categoria = null;
-            if (produto.CategoriaId != input.CategoriaId!.Value)
+            if (!somenteCaracteristicas && produto.CategoriaId != input.CategoriaId!.Value)
             {
                 categoria = await session.BuscarCategoriaAsync(input.CategoriaId.Value, token)
                     .ConfigureAwait(false);
@@ -112,7 +114,7 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
 
             try
             {
-                produto.AtualizarDados(input.Nome, input.Descricao);
+                if (!somenteCaracteristicas) produto.AtualizarDados(input.Nome, input.Descricao);
                 if (categoria is not null)
                 {
                     produto.AlterarCategoria(categoria);
@@ -244,6 +246,10 @@ public sealed class GerenciarProdutos : IGerenciarProdutos
                         input.Caracteristicas,
                         references);
                     produto.SubstituirValoresCaracteristica(varianteId, []);
+                    if (input.AtualizarMedidas)
+                    {
+                        variante.DefinirMedidasLiquidas(input.PesoLiquidoGramas, input.VolumeLiquidoMililitros);
+                    }
                     produto.SubstituirValoresCaracteristica(varianteId, associations);
                 }
 

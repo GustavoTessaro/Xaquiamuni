@@ -130,6 +130,34 @@
         <p class="mt-1 text-sm text-red-700">{{ erroCampo('precoVenda') }}</p>
       }
     </div>
+    @for (caracteristica of caracteristicas(); track caracteristica.id) {
+      <label class="block text-sm font-medium text-slate-700">
+        {{ caracteristica.nome }}
+        <select (change)="selecionar(caracteristica.id, $event)"
+          class="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3">
+          <option value="" [selected]="!selecoes()[caracteristica.id]">Sem valor</option>
+          @for (valor of caracteristica.valores; track valor.id) {
+            <option [value]="valor.id" [selected]="selecoes()[caracteristica.id] === valor.id">
+              {{ valor.nome }}
+            </option>
+          }
+        </select>
+      </label>
+    }
+    @for (campo of camposMedida; track campo) {
+      <label class="block text-sm font-medium text-slate-700">
+        {{ campo === 'peso' ? 'Peso líquido (g)' : 'Volume líquido (ml)' }}
+        @if (medidasVinculadas()[campo]; as medida) {
+          <span class="mt-1 block">{{ medida }} (pela característica)</span>
+        } @else {
+          <input type="text" inputmode="decimal" [formControlName]="campo"
+            class="mt-1 block min-h-11 w-full rounded-xl border border-slate-300 px-3" />
+          @if (enviado() && medidaInvalida(campo)) {
+            <span role="alert" class="mt-1 block text-red-700">Informe uma medida positiva com até três casas decimais.</span>
+          }
+        }
+      </label>
+    }
     <div class="flex items-end">
       <button
         type="submit"

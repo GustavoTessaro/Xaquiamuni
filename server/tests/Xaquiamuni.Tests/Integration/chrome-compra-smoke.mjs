@@ -518,6 +518,104 @@ try {
     }
   }
 
+  if (dados.varianteAuditoria) {
+    const rotaProdutos = '/api/admin/produtos';
+    const clicar = async (rotulo, aria = false) => {
+      const expressao = "Array.from(document.querySelectorAll('main button')).find(b => !b.disabled && b.getClientRects().length && "
+        + (aria ? "b.getAttribute('aria-label')" : "b.textContent.trim()") + " === " + JSON.stringify(rotulo) + ")";
+      await waitFor(() => a.ev('!!(' + expressao + ')'), rotulo);
+      await a.ev('(' + expressao + ').click()');
+    };
+    const preencher = (seletor, valor) => a.ev('(() => { const e = document.querySelector(' + JSON.stringify(seletor)
+      + '); e.value = ' + JSON.stringify(valor) + "; e.dispatchEvent(new Event('input', { bubbles: true })); })()");
+    const publico = await a.ev('fetch(' + JSON.stringify(rotaProdutos)
+      + ').then(r => r.json()).then(ps => ps.find(p => p.variantes.some(v => v.id === '
+      + JSON.stringify(dados.varianteAuditoria) + ')))');
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      for (const simples of [true, false]) {
+        const nome = (simples ? 'Simples E2E ' : 'Com opcoes E2E ') + width;
+        const corpo = {
+          nome, categoriaId: publico.categoriaId, simples,
+          variantePadrao: { identificacao: simples ? null : 'Branca', unidadeVenda: 'UN', precoVenda: 19 },
+        };
+        if (!simples) {
+          corpo.caracteristicas = [{ referencia: 'cor', nome: 'Cor', valores: [
+            { referencia: 'b', nome: 'Branca' }, { referencia: 'v', nome: 'Verde' },
+          ] }];
+          corpo.variantePadrao.caracteristicas = [{ referenciaCaracteristica: 'cor', referenciaValor: 'b' }];
+        }
+        const produto = await a.ev("(async () => { const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());"
+          + "return fetch('/api/admin/produtos', { method: 'POST', body: " + JSON.stringify(JSON.stringify(corpo))
+          + ", headers: {'Content-Type':'application/json','X-XSRF-TOKEN':requestToken} }).then(r => r.json()); })()");
+        assert.ok(produto.id, JSON.stringify(produto));
+        await a.ir('/admin/produtos');
+        await clicar('Gerenciar op\u00e7\u00f5es de ' + nome, true);
+        await clicar('Adicionar op\u00e7\u00e3o');
+        await preencher('#managed-variant-name', simples ? 'Lavanda' : 'Verde');
+        await preencher('#managed-variant-price', '2350');
+        if (!simples) {
+          await a.ev("(() => { const o = [...document.querySelectorAll('app-admin-produto-variante-form option')].find(o => o.textContent.trim() === 'Verde');"
+            + "o.parentElement.value = o.value; o.parentElement.dispatchEvent(new Event('change', { bubbles: true })); })()");
+        }
+        assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+        await clicar('Salvar op\u00e7\u00e3o');
+        await waitFor(() => a.ev('!document.querySelector("#managed-variant-name")'), 'Salvar opção');
+        const salvo = await a.ev('fetch(' + JSON.stringify(rotaProdutos + '/' + produto.id) + ').then(r => r.json())');
+        assert.equal(salvo.variantes.length, 2);
+        assert.equal(salvo.variantes.find(v => v.identificacao === (simples ? 'Lavanda' : 'Verde')).precoVenda, 23.5);
+        if (simples) {
+          await a.ir('/admin/produtos');
+          await clicar('Editar ' + nome, true);
+          await waitFor(() => a.ev('!!document.querySelector("#product-description")'), 'Edição geral');
+          assert.equal(await a.ev('!!document.querySelector("#product-mode-simple, #default-variant-unit, #features-title")'), false);
+          await preencher('#product-description', 'Descricao editada no ensaio');
+          await clicar('Salvar altera\u00e7\u00f5es');
+          await waitFor(() => a.ev('!document.querySelector("#product-description")'), 'Salvar dados gerais');
+        }
+      }
+      await a.ir('/produtos/' + publico.id);
+      await waitFor(() => a.ev('!!document.querySelector("#produto-opcao")'), 'Seletor público');
+      assert.equal(await a.ev('document.querySelector("label[for=produto-opcao]").firstChild.textContent.trim()'), 'Op\u00e7\u00e3o');
+      await a.ev("(() => { const s = document.querySelector('#produto-opcao'); s.value = "
+        + JSON.stringify(publico.variantes.find(v => v.id !== dados.varianteAuditoria).id)
+        + "; s.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      assert.match(await a.ev('document.querySelector(".product-detail__price").textContent'), /10,01/);
+      assert.match(await a.ev('document.querySelector("[data-testid=product-availability]").textContent'), /esgotada/);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      console.log('Opções, edição geral e loja verificadas em ' + width + ' px.');
+      await a.ir('/admin/produtos');
+    }
+    await clicar('Gerenciar opções de ' + publico.nome, true);
+    await clicar('Configurar características');
+    await clicar('Peso');
+    await clicar('Adicionar valor');
+    await preencher('input[id^=measure-value-]', '100');
+    await clicar('Adicionar valor');
+    const medidas = await a.ev("Array.from(document.querySelectorAll('input[id^=measure-value-]'), e => e.id)");
+    assert.equal(medidas.length, 2);
+    await preencher('#' + medidas[1], '200');
+    await clicar('Salvar alterações');
+    await waitFor(() => a.ev('!document.querySelector("#features-title")'), 'Salvar característica');
+    for (const variante of publico.variantes) {
+      await clicar('Editar opção ' + variante.identificacao, true);
+      const valor = variante.id === dados.varianteAuditoria ? '100 g' : '200 g';
+      await a.ev("(() => { const o = [...document.querySelectorAll('app-admin-produto-variante-form option')].find(o => o.textContent.trim() === "
+        + JSON.stringify(valor) + "); o.parentElement.value = o.value; o.parentElement.dispatchEvent(new Event('change', { bubbles: true })); })()");
+      await clicar('Salvar opção');
+      await waitFor(() => a.ev('!document.querySelector("#managed-variant-name")'), 'Salvar medida na opção');
+    }
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await a.ir('/produtos/' + publico.id);
+      await waitFor(() => a.ev('!!document.querySelector("#produto-opcao")'), 'Seletor de peso');
+      assert.equal(await a.ev('document.querySelector("label[for=produto-opcao]").firstChild.textContent.trim()'), 'Peso');
+      assert.deepEqual(await a.ev('Array.from(document.querySelector("#produto-opcao").options, o => o.textContent.trim()).sort()'), ['100 g', '200 g']);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      console.log('Loja atualizou o seletor para Peso em ' + width + ' px.');
+    }
+  }
+
   if (dados.demonstracao) {
     await c.ir('/produtos');
     await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes('Sabonete demonstração')

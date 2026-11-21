@@ -442,108 +442,31 @@ describe('AdminProdutoFormComponent', () => {
     ]);
   });
 
-  it('edits option products using persisted IDs and keeps the existing combination identity', () => {
-    fixture.componentRef.setInput('produto', optionsProduct);
+  it.each([simpleProduct, optionsProduct])('edits only general data for $nome', (product) => {
+    fixture.componentRef.setInput('produto', product);
     fixture.detectChanges();
+    expect(root().querySelector('#simple-weight, #features-title, #combinations-title')).toBeNull();
     setField('product-name', 'Sabonete renovado');
     submit();
-
-    const submission = submissions[0];
-    expect(submission?.mode).toBe('edit');
-    if (submission?.mode !== 'edit') {
-      throw new Error('Expected a product edit request.');
-    }
-    expect(submission.request.caracteristicas).toEqual([
-      {
-        id: 'weight-feature',
-        nome: 'Peso',
-        tipoMedidaFisica: 'PesoLiquido',
-        valores: [{ id: 'weight-100', valorMedidaCanonico: 100 }],
-      },
-    ]);
-    expect(submission.request.variantes).toEqual([
-      expect.objectContaining({
-        id: 'variant-1',
-        identificacao: '100 g',
-        padrao: true,
-        ativa: true,
-        atualizarMedidas: true,
-        caracteristicas: [{ caracteristicaId: 'weight-feature', valorId: 'weight-100' }],
-      }),
-    ]);
+    expect(submissions[0]).toEqual({ mode: 'edit', request: {
+      nome: 'Sabonete renovado', categoriaId: product.categoriaId, descricao: product.descricao,
+    } });
   });
 
-  it('adds a new explicit combination during edit without replacing the existing variant', () => {
+  it('edits features with their persisted IDs without resending options or general data', () => {
     fixture.componentRef.setInput('produto', optionsProduct);
+    fixture.componentRef.setInput('editarCaracteristicas', true);
     fixture.detectChanges();
+    expect(root().querySelector('#product-name, #combinations-title')).toBeNull();
     clickButton('Adicionar valor');
     setField('measure-value-valor-1', '200');
-    clickButton('Adicionar combinação');
-    setField('selection-1-weight-feature', 'valor-1');
-    setField('combination-price-1', '25');
     submit();
-
-    const submission = submissions[0];
-    expect(submission?.mode).toBe('edit');
-    if (submission?.mode !== 'edit') {
-      throw new Error('Expected a product edit request.');
-    }
-    expect(submission.request.caracteristicas?.[0]?.valores).toEqual([
-      { id: 'weight-100', valorMedidaCanonico: 100 },
-      { referencia: 'valor-1', valorMedidaCanonico: 200 },
-    ]);
-    expect(submission.request.variantes).toEqual([
-      expect.objectContaining({ id: 'variant-1', padrao: true }),
-      expect.objectContaining({
-        identificacao: '200 g',
-        padrao: false,
-        caracteristicas: [{ caracteristicaId: 'weight-feature', referenciaValor: 'valor-1' }],
-      }),
-    ]);
-  });
-
-  it('preserves a legacy sale unit on unrelated edits', () => {
-    const legacy = {
-      ...simpleProduct,
-      variantes: [{ ...simpleProduct.variantes[0], unidadeVenda: 'G' }],
-    };
-    fixture.componentRef.setInput('produto', legacy);
-    fixture.detectChanges();
-    expect(text()).toContain('G (legada — manter)');
-
-    setField('product-name', 'Sabonete sem outras mudanças');
-    submit();
-    const submission = submissions[0];
-    expect(submission?.mode === 'edit' && submission.request.variantes?.[0]?.unidadeVenda).toBe(
-      'G',
-    );
-  });
-
-  it('updates and clears direct measures while retaining the existing variant ID', () => {
-    const measuredProduct: AdminProduto = {
-      ...simpleProduct,
-      variantes: [
-        {
-          ...simpleProduct.variantes[0],
-          pesoLiquidoGramas: 100,
-          volumeLiquidoMililitros: 250,
-        },
-      ],
-    };
-    fixture.componentRef.setInput('produto', measuredProduct);
-    fixture.detectChanges();
-    setField('simple-weight', '');
-    setField('simple-volume', '0.5');
-    setField('simple-volume-unit', 'L');
-    submit();
-
-    const submission = submissions[0];
-    expect(submission?.mode === 'edit' && submission.request.variantes?.[0]).toMatchObject({
-      id: 'variant-1',
-      pesoLiquidoGramas: null,
-      volumeLiquidoMililitros: 500,
-      atualizarMedidas: true,
-    });
+    expect(submissions[0]).toEqual({ mode: 'features', request: { caracteristicas: [
+      { id: 'weight-feature', nome: 'Peso', tipoMedidaFisica: 'PesoLiquido', valores: [
+        { id: 'weight-100', valorMedidaCanonico: 100 },
+        { referencia: 'valor-1', valorMedidaCanonico: 200 },
+      ] },
+    ] } });
   });
 
   it('keeps form data visible when an API error is returned', () => {
@@ -576,17 +499,7 @@ describe('AdminProdutoFormComponent', () => {
     setField('product-category', 'active');
     submit();
     const submission = submissions[0];
-    expect(submission?.mode === 'edit' && submission.request.variantes).toEqual([
-      expect.objectContaining({
-        id: 'variant-1',
-        identificacao: 'Padrão',
-        unidadeVenda: 'UN',
-        precoVenda: 19.9,
-        padrao: true,
-        ativa: true,
-        atualizarMedidas: true,
-      }),
-    ]);
+    expect(submission).toEqual({mode:'edit', request:{ nome:'Sabonete editado', categoriaId:'active', descricao: simpleProduct.descricao }});
   });
 
   function chooseCombination(index: number, values: string[]): void {

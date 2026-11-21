@@ -21,7 +21,7 @@
               Opções do produto: {{ produto.nome }}
             </h1>
             <p class="mt-2 text-sm text-slate-600">
-              A publicação não representa disponibilidade para compra; o estoque será tratado na F4.
+              A disponibilidade para compra depende do estoque de cada opção.
             </p>
           </div>
           <button
@@ -66,19 +66,21 @@
           <p class="text-sm text-slate-600">
             {{ quantidadeVariantesAtivas(produto) }} ativas de {{ produto.variantes.length }} opções
           </p>
-          @if (produto.caracteristicas.length > 0) {
-            <p class="text-sm text-slate-600">
-              Para cadastrar uma nova combinação, volte aos produtos e edite este produto.
-            </p>
-          }
+          <button
+            type="button"
+            (click)="iniciarCaracteristicas()"
+            [disabled]="salvandoVariante() || variantesEmAtualizacao().size > 0 || varianteFormMode() !== null"
+            class="min-h-11 rounded-xl border border-emerald-800 px-4 py-2 text-sm font-semibold text-emerald-900 disabled:opacity-60"
+          >
+            Configurar características
+          </button>
           <button
             type="button"
             (click)="iniciarAdicaoVariante()"
             [disabled]="
               salvandoVariante() ||
               variantesEmAtualizacao().size > 0 ||
-              varianteFormMode() !== null ||
-              produto.caracteristicas.length > 0
+              varianteFormMode() !== null
             "
             class="min-h-11 rounded-xl bg-emerald-800 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-900 disabled:opacity-60"
           >
@@ -86,9 +88,19 @@
           </button>
         </div>
 
-        @if (varianteFormMode()) {
+        @if (varianteFormMode() === 'features') {
+          <app-admin-produto-form
+            [produto]="produto"
+            [editarCaracteristicas]="true"
+            [salvando]="salvandoVariante()"
+            [mensagemErro]="erroVariantes()"
+            (salvar)="salvarCaracteristicas($event)"
+            (cancelar)="cancelarFormularioVariante()"
+          />
+        } @else if (varianteFormMode()) {
           <app-admin-produto-variante-form
             [variante]="varianteEditando()"
+            [caracteristicas]="produto.caracteristicas"
             [salvando]="salvandoVariante()"
             [mensagemErro]="erroVariantes()"
             (salvar)="salvarVariante($event)"
@@ -153,7 +165,7 @@
                       <button
                         type="button"
                         (click)="definirVariantePadrao(variante)"
-                        [disabled]="variantesEmAtualizacao().size > 0"
+                        [disabled]="variantesEmAtualizacao().size > 0 || varianteFormMode() !== null"
                         class="min-h-10 rounded-lg px-3 text-sm font-semibold text-slate-700 underline underline-offset-4 disabled:opacity-60"
                       >
                         Apresentar primeiro
@@ -164,6 +176,7 @@
                       (click)="alterarStatusVariante(variante, !variante.ativa)"
                       [disabled]="
                         variantesEmAtualizacao().size > 0 ||
+                        varianteFormMode() !== null ||
                         (!variante.ativa && quantidadeVariantesAtivas(produto) === 0) ||
                         (variante.ativa && quantidadeVariantesAtivas(produto) <= 1)
                       "

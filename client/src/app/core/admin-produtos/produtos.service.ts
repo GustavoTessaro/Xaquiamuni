@@ -154,7 +154,7 @@ export class ProdutosService {
     );
   }
 
-  editar(id: string, request: AdminProdutoEdicaoRequest): Observable<AdminProduto> {
+  editar(id: string, request: AdminProdutoEdicaoRequest | { caracteristicas: AdminProdutoCaracteristicaRequest[] }): Observable<AdminProduto> {
     return this.withCsrf((requestToken) =>
       this.http.put<AdminProduto>(`${this.basePath}/${encodeURIComponent(id)}`, request, {
         headers: new HttpHeaders({ 'X-XSRF-TOKEN': requestToken }),

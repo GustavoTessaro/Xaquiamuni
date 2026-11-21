@@ -357,8 +357,9 @@ describe('AdminProdutosComponent', () => {
       Array.from(root().querySelectorAll('button')).find(
         (button) => button.textContent?.trim() === 'Adicionar opção',
       )?.disabled,
-    ).toBe(true);
-    expect(text()).toContain('volte aos produtos e edite este produto');
+    ).toBe(false);
+    clickButton('Adicionar opção');
+    expect(root().querySelector('app-admin-produto-variante-form select')).not.toBeNull();
   });
 
   it('creates a simple product and reports that it starts unpublished', () => {
@@ -499,12 +500,9 @@ describe('AdminProdutosComponent', () => {
         nome: updated.nome,
         descricao: null,
         categoriaId: 'soaps',
-        variantes: expect.arrayContaining([
-          expect.objectContaining({ id: 'soap-default', padrao: true }),
-          expect.objectContaining({ id: 'soap-large', padrao: false }),
-        ]),
       }) satisfies AdminProdutoEdicaoRequest,
     );
+    expect(editarProduto.mock.calls[0]?.[1]).not.toHaveProperty('variantes');
     expect(productNames()).toContain(updated.nome);
     expect(text()).toContain('Produto atualizado com sucesso.');
   });

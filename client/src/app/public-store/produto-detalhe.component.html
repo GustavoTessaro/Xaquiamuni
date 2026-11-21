@@ -92,49 +92,16 @@
 
         @if (item.requerSelecaoDeOpcao) {
           <div class="product-detail__selectors">
-            @if (item.caracteristicas.length) {
-              <h2>Escolha uma opção</h2>
-              @for (characteristic of item.caracteristicas; track characteristic.id) {
-                @if (availableValues(characteristic.id).length > 1) {
-                  <label [attr.for]="'characteristic-' + characteristic.id">
-                    {{ characteristic.nome }}
-                    <select
-                      [id]="'characteristic-' + characteristic.id"
-                      [attr.data-characteristic-id]="characteristic.id"
-                      [value]="selectedValues()[characteristic.id] ?? ''"
-                      (change)="selectCharacteristic(characteristic.id, $event)"
-                    >
-                      @for (value of availableValues(characteristic.id); track value.id) {
-                        <option [value]="value.id">{{ value.nome }}</option>
-                      }
-                    </select>
-                  </label>
-                } @else if (selectedValueName(characteristic); as valueName) {
-                  <p class="product-detail__fixed-value">
-                    <span>{{ characteristic.nome }}</span>
-                    <strong>{{ valueName }}</strong>
-                  </p>
+            <label for="produto-opcao">
+              {{ caracteristicaUnica()?.caracteristicaNome ?? 'Opção' }}
+              <select id="produto-opcao" (change)="selecionarOpcao($event)">
+                @for (option of item.opcoes; track option.id; let index = $index) {
+                  <option [value]="option.id" [selected]="option.id === selectedOptionId()">
+                    {{ optionLabel(option, index) }}
+                  </option>
                 }
-              }
-              @if (selectionNotice()) {
-                <p class="product-detail__selection-notice" role="status" aria-live="polite">
-                  {{ selectionNotice() }}
-                </p>
-              }
-            } @else {
-              <label for="legacy-option">
-                Opção
-                <select
-                  id="legacy-option"
-                  (change)="selectLegacyOption($event)"
-                  [value]="selectedOptionId() ?? ''"
-                >
-                  @for (option of item.opcoes; track option.id; let index = $index) {
-                    <option [value]="option.id">{{ optionLabel(option, index) }}</option>
-                  }
-                </select>
-              </label>
-            }
+              </select>
+            </label>
           </div>
         }
 

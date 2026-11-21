@@ -26,3 +26,26 @@ export function validSaleUnit(
     ? null
     : { invalidSaleUnit: true };
 }
+
+export function converterMedida(valor: string, unidade: 'G' | 'KG' | 'ML' | 'L'): number | null {
+    const trimmed = valor.trim().replace(',', '.');
+    if (!trimmed) {
+      return null;
+    }
+    if (!/^(?:\d+)(?:\.\d{1,6})?$/.test(trimmed)) {
+      return null;
+    }
+    const [whole, fraction = ''] = trimmed.split('.');
+    const scale = 10n ** BigInt(fraction.length);
+    const input = BigInt(whole) * scale + BigInt(fraction || '0');
+    const factor = unidade === 'KG' || unidade === 'L' ? 1000n : 1n;
+    const canonicalScaled = input * factor * 1000n;
+    if (canonicalScaled % scale !== 0n) {
+      return null;
+    }
+    const canonical = canonicalScaled / scale;
+    if (canonical <= 0n || canonical > 999_999_999_999n) {
+      return null;
+    }
+    return Number(canonical) / 1000;
+}

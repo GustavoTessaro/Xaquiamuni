@@ -429,6 +429,80 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         }
     }
 
+    [SqlServerIntegrationFact]
+    public async Task GerenciarOpcoes_DeProdutoSimplesPreservaLoteReservaEPrecoDoPedido()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
+        using var cliente = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
+        await using var db = ambiente.Banco.CreateVerificationContext();
+        var (produto, variante, alternativa) = await CriarProdutoCompravelAsync(db);
+        var rota = $"/api/admin/produtos/{produto.Id:D}";
+        var rotaVariante = $"{rota}/variantes/{variante.Id:D}";
+        var csrf = await admin.Http.GetFromJsonAsync<JsonElement>("/api/auth/csrf");
+
+        async Task<JsonElement> EditarAsync(string url, object corpo, HttpMethod? metodo = null)
+        {
+            using var request = new HttpRequestMessage(metodo ?? HttpMethod.Put, url) { Content = JsonContent.Create(corpo) };
+            request.Headers.Add("X-XSRF-TOKEN", csrf.GetProperty("requestToken").GetString());
+            using var resposta = await admin.Http.SendAsync(request);
+            Assert.True(resposta.IsSuccessStatusCode, await resposta.Content.ReadAsStringAsync());
+            return await resposta.Content.ReadFromJsonAsync<JsonElement>();
+        }
+
+        await EditarAsync($"{rota}/variantes/{alternativa.Id:D}/status", new { ativa = false }, HttpMethod.Patch);
+        await EditarAsync(rotaVariante, new
+        {
+            identificacao = variante.Identificacao, unidadeVenda = variante.UnidadeVenda,
+            precoVenda = variante.PrecoVenda, pesoLiquidoGramas = 100, atualizarMedidas = true,
+        });
+        await admin.PostAsync<JsonElement>($"/api/admin/estoque/produtos-acabados/variantes/{variante.Id:D}/entradas",
+            new { tipo = "EntradaManual", quantidade = 2, condicaoDestino = "Vendavel", semControleValidade = true, motivo = "Ensaio" },
+            HttpStatusCode.Created, Guid.NewGuid());
+        var pedido = await cliente.PostAsync<JsonElement>(Pedidos,
+            new { itens = new[] { new { produtoId = produto.Id, produtoVarianteId = variante.Id, quantidade = 1 } } },
+            HttpStatusCode.Created, Guid.NewGuid());
+        var reservaAnterior = await db.ReservasProdutoAcabado.AsNoTracking().SingleAsync();
+
+        var caracteristica = (await EditarAsync(rota, new
+        {
+            caracteristicas = new[] { new { nome = "Peso", tipoMedidaFisica = "PesoLiquido",
+                valores = new[] { new { valorMedidaCanonico = 200 }, new { valorMedidaCanonico = 300 } } } },
+        })).GetProperty("caracteristicas")[0];
+        object[] Vinculo(int medida) => [new
+        {
+            caracteristicaId = caracteristica.GetProperty("id").GetGuid(),
+            valorId = caracteristica.GetProperty("valores").EnumerateArray()
+                .Single(v => v.GetProperty("valorMedidaCanonico").GetDecimal() == medida).GetProperty("id").GetGuid(),
+        }];
+        await EditarAsync(rotaVariante, new
+        {
+            identificacao = "Porcao de 200 g", unidadeVenda = variante.UnidadeVenda, precoVenda = 39m,
+            pesoLiquidoGramas = 200, atualizarMedidas = true, caracteristicas = Vinculo(200),
+        });
+        var outra = await admin.PostAsync<JsonElement>($"{rota}/variantes",
+            new { identificacao = "Porcao de 300 g", unidadeVenda = "KIT", precoVenda = 56m, caracteristicas = Vinculo(300) },
+            HttpStatusCode.OK);
+        Assert.Equal(produto.Nome, outra.GetProperty("nome").GetString());
+        var atual = await EditarAsync(rota, new { nome = "Nome atualizado", descricao = "Nova descricao", categoriaId = produto.CategoriaId });
+        Assert.Single(atual.GetProperty("caracteristicas").EnumerateArray());
+        var primeira = atual.GetProperty("variantes").EnumerateArray().Single(v => v.GetProperty("id").GetGuid() == variante.Id);
+        Assert.Equal(200m, primeira.GetProperty("pesoLiquidoGramas").GetDecimal());
+        Assert.Equal(39m, primeira.GetProperty("precoVenda").GetDecimal());
+
+        var reserva = await db.ReservasProdutoAcabado.AsNoTracking().SingleAsync();
+        Assert.Equal(reservaAnterior.Id, reserva.Id);
+        Assert.Equal(reservaAnterior.LoteId, reserva.LoteId);
+        Assert.Equal(1, reserva.Quantidade);
+        Assert.Equal(pedido.GetProperty("id").GetGuid(), reserva.PedidoId);
+        Assert.Single(await db.MovimentosProdutoAcabado.AsNoTracking().ToListAsync());
+        var pedidoPersistido = await db.Pedidos.AsNoTracking().Include(p => p.Itens).SingleAsync();
+        Assert.Equal(1199L, Assert.Single(pedidoPersistido.Itens).PrecoUnitarioCentavos);
+        var publico = (await cliente.Http.GetFromJsonAsync<ProdutoCatalogoDetalheResponse>($"/api/catalogo/produtos/{produto.Id:D}"))!;
+        Assert.True(publico.Opcoes.Single(o => o.Id == variante.Id).Disponivel);
+        Assert.False(publico.Opcoes.Single(o => o.Id != variante.Id).Disponivel);
+    }
+
     private sealed class Sessao(HttpClient http) : IDisposable
     {
         public HttpClient Http { get; } = http;

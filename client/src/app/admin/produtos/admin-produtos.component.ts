@@ -1,3 +1,4 @@
+import { Observable } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -22,7 +23,7 @@ import { AdminProdutoFormComponent, ProdutoFormSubmission } from './admin-produt
 import { AdminProdutoVarianteFormComponent } from './admin-produto-variante-form.component';
 
 type PublicacaoFilter = 'all' | 'published' | 'unpublished';
-type VarianteFormMode = 'create' | 'edit' | null;
+type VarianteFormMode = 'create' | 'edit' | 'features' | null;
 
 const UNIDADE_VENDA_LABEL: Readonly<Record<string, string>> = {
   UN: 'Unidade',
@@ -191,7 +192,7 @@ export class AdminProdutosComponent {
   }
 
   protected salvarProduto(submission: ProdutoFormSubmission): void {
-    if (this.salvandoProduto()) {
+    if (this.salvandoProduto() || submission.mode === 'features') {
       return;
     }
     const produtoAtual = this.produtoEditando();
@@ -314,6 +315,18 @@ export class AdminProdutosComponent {
     this.erroVariantes.set('');
   }
 
+  protected iniciarCaracteristicas(): void {
+    this.varianteFormMode.set('features');
+    this.erroVariantes.set('');
+    this.mensagemVariantes.set('');
+  }
+
+  protected salvarCaracteristicas(submission: ProdutoFormSubmission): void {
+    const produto = this.produtoVariantes();
+    if (!produto || submission.mode !== 'features' || this.salvandoVariante()) return;
+    this.persistirOpcao(this.produtosService.editar(produto.id, submission.request), 'Características atualizadas.');
+  }
+
   protected salvarVariante(request: AdminProdutoVarianteRequest): void {
     if (this.salvandoVariante()) {
       return;
@@ -331,6 +344,10 @@ export class AdminProdutosComponent {
       return;
     }
 
+    this.persistirOpcao(operation, mode === 'create' ? 'Opção adicionada com sucesso.' : 'Opção atualizada com sucesso.');
+  }
+
+  private persistirOpcao(operation: Observable<AdminProduto>, mensagem: string): void {
     this.salvandoVariante.set(true);
     this.erroVariantes.set('');
     operation
@@ -344,9 +361,7 @@ export class AdminProdutosComponent {
           this.produtoVariantes.set(updated);
           this.varianteFormMode.set(null);
           this.varianteEditando.set(null);
-          this.mensagemVariantes.set(
-            mode === 'create' ? 'Opção adicionada com sucesso.' : 'Opção atualizada com sucesso.',
-          );
+          this.mensagemVariantes.set(mensagem);
         },
         error: (error: unknown) => {
           if (!this.redirecionarSessaoExpirada(error)) {
