@@ -150,6 +150,11 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/temas',
+    loadComponent: () => import('./admin/temas/admin-temas.component').then(m => m.AdminTemasComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/agenda',
     loadComponent: () =>
       import('./admin/agenda/admin-agenda.component').then((module) => module.AdminAgendaComponent),

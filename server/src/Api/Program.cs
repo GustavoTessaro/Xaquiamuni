@@ -116,6 +116,7 @@ app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();
 app.MapAdminEstoqueProdutoAcabadoEndpoints();
 app.MapCatalogoPublicoEndpoints();
+app.MapTemaLojaEndpoints();
 app.MapPedidosClienteEndpoints();
 app.MapAdminPedidosEndpoints();
 app.MapPagamentoPixManualEndpoints();

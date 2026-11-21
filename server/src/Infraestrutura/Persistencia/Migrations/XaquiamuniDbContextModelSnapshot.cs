@@ -369,6 +369,37 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ConfiguracaoTemaLoja", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("AdministradorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Chave")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("nvarchar(32)");
+
+                    b.Property<DateTimeOffset>("PublicadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Revisao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("UltimaChaveIdempotencia")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConfiguracoesTemaLoja", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ConfiguracoesTemaLoja_Unica", "[Id] = 1");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Fornecedor", b =>
                 {
                     b.Property<Guid>("Id")

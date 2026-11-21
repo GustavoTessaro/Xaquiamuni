@@ -20,6 +20,7 @@ public sealed class XaquiamuniDbContext
     {
     }
 
+    public DbSet<ConfiguracaoTemaLoja> ConfiguracoesTemaLoja => Set<ConfiguracaoTemaLoja>();
     public DbSet<ClientePerfil> ClientePerfis => Set<ClientePerfil>();
     public DbSet<ConfiguracaoPixManual> ConfiguracoesPixManual => Set<ConfiguracaoPixManual>();
 
@@ -97,6 +98,16 @@ public sealed class XaquiamuniDbContext
             fornecedor.HasIndex(f => f.NomeNormalizado).IsUnique().HasDatabaseName("UX_Fornecedores_NomeNormalizado");
         });
         PedidoMapping.Configurar(builder);
+        builder.Entity<ConfiguracaoTemaLoja>(tema =>
+        {
+            tema.ToTable("ConfiguracoesTemaLoja", tabela =>
+                tabela.HasCheckConstraint("CK_ConfiguracoesTemaLoja_Unica", "[Id] = 1"));
+            tema.HasKey(t => t.Id);
+            tema.Property(t => t.Id).ValueGeneratedNever();
+            tema.Property(t => t.Chave).HasMaxLength(32).IsRequired();
+            tema.Property(t => t.Revisao).IsConcurrencyToken();
+        });
+
         builder.Entity<ConfiguracaoPixManual>(pix =>
         {
             pix.ToTable("ConfiguracoesPixManual", tabela =>
