@@ -114,6 +114,7 @@ app.MapAdminFinanceiroEndpoints();
 app.MapAdminAgendaEndpoints();
 app.MapAdminDashboardEndpoints();
 app.MapAdminProdutoEndpoints();
+app.MapAdminPromocaoEndpoints();
 app.MapAdminProdutoImagemEndpoints();
 app.MapAdminEstoqueInsumoEndpoints();
 app.MapAdminEstoqueProdutoAcabadoEndpoints();

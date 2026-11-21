@@ -908,6 +908,87 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("ProdutoVarianteCaracteristicaValores", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Promocao", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AlteradaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AlteradaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadaPorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Escopo")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<DateTimeOffset?>("FimUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<DateTimeOffset?>("InicioUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("ProdutoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<long>("Valor")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Versao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProdutoId", "Ativa");
+
+                    b.ToTable("Promocoes", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_Promocoes_Escopo", "[Escopo] IN ('TodasVariantes', 'VariantesSelecionadas')");
+
+                            t.HasCheckConstraint("CK_Promocoes_Valor", "[Valor] > 0 AND ([Tipo] = 'PrecoFixo' OR ([Tipo] = 'Percentual' AND [Valor] < 10000))");
+
+                            t.HasCheckConstraint("CK_Promocoes_Vigencia", "[InicioUtc] IS NULL OR [FimUtc] IS NULL OR [InicioUtc] < [FimUtc]");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.PromocaoVariante", b =>
+                {
+                    b.Property<Guid>("PromocaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("VarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ProdutoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("PromocaoId", "VarianteId");
+
+                    b.HasIndex("ProdutoId", "VarianteId");
+
+                    b.HasIndex("PromocaoId", "ProdutoId");
+
+                    b.ToTable("PromocoesVariantes", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.AjusteSemDiferencaInsumo", b =>
                 {
                     b.Property<Guid>("ResponsavelId")
@@ -2448,6 +2529,29 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("OperacoesFinanceiras", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoPromocao", b =>
+                {
+                    b.Property<Guid>("AdministradorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("AdministradorId", "Chave");
+
+                    b.ToTable("OperacoesPromocao", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoVendaExterna", b =>
                 {
                     b.Property<Guid>("ResponsavelId")
@@ -2811,6 +2915,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Navigation("Valor");
 
                     b.Navigation("Variante");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Promocao", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Produto", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.PromocaoVariante", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.ProdutoVariante", null)
+                        .WithMany()
+                        .HasForeignKey("ProdutoId", "VarianteId")
+                        .HasPrincipalKey("ProdutoId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Promocao", null)
+                        .WithMany("Variantes")
+                        .HasForeignKey("PromocaoId", "ProdutoId")
+                        .HasPrincipalKey("Id", "ProdutoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.AlocacaoMateriaPrima", b =>
@@ -3497,6 +3627,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ProdutoVariante", b =>
                 {
                     b.Navigation("CaracteristicaValores");
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Promocao", b =>
+                {
+                    b.Navigation("Variantes");
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", b =>

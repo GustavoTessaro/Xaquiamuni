@@ -86,6 +86,7 @@ public sealed class XaquiamuniDbContext
         builder.MapearComprasMateriasPrimas();
         builder.MapearFinanceiro();
         builder.MapearAgenda();
+        builder.MapearPromocoes();
         builder.Entity<Fornecedor>(fornecedor =>
         {
             fornecedor.ToTable("Fornecedores");

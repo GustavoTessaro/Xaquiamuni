@@ -45,6 +45,7 @@ public static class DependencyInjection
             }
         });
         services.AddSingleton<TimeProvider>(TimeProvider.System);
+        services.AddScoped<EfPromocoes>();
         services.AddOptions<CalendarioOperacionalEstoqueOptions>()
             .Bind(configuration.GetSection(CalendarioOperacionalEstoque.SectionName))
             .Validate(
