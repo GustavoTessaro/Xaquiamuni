@@ -33,13 +33,11 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
                 Assert.Equal(HttpStatusCode.Forbidden, proibida.StatusCode);
                 using var semCsrf = await PublicarTemaAsync(admin.Http, "original", 0, chave, comCsrf: false);
                 Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
-                using var sazonal = await PublicarTemaAsync(admin.Http, "natal", 0, chave);
-                Assert.Equal(HttpStatusCode.BadRequest, sazonal.StatusCode);
                 using var desconhecida = await PublicarTemaAsync(admin.Http, "tema-inexistente", 0, chave);
                 Assert.Equal(HttpStatusCode.BadRequest, desconhecida.StatusCode);
                 var dados = await admin.Http.GetFromJsonAsync<JsonElement>(TemaAdmin);
                 Assert.Equal(6, dados.GetProperty("temas").GetArrayLength());
-                Assert.Single(dados.GetProperty("temas").EnumerateArray(), tema => tema.GetProperty("disponivel").GetBoolean());
+                Assert.All(dados.GetProperty("temas").EnumerateArray(), tema => Assert.True(tema.GetProperty("disponivel").GetBoolean()));
 
                 var respostas = await Task.WhenAll(
                     PublicarTemaAsync(admin.Http, "original", 0, chave),
@@ -59,9 +57,19 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
                 using var chaveReutilizada = await PublicarTemaAsync(venceu.Http, "original", 1, chave);
                 Assert.Equal(HttpStatusCode.Conflict, chaveReutilizada.StatusCode);
 
+                var revisao = 1;
+                foreach (var tema in new[] { "natal", "black-friday", "pascoa", "ano-novo", "dia-das-maes", "original" })
+                {
+                    using var publicada = await PublicarTemaAsync(venceu.Http, tema, revisao++, Guid.NewGuid());
+                    Assert.Equal(HttpStatusCode.OK, publicada.StatusCode);
+                    var publica = await cliente.Http.GetFromJsonAsync<JsonElement>(TemaPublico);
+                    Assert.Equal(tema, publica.GetProperty("chave").GetString());
+                    Assert.Equal(revisao, publica.GetProperty("revisao").GetInt32());
+                }
+
                 await using var db = banco.CreateVerificationContext();
                 var registro = Assert.Single(await db.ConfiguracoesTemaLoja.AsNoTracking().ToListAsync());
-                Assert.Equal(1, registro.Revisao);
+                Assert.Equal(7, registro.Revisao);
             }
 
             await using var reiniciado = new HostE2ECompra(banco, diretorio.FullName, diretorio.FullName);
@@ -70,7 +78,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
             Assert.True(resposta.Headers.CacheControl?.NoCache);
             var lida = await resposta.Content.ReadFromJsonAsync<JsonElement>();
-            Assert.Equal(1, lida.GetProperty("revisao").GetInt32());
+            Assert.Equal(7, lida.GetProperty("revisao").GetInt32());
             using var condicional = new HttpRequestMessage(HttpMethod.Get, TemaPublico);
             condicional.Headers.IfNoneMatch.Add(resposta.Headers.ETag!);
             using var revalidada = await sessao.Http.SendAsync(condicional);

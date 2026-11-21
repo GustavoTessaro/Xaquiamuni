@@ -5,7 +5,7 @@
 .store-header {
   position: relative;
   z-index: 5;
-  background: var(--brand-white);
+  background: var(--tema-topo, var(--brand-white));
   border-bottom: 1px solid var(--brand-line);
 }
 
@@ -24,6 +24,7 @@
 }
 
 .store-brand {
+  background: var(--brand-white);
   --brand-wordmark-width: clamp(112px, 12vw, 155px);
   --brand-symbol-width: clamp(21px, 3vw, 32px);
   display: inline-flex;

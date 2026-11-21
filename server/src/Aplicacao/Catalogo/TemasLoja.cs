@@ -7,11 +7,11 @@ public static class TemasLoja
     public static IReadOnlyList<TemaLoja> Catalogo { get; } = Array.AsReadOnly<TemaLoja>(
     [
         new(Original, "Original", "Identidade visual da Xaquiamuni.", true),
-        new("natal", "Natal", "Tema comemorativo de Natal.", false),
-        new("black-friday", "Black Friday", "Tema comemorativo de Black Friday.", false),
-        new("pascoa", "Páscoa", "Tema comemorativo de Páscoa.", false),
-        new("ano-novo", "Ano Novo", "Tema comemorativo de Ano Novo.", false),
-        new("dia-das-maes", "Dia das Mães", "Tema comemorativo de Dia das Mães.", false),
+        new("natal", "Natal", "Tema comemorativo de Natal.", true),
+        new("black-friday", "Black Friday", "Tema comemorativo de Black Friday.", true),
+        new("pascoa", "Páscoa", "Tema comemorativo de Páscoa.", true),
+        new("ano-novo", "Ano Novo", "Tema comemorativo de Ano Novo.", true),
+        new("dia-das-maes", "Dia das Mães", "Tema comemorativo de Dia das Mães.", true),
     ]);
 
     public static TemaLoja? Buscar(string? chave) => Catalogo.SingleOrDefault(tema => tema.Chave == chave);

@@ -1,25 +1,37 @@
-<section class="store-hero" aria-labelledby="welcome-title">
-  <div class="store-hero__inner">
-    <div class="store-hero__content">
-      <p class="store-hero__eyebrow">Feito à mão · Desde 2021</p>
-      <h1 id="welcome-title">Transforme pequenos momentos em <em>grandes cuidados.</em></h1>
-      <p class="store-hero__description">
-        Sabonetes artesanais e velas aromáticas feitos com carinho para quem se cuida com amor.
-      </p>
-      <a class="store-hero__cta" [routerLink]="contexto.link()" fragment="produtos">
-        Conheça nossos produtos
-        <span aria-hidden="true">→</span>
-      </a>
+@if (contexto.manifesto()?.sazonal; as tema) {
+  <section class="season-hero" [attr.data-composicao]="contexto.tema()" aria-labelledby="welcome-title">
+    <div class="season-hero__copy">
+      <p class="season-kicker">{{ tema.chamada }}</p>
+      <h1 id="welcome-title">{{ tema.titulo }}</h1>
+      <p>{{ tema.descricao }}</p>
+      <a [routerLink]="contexto.link()" fragment="produtos">Conheça nossos produtos <span aria-hidden="true">→</span></a>
     </div>
-    <div class="store-hero__art" aria-hidden="true">
-      <div class="hero-art__frame">
-        <span class="brand-crop brand-crop--symbol">
-          <img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" />
-        </span>
+    <img [src]="tema.arte" alt="" width="720" height="540" fetchpriority="high" />
+  </section>
+} @else {
+  <section class="store-hero" aria-labelledby="welcome-title">
+    <div class="store-hero__inner">
+      <div class="store-hero__content">
+        <p class="store-hero__eyebrow">Feito à mão · Desde 2021</p>
+        <h1 id="welcome-title">Transforme pequenos momentos em <em>grandes cuidados.</em></h1>
+        <p class="store-hero__description">
+          Sabonetes artesanais e velas aromáticas feitos com carinho para quem se cuida com amor.
+        </p>
+        <a class="store-hero__cta" [routerLink]="contexto.link()" fragment="produtos">
+          Conheça nossos produtos
+          <span aria-hidden="true">→</span>
+        </a>
+      </div>
+      <div class="store-hero__art" aria-hidden="true">
+        <div class="hero-art__frame">
+          <span class="brand-crop brand-crop--symbol">
+            <img src="/logo-xaquiamuni.jpeg" width="1024" height="1024" alt="" />
+          </span>
+        </div>
       </div>
     </div>
-  </div>
-</section>
+  </section>
+}
 
 <section class="store-categories" id="categorias" aria-labelledby="categories-title">
   <div class="store-section-heading">
@@ -118,6 +130,16 @@
     </div>
   }
 </section>
+
+@if (contexto.manifesto()?.sazonal; as tema) {
+  <section class="season-editorial" aria-labelledby="season-editorial-title">
+    <div>
+      <h2 id="season-editorial-title">{{ tema.editorial.titulo }}</h2>
+      <p>{{ tema.editorial.texto }}</p>
+    </div>
+    <a [routerLink]="contexto.link('produtos')">Ver catálogo <span aria-hidden="true">→</span></a>
+  </section>
+}
 
 <app-catalogo-produtos [homePage]="true" />
 

@@ -1,6 +1,7 @@
-import { computed, inject, Injectable } from '@angular/core';
+import { computed, inject, Injectable, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { ActivatedRoute } from '@angular/router';
+import { buscarManifestoTemaLoja, resolverTemaLoja, TEMA_ORIGINAL } from './manifestos-tema-loja';
 
 @Injectable({ providedIn: 'root' })
 export class StorefrontContext {
@@ -11,6 +12,14 @@ export class StorefrontContext {
     : null;
 
   readonly previewKey = computed(() => this.params?.().get('tema') ?? null);
+
+  private readonly publicado = signal(TEMA_ORIGINAL);
+  readonly tema = computed(() => this.preview ? resolverTemaLoja(this.previewKey()) : this.publicado());
+  readonly manifesto = computed(() => buscarManifestoTemaLoja(this.tema()));
+
+  aplicarPublicado(chave: unknown): void {
+    this.publicado.set(resolverTemaLoja(chave));
+  }
 
   link(...segments: string[]): string[] {
     const key = this.previewKey();

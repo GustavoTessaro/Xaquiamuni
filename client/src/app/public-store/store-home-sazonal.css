@@ -1,0 +1,133 @@
+.season-hero,
+.season-editorial {
+  width: min(var(--brand-width), 100% - 2 * var(--brand-gutter));
+  margin-inline: auto;
+  border-radius: var(--brand-radius);
+  overflow: hidden;
+}
+.season-hero {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  margin-top: clamp(1rem, 3vw, 2.5rem);
+  background: var(--tema-painel);
+  color: var(--tema-texto);
+}
+.season-hero__copy {
+  padding: clamp(1.4rem, 4.8vw, 4rem);
+}
+.season-kicker {
+  margin: 0 0 .75rem;
+  font-size: .75rem;
+  font-weight: 750;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+.season-hero h1,
+.season-editorial h2 {
+  margin: 0;
+  font: 400 clamp(2rem, 5vw, 4.2rem)/1.04 var(--brand-display);
+}
+.season-hero__copy p:not(.season-kicker),
+.season-editorial p {
+  max-width: 48ch;
+  margin-block: 1rem;
+  line-height: 1.55;
+}
+.season-hero img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+}
+.season-hero a,
+.season-editorial a {
+  display: inline-flex;
+  align-items: center;
+  gap: .55rem;
+  min-height: 44px;
+  padding: .6rem 1rem;
+  border-radius: var(--brand-radius-pill);
+  background: var(--brand-action);
+  color: var(--brand-white);
+  font-size: .9rem;
+  font-weight: 700;
+}
+.season-hero a {
+  background: var(--brand-gold-light);
+  color: var(--brand-green-hover);
+}
+.season-hero a:hover,
+.season-editorial a:hover {
+  text-decoration: underline;
+}
+.season-hero a:focus-visible {
+  outline-color: currentColor;
+  outline-offset: -4px;
+}
+.season-hero[data-composicao='black-friday'] {
+  grid-template-columns: .95fr 1.05fr;
+  border-bottom: .3rem solid var(--brand-gold);
+}
+.season-hero[data-composicao='black-friday'] h1 {
+  font-weight: 800;
+  letter-spacing: -.05em;
+}
+.season-hero[data-composicao='pascoa'] img {
+  grid-column: 1;
+  grid-row: 1;
+}
+.season-hero[data-composicao='dia-das-maes'] {
+  grid-template-columns: 1.05fr .95fr;
+  border: .4rem solid var(--brand-surface);
+}
+.season-hero[data-composicao='dia-das-maes'] img {
+  border-radius: 50% 0 0 50%;
+}
+.season-hero[data-composicao='ano-novo'] {
+  grid-template-columns: 1fr;
+  text-align: center;
+}
+.season-hero[data-composicao='ano-novo'] .season-hero__copy {
+  padding-bottom: .75rem;
+}
+.season-hero[data-composicao='ano-novo'] p {
+  margin-inline: auto;
+}
+.season-hero[data-composicao='ano-novo'] img {
+  width: min(100%, 36rem);
+  justify-self: center;
+}
+.season-editorial {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-block-end: var(--brand-section-space);
+  padding: clamp(1.25rem, 4vw, 2.75rem);
+  border-inline-start: .35rem solid var(--brand-gold);
+  background: var(--brand-sage);
+  color: var(--brand-green);
+}
+.season-editorial h2 {
+  font-size: clamp(1.6rem, 3vw, 2.6rem);
+}
+.season-editorial p {
+  margin-bottom: 0;
+}
+@media (max-width: 700px) {
+  .season-hero[data-composicao] {
+    grid-template-columns: 1fr;
+  }
+  .season-hero img {
+    height: auto;
+    aspect-ratio: 4 / 3;
+  }
+  .season-hero[data-composicao='pascoa'] img {
+    grid-row: auto;
+  }
+  .season-hero[data-composicao='dia-das-maes'] img {
+    border-radius: 50% 50% 0 0;
+  }
+}

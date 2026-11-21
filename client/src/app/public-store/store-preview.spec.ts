@@ -82,11 +82,28 @@ describe('prévia administrativa da loja', () => {
     expect(deps.consultarPublico).not.toHaveBeenCalled();
   });
 
-  it('recusa tema desconhecido, incompleto e rotas comerciais sob a prévia', async () => {
+  it.each(['natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes'])(
+    'renderiza a arte final e conserva os links na prévia de %s',
+    async (chave) => {
+      const deps = configurar();
+      const inicio = '/admin/temas/previa/' + chave;
+      const harness = await RouterTestingHarness.create(inicio);
+      expect(harness.routeNativeElement?.getAttribute('data-theme')).toBe(chave);
+      expect(harness.routeNativeElement?.querySelector('.season-hero img')?.getAttribute('src'))
+        .toBe('/temas/' + chave + '.svg');
+      expect(harness.routeNativeElement?.querySelector('.season-editorial h2')).not.toBeNull();
+      await harness.navigateByUrl(inicio + '/produtos/produto-1');
+      expect(harness.routeNativeElement?.getAttribute('data-theme')).toBe(chave);
+      expect(deps.consultarPublico).not.toHaveBeenCalled();
+      expect(deps.carrinho).not.toHaveBeenCalled();
+    },
+  );
+
+  it('recusa tema desconhecido e rotas comerciais sob a prévia', async () => {
     configurar();
     const harness = await RouterTestingHarness.create();
     const router = TestBed.inject(Router);
-    for (const invalida of ['/admin/temas/previa/natal', '/admin/temas/previa/desconhecido',
+    for (const invalida of ['/admin/temas/previa/desconhecido',
       previa + '/carrinho', previa + '/checkout', previa + '/pedidos/pedido-1']) {
       await harness.navigateByUrl(invalida);
       expect(router.url).toBe('/admin/temas');

@@ -17,7 +17,7 @@ import { StorefrontContext } from './storefront-context';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CatalogoProdutosComponent, RouterLink],
   selector: 'app-store-home',
-  styleUrl: './store-home.component.css',
+  styleUrls: ['./store-home.component.css', './store-home-sazonal.css'],
   templateUrl: './store-home.component.html',
 })
 export class StoreHomeComponent implements OnInit {
