@@ -59,8 +59,26 @@ describe('AdminVisaoFinanceiraComponent', () => {
     expect(texto()).toContain('R$ 92.233.720.368.547.758,08');
     expect(texto()).toContain('R$ 92.233.720.368.547.757,08');
     expect(texto()).toContain('Não representa lucro nem saldo bancário');
-    expect(texto('[aria-labelledby="posicao-financeira-titulo"]')).toMatch(/valor a conferir\s*2/);
+    expect(texto('[aria-labelledby="posicao-financeira-titulo"]')).toMatch(/valor a conferir:\s*2/);
     expect(texto()).toContain('o total a pagar não inclui esses valores');
+  });
+
+  it('mostra alertas do Dashboard a partir dos agregados e aponta para filtros exatos', async () => {
+    const vazio = { quantidade: 0, valorCentavos: '0' };
+    const valor = { quantidade: 1, valorCentavos: '1990' };
+    resumo.mockReturnValue(of({ fluxoPeriodo: fluxo, posicaoAtual: { ...posicaoAtual,
+      contasEmAberto: { dataOperacional: '2026-11-21',
+        aPagar: { ...valor, vencidas: valor, venceHoje: vazio, vencendoEmBreve: vazio, proximosTresDias: vazio },
+        aReceber: { ...valor, vencidas: vazio, venceHoje: valor, vencendoEmBreve: valor, proximosTresDias: vazio },
+      },
+    } }));
+    fixture = TestBed.createComponent(AdminVisaoFinanceiraComponent);
+    fixture.componentRef.setInput('compacto', true);
+    await atualizar();
+    const links = [...(fixture.nativeElement as HTMLElement).querySelectorAll<HTMLAnchorElement>('.alertas-contas a')];
+    expect(links.map(link => new URL(link.href).searchParams.get('classificacao'))).toEqual(['Vencidas', 'VenceHoje']);
+    expect(links.map(link => new URL(link.href).searchParams.get('direcao'))).toEqual(['APagar', 'AReceber']);
+    expect(links[0].textContent).toContain('R$ 19,90');
   });
 
   it('envia os limites civis de mês atual e anterior, incluindo virada de ano', async () => {

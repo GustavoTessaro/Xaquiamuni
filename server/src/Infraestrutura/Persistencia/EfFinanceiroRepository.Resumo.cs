@@ -64,7 +64,8 @@ public sealed partial class EfFinanceiroRepository
                 Texto(normal.Valor + vencidas.Valor + venceHoje.Valor + proximas.Valor),
                 new(vencidas.Quantidade, Texto(vencidas.Valor)),
                 new(venceHoje.Quantidade, Texto(venceHoje.Valor)),
-                new(proximas.Quantidade + venceHoje.Quantidade, Texto(proximas.Valor + venceHoje.Valor)));
+                new(proximas.Quantidade + venceHoje.Quantidade, Texto(proximas.Valor + venceHoje.Valor)),
+                new(proximas.Quantidade, Texto(proximas.Valor)));
         }
     }
 

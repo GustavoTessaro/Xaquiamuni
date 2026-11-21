@@ -86,20 +86,48 @@
       <h3 id="posicao-financeira-titulo" class="font-semibold">
         Posição atual — independente do período selecionado
       </h3>
+      @if (posicao.contasEmAberto; as contas) {
+        <div class="grade-contas">
+          @for (direcao of direcoes; track direcao.chave) {
+            @let grupo = contas[direcao.chave];
+            <section class="cartao">
+              <h4><a routerLink="/admin/financeiro" [queryParams]="{ secao: 'contas', direcao: direcao.filtro }">{{ direcao.titulo }}</a></h4>
+              <p><strong>{{ moeda(grupo.valorCentavos) }}</strong> · {{ grupo.quantidade }} conta(s)</p>
+              <ul class="alertas-contas">
+                @for (alerta of alertas; track alerta.chave) {
+                  @let total = grupo[alerta.chave];
+                  @if (!compacto() || total.quantidade > 0) {
+                    <li>
+                      <a [class]="alerta.classe" routerLink="/admin/financeiro"
+                        [queryParams]="{ secao: 'contas', direcao: direcao.filtro, classificacao: alerta.filtro }">
+                        {{ alerta.titulo }} · {{ total.quantidade }} · {{ moeda(total.valorCentavos) }}
+                      </a>
+                    </li>
+                  }
+                }
+                @if (!compacto()) {
+                  <li><a routerLink="/admin/financeiro"
+                    [queryParams]="{ secao: 'contas', direcao: direcao.filtro, classificacao: 'VencendoEmBreve' }">
+                    Vencendo em breve (inclui hoje) · {{ grupo.vencendoEmBreve.quantidade }} · {{ moeda(grupo.vencendoEmBreve.valorCentavos) }}
+                  </a></li>
+                }
+              </ul>
+            </section>
+          }
+        </div>
+      } @else {
       <dl class="grid gap-3 lg:grid-cols-3">
         <div class="cartao">
-          <dt>A receber de vendas externas</dt>
+          <dt>Total a receber</dt>
           <dd class="text-lg">{{ moeda(posicao.aReceberCentavos) }}</dd>
         </div>
         <div class="cartao">
-          <dt>A pagar a fornecedores</dt>
+          <dt>Total a pagar</dt>
           <dd class="text-lg">{{ moeda(posicao.aPagarCentavos) }}</dd>
         </div>
-        <div class="cartao">
-          <dt>Compras com valor a conferir</dt>
-          <dd class="text-lg">{{ posicao.comprasValorAConferir }}</dd>
-        </div>
       </dl>
+      }
+      <p>Compras com valor a conferir: <strong>{{ posicao.comprasValorAConferir }}</strong></p>
       @if (posicao.comprasValorAConferir > 0) {
         <p class="text-sm text-slate-600">
           Existem compras com valor a conferir; o total a pagar não inclui esses valores.

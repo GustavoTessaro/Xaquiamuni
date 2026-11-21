@@ -22,6 +22,7 @@ import {
 } from '../../core/compras-materias-primas.service';
 import {
   ComandoFinanceiro,
+  ContaEmAberto,
   CompraFinanceira,
   FinanceiroService,
   LancamentoFinanceiro,
@@ -32,6 +33,7 @@ import {
 } from '../../core/financeiro.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { AdminMovimentacoesFinanceirasComponent } from './admin-movimentacoes-financeiras.component';
+import { AdminContasEmAbertoComponent } from './admin-contas-em-aberto.component';
 import { AdminVisaoFinanceiraComponent } from './admin-visao-financeira.component';
 import { decimalEscalado, decimalTexto, exibirReais } from '../compras/compra-decimais';
 import { dataCivilValida } from '../compras/recebimento-pendente';
@@ -69,26 +71,27 @@ function tentativaIntegra(tentativa: TentativaFinanceira): boolean {
       Object.keys(corpo).length === 1
     );
   }
-  if (
-    !('valorCentavos' in corpo) ||
-    typeof corpo.valorCentavos !== 'string' ||
-    !/^\d{1,19}$/.test(corpo.valorCentavos) ||
-    typeof corpo.data !== 'string' ||
-    !dataCivilValida(corpo.data) ||
-    !meiosFinanceiros.includes(corpo.meio)
-  )
-    return false;
-  if (tentativa.tipo === 'criar') {
-    return (
-      'categoria' in corpo &&
-      typeof corpo.categoria === 'string' &&
-      typeof corpo.descricao === 'string' &&
-      ['Entrada', 'Saida'].includes(corpo.tipo) &&
-      Object.keys(corpo).length === 6
-    );
+  const dataEMeioValidos = 'data' in corpo && typeof corpo.data === 'string' &&
+    dataCivilValida(corpo.data) && meiosFinanceiros.includes(corpo.meio);
+  if (tentativa.tipo === 'quitar')
+    return uuid.test(tentativa.id) && dataEMeioValidos && Object.keys(corpo).length === 2;
+  if (!('valorCentavos' in corpo) || typeof corpo.valorCentavos !== 'string' ||
+      !/^\d{1,19}$/.test(corpo.valorCentavos)) return false;
+  if (tentativa.tipo === 'criar' || tentativa.tipo === 'criar-pendente') {
+    const criacao = tentativa.corpo;
+    const campos = ['tipo', 'categoria', 'descricao', 'valorCentavos', 'contraparte', 'observacoes'];
+    const pendente = tentativa.tipo === 'criar-pendente';
+    return typeof criacao.categoria === 'string' && typeof criacao.descricao === 'string' &&
+      ['Entrada', 'Saida'].includes(criacao.tipo) &&
+      (criacao.contraparte === undefined || typeof criacao.contraparte === 'string') &&
+      (criacao.observacoes === undefined || typeof criacao.observacoes === 'string') &&
+      Object.keys(criacao).every(campo => campos.includes(campo) ||
+        (pendente ? campo === 'vencimento' : ['data', 'meio'].includes(campo))) &&
+      (pendente ? typeof tentativa.corpo.vencimento === 'string' &&
+        dataCivilValida(tentativa.corpo.vencimento) : dataEMeioValidos);
   }
   return (
-    tentativa.tipo === 'pagar' &&
+    tentativa.tipo === 'pagar' && dataEMeioValidos &&
     uuid.test(tentativa.id) &&
     'referencia' in corpo &&
     (corpo.referencia === null || typeof corpo.referencia === 'string') &&
@@ -103,6 +106,7 @@ function tentativaIntegra(tentativa: TentativaFinanceira): boolean {
     DatePipe,
     AdminMovimentacoesFinanceirasComponent,
     AdminVisaoFinanceiraComponent,
+    AdminContasEmAbertoComponent,
   ],
   templateUrl: './admin-financeiro.component.html',
   styleUrl: './admin-financeiro.component.css',
@@ -120,7 +124,7 @@ export class AdminFinanceiroComponent {
   private readonly tituloFormulario = viewChild<ElementRef<HTMLElement>>('tituloFormulario');
   private chaveStorage = '';
 
-  protected secao: 'visao' | 'movimentacoes' | 'lancamentos' | 'compras' = 'visao';
+  protected secao: 'visao' | 'movimentacoes' | 'lancamentos' | 'compras' | 'contas' = 'visao';
   protected movimentacoesAbertas = false;
   protected revisaoFinanceira = 0;
   private compraUrlPendente: string | null | undefined;
@@ -141,9 +145,14 @@ export class AdminFinanceiroComponent {
   protected pendente: TentativaFinanceira | null = null;
   protected armazenamentoInvalido = false;
   protected tentativaAusente = false;
+  protected conflitoNoReenvio = false;
   protected confirmarDescarte = false;
-  protected formulario: 'criar' | 'cancelar' | 'pagar' | null = null;
+  protected formulario: 'criar' | 'cancelar' | 'pagar' | 'quitar' | null = null;
   protected tipo: 'Entrada' | 'Saida' = 'Entrada';
+  protected inicial: 'realizado' | 'pendente' = 'realizado';
+  protected vencimento = '';
+  protected contraparte = '';
+  protected observacoes = '';
   protected categoria = '';
   protected descricao = '';
   protected valor = '';
@@ -190,6 +199,12 @@ export class AdminFinanceiroComponent {
             this.secao = this.pendente.tipo === 'pagar' ? 'compras' : 'lancamentos';
           }
           this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroy)).subscribe((params) => {
+            if (!this.pendente && params.get('secao') === 'contas' && !params.get('compra')) {
+              this.secao = 'contas';
+              this.formulario = null;
+            } else if (this.secao === 'contas' && params.get('secao') !== 'contas') {
+              this.secao = 'visao';
+            }
             this.compraUrlPendente = params.get('compra');
             this.sincronizarCompra();
           });
@@ -203,7 +218,7 @@ export class AdminFinanceiroComponent {
       });
   }
 
-  protected mudarSecao(secao: 'visao' | 'movimentacoes' | 'lancamentos' | 'compras'): void {
+  protected mudarSecao(secao: 'visao' | 'movimentacoes' | 'lancamentos' | 'compras' | 'contas'): void {
     this.secao = secao;
     this.detalhe = this.compra = null;
     this.compraSelecionada = '';
@@ -212,11 +227,28 @@ export class AdminFinanceiroComponent {
       if (secao === 'movimentacoes') this.movimentacoesAbertas = this.sessaoConfirmada;
       this.erro = this.sucesso = '';
     } else this.carregar();
-    this.atualizarUrlCompra(null);
+    if (secao === 'contas' || this.route.snapshot.queryParamMap.get('secao') === 'contas') {
+      void this.router.navigate([], { relativeTo: this.route,
+        queryParams: { compra: null, secao: secao === 'contas' ? 'contas' : null,
+          direcao: null, classificacao: null, origem: null }, queryParamsHandling: 'merge' });
+    } else this.atualizarUrlCompra(null);
+  }
+
+  protected abrirConta(conta: ContaEmAberto): void {
+    if (conta.origem === 'VendaExterna') {
+      void this.router.navigate(['/admin/vendas-externas', conta.id]);
+      return;
+    }
+    this.abrirOrigem({ secao: conta.origem === 'Compra' ? 'compras' : 'lancamentos', id: conta.id });
   }
 
   protected abrirOrigem(recurso: { secao: 'lancamentos' | 'compras'; id: string }): void {
     this.secao = recurso.secao;
+    if (recurso.secao === 'lancamentos' && this.route.snapshot.queryParamMap.get('secao') === 'contas') {
+      void this.router.navigate([], { relativeTo: this.route, queryParamsHandling: 'merge',
+        queryParams: { secao: null, direcao: null, classificacao: null, origem: null,
+          compra: null } });
+    }
     if (recurso.secao === 'lancamentos') {
       this.atualizarUrlCompra(null);
       this.abrirLancamento(recurso.id);
@@ -224,7 +256,7 @@ export class AdminFinanceiroComponent {
   }
 
   protected carregar(pagina = this.pagina): void {
-    if (this.secao === 'visao' || this.secao === 'movimentacoes') return;
+    if (this.secao !== 'lancamentos' && this.secao !== 'compras') return;
     this.carregado = false;
     if (this.secao === 'compras') {
       this.executar(this.comprasApi.listar(), (compras) => {
@@ -243,6 +275,7 @@ export class AdminFinanceiroComponent {
   protected abrirLancamento(id: string): void {
     this.executar(this.api.lancamento(id), (dados) => {
       this.detalhe = dados;
+      this.formulario = null;
     });
   }
 
@@ -276,7 +309,7 @@ export class AdminFinanceiroComponent {
     if (this.route.snapshot.queryParamMap.get('compra') === id) return;
     void this.router.navigate([], {
       relativeTo: this.route,
-      queryParams: { compra: id },
+      queryParams: id ? { compra: id, secao: null, direcao: null, classificacao: null, origem: null } : { compra: null },
       queryParamsHandling: 'merge',
     });
   }
@@ -296,9 +329,11 @@ export class AdminFinanceiroComponent {
     this.cdr.markForCheck();
   }
 
-  protected abrirFormulario(tipo: 'criar' | 'cancelar' | 'pagar'): void {
+  protected abrirFormulario(tipo: 'criar' | 'cancelar' | 'pagar' | 'quitar'): void {
     this.formulario = tipo;
     this.tipo = 'Entrada';
+    this.inicial = 'realizado';
+    this.contraparte = this.observacoes = this.vencimento = '';
     this.categoria = this.descricao = this.valor = this.motivo = this.referencia = '';
     this.meio = 'Pix';
     this.data = hoje();
@@ -317,14 +352,25 @@ export class AdminFinanceiroComponent {
     if (this.ocupado || this.pendente || this.armazenamentoInvalido || !this.chaveStorage) return;
     let comando: ComandoFinanceiro;
     if (this.formulario === 'cancelar') {
-      if (!this.detalhe || !this.confirmacao || !this.motivo.trim()) {
+      if (!this.detalhe || this.detalhe.quitadoEmUtc || !this.confirmacao || !this.motivo.trim()) {
         this.erro = 'Informe o motivo e confirme o cancelamento.';
         return;
       }
       comando = { tipo: 'cancelar', id: this.detalhe.id, corpo: { motivo: this.motivo.trim() } };
+    } else if (this.formulario === 'quitar') {
+      if (!this.detalhe || !this.emAberto(this.detalhe) || !this.confirmacao || !dataCivilValida(this.data)) {
+        this.erro = 'Informe uma data efetiva válida e confirme a quitação integral.';
+        return;
+      }
+      comando = { tipo: 'quitar', id: this.detalhe.id, corpo: { data: this.data, meio: this.meio } };
     } else {
       const valor = centavosFinanceiros(this.valor);
-      if (valor === null || !dataCivilValida(this.data)) {
+      const criandoPendente = this.formulario === 'criar' && this.inicial === 'pendente';
+      if (criandoPendente && !dataCivilValida(this.vencimento)) {
+        this.erro = 'Informe um vencimento válido.';
+        return;
+      }
+      if (valor === null || (!criandoPendente && !dataCivilValida(this.data))) {
         this.erro = 'Informe um valor positivo, com até duas casas decimais, e uma data válida.';
         return;
       }
@@ -344,15 +390,15 @@ export class AdminFinanceiroComponent {
           this.erro = 'Informe a categoria e a descrição.';
           return;
         }
-        comando = {
-          tipo: 'criar',
-          corpo: {
-            ...movimento,
-            tipo: this.tipo,
-            categoria: this.categoria.trim(),
-            descricao: this.descricao.trim(),
-          },
+        const comum = {
+          valorCentavos: valor.toString(), tipo: this.tipo, categoria: this.categoria.trim(),
+          descricao: this.descricao.trim(),
+          ...(this.contraparte.trim() ? { contraparte: this.contraparte.trim() } : {}),
+          ...(this.observacoes.trim() ? { observacoes: this.observacoes.trim() } : {}),
         };
+        comando = criandoPendente
+          ? { tipo: 'criar-pendente', corpo: { ...comum, vencimento: this.vencimento } }
+          : { tipo: 'criar', corpo: { ...comum, data: this.data, meio: this.meio } };
       }
     }
     const chave = this.store.criarChaveIdempotencia();
@@ -382,7 +428,7 @@ export class AdminFinanceiroComponent {
       (confirmada) => {
         if (
           confirmada.operacao !== tentativa.tipo ||
-          (tentativa.tipo !== 'criar' && confirmada.recursoId !== tentativa.id)
+          ('id' in tentativa && confirmada.recursoId !== tentativa.id)
         ) {
           this.erro =
             'A chave corresponde a outra operação. Confira o histórico antes de continuar.';
@@ -413,7 +459,11 @@ export class AdminFinanceiroComponent {
       (falha) => {
         if (falha instanceof HttpErrorResponse && falha.status === 404) {
           this.erro = '';
-          this.tentativaAusente = true;
+          this.tentativaAusente = !this.conflitoNoReenvio;
+          if (this.conflitoNoReenvio && 'id' in tentativa) {
+            this.erro = 'A tentativa não foi gravada e o lançamento mudou. Confira o estado atual antes de descartar a tentativa.';
+            this.executar(this.api.lancamento(tentativa.id), dados => this.detalhe = dados, undefined, true);
+          }
         }
       },
     );
@@ -462,6 +512,19 @@ export class AdminFinanceiroComponent {
         }
       },
       (falha) => {
+        if (falha instanceof HttpErrorResponse && falha.status === 409 &&
+            (tentativa.tipo === 'quitar' || tentativa.tipo === 'cancelar')) {
+          this.formulario = null;
+          this.detalhe = null;
+          this.revisaoFinanceira++;
+          if (reenvio) {
+            this.conflitoNoReenvio = true;
+            this.conferir();
+          } else if (this.limpar()) {
+            this.executar(this.api.lancamento(tentativa.id), dados => this.detalhe = dados, undefined, true);
+          }
+          return;
+        }
         if (
           falha instanceof HttpErrorResponse &&
           !reenvio &&
@@ -483,6 +546,7 @@ export class AdminFinanceiroComponent {
       return false;
     }
     this.pendente = null;
+    this.conflitoNoReenvio = false;
     this.armazenamentoInvalido = this.tentativaAusente = this.confirmarDescarte = false;
     return true;
   }
@@ -535,10 +599,16 @@ export class AdminFinanceiroComponent {
   protected moeda(valor: string | null): string {
     return valor === null ? 'Valor a conferir' : exibirReais(BigInt(valor));
   }
-  protected civil(valor: string): string {
-    return valor.split('-').reverse().join('/');
+  protected emAberto(item: LancamentoFinanceiro): boolean {
+    return item.situacao === 'Pendente';
   }
-  protected rotuloMeio(meio: MeioFinanceiro): string {
-    return meio === 'Cartao' ? 'Cartão' : meio === 'Transferencia' ? 'Transferência' : meio;
+  protected situacaoLancamento(item: LancamentoFinanceiro): string {
+    return item.situacao ?? (item.canceladoEmUtc ? 'Cancelado' : 'Ativo');
+  }
+  protected civil(valor: string | null | undefined): string {
+    return valor ? valor.split('-').reverse().join('/') : '—';
+  }
+  protected rotuloMeio(meio: MeioFinanceiro | null): string {
+    return meio === 'Cartao' ? 'Cartão' : meio === 'Transferencia' ? 'Transferência' : meio ?? '—';
   }
 }

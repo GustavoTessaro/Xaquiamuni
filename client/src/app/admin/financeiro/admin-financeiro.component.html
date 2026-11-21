@@ -34,6 +34,8 @@
       >
         Pagamentos de compras
       </button>
+      <button type="button" [attr.aria-current]="secao === 'contas' ? 'page' : null"
+        [disabled]="ocupado" (click)="mudarSecao('contas')">Contas em aberto</button>
     </nav>
     @if (ocupado) {
       <p role="status">Aguarde…</p>
@@ -50,6 +52,10 @@
         <h2 id="tentativa">Tentativa pendente</h2>
         @if (pendente; as tentativa) {
           @switch (tentativa.tipo) {
+            @case ('criar-pendente') {
+              <p>{{ tentativa.corpo.descricao }} ? {{ moeda(tentativa.corpo.valorCentavos) }}</p>
+            }
+            @case ('quitar') { <p>Quitação integral de lançamento</p> }
             @case ('criar') {
               <p>{{ tentativa.corpo.descricao }} · {{ moeda(tentativa.corpo.valorCentavos) }}</p>
             }
@@ -112,6 +118,10 @@
       />
     }
 
+    @if (secao === 'contas' && sessaoConfirmada) {
+      <app-admin-contas-em-aberto (abrir)="abrirConta($event)" />
+    }
+
     @if (secao === 'lancamentos') {
       <p>
         Use lançamentos manuais apenas para movimentações que não foram registradas em vendas ou
@@ -122,7 +132,7 @@
           <h2 id="lancamento-titulo">{{ item.descricao }}</h2>
           <p>
             {{ item.tipo === 'Entrada' ? 'Entrada' : 'Saída' }} ·
-            {{ item.canceladoEmUtc ? 'Cancelado' : 'Ativo' }}
+            {{ situacaoLancamento(item) }}
           </p>
           <dl class="dados">
             <div>
@@ -141,6 +151,18 @@
               <dt>Meio</dt>
               <dd>{{ rotuloMeio(item.meio) }}</dd>
             </div>
+            @if (item.vencimento) {
+              <div><dt>Vencimento</dt><dd>{{ civil(item.vencimento) }}</dd></div>
+            }
+            @if (item.contraparte) {
+              <div><dt>Pessoa ou empresa</dt><dd>{{ item.contraparte }}</dd></div>
+            }
+            @if (item.observacoes) {
+              <div><dt>Observações</dt><dd>{{ item.observacoes }}</dd></div>
+            }
+            @if (item.quitadoEmUtc) {
+              <div><dt>Quitação registrada em</dt><dd>{{ item.quitadoEmUtc | date: 'dd/MM/yyyy HH:mm' }}</dd></div>
+            }
             <div>
               <dt>Registrado em</dt>
               <dd>{{ item.criadoEmUtc | date: 'dd/MM/yyyy HH:mm' }}</dd>
@@ -168,7 +190,12 @@
             <button type="button" [disabled]="ocupado || !!pendente" (click)="voltarLancamentos()">
               Voltar à lista
             </button>
-            @if (!item.canceladoEmUtc && !formulario && !pendente && !armazenamentoInvalido) {
+            @if (emAberto(item) && !formulario && !pendente && !armazenamentoInvalido && !ocupado) {
+              <button type="button" class="primario" (click)="abrirFormulario('quitar')">
+                {{ item.tipo === 'Entrada' ? 'Marcar como recebido' : 'Marcar como pago' }}
+              </button>
+            }
+            @if (!item.canceladoEmUtc && !item.quitadoEmUtc && !formulario && !pendente && !armazenamentoInvalido) {
               <button type="button" (click)="abrirFormulario('cancelar')">
                 Cancelar lançamento
               </button>
@@ -192,7 +219,7 @@
               <li class="cartao">
                 <p>
                   <strong>{{ item.tipo === 'Entrada' ? 'Entrada' : 'Saída' }}</strong> ·
-                  {{ civil(item.data) }} · {{ item.canceladoEmUtc ? 'Cancelado' : 'Ativo' }}
+                  {{ civil(item.data) }} · {{ situacaoLancamento(item) }}
                 </p>
                 <h2>{{ item.descricao }}</h2>
                 <p>
@@ -365,7 +392,7 @@
               ? 'Novo lançamento'
               : formulario === 'pagar'
                 ? 'Registrar pagamento'
-                : 'Cancelar lançamento'
+                : formulario === 'quitar' ? 'Confirmar quitação integral' : 'Cancelar lançamento'
           }}
         </h2>
         <fieldset class="campos" [disabled]="ocupado || !!pendente || armazenamentoInvalido">
@@ -387,6 +414,12 @@
                   <option value="Saida">Saída</option>
                 </select></label
               >
+              <label>Situação inicial
+                <select name="inicial" [(ngModel)]="inicial">
+                  <option value="realizado">Já recebido/pago</option>
+                  <option value="pendente">Ainda pendente</option>
+                </select>
+              </label>
               <label
                 >Categoria <input name="categoria" [(ngModel)]="categoria" maxlength="80" required
               /></label>
@@ -399,14 +432,31 @@
                   required
                 ></textarea>
               </label>
+              <label>Pessoa ou empresa (opcional)
+                <input name="contraparte" [(ngModel)]="contraparte" maxlength="150" />
+              </label>
+              <label>Observações (opcional)
+                <textarea name="observacoes" [(ngModel)]="observacoes" maxlength="500"></textarea>
+              </label>
             }
+            @if (formulario === 'quitar') {
+              <p>Valor integral: <strong>{{ moeda(detalhe?.valorCentavos ?? null) }}</strong></p>
+              <label class="check">
+                <input type="checkbox" name="confirmacao" [(ngModel)]="confirmacao" />
+                Confirmo a quitação do valor integral.
+              </label>
+            } @else {
             <label
               >Valor (R$)
               <input name="valor" inputmode="decimal" maxlength="27" [(ngModel)]="valor" required
             /></label>
+            }
             @if (formulario === 'pagar') {
               <button type="button" (click)="preencherSaldo()">Usar saldo total</button>
             }
+            @if (formulario === 'criar' && inicial === 'pendente') {
+              <label>Vencimento <input type="date" name="vencimento" [(ngModel)]="vencimento" required /></label>
+            } @else {
             <label
               >{{ formulario === 'pagar' ? 'Data do pagamento' : 'Data efetiva' }}
               <input type="date" name="data" [(ngModel)]="data" required
@@ -419,6 +469,7 @@
                 }
               </select></label
             >
+            }
             @if (formulario === 'pagar') {
               <label
                 >Referência ou observação (opcional)
@@ -430,7 +481,7 @@
             <button
               type="submit"
               class="primario"
-              [disabled]="formulario === 'cancelar' && (!confirmacao || !motivo.trim())"
+              [disabled]="(formulario === 'cancelar' && (!confirmacao || !motivo.trim())) || (formulario === 'quitar' && !confirmacao)"
             >
               Confirmar
             </button>

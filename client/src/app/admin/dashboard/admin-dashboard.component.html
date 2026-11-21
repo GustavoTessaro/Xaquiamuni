@@ -89,7 +89,7 @@
 
     <div class="dashboard__panel">
       <a routerLink="/admin/financeiro" class="dashboard__finance-link">Abrir Financeiro</a>
-      <app-admin-visao-financeira [revisao]="revisao()" [periodoInicial]="periodoInicial"
+      <app-admin-visao-financeira [compacto]="true" [revisao]="revisao()" [periodoInicial]="periodoInicial"
         (periodoAplicado)="guardarPeriodo($event)" />
     </div>
   </div>

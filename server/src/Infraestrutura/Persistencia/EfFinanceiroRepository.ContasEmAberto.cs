@@ -16,6 +16,8 @@ public sealed partial class EfFinanceiroRepository
         consulta = filtro.Classificacao switch
         {
             FiltroVencimento.Vencidas => consulta.Where(x => x.Situacao == SituacaoVencimento.Vencida),
+            FiltroVencimento.VenceHoje => consulta.Where(x => x.Situacao == SituacaoVencimento.VenceHoje),
+            FiltroVencimento.ProximosTresDias => consulta.Where(x => x.Situacao == SituacaoVencimento.VencendoEmBreve),
             FiltroVencimento.VencendoEmBreve => consulta.Where(x =>
                 x.Situacao == SituacaoVencimento.VenceHoje || x.Situacao == SituacaoVencimento.VencendoEmBreve),
             _ => consulta

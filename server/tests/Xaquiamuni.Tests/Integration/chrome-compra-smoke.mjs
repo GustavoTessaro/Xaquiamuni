@@ -430,6 +430,60 @@ try {
     await a.ir('/admin/vendas-externas/00000000-0000-4000-8000-000000000001');
     await waitFor(() => a.ev(`document.querySelector('main [role="alert"]')?.textContent.includes('Venda não encontrada')`),
       'Venda inexistente sem mensagem de erro');
+    const preencherConta = campos => a.ev(`(() => {
+      for (const [nome, valor] of Object.entries(${JSON.stringify(campos)})) {
+        const campo = document.querySelector('main [name="' + nome + '"]');
+        campo.value = valor;
+        campo.dispatchEvent(new Event(campo.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+      }
+    })()`);
+    for (const width of [375, 1280]) {
+      const tipo = width === 375 ? 'Saida' : 'Entrada';
+      const direcao = tipo === 'Saida' ? 'APagar' : 'AReceber';
+      const descricao = 'Conta E2E ' + width;
+      const acaoQuitar = tipo === 'Saida' ? 'Marcar como pago' : 'Marcar como recebido';
+      const clicarFinanceiro = async rotulo => {
+        await waitFor(() => a.ev(`!!(${botaoFinanceiro(rotulo)})`), 'Botão indisponível: ' + rotulo);
+        await a.ev(`(${botaoFinanceiro(rotulo)}).click()`);
+      };
+      const detalhe = () => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === ${JSON.stringify(descricao)}`);
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await a.ir('/admin/financeiro');
+      await clicarFinanceiro('Lançamentos');
+      await clicarFinanceiro('Novo lançamento');
+      await preencherConta({ tipo, inicial: 'pendente', categoria: 'Ensaio', descricao,
+        valor: '19,90', contraparte: 'Pessoa E2E' });
+      await waitFor(() => a.ev(`!!document.querySelector('main input[name="vencimento"]')`), 'Vencimento ausente');
+      await preencherConta({ vencimento: '2020-01-02' });
+      assert.ok(await a.ev(`!document.querySelector('main input[name="data"]') && document.documentElement.scrollWidth <= innerWidth`));
+      await clicarFinanceiro('Confirmar');
+      await waitFor(detalhe, 'Criação pendente não abriu o detalhe');
+      await a.ir('/admin');
+      const atalho = `[...document.querySelectorAll('main a')].find(a => a.href.includes('direcao=${direcao}') && a.href.includes('classificacao=Vencidas'))`;
+      await waitFor(() => a.ev(`!!(${atalho})`), 'Alerta de conta vencida ausente no Dashboard');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev(`(${atalho}).focus()`);
+      assert.ok(await a.ev(`document.activeElement === (${atalho})`));
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }, a.sessionId);
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }, a.sessionId);
+      const conta = `[...document.querySelectorAll('app-admin-contas-em-aberto article')].find(a => a.textContent.includes(${JSON.stringify(descricao)}))`;
+      await waitFor(() => a.ev(`(${conta})?.textContent.includes('R$ 19,90')`), 'Lista filtrada não encontrou a conta');
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev(`(${conta}).querySelector('button').click()`);
+      await waitFor(detalhe, 'Origem manual não abriu');
+      await clicarFinanceiro(acaoQuitar);
+      await preencherConta({ data: '2020-01-03', meio: 'Dinheiro' });
+      assert.ok(await a.ev(`document.querySelector('#formulario-financeiro')?.textContent.includes('quitação integral')
+        && document.documentElement.scrollWidth <= innerWidth`));
+      await a.ev(`document.querySelector('main input[name="confirmacao"]').click()`);
+      await clicarFinanceiro('Confirmar');
+      await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Quitação registrada em')`), 'Quitação não refletida no detalhe');
+      await a.ir('/admin/financeiro?secao=contas&direcao=' + direcao + '&classificacao=Vencidas');
+      await waitFor(() => a.ev(`document.querySelector('app-admin-contas-em-aberto')?.textContent.includes('Nenhuma conta em aberto')`),
+        'Conta quitada continuou na lista');
+      console.log('Contas em ' + width + ' px: cadastro, alerta no Dashboard, filtro por teclado, quitação integral e remoção da lista.');
+    }
+
   }
 
   if (dados.varianteAuditoria) {

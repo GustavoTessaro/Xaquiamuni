@@ -62,8 +62,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var resumo = await ObterResumoAsync(admin, "");
         var contas = resumo.PosicaoAtual.ContasEmAberto;
         Assert.Equal(hoje, contas.DataOperacional);
-        Assert.Equal(new IndicadoresDirecaoContaDto(4, "1402", new(1, "100"), new(1, "300"), new(1, "300")), contas.APagar);
-        Assert.Equal(new IndicadoresDirecaoContaDto(3, "1499", new(1, "899"), new(0, "0"), new(1, "400")), contas.AReceber);
+        Assert.Equal(new IndicadoresDirecaoContaDto(4, "1402", new(1, "100"), new(1, "300"), new(1, "300"), new(0, "0")), contas.APagar);
+        Assert.Equal(new IndicadoresDirecaoContaDto(3, "1499", new(1, "899"), new(0, "0"), new(1, "400"), new(1, "400")), contas.AReceber);
         Assert.Equal(("1402", "1499", 1L), (resumo.PosicaoAtual.APagarCentavos,
             resumo.PosicaoAtual.AReceberCentavos, resumo.PosicaoAtual.ComprasValorAConferir));
         Assert.Equal(contas, (await ObterResumoAsync(admin, "?dataInicial=2027-02-01")).PosicaoAtual.ContasEmAberto);
@@ -84,6 +84,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(manualAtrasada.Id, Assert.Single((await Listar("?direcao=APagar&classificacao=Vencidas")).Itens).Id);
         Assert.Equal(vencida.Id, Assert.Single((await Listar("?origem=VendaExterna&classificacao=Vencidas")).Itens).Id);
         Assert.Equal(manualTres.Id, Assert.Single((await Listar("?direcao=AReceber&classificacao=VencendoEmBreve")).Itens).Id);
+        Assert.Equal(manualTres.Id, Assert.Single((await Listar("?classificacao=ProximosTresDias")).Itens).Id);
+        Assert.Equal("VenceHoje", Assert.Single((await Listar("?classificacao=VenceHoje")).Itens).Situacao);
         Assert.Equal("VenceHoje", Assert.Single((await Listar("?direcao=APagar&classificacao=VencendoEmBreve")).Itens).Situacao);
 
         var dataEfetiva = hoje.AddDays(-3);

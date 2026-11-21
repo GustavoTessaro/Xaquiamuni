@@ -1,0 +1,55 @@
+<section class="financeiro" aria-labelledby="contas-titulo">
+  <h2 id="contas-titulo">Contas em aberto</h2>
+  <form class="cartao" aria-label="Filtros de contas" (ngSubmit)="filtrar()">
+    <div class="dados">
+      <label>Direção
+        <select name="direcao" [(ngModel)]="direcao">
+          <option value="">Todas</option><option value="APagar">A pagar</option><option value="AReceber">A receber</option>
+        </select>
+      </label>
+      <label>Vencimento
+        <select name="classificacao" [(ngModel)]="classificacao">
+          <option value="Todas">Todas</option><option value="Vencidas">Vencidas</option>
+          <option value="VenceHoje">Vencem hoje</option><option value="VencendoEmBreve">Hoje e próximos três dias</option>
+          <option value="ProximosTresDias">Próximos três dias</option>
+        </select>
+      </label>
+      <label>Origem
+        <select name="origem" [(ngModel)]="origem">
+          <option value="">Todas</option><option value="Manual">Lançamento manual</option>
+          <option value="Compra">Compra</option><option value="VendaExterna">Venda externa</option>
+        </select>
+      </label>
+    </div>
+    <button type="submit" class="primario">Aplicar filtros</button>
+  </form>
+  @if (carregando()) {
+    <p role="status">Carregando contas…</p>
+  } @else if (erro()) {
+    <p role="alert" class="mensagem erro">Não foi possível consultar as contas.</p>
+    <button type="button" (click)="carregar()">Tentar novamente</button>
+  } @else if (resultado(); as lista) {
+    @if (!lista.itens.length) {
+      <p role="status">Nenhuma conta em aberto para estes filtros.</p>
+    }
+    @for (conta of lista.itens; track conta.origem + conta.id) {
+      <article class="cartao">
+        <h3>{{ conta.descricao }}</h3>
+        <p>{{ rotulosOrigem[conta.origem] }} · {{ conta.direcao === 'APagar' ? 'A pagar' : 'A receber' }}</p>
+        @if (conta.contraparte) { <p>{{ conta.contraparte }}</p> }
+        <p><strong>{{ moeda(conta.valorPendenteCentavos) }}</strong></p>
+        <p>{{ conta.vencimento ? conta.vencimento.split('-').reverse().join('/') : 'Sem vencimento' }}</p>
+        <p [class.conta-atrasada]="conta.situacao === 'Vencida'" [class.conta-hoje]="conta.situacao === 'VenceHoje'"
+          [class.conta-proxima]="conta.situacao === 'VencendoEmBreve'">{{ rotulosSituacao[conta.situacao] }}</p>
+        <button type="button" (click)="abrir.emit(conta)" [attr.aria-label]="'Consultar origem de ' + conta.descricao">Consultar origem</button>
+      </article>
+    }
+    @if (lista.pagina > 1 || lista.temProxima) {
+      <nav class="acoes" aria-label="Paginação de contas">
+        <button type="button" [disabled]="lista.pagina === 1" (click)="carregar(lista.pagina - 1)">Anterior</button>
+        <span>Página {{ lista.pagina }}</span>
+        <button type="button" [disabled]="!lista.temProxima || lista.pagina === 10000" (click)="carregar(lista.pagina + 1)">Próxima</button>
+      </nav>
+    }
+  }
+</section>

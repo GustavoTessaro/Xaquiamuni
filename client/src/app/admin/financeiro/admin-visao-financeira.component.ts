@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import {
   FinanceiroService,
@@ -24,7 +24,7 @@ function dataCivil(data: Date): string {
 
 @Component({
   selector: 'app-admin-visao-financeira',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   templateUrl: './admin-visao-financeira.component.html',
   styleUrl: './admin-financeiro.component.css',
 })
@@ -42,6 +42,16 @@ export class AdminVisaoFinanceiraComponent {
   readonly periodoInicial = input<PeriodoFinanceiro>(todoPeriodo);
   readonly periodoAplicado = output<PeriodoFinanceiro>();
   readonly ativa = input(true);
+  readonly compacto = input(false);
+  protected readonly direcoes = [
+    { chave: 'aPagar', filtro: 'APagar', titulo: 'A pagar' },
+    { chave: 'aReceber', filtro: 'AReceber', titulo: 'A receber' },
+  ] as const;
+  protected readonly alertas = [
+    { chave: 'vencidas', filtro: 'Vencidas', titulo: 'Vencidas', classe: 'conta-atrasada' },
+    { chave: 'venceHoje', filtro: 'VenceHoje', titulo: 'Vencem hoje', classe: 'conta-hoje' },
+    { chave: 'proximosTresDias', filtro: 'ProximosTresDias', titulo: 'Próximos três dias', classe: 'conta-proxima' },
+  ] as const;
   readonly revisao = input(0);
   private revisaoConsultada = -1;
 

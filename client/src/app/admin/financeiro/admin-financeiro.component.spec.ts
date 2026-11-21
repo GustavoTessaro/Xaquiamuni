@@ -44,6 +44,7 @@ describe('AdminFinanceiroComponent', () => {
   let fixture: ComponentFixture<AdminFinanceiroComponent>;
   const api = {
     resumo: vi.fn(),
+    contasEmAberto: vi.fn(),
     movimentacoes: vi.fn(),
     consultarTentativa: vi.fn(),
     lancamentos: vi.fn(),
@@ -198,6 +199,122 @@ describe('AdminFinanceiroComponent', () => {
       }),
     );
     expect(sessionStorage.getItem(chaveStorage)).toBeNull();
+  });
+
+  it.each(['Entrada', 'Saida'])('cria conta pendente do tipo %s', async (tipo) => {
+    await render();
+    await preencher();
+    await campo('tipo', tipo);
+    await campo('inicial', 'pendente');
+    expect(fixture.nativeElement.querySelector('input[name="data"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('select[name="meio"]')).toBeNull();
+    await campo('valor', '12,34');
+    await clicar('Confirmar');
+    expect(api.enviar).not.toHaveBeenCalled();
+    expect(texto()).toContain('Informe um vencimento válido');
+    await campo('vencimento', '2026-12-01');
+    await campo('contraparte', 'Pessoa teste');
+    await campo('observacoes', 'Observação teste');
+    await clicar('Confirmar');
+    expect(api.enviar).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: 'criar-pendente',
+      corpo: { tipo, categoria: 'Teste', descricao: 'Novo movimento', valorCentavos: '1234',
+        vencimento: '2026-12-01', contraparte: 'Pessoa teste', observacoes: 'Observação teste' },
+    }));
+  });
+
+  it('quita integralmente e retira as ações do lançamento quitado', async () => {
+    api.lancamento.mockReturnValue(of({ ...lancamento, data: null, meio: null, situacao: 'Pendente' }));
+    api.enviar.mockReturnValue(of({ ...lancamento, situacao: 'Realizado', quitadoEmUtc: lancamento.criadoEmUtc }));
+    await render();
+    await clicar('Ver detalhe');
+    await clicar('Marcar como recebido');
+    expect(botao('Confirmar')?.disabled).toBe(true);
+    fixture.nativeElement.querySelector('input[name="confirmacao"]').click();
+    await atualizar();
+    await campo('data', '2026-11-20');
+    await clicar('Confirmar');
+    expect(api.enviar).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: 'quitar', id, corpo: { data: '2026-11-20', meio: 'Pix' },
+    }));
+    expect(botao('Marcar como recebido')).toBeUndefined();
+    expect(botao('Cancelar lançamento')).toBeUndefined();
+  });
+
+  it('cancela uma pendência com motivo e preserva o detalhe para auditoria', async () => {
+    const aberto = { ...lancamento, situacao: 'Pendente', data: null, meio: null };
+    api.lancamento.mockReturnValue(of(aberto));
+    api.enviar.mockReturnValue(of({ ...aberto, situacao: 'Cancelado',
+      canceladoEmUtc: lancamento.criadoEmUtc, motivoCancelamento: 'Conta duplicada' }));
+    await render();
+    await clicar('Ver detalhe');
+    await clicar('Cancelar lançamento');
+    await campo('motivo', 'Conta duplicada');
+    expect(botao('Confirmar')?.disabled).toBe(true);
+    fixture.nativeElement.querySelector('input[name="confirmacao"]').click();
+    await atualizar();
+    await clicar('Confirmar');
+    expect(api.enviar).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: 'cancelar', id, corpo: { motivo: 'Conta duplicada' },
+    }));
+    expect(texto()).toContain('Conta duplicada');
+    expect(botao('Marcar como recebido')).toBeUndefined();
+  });
+
+  it('recarrega o lançamento quando outra sessão já quitou a conta', async () => {
+    const aberto = { ...lancamento, situacao: 'Pendente', data: null, meio: null };
+    const realizado = { ...lancamento, situacao: 'Realizado', quitadoEmUtc: lancamento.criadoEmUtc };
+    api.lancamento.mockReturnValueOnce(of(aberto)).mockReturnValueOnce(of(realizado));
+    api.enviar.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 409 })));
+    await render();
+    await clicar('Ver detalhe');
+    await clicar('Marcar como recebido');
+    fixture.nativeElement.querySelector('input[name="confirmacao"]').click();
+    await atualizar();
+    await clicar('Confirmar');
+    expect(api.lancamento).toHaveBeenCalledTimes(2);
+    expect(botao('Marcar como recebido')).toBeUndefined();
+    expect(texto()).toContain('Os dados mudaram');
+  });
+
+  it('mostra erro de contas em aberto e permite nova consulta', async () => {
+    api.contasEmAberto.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })))
+      .mockReturnValueOnce(of({ dataOperacional: '2026-11-21', pagina: 1, tamanhoPagina: 50, temProxima: false, itens: [] }));
+    params.next(convertToParamMap({ secao: 'contas' }));
+    await render(false);
+    expect(texto()).toContain('Não foi possível consultar as contas');
+    await clicar('Tentar novamente');
+    expect(texto()).toContain('Nenhuma conta em aberto');
+  });
+
+  it('recupera a quitação por chave sem enviar outra escrita', async () => {
+    const resultado = { ...lancamento, situacao: 'Realizado', quitadoEmUtc: lancamento.criadoEmUtc };
+    sessionStorage.setItem(chaveStorage, JSON.stringify({ tipo: 'quitar', id, chave: id,
+      corpo: { data: '2026-11-20', meio: 'Pix' } }));
+    api.consultarTentativa.mockReturnValue(of({ operacao: 'quitar', recursoId: id, resultado }));
+    api.lancamento.mockReturnValue(of(resultado));
+    await render(false);
+    expect(api.consultarTentativa).toHaveBeenCalledWith(id);
+    expect(api.enviar).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem(chaveStorage)).toBeNull();
+    expect(texto()).toContain('Quitação registrada em');
+  });
+
+  it('carrega o atalho por URL e pagina pelos filtros da API', async () => {
+    const dados = { dataOperacional: '2026-11-21', pagina: 1, tamanhoPagina: 50,
+      temProxima: true, itens: [] };
+    api.contasEmAberto.mockReturnValueOnce(of(dados)).mockReturnValueOnce(of({ ...dados, pagina: 2, temProxima: false }));
+    rota.snapshot.queryParamMap = convertToParamMap({ secao: 'contas', direcao: 'APagar', classificacao: 'VenceHoje' });
+    params.next(rota.snapshot.queryParamMap);
+    await render(false);
+    expect(api.contasEmAberto).toHaveBeenLastCalledWith(expect.objectContaining({
+      direcao: 'APagar', classificacao: 'VenceHoje',
+    }), 1);
+    expect(texto()).toContain('Nenhuma conta em aberto');
+    await clicar('Próxima');
+    expect(api.contasEmAberto).toHaveBeenLastCalledWith(expect.objectContaining({
+      direcao: 'APagar', classificacao: 'VenceHoje',
+    }), 2);
   });
 
   it('rejeita valor inválido', async () => {

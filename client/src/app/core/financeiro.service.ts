@@ -23,9 +23,22 @@ export interface CriarLancamento extends MovimentoFinanceiro {
   tipo: 'Entrada' | 'Saida';
   categoria: string;
   descricao: string;
+  contraparte?: string;
+  observacoes?: string;
 }
 
-export interface LancamentoFinanceiro extends CriarLancamento {
+export type CriarPendente = Omit<CriarLancamento, 'data' | 'meio'> & { vencimento: string };
+export type QuitarLancamento = Pick<MovimentoFinanceiro, 'data' | 'meio'>;
+
+export interface LancamentoFinanceiro extends Omit<CriarLancamento, 'data' | 'meio' | 'contraparte' | 'observacoes'> {
+  data: string | null;
+  meio: MeioFinanceiro | null;
+  situacao?: 'Pendente' | 'Realizado' | 'Cancelado';
+  vencimento?: string | null;
+  contraparte?: string | null;
+  observacoes?: string | null;
+  quitadoPorId?: string | null;
+  quitadoEmUtc?: string | null;
   id: string;
   responsavelId: string;
   criadoEmUtc: string;
@@ -60,13 +73,15 @@ export interface PagamentoFornecedor extends PagarCompra {
 
 export type ComandoFinanceiro =
   | { tipo: 'criar'; corpo: CriarLancamento }
+  | { tipo: 'criar-pendente'; corpo: CriarPendente }
+  | { tipo: 'quitar'; id: string; corpo: QuitarLancamento }
   | { tipo: 'cancelar'; id: string; corpo: { motivo: string } }
   | { tipo: 'pagar'; id: string; corpo: PagarCompra };
 
 export type TentativaFinanceira = ComandoFinanceiro & { chave: string };
 
 export type ResultadoTentativaFinanceira =
-  | { operacao: 'criar' | 'cancelar'; recursoId: string; resultado: LancamentoFinanceiro }
+  | { operacao: 'criar' | 'criar-pendente' | 'quitar' | 'cancelar'; recursoId: string; resultado: LancamentoFinanceiro }
   | { operacao: 'pagar'; recursoId: string; resultado: PagamentoFornecedor };
 
 export type TipoMovimentacao = 'Entrada' | 'Saida';
@@ -106,7 +121,7 @@ export interface PeriodoFinanceiro {
 
 export type DirecaoConta = 'APagar' | 'AReceber';
 export type OrigemConta = 'Manual' | 'Compra' | 'VendaExterna';
-export type FiltroVencimento = 'Todas' | 'Vencidas' | 'VencendoEmBreve';
+export type FiltroVencimento = 'Todas' | 'Vencidas' | 'VencendoEmBreve' | 'VenceHoje' | 'ProximosTresDias';
 export type SituacaoVencimento = 'EmAberto' | 'Vencida' | 'VenceHoje' | 'VencendoEmBreve';
 
 export interface FiltroContasEmAberto {
@@ -144,6 +159,7 @@ export interface IndicadoresDirecaoConta extends TotalContas {
   vencidas: TotalContas;
   venceHoje: TotalContas;
   vencendoEmBreve: TotalContas;
+  proximosTresDias: TotalContas;
 }
 
 export interface IndicadoresContasEmAberto {
@@ -232,12 +248,13 @@ export class FinanceiroService {
   }
 
   enviar(tentativa: TentativaFinanceira) {
-    const rota =
-      tentativa.tipo === 'criar'
-        ? '/lancamentos'
-        : tentativa.tipo === 'cancelar'
-          ? '/lancamentos/' + encodeURIComponent(tentativa.id) + '/cancelar'
-          : '/compras/' + encodeURIComponent(tentativa.id) + '/pagamentos';
+    let rota: string;
+    switch (tentativa.tipo) {
+      case 'criar': rota = '/lancamentos'; break;
+      case 'criar-pendente': rota = '/lancamentos/pendentes'; break;
+      case 'pagar': rota = '/compras/' + encodeURIComponent(tentativa.id) + '/pagamentos'; break;
+      default: rota = '/lancamentos/' + encodeURIComponent(tentativa.id) + '/' + tentativa.tipo;
+    }
     return this.csrf.getRequestToken().pipe(
       switchMap(({ requestToken }) =>
         this.http.post<LancamentoFinanceiro | PagamentoFornecedor>(

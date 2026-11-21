@@ -3,7 +3,7 @@ namespace Xaquiamuni.Aplicacao.Financeiro;
 public enum DirecaoConta { APagar, AReceber }
 public enum OrigemConta { Manual, Compra, VendaExterna }
 public enum SituacaoVencimento { EmAberto, Vencida, VenceHoje, VencendoEmBreve }
-public enum FiltroVencimento { Todas, Vencidas, VencendoEmBreve }
+public enum FiltroVencimento { Todas, Vencidas, VencendoEmBreve, VenceHoje, ProximosTresDias }
 
 public sealed record FiltroContasEmAberto(DirecaoConta? Direcao, FiltroVencimento Classificacao, OrigemConta? Origem, int Pagina)
 {
@@ -18,6 +18,6 @@ public sealed record PaginaContasEmAberto(DateOnly DataOperacional, int Pagina, 
 
 public sealed record TotalContasDto(long Quantidade, string ValorCentavos);
 public sealed record IndicadoresDirecaoContaDto(long Quantidade, string ValorCentavos,
-    TotalContasDto Vencidas, TotalContasDto VenceHoje, TotalContasDto VencendoEmBreve);
+    TotalContasDto Vencidas, TotalContasDto VenceHoje, TotalContasDto VencendoEmBreve, TotalContasDto ProximosTresDias);
 public sealed record IndicadoresContasEmAbertoDto(DateOnly DataOperacional, IndicadoresDirecaoContaDto APagar,
     IndicadoresDirecaoContaDto AReceber);
