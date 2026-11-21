@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, effect, inject, input, signal, untracked } from '@angular/core';
+import { Component, DestroyRef, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -39,6 +39,8 @@ export class AdminVisaoFinanceiraComponent {
   protected readonly erro = signal('');
   protected readonly erroPeriodo = signal('');
 
+  readonly periodoInicial = input<PeriodoFinanceiro>(todoPeriodo);
+  readonly periodoAplicado = output<PeriodoFinanceiro>();
   readonly ativa = input(true);
   readonly revisao = input(0);
   private revisaoConsultada = -1;
@@ -46,6 +48,10 @@ export class AdminVisaoFinanceiraComponent {
   constructor() {
     effect(() => {
       if (!this.ativa() || this.carregando() || this.revisaoConsultada === this.revisao()) return;
+      if (this.revisaoConsultada === -1) {
+        this.periodo = { ...untracked(this.periodoInicial) };
+        this.aplicado = { ...this.periodo };
+      }
       this.revisaoConsultada = this.revisao();
       untracked(() => this.carregar());
     });
@@ -80,6 +86,7 @@ export class AdminVisaoFinanceiraComponent {
     }
     this.erroPeriodo.set('');
     this.aplicado = { ...this.periodo };
+    this.periodoAplicado.emit(this.aplicado);
     this.carregar();
   }
 

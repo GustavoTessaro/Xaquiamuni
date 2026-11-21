@@ -75,20 +75,26 @@ public sealed class EfCatalogoPublicoRepository(
         var variantes = produtos.SelectMany(produto => produto.Variantes).Select(variante => variante.Id).ToArray();
         var agoraUtc = await dbContext.ObterAgoraReservasUtcAsync(cancellationToken).ConfigureAwait(false);
         var dataOperacional = calendario.ObterDataEm(agoraUtc);
+        var disponiveis = await VariantesDisponiveis(dbContext, agoraUtc, dataOperacional)
+            .Where(id => variantes.Contains(id)).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
+        return disponiveis.ToHashSet();
+    }
+
+    internal static IQueryable<Guid> VariantesDisponiveis(
+        XaquiamuniDbContext dbContext, DateTimeOffset agoraUtc, DateOnly dataOperacional)
+    {
         var compromissos = dbContext.ReservasProdutoAcabado.ComprometidasEm(agoraUtc);
-        var disponiveis = await (
+        return
             from lote in dbContext.LotesProdutoAcabado
             join saldo in dbContext.SaldosProdutoAcabado on new { lote.ProdutoVarianteId, LoteId = lote.Id }
                 equals new { saldo.ProdutoVarianteId, saldo.LoteId }
-            where variantes.Contains(lote.ProdutoVarianteId) && (lote.DataValidade == null || lote.DataValidade >= dataOperacional)
+            where (lote.DataValidade == null || lote.DataValidade >= dataOperacional)
                 && dbContext.ProdutoVariantes.Any(variante => variante.Id == lote.ProdutoVarianteId && variante.Ativa)
                 && saldo.QuantidadeVendavel > 0
                 && saldo.QuantidadeVendavel > compromissos
                     .Where(reserva => reserva.ProdutoVarianteId == lote.ProdutoVarianteId && reserva.LoteId == lote.Id)
                     .Sum(reserva => (long)reserva.Quantidade)
-            select lote.ProdutoVarianteId
-        ).Distinct().ToListAsync(cancellationToken).ConfigureAwait(false);
-        return disponiveis.ToHashSet();
+            select lote.ProdutoVarianteId;
     }
 
     private static ProdutoCatalogoPublico Mapear(Produto produto, HashSet<Guid> disponiveis) =>

@@ -208,6 +208,11 @@ public sealed class EfEstoqueInsumoConsultaRepository(XaquiamuniDbContext dbCont
         return dados.ToDictionary(r => r.Insumo.Id, MapearResumo);
     }
 
+    internal Task<int> ContarInsumosEmAlertaAsync(DateOnly dataReferencia, CancellationToken ct) =>
+        ConstruirResumoQuery(dataReferencia).CountAsync(item => item.Insumo.Ativo &&
+            (item.SaldoUtilizavel == 0m || (item.Insumo.EstoqueMinimo != null &&
+                item.SaldoUtilizavel <= item.Insumo.EstoqueMinimo.ValorBase)), ct);
+
     private IQueryable<ResumoEstoqueSql> ConstruirResumoQuery(DateOnly dataReferencia)
     {
         var reservasAtivas = dbContext.Ativas();

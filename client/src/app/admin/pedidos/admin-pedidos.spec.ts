@@ -132,6 +132,10 @@ describe('Pedidos administrativos', () => {
 
   it('oferece a navegação no painel e protege as duas rotas com o guard', async () => {
     const harness = await RouterTestingHarness.create('/admin');
+    for (const secao of ['operacao', 'estoque', 'agenda']) {
+      http.expectOne('/api/admin/dashboard/' + secao).flush(null, { status: 503, statusText: 'Offline' });
+    }
+    http.expectOne('/api/admin/financeiro/resumo').flush(null, { status: 503, statusText: 'Offline' });
     const link = harness.routeNativeElement!.querySelector<HTMLAnchorElement>(
       'a[href="/admin/pedidos"]',
     )!;

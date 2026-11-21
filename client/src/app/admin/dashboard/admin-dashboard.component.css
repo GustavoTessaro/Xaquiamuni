@@ -1,47 +1,81 @@
-:host {
-  display: block;
+.dashboard,
+.dashboard__panel {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
-.admin-welcome {
-  padding: clamp(1.4rem, 4vw, 3rem);
-  border-radius: 1rem;
-  border-inline-start: .35rem solid var(--admin-gold);
-  background: var(--color-emerald-900);
-  color: #fffaf0;
+.dashboard__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .65rem;
+  flex-wrap: wrap;
 }
-.admin-welcome h1 {
-  font-size: clamp(1.8rem, 4vw, 3rem);
+.dashboard__heading h1 {
+  color: var(--color-emerald-900);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
 }
-.admin-welcome p {
-  margin-top: .65rem;
+.dashboard__panel {
+  padding: clamp(.8rem, 2vw, 1.3rem);
+  border: 1px solid var(--admin-border);
+  border-radius: .85rem;
+  background: var(--admin-surface);
 }
-.admin-shortcuts {
-  margin-block-start: clamp(1.25rem, 4vw, 2.5rem);
-}
-.admin-shortcuts h2 {
-  margin-block-end: .75rem;
+.dashboard__panel h2 {
   color: var(--color-emerald-900);
   font-size: 1.15rem;
   font-weight: 700;
 }
-.admin-shortcuts > div {
+.dashboard__cards,
+.dashboard__cols {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
-  gap: .75rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.5rem), 1fr));
+  gap: .65rem;
 }
-.admin-shortcuts a {
+.dashboard__cols {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  align-items: start;
+}
+.dashboard__card {
   display: grid;
+  align-content: start;
   gap: .3rem;
-  padding: 1rem;
+  min-width: 0;
+  padding: .8rem;
   border: 1px solid var(--admin-border);
-  border-radius: .8rem;
-  background: var(--admin-surface);
-  box-shadow: var(--admin-shadow);
+  border-radius: .65rem;
+  background: var(--color-slate-50);
   color: var(--color-emerald-900);
 }
-.admin-shortcuts a:hover strong {
+.dashboard__card:hover span {
   text-decoration: underline;
 }
-.admin-shortcuts span {
-  color: var(--color-slate-600);
+.dashboard__card span,
+.dashboard__agenda span {
   font-size: .875rem;
+}
+.dashboard__card strong {
+  font-size: 1.65rem;
+  font-variant-numeric: tabular-nums;
+}
+.dashboard__card meter {
+  width: 100%;
+  accent-color: var(--color-emerald-800);
+}
+.dashboard__agenda {
+  display: grid;
+  gap: .5rem;
+}
+.dashboard__agenda li {
+  display: grid;
+  overflow-wrap: anywhere;
+}
+.dashboard__finance-link,
+.dashboard__heading a {
+  justify-self: start;
+  color: var(--color-emerald-900);
+  text-decoration: underline;
+}
+.dashboard [role=alert] {
+  color: #842b24;
 }

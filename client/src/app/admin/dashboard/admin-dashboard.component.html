@@ -1,15 +1,96 @@
 <app-admin-workspace activePage="overview">
-  <section class="admin-welcome" aria-labelledby="admin-welcome-title">
-    <h1 id="admin-welcome-title">Bem-vinda à administração</h1>
-    <p>Acompanhe pedidos, prepare produções e mantenha o catálogo atualizado.</p>
-  </section>
+  <div class="dashboard">
+    <header class="admin-page-heading dashboard__heading">
+      <div>
+        <h1 id="admin-welcome-title">Visão geral</h1>
+        <p>Pedidos, estoque e caixa da loja.</p>
+      </div>
+      <button class="admin-button" type="button" (click)="atualizar()" [disabled]="carregando()">
+        {{ carregando() ? 'Atualizando…' : 'Atualizar painel' }}
+      </button>
+    </header>
 
-  <section class="admin-shortcuts" aria-labelledby="admin-shortcuts-title">
-    <h2 id="admin-shortcuts-title">Acesso rápido</h2>
-    <div>
-      <a routerLink="/admin/pedidos"><strong>Pedidos</strong><span>Consulte pagamentos e retiradas.</span></a>
-      <a routerLink="/admin/produtos"><strong>Produtos</strong><span>Gerencie opções e estoque.</span></a>
-      <a routerLink="/admin/producao"><strong>Produção</strong><span>Acompanhe as ordens de fabricação.</span></a>
+    <section class="dashboard__panel" aria-labelledby="dashboard-operacao">
+      <h2 id="dashboard-operacao">Operação</h2>
+      @let oper = operacao();
+      @if (oper.tipo === 'carregando') {
+        <p role="status">Consultando a operação…</p>
+      } @else if (oper.tipo === 'erro') {
+        <p role="alert">Não foi possível consultar os pedidos, a produção e as compras.</p>
+      } @else if (oper.tipo === 'dados') {
+        <div class="dashboard__cards">
+          @for (pedido of pedidos; track pedido.chave) {
+            <a routerLink="/admin/pedidos" [queryParams]="{ situacao: pedido.fluxo }" class="dashboard__card">
+              <span>{{ pedido.titulo }}</span>
+              <strong>{{ oper.dados[pedido.chave] }}</strong>
+              @if (totalPedidos() > 0) {
+                <meter min="0" [max]="totalPedidos()" [value]="oper.dados[pedido.chave]"
+                  [attr.aria-label]="pedido.titulo + ' em relação aos pedidos em aberto'"></meter>
+              }
+            </a>
+          }
+          <a routerLink="/admin/producao" class="dashboard__card">
+            <span>Produções em andamento</span><strong>{{ oper.dados.producoesEmAndamento }}</strong>
+          </a>
+          <a routerLink="/admin/compras" class="dashboard__card">
+            <span>Compras em rascunho</span><strong>{{ oper.dados.comprasRascunho }}</strong>
+            <small>Recebimento físico ainda não registrado.</small>
+          </a>
+        </div>
+      }
+    </section>
+
+    <div class="dashboard__cols">
+      <section class="dashboard__panel" aria-labelledby="dashboard-estoque">
+        <h2 id="dashboard-estoque">Estoque</h2>
+        @let est = estoque();
+        @if (est.tipo === 'carregando') {
+          <p role="status">Consultando o estoque…</p>
+        } @else if (est.tipo === 'erro') {
+          <p role="alert">Não foi possível consultar os indicadores de estoque.</p>
+        } @else if (est.tipo === 'dados') {
+          <div class="dashboard__cards">
+            <a routerLink="/admin/estoque/insumos" class="dashboard__card">
+              <span>Matérias-primas com estoque baixo ou zerado</span>
+              <strong>{{ est.dados.materiasPrimasEmAlerta }}</strong>
+            </a>
+            <a routerLink="/admin/produtos" class="dashboard__card">
+              <span>Produtos disponíveis para venda</span><strong>{{ est.dados.produtosDisponiveis }}</strong>
+            </a>
+          </div>
+        }
+      </section>
+
+      <section class="dashboard__panel" aria-labelledby="dashboard-agenda">
+        <div class="dashboard__heading">
+          <h2 id="dashboard-agenda">Próximos compromissos</h2>
+          <a routerLink="/admin/agenda">Abrir Agenda</a>
+        </div>
+        @let ag = agenda();
+        @if (ag.tipo === 'carregando') {
+          <p role="status">Consultando a Agenda…</p>
+        } @else if (ag.tipo === 'erro') {
+          <p role="alert">Não foi possível consultar os compromissos.</p>
+        } @else if (ag.tipo === 'dados') {
+          <ul class="dashboard__agenda">
+            @for (item of ag.dados; track $index) {
+              <li>
+                <strong>{{ item.titulo }}</strong>
+                <span><time [attr.datetime]="item.data">{{ item.data.split('-').reverse().join('/') }}</time>
+                  · {{ item.horarioInicial?.slice(0, 5) || 'Dia inteiro' }}</span>
+              </li>
+            } @empty {
+              <li>Nenhum compromisso nos próximos 30 dias.</li>
+            }
+          </ul>
+        }
+      </section>
     </div>
-  </section>
+
+    <div class="dashboard__panel">
+      <a routerLink="/admin/financeiro" class="dashboard__finance-link">Abrir Financeiro</a>
+      <app-admin-visao-financeira [revisao]="revisao()" [periodoInicial]="periodoInicial"
+        (periodoAplicado)="guardarPeriodo($event)" />
+    </div>
+  </div>
 </app-admin-workspace>

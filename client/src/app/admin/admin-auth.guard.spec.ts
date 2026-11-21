@@ -1,3 +1,5 @@
+import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { Router, Routes, provideRouter } from '@angular/router';
@@ -74,6 +76,7 @@ describe('adminAuthGuard', () => {
     );
     await TestBed.configureTestingModule({
       providers: [
+        provideHttpClient(), provideHttpClientTesting(),
         provideRouter(routes),
         {
           provide: AdminAuthService,
@@ -89,8 +92,13 @@ describe('adminAuthGuard', () => {
     const harness = await RouterTestingHarness.create();
     await harness.navigateByUrl('/admin', AdminDashboardComponent);
 
+    const http = TestBed.inject(HttpTestingController);
+    http.match(req => req.url.startsWith('/api/admin/')).forEach(req =>
+      req.flush(null, { status: 503, statusText: 'Offline' }));
+    http.verify();
+
     expect(TestBed.inject(Router).url).toBe('/admin');
-    expect(harness.routeNativeElement?.textContent).toContain('Bem-vinda à administração');
+    expect(harness.routeNativeElement?.textContent).toContain('Próximos compromissos');
   });
 
   it.each(['/admin/categorias', '/admin/fornecedores', '/admin/compras', '/admin/receitas', '/admin/producao'])('protects %s and redirects a session without access', async (url) => {
