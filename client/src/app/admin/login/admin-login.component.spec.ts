@@ -4,6 +4,7 @@ import { Router, provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
+import { TemaAdminService } from '../tema-admin.service';
 import { AdminLoginComponent } from './admin-login.component';
 
 describe('AdminLoginComponent', () => {
@@ -36,6 +37,19 @@ describe('AdminLoginComponent', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('aplica a preferência administrativa no login sem duplicar o controle', () => {
+    const tema = TestBed.inject(TemaAdminService);
+    tema.alternar();
+    try {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('main').dataset.adminLoginTheme).toBe('dark');
+      expect(fixture.nativeElement.querySelector('[data-admin-theme]')).toBeNull();
+      expect(fixture.nativeElement.querySelectorAll('button')).toHaveLength(1);
+    } finally {
+      localStorage.removeItem('xaquiamuni:admin:tema');
+    }
   });
 
   it('validates required and malformed credentials without submitting', () => {

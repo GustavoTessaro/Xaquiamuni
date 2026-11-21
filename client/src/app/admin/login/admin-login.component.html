@@ -1,4 +1,5 @@
-<main class="min-h-screen bg-[#f5f7f1] px-4 py-8 text-slate-800 sm:px-6 lg:py-12">
+<main class="admin-login-theme min-h-screen bg-[var(--admin-bg)] px-4 py-8 text-[var(--admin-text)] sm:px-6 lg:py-12"
+  [attr.data-admin-login-theme]="temaAdmin.tema()">
   <div class="mx-auto max-w-5xl">
     <header class="mb-7 flex items-center gap-3" aria-label="Xaquiamuni Produtos Naturais">
       <span class="flex size-11 items-center justify-center rounded-2xl bg-emerald-800 text-white" aria-hidden="true">
@@ -7,12 +8,12 @@
         </svg>
       </span>
       <div>
-        <p class="text-lg font-semibold tracking-tight text-emerald-950">Xaquiamuni</p>
-        <p class="text-xs tracking-wide text-slate-500">PRODUTOS NATURAIS</p>
+        <p class="text-lg font-semibold tracking-tight text-[var(--admin-action-text)]">Xaquiamuni</p>
+        <p class="text-xs tracking-wide text-[var(--admin-muted)]">PRODUTOS NATURAIS</p>
       </div>
     </header>
 
-    <section class="overflow-hidden rounded-3xl border border-emerald-950/5 bg-white shadow-[0_24px_70px_-45px_rgba(27,66,47,0.42)]">
+    <section class="overflow-hidden rounded-3xl border border-[var(--admin-border)] bg-[var(--admin-surface)] shadow-[0_24px_70px_-45px_rgba(27,66,47,0.42)]">
       <div class="grid lg:grid-cols-[0.8fr_1.2fr]">
         <aside class="relative overflow-hidden bg-emerald-950 px-7 py-9 text-white sm:px-10 lg:px-11 lg:py-12">
           <div class="absolute -right-20 -top-20 size-64 rounded-full border border-white/10"></div>
@@ -28,9 +29,9 @@
 
         <div class="px-5 py-8 sm:px-9 sm:py-10 lg:px-12 lg:py-14">
           <div class="mb-8">
-            <p class="text-sm font-medium text-emerald-800">Xaquiamuni</p>
-            <h2 class="mt-1 text-2xl font-semibold tracking-tight text-slate-900">Entrar no painel</h2>
-            <p class="mt-2 text-sm text-slate-500">Informe suas credenciais administrativas.</p>
+            <p class="text-sm font-medium text-[var(--admin-action-text)]">Xaquiamuni</p>
+            <h2 class="mt-1 text-2xl font-semibold tracking-tight text-[var(--admin-text)]">Entrar no painel</h2>
+            <p class="mt-2 text-sm text-[var(--admin-muted)]">Informe suas credenciais administrativas.</p>
           </div>
 
           <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
@@ -63,9 +64,9 @@
 
             <div class="mt-7 space-y-3">
               <button type="submit" [disabled]="signingIn()" [attr.aria-busy]="signingIn()"
-                class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-800 px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-wait disabled:opacity-70">
+                class="flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[var(--admin-action)] px-5 py-3 text-sm font-semibold text-[var(--admin-action-ink)] shadow-sm transition hover:bg-[var(--admin-action-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--admin-focus)] disabled:cursor-wait disabled:opacity-70">
                 @if (signingIn()) {
-                  <span class="size-4 animate-spin rounded-full border-2 border-white/40 border-t-white" aria-hidden="true"></span>
+                  <span class="size-4 animate-spin rounded-full border-2 border-current/40 border-t-current" aria-hidden="true"></span>
                   <span>Entrando...</span>
                 } @else {
                   <span>Entrar</span>
@@ -75,21 +76,21 @@
                 <p class="sr-only" role="status" aria-live="polite">Autenticando a conta administrativa.</p>
               }
               @if (errorMessage()) {
-                <p class="text-center text-sm font-medium text-red-700" role="alert" aria-live="assertive">
+                <p class="text-center text-sm font-medium text-[var(--admin-error)]" role="alert" aria-live="assertive">
                   {{ errorMessage() }}
                 </p>
               }
             </div>
           </form>
 
-          <p class="mt-7 border-t border-slate-100 pt-5 text-center text-sm text-slate-600">
-            <a routerLink="/login" class="font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800">
+          <p class="mt-7 border-t border-[var(--admin-border)] pt-5 text-center text-sm text-[var(--admin-muted)]">
+            <a routerLink="/login" class="font-semibold text-[var(--admin-action-text)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--admin-focus)]">
               Voltar à loja
             </a>
           </p>
         </div>
       </div>
     </section>
-    <footer class="py-5 text-center text-xs text-slate-400">Xaquiamuni Produtos Naturais</footer>
+    <footer class="py-5 text-center text-xs text-[var(--admin-muted)]">Xaquiamuni Produtos Naturais</footer>
   </div>
 </main>

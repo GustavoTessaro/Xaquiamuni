@@ -1,4 +1,4 @@
-<div class="admin-shell">
+<div class="admin-shell" [attr.data-admin-theme]="temaAdmin.tema()">
   <header class="admin-topbar">
     <div class="admin-topbar__inner">
       <button #menuTrigger type="button" class="admin-button admin-menu-toggle"
@@ -11,6 +11,18 @@
         <span class="brand-crop brand-crop--symbol"><img src="/logo-xaquiamuni.jpeg" alt="" width="1024" height="1024" /></span>
         <span class="brand-crop brand-crop--wordmark"><img src="/logo-xaquiamuni.jpeg" alt="" width="1024" height="1024" /></span>
       </a>
+      @let acaoTema = temaAdmin.tema() === 'dark' ? 'Ativar modo claro' : 'Ativar modo escuro';
+      <button type="button" class="admin-button admin-theme-toggle"
+        [attr.aria-label]="acaoTema" [title]="acaoTema" (click)="temaAdmin.alternar()">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          @if (temaAdmin.tema() === 'dark') {
+            <circle cx="12" cy="12" r="4" />
+            <path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M5 19l1.5-1.5m11-11L19 5" />
+          } @else {
+            <path d="M20.5 14A8.7 8.7 0 0 1 10 3.5 8.7 8.7 0 1 0 20.5 14Z" />
+          }
+        </svg>
+      </button>
       <button type="button" class="admin-button admin-signout" (click)="logout()"
         [disabled]="signingOut()" [attr.aria-busy]="signingOut()">
         {{ signingOut() ? 'Saindo...' : 'Sair' }}

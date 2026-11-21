@@ -4,6 +4,7 @@ import { NavigationEnd, Router, RouterLink } from '@angular/router';
 import { filter, finalize } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
+import { TemaAdminService } from './tema-admin.service';
 
 export type AdminWorkspacePage =
   'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases' | 'recipes' | 'production' | 'external-sales' | 'finance' | 'agenda' | 'themes' | 'promotions';
@@ -54,6 +55,7 @@ const grupos: readonly GrupoAdmin[] = [
 })
 export class AdminWorkspaceComponent {
   readonly activePage = input.required<AdminWorkspacePage>();
+  protected readonly temaAdmin = inject(TemaAdminService);
   protected readonly grupos = grupos;
   protected readonly menuAberto = signal(false);
   private readonly menu = viewChild.required<ElementRef<HTMLDialogElement>>('menu');

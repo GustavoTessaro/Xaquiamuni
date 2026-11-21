@@ -1,3 +1,4 @@
+import { TemaAdminService } from '../admin/tema-admin.service';
 import { provideHttpClient } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
@@ -12,6 +13,7 @@ import { CarrinhoService } from './carrinho.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
 
 describe('prévia administrativa da loja', () => {
+  afterEach(() => localStorage.removeItem('xaquiamuni:admin:tema'));
   const previa = '/admin/temas/previa/original';
   const item = { id: 'produto-1', nome: 'Vela artesanal', categoriaNome: 'Velas', categoriaId: 'velas',
     fotoPrincipal: { id: 'foto', url: '/foto', opcoesIds: [] }, galeria: [],
@@ -57,11 +59,13 @@ describe('prévia administrativa da loja', () => {
 
   it('reutiliza home, catálogo e detalhe sem ler sessão, carrinho ou tema publicado', async () => {
     const deps = configurar();
+    TestBed.inject(TemaAdminService).alternar();
     const harness = await RouterTestingHarness.create(previa);
     const links = () => Array.from(harness.routeNativeElement!.querySelectorAll<HTMLAnchorElement>('a'),
       a => a.getAttribute('href'));
     expect(harness.routeNativeElement?.textContent).toContain('Prévia administrativa');
     expect(harness.routeNativeElement?.getAttribute('data-theme')).toBe('original');
+    expect(harness.routeNativeElement?.closest('[data-admin-theme]')).toBeNull();
     expect(links()).toContain(previa + '/produtos');
     expect(links()).toContain('/admin/temas');
     expect(links()).not.toContain('/carrinho');
@@ -86,14 +90,17 @@ describe('prévia administrativa da loja', () => {
     'renderiza a arte final e conserva os links na prévia de %s',
     async (chave) => {
       const deps = configurar();
+      TestBed.inject(TemaAdminService).alternar();
       const inicio = '/admin/temas/previa/' + chave;
       const harness = await RouterTestingHarness.create(inicio);
       expect(harness.routeNativeElement?.getAttribute('data-theme')).toBe(chave);
+      expect(harness.routeNativeElement?.closest('[data-admin-theme]')).toBeNull();
       expect(harness.routeNativeElement?.querySelector('.season-hero img')?.getAttribute('src'))
         .toBe('/temas/' + chave + '.svg');
       expect(harness.routeNativeElement?.querySelector('.season-editorial h2')).not.toBeNull();
       await harness.navigateByUrl(inicio + '/produtos/produto-1');
       expect(harness.routeNativeElement?.getAttribute('data-theme')).toBe(chave);
+      expect(harness.routeNativeElement?.closest('[data-admin-theme]')).toBeNull();
       expect(deps.consultarPublico).not.toHaveBeenCalled();
       expect(deps.carrinho).not.toHaveBeenCalled();
     },

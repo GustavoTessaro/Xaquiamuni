@@ -7,39 +7,40 @@
   margin-bottom: 0.4rem;
   font-size: 0.875rem;
   font-weight: 500;
-  color: #334155;
+  color: var(--admin-text);
 }
 
 .field-control {
   display: block;
   width: 100%;
   min-height: 2.75rem;
-  border: 1px solid #dbe3dc;
+  border: 1px solid var(--admin-control);
   border-radius: 0.75rem;
-  background-color: #fff;
+  background-color: var(--admin-field);
   padding: 0.65rem 0.8rem;
-  color: #17231d;
+  color: var(--admin-text);
   font-size: 0.925rem;
   outline: none;
-  transition: border-color 150ms ease, box-shadow 150ms ease;
+  transition: border-color 150ms ease;
 }
 
 .field-control::placeholder {
-  color: #a0aaa3;
+  color: var(--admin-muted);
 }
 
 .field-control:focus {
-  border-color: #16784b;
-  box-shadow: 0 0 0 3px rgb(22 120 75 / 12%);
+  border-color: var(--admin-focus);
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
 }
 
 .field-control[aria-invalid='true'] {
-  border-color: #dc2626;
+  border-color: var(--admin-error);
 }
 
 .field-error {
   margin-top: 0.35rem;
-  color: #b91c1c;
+  color: var(--admin-error);
   font-size: 0.75rem;
   line-height: 1.15rem;
 }

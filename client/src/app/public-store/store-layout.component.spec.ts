@@ -1,3 +1,4 @@
+import { TemaAdminService } from '../admin/tema-admin.service';
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
@@ -20,9 +21,12 @@ describe('tema da loja pública', () => {
     });
   });
 
+  afterEach(() => localStorage.removeItem('xaquiamuni:admin:tema'));
+
   it.each([null, 'original', 'natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes', 'tema-inexistente'])(
     'mantém navegação e resolve o tema para resposta %s',
     (chave) => {
+      TestBed.inject(TemaAdminService).alternar();
       const fixture = TestBed.createComponent(StoreLayoutComponent);
       fixture.detectChanges();
       const layout = fixture.nativeElement as HTMLElement;
@@ -34,6 +38,8 @@ describe('tema da loja pública', () => {
       expect(layout.dataset['theme']).toBe(chave === null || chave === 'tema-inexistente' ? 'original' : chave);
       const sazonal = !!chave && chave !== 'original' && chave !== 'tema-inexistente';
       expect(!!layout.style.getPropertyValue('--tema-painel')).toBe(sazonal);
+      expect(layout.closest('[data-admin-theme]')).toBeNull();
+      expect(layout.style.getPropertyValue('--admin-bg')).toBe('');
       expect(layout.querySelector('main router-outlet')).not.toBeNull();
       expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
       TestBed.inject(HttpTestingController).verify();

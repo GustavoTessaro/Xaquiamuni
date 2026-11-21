@@ -1,0 +1,53 @@
+.admin-shell,
+.admin-login-theme {
+  color-scheme: light;
+  --admin-bg: #faf7f0;
+  --admin-surface: #fffefa;
+  --admin-border: #ded4c3;
+  --admin-control: #928672;
+  --admin-gold: #b69a59;
+  --admin-focus: #795f30;
+  --admin-shadow: 0 8px 22px rgb(36 71 55 / 6%);
+  --admin-elevated: #fff;
+  --admin-text: #33342d;
+  --admin-muted: #555347;
+  --admin-field: #fff;
+  --admin-action: #244737;
+  --admin-action-hover: #19392c;
+  --admin-action-ink: #fff;
+  --admin-action-text: #19392c;
+  --admin-action-soft: #edf0e8;
+  --admin-success: #24573e;
+  --admin-success-bg: #e5f3ea;
+  --admin-warning: #765115;
+  --admin-warning-bg: #fff2d6;
+  --admin-error: #842b24;
+  --admin-error-bg: #fff4ee;
+}
+
+.admin-shell[data-admin-theme='dark'],
+.admin-login-theme[data-admin-login-theme='dark'] {
+  color-scheme: dark;
+  --admin-bg: #151d19;
+  --admin-surface: #202b25;
+  --admin-elevated: #29372e;
+  --admin-text: #faf7f0;
+  --admin-muted: #c8cfc5;
+  --admin-border: #46574c;
+  --admin-control: #829388;
+  --admin-field: #18231d;
+  --admin-action: #b9ddc4;
+  --admin-action-hover: #d4efdc;
+  --admin-action-ink: #19392c;
+  --admin-action-text: #cae8d3;
+  --admin-action-soft: #32463a;
+  --admin-gold: #d2b675;
+  --admin-focus: #edcd83;
+  --admin-shadow: 0 8px 22px rgb(0 0 0 / 20%);
+  --admin-success: #b6e5c4;
+  --admin-success-bg: #253e30;
+  --admin-warning: #f4d68e;
+  --admin-warning-bg: #443822;
+  --admin-error: #ffc0b6;
+  --admin-error-bg: #452d2b;
+}

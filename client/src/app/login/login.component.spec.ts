@@ -1,3 +1,4 @@
+import { TemaAdminService } from '../admin/tema-admin.service';
 import { HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
@@ -59,6 +60,17 @@ describe('LoginComponent', () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();
+  });
+
+  it('mantém o login público fora do tema administrativo', () => {
+    TestBed.inject(TemaAdminService).alternar();
+    try {
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('form')).not.toBeNull();
+      expect(fixture.nativeElement.querySelector('[data-admin-theme], [data-admin-login-theme]')).toBeNull();
+    } finally {
+      localStorage.removeItem('xaquiamuni:admin:tema');
+    }
   });
 
   it('checks /me on initialization and shows a discreet loading state', () => {

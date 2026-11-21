@@ -5,6 +5,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { Router, RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { AdminAuthService } from '../../core/admin-auth/admin-auth.service';
+import { TemaAdminService } from '../tema-admin.service';
 
 type AdminLoginControls = {
   email: FormControl<string>;
@@ -19,6 +20,7 @@ type AdminLoginControls = {
   templateUrl: './admin-login.component.html',
 })
 export class AdminLoginComponent {
+  protected readonly temaAdmin = inject(TemaAdminService);
   protected readonly submitted = signal(false);
   protected readonly signingIn = signal(false);
   protected readonly errorMessage = signal('');

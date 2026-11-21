@@ -2,13 +2,6 @@ app-admin-workspace {
   display: block;
 }
 .admin-shell {
-  --admin-bg: #faf7f0;
-  --admin-surface: #fffefa;
-  --admin-border: #ded4c3;
-  --admin-control: #928672;
-  --admin-gold: #b69a59;
-  --admin-focus: #795f30;
-  --admin-shadow: 0 8px 22px rgb(36 71 55 / 6%);
   --color-emerald-50: #edf0e8;
   --color-emerald-100: #dfe9df;
   --color-emerald-200: #c9dbcb;
@@ -27,10 +20,10 @@ app-admin-workspace {
   --color-slate-900: #292a25;
   min-height: 100dvh;
   background: var(--admin-bg);
-  color: var(--color-slate-800);
+  color: var(--admin-text);
 }
 .admin-topbar {
-  background: white;
+  background: var(--admin-elevated);
   border-block-end: 1px solid var(--admin-border);
 }
 .admin-topbar__inner,
@@ -53,8 +46,14 @@ app-admin-workspace {
   gap: .45rem;
   border-radius: .35rem;
 }
-.admin-signout {
+.admin-theme-toggle {
   margin-inline-start: auto;
+  min-width: 2.75rem;
+  padding-inline: .55rem;
+}
+.admin-shell[data-admin-theme='dark'] .admin-mark {
+  background: #fff;
+  padding: .25rem .35rem;
 }
 .admin-button {
   display: inline-flex;
@@ -66,12 +65,12 @@ app-admin-workspace {
   border: 1px solid var(--admin-control);
   border-radius: .65rem;
   background: var(--admin-surface);
-  color: var(--color-emerald-900);
+  color: var(--admin-action-text);
   font-size: .85rem;
   font-weight: 650;
 }
 .admin-button:hover:not(:disabled) {
-  background: var(--color-emerald-50);
+  background: var(--admin-action-soft);
 }
 .admin-button:disabled {
   opacity: .65;
@@ -80,6 +79,7 @@ app-admin-workspace {
 .admin-menu-toggle {
   display: none;
 }
+.admin-theme-toggle svg,
 .admin-menu-toggle svg,
 .admin-nav__label svg {
   width: 1.15rem;
@@ -120,7 +120,7 @@ app-admin-workspace {
   align-items: center;
   margin: 0;
   padding: .4rem .6rem;
-  color: var(--color-slate-600);
+  color: var(--admin-muted);
   font-size: .72rem;
   font-weight: 700;
 }
@@ -134,16 +134,16 @@ app-admin-workspace {
   padding: .35rem .65rem;
   border-inline-start: .2rem solid transparent;
   border-radius: .55rem;
-  color: var(--color-slate-700);
+  color: var(--admin-text);
   font-size: .875rem;
 }
 .admin-nav a:hover {
-  background: var(--color-slate-50);
+  background: var(--admin-action-soft);
 }
 .admin-nav a.is-current {
   border-inline-start-color: var(--admin-gold);
-  background: var(--color-emerald-50);
-  color: var(--color-emerald-900);
+  background: var(--admin-action-soft);
+  color: var(--admin-action-text);
   font-weight: 750;
 }
 .admin-drawer {
@@ -156,7 +156,7 @@ app-admin-workspace {
   max-height: none;
   border: 0;
   background: var(--admin-surface);
-  color: var(--color-slate-900);
+  color: var(--admin-text);
 }
 .admin-drawer::backdrop {
   background: rgb(20 46 35 / 55%);
@@ -175,10 +175,10 @@ app-admin-workspace {
 .admin-feedback {
   margin-block-end: 1rem;
   padding: .75rem 1rem;
-  border-inline-start: .25rem solid #a73a31;
+  border-inline-start: .25rem solid var(--admin-error);
   border-radius: .5rem;
-  background: #fff4ee;
-  color: #842b24;
+  background: var(--admin-error-bg);
+  color: var(--admin-error);
 }
 .admin-content {
   min-width: 0;
@@ -220,6 +220,9 @@ app-admin-workspace {
   }
 }
 @media (max-width: 420px) {
+  .admin-topbar__inner {
+    gap: .35rem;
+  }
   .admin-mark {
     --brand-symbol-width: 1.2rem;
     gap: .25rem;
