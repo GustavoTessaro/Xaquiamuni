@@ -93,11 +93,12 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public async Task VendasExternas_RecebimentosConcorrentesEReplayOriginal()
     {
-        await using var banco = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: new RelogioSqlControlado { Agora = Agora });
+        var relogio = new RelogioSqlControlado { Agora = Agora };
+        await using var banco = await SqlServerTestDatabase.CreateAsync(dbContextInterceptor: relogio);
         await using var db = banco.CreateVerificationContext();
         var (produto, variante, _) = await CriarProdutoCompravelAsync(db);
         await EntrarAsync(db, variante.Id, 2);
-        using var factory = CriarApiPedidos(banco);
+        using var factory = CriarApiPedidos(banco, relogio);
         using var admin = ClienteHttpPedidos(factory, Responsavel, XaquiamuniRoles.Administrador);
         var token = await CsrfPedidosAsync(admin);
         var dados = NovaVenda([new(produto.Id, variante.Id, 1, 1000)]) with { RecebimentoInicial = new(400, Hoje, "Pix") };

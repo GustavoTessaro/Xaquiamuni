@@ -134,7 +134,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await using var db = database.CreateVerificationContext();
         var variante = await CriarVarianteAsync(db);
         var lote = (await EntrarAsync(db, variante.Id, 1)).Lote!;
-        using var factory = CriarApiPedidos(database);
+        using var factory = CriarApiPedidos(database, relogio);
         using var anonimo = ClienteHttpPedidos(factory);
         using var cliente = ClienteHttpPedidos(factory, Guid.NewGuid());
         using var admin = ClienteHttpPedidos(factory, Responsavel, XaquiamuniRoles.Administrador);
