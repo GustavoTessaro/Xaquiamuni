@@ -17,6 +17,8 @@
   --admin-action-ink: #fff;
   --admin-action-text: #19392c;
   --admin-action-soft: #edf0e8;
+  --admin-info: #164e63;
+  --admin-info-bg: #ecf9ff;
   --admin-success: #24573e;
   --admin-success-bg: #e5f3ea;
   --admin-warning: #765115;
@@ -44,10 +46,112 @@
   --admin-gold: #d2b675;
   --admin-focus: #edcd83;
   --admin-shadow: 0 8px 22px rgb(0 0 0 / 20%);
+  --admin-info: #bae6fd;
+  --admin-info-bg: #233944;
   --admin-success: #b6e5c4;
   --admin-success-bg: #253e30;
   --admin-warning: #f4d68e;
   --admin-warning-bg: #443822;
   --admin-error: #ffc0b6;
   --admin-error-bg: #452d2b;
+}
+
+/* Existing ADMIN templates use Tailwind palette utilities. These aliases
+   retain their light appearance and map each shade inside the dark shell. */
+.admin-shell[data-admin-theme='dark'] {
+  --color-slate-50: var(--admin-elevated);
+  --color-slate-100: var(--admin-action-soft);
+  --color-slate-200: var(--admin-border);
+  --color-slate-300: var(--admin-control);
+  --color-slate-400: var(--admin-control);
+  --color-slate-500: var(--admin-muted);
+  --color-slate-600: var(--admin-muted);
+  --color-slate-700: var(--admin-text);
+  --color-slate-800: var(--admin-text);
+  --color-slate-900: var(--admin-text);
+  --color-slate-950: var(--admin-text);
+  --color-emerald-50: var(--admin-action-soft);
+  --color-emerald-100: var(--admin-action-soft);
+  --color-emerald-200: var(--admin-control);
+  --color-red-50: var(--admin-error-bg);
+  --color-red-100: var(--admin-error-bg);
+  --color-red-200: var(--admin-control);
+  --color-red-300: var(--admin-control);
+  --color-red-700: var(--admin-error);
+  --color-red-800: var(--admin-error);
+  --color-red-900: var(--admin-error);
+  --color-amber-50: var(--admin-warning-bg);
+  --color-amber-100: var(--admin-warning-bg);
+  --color-amber-200: var(--admin-control);
+  --color-amber-300: var(--admin-control);
+  --color-orange-50: var(--admin-warning-bg);
+  --color-orange-100: var(--admin-control);
+  --color-orange-200: var(--admin-control);
+  --color-sky-50: var(--admin-info-bg);
+  --color-sky-100: var(--admin-control);
+  --color-sky-200: var(--admin-control);
+  --color-sky-300: var(--admin-control);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.bg-white, .hover\:bg-white:hover) {
+  background-color: var(--admin-surface);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(input:not([type='checkbox'], [type='radio']), select, textarea):not(:disabled, [readonly]) {
+  background-color: var(--admin-field);
+  color: var(--admin-text);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.text-emerald-800, .text-emerald-900, .text-emerald-950) {
+  color: var(--admin-action-text);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.text-amber-800, .text-amber-900, .text-amber-950, .text-orange-900, .text-orange-950) {
+  color: var(--admin-warning);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.text-sky-900, .text-sky-950) {
+  color: var(--admin-info);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.border-emerald-700, .border-emerald-800, .hover\:border-emerald-700:hover) {
+  border-color: var(--admin-control);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.border-emerald-950\/10, .border-emerald-900\/15, .border-emerald-900\/20, .border-emerald-900\/25, .border-emerald-900\/30, .border-emerald-100) {
+  border-color: var(--admin-border);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(input[type='checkbox'], input[type='radio']) {
+  accent-color: var(--admin-action);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(:disabled, [readonly]):is(input, select, textarea) {
+  background-color: var(--admin-elevated);
+  color: var(--admin-muted);
+}
+
+.admin-shell[data-admin-theme='dark'] :focus-visible {
+  outline-color: var(--admin-focus);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.border-red-700, .border-red-800) {
+  border-color: var(--admin-error);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.border-amber-500, .border-amber-700, .border-amber-900, .border-orange-700) {
+  border-color: var(--admin-warning);
+}
+
+.admin-shell[data-admin-theme='dark'] :is(.border-sky-700, .border-sky-800) {
+  border-color: var(--admin-info);
+}
+
+.admin-shell[data-admin-theme='dark'] .aria-invalid\:border-red-700[aria-invalid='true'] {
+  border-color: var(--admin-error);
+}
+
+/* Keep foreground and surface in sync when switching palettes. */
+.admin-shell .transition {
+  transition-property: opacity, box-shadow, transform;
 }

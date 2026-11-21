@@ -1,15 +1,32 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
+import { RouterTestingHarness } from '@angular/router/testing';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 import { AdminWorkspaceComponent } from './admin-workspace.component';
 
 const chave = 'xaquiamuni:admin:tema';
 
+@Component({
+  imports: [AdminWorkspaceComponent],
+  template: `
+    <app-admin-workspace activePage="finance">
+      <p role="alert" class="bg-amber-50 text-amber-950">Vencimento</p>
+      <table class="bg-white text-slate-900"><tbody><tr><td>R$ 19,90</td></tr></tbody></table>
+      <label>Vencimento <input type="date" value="2026-11-21"></label>
+    </app-admin-workspace>
+  `,
+})
+class ConteudoProjetadoComponent {}
+
 describe('Tema no cabeçalho ADMIN', () => {
   beforeEach(() => {
     localStorage.removeItem(chave);
     TestBed.configureTestingModule({
-      providers: [provideRouter([]), { provide: AdminAuthService, useValue: {} }],
+      providers: [provideRouter([
+        { path: 'admin/financeiro', component: ConteudoProjetadoComponent },
+        { path: 'admin/agenda', component: ConteudoProjetadoComponent },
+      ]), { provide: AdminAuthService, useValue: {} }],
     });
   });
   afterEach(() => localStorage.removeItem(chave));
@@ -46,5 +63,18 @@ describe('Tema no cabeçalho ADMIN', () => {
     });
     const recriado = renderizar();
     expect(recriado.nativeElement.querySelector('.admin-shell').dataset.adminTheme).toBe('dark');
+  });
+  it('mantém tabela, formulário e alerta no escopo ADMIN durante navegação', async () => {
+    const harness = await RouterTestingHarness.create('/admin/financeiro');
+    const shell = () => harness.routeNativeElement!.querySelector<HTMLElement>('.admin-shell')!;
+    shell().querySelector<HTMLButtonElement>('.admin-theme-toggle')!.click();
+    harness.detectChanges();
+    for (const rota of ['/admin/financeiro', '/admin/agenda']) {
+      await harness.navigateByUrl(rota);
+      expect(shell().dataset['adminTheme']).toBe('dark');
+      expect(shell().querySelector('[role="alert"]')?.textContent).toContain('Vencimento');
+      expect(shell().querySelector('table')?.textContent).toContain('R$ 19,90');
+      expect(shell().querySelector('input')?.value).toBe('2026-11-21');
+    }
   });
 });

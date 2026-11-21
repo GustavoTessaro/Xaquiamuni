@@ -8,7 +8,7 @@
   gap: 0.85rem;
 }
 .agenda {
-  color: var(--color-slate-900);
+  color: var(--admin-text);
   overflow-wrap: anywhere;
 }
 .cartao,
@@ -16,7 +16,7 @@
   border: 1px solid var(--admin-border);
   border-radius: 0.75rem;
   padding: clamp(0.5rem, 2vw, 1rem);
-  background: white;
+  background: var(--admin-surface);
 }
 .cartao h2,
 .resumo h3 {
@@ -35,24 +35,24 @@ button {
   width: fit-content;
   min-height: 44px;
   padding: 0.35rem 0.7rem;
-  border: 1px solid var(--color-emerald-700);
+  border: 1px solid var(--admin-control);
   border-radius: 0.5rem;
-  color: var(--color-emerald-900);
+  color: var(--admin-action-text);
 }
 button:not(:disabled):hover,
 button[aria-pressed='true'] {
-  background: var(--color-emerald-100);
+  background: var(--admin-action-soft);
 }
 .primario,
 .primario:not(:disabled):hover {
-  color: white;
-  background: var(--color-emerald-800);
+  color: var(--admin-action-ink);
+  background: var(--admin-action);
 }
 button:disabled {
   opacity: 0.55;
 }
 :where(button, input, textarea):focus-visible {
-  outline: 2px solid var(--color-emerald-700);
+  outline: 2px solid var(--admin-focus);
   outline-offset: 2px;
 }
 .grade {
@@ -76,7 +76,7 @@ button:disabled {
 }
 .dia[aria-pressed='true'] {
   font-weight: 700;
-  border-color: var(--color-emerald-700);
+  border-color: var(--admin-control);
 }
 .dia[aria-current='date'] {
   text-decoration: underline;
@@ -87,7 +87,7 @@ button:disabled {
   width: 0.32rem;
   height: 0.32rem;
   border-radius: 100%;
-  background: var(--color-emerald-800);
+  background: var(--admin-action);
 }
 .resumo {
   padding-block: 0.7rem;
@@ -100,11 +100,12 @@ button:disabled {
   white-space: pre-wrap;
 }
 .aviso {
-  background: #ecfdf5;
+  color: var(--admin-success);
+  background: var(--admin-success-bg);
 }
 .erro {
-  background: #fef2f2;
-  color: #991b1b;
+  background: var(--admin-error-bg);
+  color: var(--admin-error);
 }
 .campos {
   max-width: 40rem;
@@ -124,7 +125,8 @@ textarea {
   width: 100%;
   min-width: 0;
   min-height: 44px;
-  border: 1px solid #64748b;
+  border: 1px solid var(--admin-control);
+  background: var(--admin-field);
   border-radius: 0.5rem;
   padding: 0.4rem 0.6rem;
 }

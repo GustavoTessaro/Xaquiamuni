@@ -2,7 +2,7 @@
   display: grid;
   min-width: 0;
   gap: 1rem;
-  color: #0f172a;
+  color: var(--admin-text);
   overflow-wrap: anywhere;
 }
 .acoes {
@@ -17,36 +17,37 @@
   min-width: 0;
   gap: 0.6rem;
   padding: 1rem;
-  border: 1px solid #cbd5e1;
+  border: 1px solid var(--admin-border);
   border-radius: 0.75rem;
-  background: white;
+  background: var(--admin-surface);
 }
 .cartao h2 {
   font-weight: 700;
 }
 .mensagem {
-  background: #ecfdf5;
+  color: var(--admin-success);
+  background: var(--admin-success-bg);
 }
 .erro {
-  color: #991b1b;
-  background: #fef2f2;
+  color: var(--admin-error);
+  background: var(--admin-error-bg);
 }
 button {
   width: fit-content;
   min-height: 44px;
   padding: 0.4rem 0.75rem;
-  border: 1px solid #047857;
+  border: 1px solid var(--admin-control);
   border-radius: 0.5rem;
-  color: #064e3b;
+  color: var(--admin-action-text);
 }
 button:hover:not(:disabled),
 button[aria-current] {
-  background: #ecfdf5;
+  background: var(--admin-success-bg);
 }
 .primario,
 .primario:hover:not(:disabled) {
-  background: #065f46;
-  color: white;
+  background: var(--admin-action);
+  color: var(--admin-action-ink);
 }
 button:disabled {
   opacity: 0.55;
@@ -55,7 +56,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid #047857;
+  outline: 2px solid var(--admin-focus);
   outline-offset: 2px;
 }
 .campos,
@@ -86,15 +87,15 @@ textarea {
   min-width: 0;
   max-width: 100%;
   min-height: 44px;
-  border: 1px solid #64748b;
+  border: 1px solid var(--admin-control);
   border-radius: 0.5rem;
   padding: 0.4rem 0.6rem;
-  background: white;
+  background: var(--admin-field);
   color: inherit;
 }
 dt {
   font-size: 0.875rem;
-  color: #475569;
+  color: var(--admin-muted);
 }
 dd {
   font-weight: 600;
@@ -124,6 +125,6 @@ dd {
   text-underline-offset: 0.2em;
 }
 
-.conta-atrasada { color: #9f2525; }
-.conta-hoje { color: #765115; }
-.conta-proxima { color: #28563c; }
+.conta-atrasada { color: var(--admin-error); }
+.conta-hoje { color: var(--admin-warning); }
+.conta-proxima { color: var(--admin-success); }

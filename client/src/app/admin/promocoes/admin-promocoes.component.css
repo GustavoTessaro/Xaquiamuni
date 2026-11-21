@@ -5,9 +5,9 @@
 .painel, .cartao {
   padding: 1rem;
   min-width: 0;
-  border: 1px solid var(--brand-line);
+  border: 1px solid var(--admin-border);
   border-radius: var(--brand-radius);
-  background: var(--brand-surface);
+  background: var(--admin-surface);
 }
 .campos, .cards {
   display: grid;
@@ -27,12 +27,12 @@
   min-width: 0;
   max-width: 100%;
   padding: .45rem .65rem;
-  border: 1px solid var(--brand-control-line);
+  border: 1px solid var(--admin-control);
   border-radius: var(--brand-radius-sm);
-  background: var(--brand-white);
+  background: var(--admin-field);
 }
 .pagina button { justify-self: start; font-weight: 600; }
-.pagina .principal { background: var(--brand-green); color: var(--brand-white); border-color: var(--brand-green); }
-.pagina :is(input, select, button):focus-visible { outline: 2px solid var(--brand-focus); outline-offset: 2px; }
+.pagina button.principal { background: var(--admin-action); color: var(--admin-action-ink); border-color: var(--admin-action); }
+.pagina :is(input, select, button):focus-visible { outline: 2px solid var(--admin-focus); outline-offset: 2px; }
 .pagina :disabled { opacity: .65; }
-.alerta { color: var(--brand-error); overflow-wrap: anywhere; }
+.alerta { color: var(--admin-error); overflow-wrap: anywhere; }

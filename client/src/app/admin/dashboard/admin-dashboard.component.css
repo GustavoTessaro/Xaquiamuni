@@ -12,7 +12,7 @@
   flex-wrap: wrap;
 }
 .dashboard__heading h1 {
-  color: var(--color-emerald-900);
+  color: var(--admin-action-text);
   font-size: clamp(1.75rem, 4vw, 2.5rem);
 }
 .dashboard__panel {
@@ -22,7 +22,7 @@
   background: var(--admin-surface);
 }
 .dashboard__panel h2 {
-  color: var(--color-emerald-900);
+  color: var(--admin-action-text);
   font-size: 1.15rem;
   font-weight: 700;
 }
@@ -44,8 +44,8 @@
   padding: .8rem;
   border: 1px solid var(--admin-border);
   border-radius: .65rem;
-  background: var(--color-slate-50);
-  color: var(--color-emerald-900);
+  background: var(--admin-elevated);
+  color: var(--admin-action-text);
 }
 .dashboard__card:hover span {
   text-decoration: underline;
@@ -60,7 +60,7 @@
 }
 .dashboard__card meter {
   width: 100%;
-  accent-color: var(--color-emerald-800);
+  accent-color: var(--admin-action);
 }
 .dashboard__agenda {
   display: grid;
@@ -73,9 +73,9 @@
 .dashboard__finance-link,
 .dashboard__heading a {
   justify-self: start;
-  color: var(--color-emerald-900);
+  color: var(--admin-action-text);
   text-decoration: underline;
 }
 .dashboard [role=alert] {
-  color: #842b24;
+  color: var(--admin-error);
 }

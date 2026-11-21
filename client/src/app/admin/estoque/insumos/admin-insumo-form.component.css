@@ -7,22 +7,22 @@ input[type='number'] {
   box-sizing: border-box;
   min-height: 2.75rem;
   width: 100%;
-  border: 1px solid rgb(203 213 225);
+  border: 1px solid var(--admin-control);
   border-radius: 0.75rem;
-  background-color: white;
+  background-color: var(--admin-field);
   padding: 0.625rem 0.75rem;
-  color: rgb(15 23 42);
+  color: var(--admin-text);
   box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
 }
 
 input[type='text']:focus-visible,
 input[type='number']:focus-visible {
-  outline: 2px solid rgb(6 95 70);
+  outline: 2px solid var(--admin-focus);
   outline-offset: 2px;
 }
 
 input[type='text']:disabled,
 input[type='number']:disabled {
-  background-color: rgb(241 245 249);
-  color: rgb(71 85 105);
+  background-color: var(--admin-elevated);
+  color: var(--admin-muted);
 }
