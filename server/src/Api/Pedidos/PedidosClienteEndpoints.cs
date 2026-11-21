@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Xaquiamuni.Api.Autenticacao;
@@ -11,7 +12,7 @@ public static class PedidosClienteEndpoints
 {
     public const string BasePath = "/api/pedidos";
     private const int MaxItensCompra = 100;
-    private const int MaxBytesCompra = 16 * 1024;
+    private const int MaxBytesCompra = 24 * 1024;
     private const int TamanhoPaginaPadrao = 20;
     private const int TamanhoPaginaMaximo = 50;
     private const string IdempotencyHeader = "Idempotency-Key";
@@ -103,8 +104,19 @@ public static class PedidosClienteEndpoints
             return Invalido("itens", $"Informe de 1 a {MaxItensCompra} itens válidos.");
         }
 
-        var input = new CriarPedidoCompraInput(clienteId, chave,
-            itens.Select(item => new ItemCompraInput(item!.ProdutoId, item.ProdutoVarianteId, item.Quantidade)).ToArray());
+        var itensCompra = new List<ItemCompraInput>(itens.Length);
+        foreach (var item in itens)
+        {
+            long? aceito = null;
+            if (item!.PrecoAceitoCentavos is { } texto)
+            {
+                if (!long.TryParse(texto, NumberStyles.None, CultureInfo.InvariantCulture, out var centavos) || centavos <= 0)
+                    return Invalido("precoAceitoCentavos", "Informe um preço positivo em centavos.");
+                aceito = centavos;
+            }
+            itensCompra.Add(new(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade, aceito));
+        }
+        var input = new CriarPedidoCompraInput(clienteId, chave, itensCompra);
         var resultado = await criarPedido.ExecuteAsync(input, cancellationToken).ConfigureAwait(false);
         return resultado.Status switch
         {
@@ -119,6 +131,13 @@ public static class PedidosClienteEndpoints
                 Conflito("itens_indisponiveis", "Um ou mais itens do pedido estão indisponíveis."),
             CriarPedidoCompraStatus.ConflitoIdempotencia =>
                 Conflito("chave_em_uso", "Esta chave já foi usada para outro conteúdo."),
+            CriarPedidoCompraStatus.PrecoAlterado =>
+                Results.Problem(statusCode: 409, title: "Revise os preços atuais antes de confirmar a compra.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["codigo"] = "preco_alterado",
+                        ["precosAtuais"] = resultado.PrecosAtuais
+                    }),
             CriarPedidoCompraStatus.ConflitoConcorrencia =>
                 Conflito("conflito_concorrencia", "Tente novamente com a mesma chave."),
             _ => Results.Problem(statusCode: 500, title: "Não foi possível concluir a solicitação."),
@@ -170,7 +189,7 @@ public static class PedidosClienteEndpoints
         Results.ValidationProblem(new Dictionary<string, string[]> { [campo] = [mensagem] });
 
     private static IResult CorpoMuitoGrande() =>
-        Results.Problem(statusCode: 413, title: "O corpo do pedido excede 16 KiB.");
+        Results.Problem(statusCode: 413, title: $"O corpo do pedido excede {MaxBytesCompra / 1024} KiB.");
 
     private static IResult Conflito(string codigo, string titulo) =>
         Results.Problem(statusCode: 409, title: titulo,

@@ -464,6 +464,12 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("PedidoId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<long?>("PrecoAceitoCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("PrecoRegularCentavos")
+                        .HasColumnType("bigint");
+
                     b.Property<long>("PrecoUnitarioCentavos")
                         .HasColumnType("bigint");
 
@@ -471,6 +477,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<Guid>("ProdutoVarianteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("PromocaoId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<int>("Quantidade")

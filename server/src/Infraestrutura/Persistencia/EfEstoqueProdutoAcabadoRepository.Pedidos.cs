@@ -29,12 +29,16 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
             if (existente is not null)
             {
                 var mesmosItens = existente.Itens.OrderBy(item => item.ProdutoVarianteId)
-                    .Select(item => new ItemCompraInput(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade))
+                    .Select(item => new ItemCompraInput(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade,
+                        item.PrecoAceitoCentavos))
                     .SequenceEqual(input.Itens);
                 return mesmosItens
                     ? new(CriarPedidoCompraStatus.Sucesso, existente, Repetida: true)
                     : new(CriarPedidoCompraStatus.ConflitoIdempotencia);
             }
+
+            if (_promocoesHabilitadas)
+                await PromocoesComerciaisSql.BloquearAsync(_dbContext, escrita: false, cancellationToken);
 
             var pedidoId = Guid.NewGuid();
             await AdquirirLockPedidoAsync(pedidoId, cancellationToken).ConfigureAwait(false);
@@ -49,11 +53,15 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 return new(CriarPedidoCompraStatus.ClienteInapto);
             }
 
-            var dados = await CarregarItensCompraAsync(input.Itens, cancellationToken).ConfigureAwait(false);
+            var (dados, precos) = await CarregarItensCompraAsync(input.Itens, agora, cancellationToken).ConfigureAwait(false);
             if (dados is null)
             {
                 return new(CriarPedidoCompraStatus.ItemNaoCompravel);
             }
+            if (input.Itens.Where((item, i) =>
+                (_promocoesHabilitadas || item.PrecoAceitoCentavos.HasValue) &&
+                item.PrecoAceitoCentavos != dados[i].PrecoUnitarioCentavos).Any())
+                return new(CriarPedidoCompraStatus.PrecoAlterado, PrecosAtuais: precos);
 
             Pedido pedido;
             try
@@ -110,8 +118,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
             && (!usuario.LockoutEnabled || usuario.LockoutEnd == null || usuario.LockoutEnd < agora)
          select perfil.UserId).AnyAsync(cancellationToken);
 
-    private async Task<DadosItemPedido[]?> CarregarItensCompraAsync(
-        IReadOnlyList<ItemCompraInput> itens, CancellationToken cancellationToken)
+    private async Task<(DadosItemPedido[]? Dados, PrecoAtualPedido[]? Precos)> CarregarItensCompraAsync(
+        IReadOnlyList<ItemCompraInput> itens, DateTimeOffset agora, CancellationToken cancellationToken)
     {
         var variantes = itens.Select(item => item.ProdutoVarianteId).ToArray();
         var catalogo = await (
@@ -122,18 +130,25 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
         ).ToDictionaryAsync(item => item.VarianteId, cancellationToken).ConfigureAwait(false);
 
         var resultado = new DadosItemPedido[itens.Count];
+        var precos = new PrecoAtualPedido[itens.Count];
+        var promocoes = _promocoesHabilitadas
+            ? await PromocoesComerciaisSql.CarregarAsync(_dbContext, itens.Select(i => i.ProdutoId).Distinct().ToArray(),
+                agora, cancellationToken) : null;
         for (var i = 0; i < itens.Count; i++)
         {
             var item = itens[i];
             if (!catalogo.TryGetValue(item.ProdutoVarianteId, out var atual) || atual.Id != item.ProdutoId)
             {
-                return null;
+                return (null, null);
             }
 
+            var preco = PromocoesComerciaisSql.Resolver(promocoes?[atual.Id] ?? [], atual.VarianteId, atual.PrecoVenda, agora);
+            precos[i] = new(atual.Id, atual.VarianteId, preco);
             resultado[i] = new DadosItemPedido(atual.Id, atual.VarianteId, atual.Nome, atual.Identificacao,
-                item.Quantidade, checked((long)(atual.PrecoVenda * 100m)));
+                item.Quantidade, preco.FinalCentavos, item.PrecoAceitoCentavos,
+                preco.PromocaoId is null ? null : preco.RegularCentavos, preco.PromocaoId);
         }
 
-        return resultado;
+        return (resultado, precos);
     }
 }

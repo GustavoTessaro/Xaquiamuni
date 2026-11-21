@@ -26,6 +26,7 @@ export class CarrinhoComponent implements OnInit {
   protected readonly carrinho = inject(CarrinhoService);
   protected readonly erroQuantidade = signal<string | null>(null);
   protected readonly mensagemQuantidade = signal('');
+  protected readonly precoMudou = signal(false);
   protected readonly formatarPreco = formatarCentavos;
   private readonly catalogo = inject(CatalogoPublicoService);
   private readonly destroyRef = inject(DestroyRef);
@@ -36,7 +37,9 @@ export class CarrinhoComponent implements OnInit {
     }
     revalidarCarrinho(this.carrinho, this.catalogo)
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe();
+      .subscribe((mudou) => {
+        if (mudou) this.precoMudou.set(true);
+      });
   }
 
   protected alterarQuantidade(item: ItemCarrinho, campo: HTMLInputElement): void {

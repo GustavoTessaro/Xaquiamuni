@@ -1,6 +1,13 @@
 using Xaquiamuni.Dominio.Entidades;
+using System.Text.Json.Serialization;
 
 namespace Xaquiamuni.Aplicacao.Catalogo;
+
+public sealed record PrecoComercial(
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long RegularCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long FinalCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long EconomiaCentavos,
+    int OffPontosBase, Guid? PromocaoId);
 
 public sealed record PrecoPromocional(long Regular, long Final, int OffPontosBase)
 {

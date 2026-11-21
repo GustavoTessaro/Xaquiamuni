@@ -3,6 +3,7 @@ import { RouterLink } from '@angular/router';
 import { CatalogoPublicoRetorno, ProdutoCatalogoResumo } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
 import { StorefrontContext } from './storefront-context';
+import { formatarCentavos } from './carrinho.service';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -23,11 +24,19 @@ export class PublicProductCardComponent {
     this.imageUnavailable.set(false);
   });
 
-  protected formatPrice(price: number): string {
+  protected formatPrice(price: number, centavos?: string | null): string {
+    if (centavos != null) return formatarCentavos(centavos);
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',
     }).format(price);
+  }
+
+  protected get temFaixaPreco(): boolean {
+    const produto = this.product();
+    return produto.menorPreco && produto.maiorPreco
+      ? produto.menorPreco.preco.finalCentavos !== produto.maiorPreco.preco.finalCentavos
+      : produto.precoMinimo !== produto.precoMaximo;
   }
 
   protected formatMeasure(value: number, unit: 'g' | 'ml'): string {
@@ -37,7 +46,7 @@ export class PublicProductCardComponent {
   protected get hasSelectableOptions(): boolean {
     const product = this.product();
     return (
-      product.precoMinimo !== product.precoMaximo ||
+      this.temFaixaPreco ||
       product.unidadesVenda.length > 1 ||
       product.medidas.length > 1
     );

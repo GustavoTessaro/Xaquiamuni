@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Dominio.Estoque;
 
@@ -13,15 +14,18 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private readonly XaquiamuniDbContext _dbContext;
     private readonly TimeProvider _timeProvider;
     private readonly ICalendarioOperacionalEstoque _calendario;
+    private readonly bool _promocoesHabilitadas;
 
     public EfEstoqueProdutoAcabadoRepository(
         XaquiamuniDbContext dbContext,
         TimeProvider timeProvider,
-        ICalendarioOperacionalEstoque calendario)
+        ICalendarioOperacionalEstoque calendario,
+        IOptions<PromocoesComerciaisOptions>? promocoes = null)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _calendario = calendario;
+        _promocoesHabilitadas = promocoes?.Value.Habilitadas == true;
     }
 
     public async Task<ConfigurarPoliticaProdutoAcabadoResult> ConfigurarPoliticaAsync(

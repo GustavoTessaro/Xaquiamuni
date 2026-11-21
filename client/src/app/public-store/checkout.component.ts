@@ -28,6 +28,7 @@ export class CheckoutComponent {
   protected readonly formatarPreco = formatarCentavos;
   protected readonly erro = signal('');
   protected readonly consultando = signal(true);
+  protected readonly precoMudou = signal(false);
   private readonly destroy = inject(DestroyRef);
   private readonly router = inject(Router);
   protected readonly itensCompra = computed(() =>
@@ -35,6 +36,7 @@ export class CheckoutComponent {
       produtoId: item.produtoId,
       produtoVarianteId: item.varianteId,
       quantidade: item.quantidade,
+      precoAceitoCentavos: item.precoCentavos,
     })),
   );
   protected readonly indisponivel = computed(() =>
@@ -61,7 +63,9 @@ export class CheckoutComponent {
         takeUntilDestroyed(this.destroy),
         finalize(() => this.consultando.set(false)),
       )
-      .subscribe();
+      .subscribe((mudou) => {
+        if (mudou) this.precoMudou.set(true);
+      });
   }
 
   protected async enviar(recuperar: boolean): Promise<void> {
@@ -80,6 +84,9 @@ export class CheckoutComponent {
         break;
       case 'erro':
         this.erro.set(resultado.mensagem);
+        break;
+      case 'preco_alterado':
+        this.precoMudou.set(true);
         break;
       case 'sucesso':
         await this.router.navigate(['/pedidos', resultado.pedido.id], { info: resultado.pedido });

@@ -52,12 +52,10 @@
     </p>
     <div class="product-card__bottom">
       <p class="product-card__price">
-        @if (product().precoMinimo === product().precoMaximo) {
-          {{ formatPrice(product().precoMinimo) }}
-        } @else {
+        @if (temFaixaPreco) {
           <span class="product-card__from">A partir de</span>
-          {{ formatPrice(product().precoMinimo) }}
         }
+        {{ formatPrice(product().precoMinimo, product().menorPreco?.preco.finalCentavos) }}
       </p>
       @if (hasSelectableOptions) {
         <span class="product-card__options">Variações</span>

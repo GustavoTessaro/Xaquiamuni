@@ -13,7 +13,8 @@ public sealed record CatalogoPublicoPagina(
     IReadOnlyList<ProdutoCatalogoPublico> Produtos,
     int TotalItens);
 
-public sealed record ProdutoCatalogoPublico(Produto Produto, IReadOnlySet<Guid> OpcoesDisponiveis);
+public sealed record ProdutoCatalogoPublico(Produto Produto, IReadOnlySet<Guid> OpcoesDisponiveis,
+    IReadOnlyDictionary<Guid, PrecoComercial>? Precos = null);
 
 public interface ICatalogoPublicoRepository
 {

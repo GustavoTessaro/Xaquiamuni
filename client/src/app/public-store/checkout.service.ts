@@ -8,6 +8,7 @@ import {
   ItemCompra,
   PedidoCliente,
   PedidosService,
+  PrecoAtualPedido,
   itensCompraValidos,
   mesmosItensCompra,
   uuidValido,
@@ -24,6 +25,7 @@ interface TentativaCompra {
 export type ResultadoCheckout =
   | { estado: 'login' }
   | { estado: 'erro'; mensagem: string }
+  | { estado: 'preco_alterado' }
   | { estado: 'sucesso'; pedido: PedidoCliente };
 
 @Injectable({ providedIn: 'root' })
@@ -102,9 +104,12 @@ export class CheckoutService {
         produtoId: item.produtoId,
         produtoVarianteId: item.varianteId,
         quantidade: item.quantidade,
+        precoAceitoCentavos: item.precoCentavos,
       }));
-      if (!mesmosItensCompra(itens, atuais)) {
-        return erro('O carrinho mudou. Revise as quantidades antes de finalizar.');
+      if (!mesmosItensCompra(itens, atuais) || itens.some(item => item.precoAceitoCentavos !== undefined &&
+        !atuais.some(atual => atual.produtoVarianteId === item.produtoVarianteId &&
+          atual.precoAceitoCentavos === item.precoAceitoCentavos))) {
+        return erro('O carrinho mudou. Revise os preços e as quantidades antes de finalizar.');
       }
     }
 
@@ -160,7 +165,8 @@ export class CheckoutService {
     armazenamento: Storage,
   ): ResultadoCheckout {
     if (falha instanceof HttpErrorResponse) {
-      const codigo = (falha.error as { codigo?: string } | null)?.codigo;
+      const dados = falha.error as { codigo?: string; precosAtuais?: PrecoAtualPedido[] } | null;
+      const codigo = dados?.codigo;
       if (falha.status === 401) {
         return { estado: 'login' };
       }
@@ -169,6 +175,12 @@ export class CheckoutService {
         return erro(
           'Não há estoque para todos os itens solicitados. Revise as opções e quantidades no carrinho.',
         );
+      }
+      if (falha.status === 409 && codigo === 'preco_alterado') {
+        armazenamento.removeItem(chaveLocal);
+        if (Array.isArray(dados?.precosAtuais))
+          this.carrinho.atualizarPrecos(dados.precosAtuais.filter(p => p && typeof p === 'object'));
+        return { estado: 'preco_alterado' };
       }
       if (falha.status === 409 && codigo === 'chave_em_uso') {
         return erro(
@@ -209,10 +221,11 @@ export function lerTentativaCompra(janela: Window | null): TentativaCompra | nul
     return {
       chave: tentativa.chave,
       vinculo: tentativa.vinculo,
-      itens: tentativa.itens.map(({ produtoId, produtoVarianteId, quantidade }: ItemCompra) => ({
+      itens: tentativa.itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }: ItemCompra) => ({
         produtoId,
         produtoVarianteId,
         quantidade,
+        ...(precoAceitoCentavos === undefined ? {} : { precoAceitoCentavos }),
       })),
     };
   } catch {

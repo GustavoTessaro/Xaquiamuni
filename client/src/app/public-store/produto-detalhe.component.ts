@@ -19,7 +19,7 @@ import {
   CatalogoPublicoService,
 } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
-import { CarrinhoService } from './carrinho.service';
+import { CarrinhoService, formatarCentavos } from './carrinho.service';
 import { StorefrontContext } from './storefront-context';
 
 type ProdutoResult =
@@ -116,7 +116,8 @@ export class ProdutoDetalheComponent implements OnInit {
     }
   }
 
-  protected formatPrice(price: number): string {
+  protected formatPrice(price: number, centavos?: string | null): string {
+    if (centavos != null) return formatarCentavos(centavos);
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL',

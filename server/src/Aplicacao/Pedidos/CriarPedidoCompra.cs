@@ -1,8 +1,11 @@
 using Xaquiamuni.Dominio.Entidades;
+using Xaquiamuni.Aplicacao.Catalogo;
 
 namespace Xaquiamuni.Aplicacao.Pedidos;
 
-public sealed record ItemCompraInput(Guid ProdutoId, Guid ProdutoVarianteId, int Quantidade);
+public sealed record ItemCompraInput(Guid ProdutoId, Guid ProdutoVarianteId, int Quantidade,
+    long? PrecoAceitoCentavos = null);
+public sealed record PrecoAtualPedido(Guid ProdutoId, Guid ProdutoVarianteId, PrecoComercial Preco);
 
 public sealed record CriarPedidoCompraInput(
     Guid ClienteId, Guid ChaveIdempotencia, IReadOnlyList<ItemCompraInput> Itens);
@@ -17,10 +20,12 @@ public enum CriarPedidoCompraStatus
     SaldoInsuficiente,
     ConflitoIdempotencia,
     ConflitoConcorrencia,
+    PrecoAlterado,
 }
 
 public sealed record CriarPedidoCompraResult(
-    CriarPedidoCompraStatus Status, Pedido? Pedido = null, bool Repetida = false);
+    CriarPedidoCompraStatus Status, Pedido? Pedido = null, bool Repetida = false,
+    IReadOnlyList<PrecoAtualPedido>? PrecosAtuais = null);
 
 public interface ICriarPedidoCompraRepository
 {
@@ -45,14 +50,15 @@ public sealed class CriarPedidoCompra(ICriarPedidoCompraRepository repository)
         foreach (var item in input.Itens)
         {
             if (item is null || item.ProdutoId == Guid.Empty || item.ProdutoVarianteId == Guid.Empty
-                || item.Quantidade <= 0)
+                || item.Quantidade <= 0 || item.PrecoAceitoCentavos is <= 0)
             {
                 return DadosInvalidos();
             }
 
             if (porVariante.TryGetValue(item.ProdutoVarianteId, out var anterior))
             {
-                if (anterior.ProdutoId != item.ProdutoId || anterior.Quantidade > int.MaxValue - item.Quantidade)
+                if (anterior.ProdutoId != item.ProdutoId || anterior.Quantidade > int.MaxValue - item.Quantidade
+                    || anterior.PrecoAceitoCentavos != item.PrecoAceitoCentavos)
                 {
                     return DadosInvalidos();
                 }

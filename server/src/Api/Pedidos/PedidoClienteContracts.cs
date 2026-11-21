@@ -7,7 +7,8 @@ namespace Xaquiamuni.Api.Pedidos;
 public sealed record CriarPedidoClienteRequest(ItemPedidoClienteRequest?[]? Itens);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record ItemPedidoClienteRequest(Guid ProdutoId, Guid ProdutoVarianteId, int Quantidade);
+public sealed record ItemPedidoClienteRequest(Guid ProdutoId, Guid ProdutoVarianteId, int Quantidade,
+    string? PrecoAceitoCentavos = null);
 
 public sealed record PedidoClienteResumoResponse(
     Guid Id, string Situacao, DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
@@ -28,10 +29,13 @@ public sealed record PedidoClienteResponse(
         pedido.Itens.OrderBy(item => item.ProdutoVarianteId)
             .Select(item => new ItemPedidoClienteResponse(item.ProdutoId, item.ProdutoVarianteId,
                 item.NomeProduto, item.NomeVariante, item.Quantidade,
-                item.PrecoUnitarioCentavos, item.SubtotalCentavos)).ToArray());
+                item.PrecoUnitarioCentavos, item.SubtotalCentavos, item.PrecoRegularCentavos, item.PromocaoId)).ToArray());
 }
 
 public sealed record ItemPedidoClienteResponse(
     Guid ProdutoId, Guid ProdutoVarianteId, string NomeProduto, string NomeVariante, int Quantidade,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long PrecoUnitarioCentavos,
-    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long SubtotalCentavos);
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long SubtotalCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    long? PrecoRegularCentavos = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? PromocaoId = null);

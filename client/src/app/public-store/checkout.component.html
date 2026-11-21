@@ -52,7 +52,7 @@
                 <p class="aviso">Opção indisponível.</p>
               }
             </div>
-            <strong>{{ formatarPreco(item.precoCentavos * item.quantidade) }}</strong>
+            <strong>{{ formatarPreco(carrinho.subtotalItem(item)) }}</strong>
           </li>
         }
       </ul>
@@ -63,6 +63,9 @@
           Subtotal estimado: <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong>
         </p>
         <p>O servidor revalida preços e disponibilidade ao criar o pedido.</p>
+        @if (precoMudou() && !checkout.pendente()) {
+          <p role="alert" class="aviso">Os preços mudaram. Confira os valores atuais antes de confirmar.</p>
+        }
         @if (consultando() && !checkout.pendente()) {
           <p role="status">Consultando disponibilidade…</p>
         }
@@ -82,7 +85,7 @@
             (click)="enviar(false)"
             [disabled]="checkout.enviando() || consultando() || indisponivel() || !valido()"
           >
-            Finalizar compra
+            {{ precoMudou() ? 'Confirmar preços atuais' : 'Finalizar compra' }}
           </button>
         }
         <a routerLink="/carrinho">Voltar ao carrinho</a>

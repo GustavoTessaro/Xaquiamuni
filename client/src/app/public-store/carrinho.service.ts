@@ -1,7 +1,8 @@
 import { DOCUMENT } from '@angular/common';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import type { ItemCompra } from './pedidos.service';
-import { ProdutoCatalogoDetalhe } from './catalogo-publico.service';
+import { limiteQuantidadePedido, type ItemCompra } from './pedidos.service';
+import { PrecoCatalogo, ProdutoCatalogoDetalhe, ProdutoCatalogoOpcao } from './catalogo-publico.service';
+import { precoValido } from './catalogo-formatacao';
 
 const chaveCarrinho = 'xaquiamuni:carrinho:v1';
 
@@ -11,7 +12,8 @@ export interface ItemCarrinho {
   nome: string;
   variante: string | null;
   imagem: string | null;
-  precoCentavos: number;
+  precoCentavos: string;
+  preco?: PrecoCatalogo;
   quantidade: number;
   disponivel: boolean | null;
 }
@@ -20,7 +22,7 @@ export type ResultadoCarrinho = 'ok' | 'indisponivel' | 'invalido';
 
 const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
 
-export function formatarCentavos(centavos: number | string): string {
+export function formatarCentavos(centavos: number | string | bigint): string {
   const valor = BigInt(centavos);
   return moeda
     .formatToParts(valor / 100n)
@@ -49,10 +51,7 @@ export class CarrinhoService {
 
     const anterior = this.itens().find((item) => item.varianteId === varianteId);
     const imagem = produto.galeria.find((foto) => foto.opcaoIds.includes(varianteId));
-    const textoPreco = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(opcao.precoVenda));
-    const precoCentavos = textoPreco
-      ? Number(`${textoPreco[1]}${(textoPreco[2] ?? '').padEnd(2, '0')}`)
-      : NaN;
+    const precoCentavos = lerPrecoOpcao(opcao);
     const item = lerItem({
       produtoId: produto.id,
       varianteId,
@@ -62,6 +61,7 @@ export class CarrinhoService {
         (opcao.caracteristicas.map((valor) => valor.valorNome).join(' · ') || null),
       imagem: imagem?.conteudoUrl ?? produto.fotoPrincipal.conteudoUrl,
       precoCentavos,
+      preco: opcao.preco,
       quantidade: (anterior?.quantidade ?? 0) + 1,
     });
     if (!item || (anterior && anterior.produtoId !== produto.id)) {
@@ -78,7 +78,7 @@ export class CarrinhoService {
 
   alterarQuantidade(varianteId: string, quantidade: number): ResultadoCarrinho {
     const item = this.itens().find((atual) => atual.varianteId === varianteId);
-    if (!item || !inteiroNaoNegativo(quantidade) || quantidade === 0) {
+    if (!item || !quantidadeValida(quantidade)) {
       return 'invalido';
     }
     if (quantidade > item.quantidade && item.disponivel !== true) {
@@ -136,21 +136,40 @@ export class CarrinhoService {
     return !this.persistenciaIndisponivel();
   }
 
-  atualizarDisponibilidade(produto: ProdutoCatalogoDetalhe): void {
+  atualizarDisponibilidade(produto: ProdutoCatalogoDetalhe): boolean {
     const opcoes = new Map(produto.opcoes.map((opcao) => [opcao.id, opcao]));
-    this.itensInternos.update((itens) =>
-      itens.map((item) => {
-        if (item.produtoId !== produto.id) {
-          return item;
-        }
-        const opcao = opcoes.get(item.varianteId);
-        const disponivel = opcao?.disponivel;
-        return {
-          ...item,
-          disponivel: opcao ? (typeof disponivel === 'boolean' ? disponivel : null) : false,
-        };
-      }),
-    );
+    const itens = this.sincronizarItens();
+    const atualizados = itens.map((item) => {
+      if (item.produtoId !== produto.id) return item;
+      const opcao = opcoes.get(item.varianteId);
+      const precoCentavos = opcao && lerPrecoOpcao(opcao);
+      return {
+        ...item,
+        ...(precoCentavos ? { precoCentavos, preco: opcao?.preco } : {}),
+        disponivel: opcao?.disponivel ?? false,
+      };
+    });
+    const mudou = itens.some((item, i) => item.precoCentavos !== atualizados[i].precoCentavos);
+    if (mudou || itens.some((item, i) => item.preco?.promocaoId !== atualizados[i].preco?.promocaoId ||
+      item.preco?.regularCentavos !== atualizados[i].preco?.regularCentavos)) {
+      this.gravar(atualizados);
+    } else {
+      this.itensInternos.set(atualizados);
+    }
+    return mudou;
+  }
+
+  atualizarPrecos(precos: readonly { produtoId: string; produtoVarianteId: string; preco: PrecoCatalogo }[]): void {
+    const itens = this.sincronizarItens().map((item) => {
+      const novo = precos.find(p => p.produtoId === item.produtoId && p.produtoVarianteId === item.varianteId);
+      return novo && precoValido(novo.preco?.finalCentavos)
+        ? { ...item, precoCentavos: novo.preco.finalCentavos, preco: novo.preco } : item;
+    });
+    this.gravar(itens);
+  }
+
+  subtotalItem(item: ItemCarrinho): bigint {
+    return BigInt(item.precoCentavos) * BigInt(item.quantidade);
   }
 
   sinalizarDisponibilidade(produtoId: string, disponivel: false | null): void {
@@ -160,7 +179,7 @@ export class CarrinhoService {
   }
 
   private gravar(itens: ItemCarrinho[]): ResultadoCarrinho {
-    if (!inteiroNaoNegativo(somarCentavos(itens)) || !inteiroNaoNegativo(somarQuantidade(itens))) {
+    if (!inteiroNaoNegativo(somarQuantidade(itens))) {
       return 'invalido';
     }
     this.itensInternos.set(itens);
@@ -198,17 +217,14 @@ export class CarrinhoService {
       }
 
       const itens = new Map<string, ItemCarrinho>();
-      let subtotal = 0;
       let quantidade = 0;
       for (const dado of dados) {
         const item = lerItem(dado);
         if (!item || itens.has(item.varianteId)) {
           continue;
         }
-        const novoSubtotal = subtotal + item.precoCentavos * item.quantidade;
         const novaQuantidade = quantidade + item.quantidade;
-        if (inteiroNaoNegativo(novoSubtotal) && inteiroNaoNegativo(novaQuantidade)) {
-          subtotal = novoSubtotal;
+        if (inteiroNaoNegativo(novaQuantidade)) {
           quantidade = novaQuantidade;
           itens.set(item.varianteId, item);
         }
@@ -224,17 +240,17 @@ function lerItem(dado: unknown): ItemCarrinho | null {
   if (!dado || typeof dado !== 'object') {
     return null;
   }
-  const { produtoId, varianteId, nome, variante, imagem, precoCentavos, quantidade } =
+  const { produtoId, varianteId, nome, variante, imagem, precoCentavos, preco, quantidade } =
     dado as Record<string, unknown>;
+  const centavos = inteiroNaoNegativo(precoCentavos) ? String(precoCentavos) : precoCentavos;
   if (
     !identificador(produtoId) ||
     !identificador(varianteId) ||
     typeof nome !== 'string' ||
     !nome.trim() ||
     (variante !== null && typeof variante !== 'string') ||
-    !inteiroNaoNegativo(precoCentavos) ||
-    !inteiroNaoNegativo(quantidade) ||
-    quantidade === 0
+    !precoValido(centavos) ||
+    !quantidadeValida(quantidade)
   ) {
     return null;
   }
@@ -243,7 +259,8 @@ function lerItem(dado: unknown): ItemCarrinho | null {
     varianteId,
     nome,
     variante,
-    precoCentavos,
+    precoCentavos: centavos,
+    preco: lerPrecoCatalogo(preco, centavos),
     quantidade,
     imagem:
       typeof imagem === 'string' &&
@@ -266,6 +283,26 @@ function somarQuantidade(itens: ItemCarrinho[]): number {
   return itens.reduce((total, item) => total + item.quantidade, 0);
 }
 
-function somarCentavos(itens: ItemCarrinho[]): number {
-  return itens.reduce((total, item) => total + item.precoCentavos * item.quantidade, 0);
+function somarCentavos(itens: ItemCarrinho[]): bigint {
+  return itens.reduce((total, item) => total + BigInt(item.precoCentavos) * BigInt(item.quantidade), 0n);
+}
+
+function quantidadeValida(valor: unknown): valor is number {
+  return inteiroNaoNegativo(valor) && valor > 0 && valor <= limiteQuantidadePedido;
+}
+
+function lerPrecoOpcao(opcao: ProdutoCatalogoOpcao): string | null {
+  if (opcao.preco) return precoValido(opcao.preco.finalCentavos) ? opcao.preco.finalCentavos : null;
+  const partes = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(opcao.precoVenda));
+  if (!partes) return null;
+  const centavos = BigInt(`${partes[1]}${(partes[2] ?? '').padEnd(2, '0')}`);
+  return centavos > 0n && centavos <= BigInt(Number.MAX_SAFE_INTEGER) ? String(centavos) : null;
+}
+
+function lerPrecoCatalogo(valor: unknown, centavos: string): PrecoCatalogo | undefined {
+  const preco = valor as PrecoCatalogo | null;
+  return preco?.finalCentavos === centavos && precoValido(preco.regularCentavos) &&
+    typeof preco.economiaCentavos === 'string' && /^(0|[1-9]\d{0,18})$/.test(preco.economiaCentavos) &&
+    Number.isInteger(preco.offPontosBase) &&
+    (preco.promocaoId === null || typeof preco.promocaoId === 'string') ? preco : undefined;
 }

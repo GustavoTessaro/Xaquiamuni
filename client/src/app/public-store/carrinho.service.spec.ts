@@ -58,7 +58,7 @@ describe('CarrinhoService', () => {
       imagem: imagem.conteudoUrl,
     });
     expect(carrinho.quantidadeTotal()).toBe(3);
-    expect(carrinho.subtotalCentavos()).toBe(40);
+    expect(carrinho.subtotalCentavos()).toBe(40n);
     expect(formatarCentavos(40).replace(/\s+/g, ' ')).toBe('R$ 0,40');
   });
 
@@ -69,7 +69,7 @@ describe('CarrinhoService', () => {
       expect(carrinho.alterarQuantidade(opcao.id, valor)).toBe('invalido');
     }
     expect(carrinho.alterarQuantidade(opcao.id, 3)).toBe('ok');
-    expect(carrinho.subtotalCentavos()).toBe(30);
+    expect(carrinho.subtotalCentavos()).toBe(30n);
     carrinho.remover(opcao.id);
     expect(carrinho.itens()).toEqual([]);
     carrinho.adicionar(produto, opcao.id);
@@ -92,7 +92,7 @@ describe('CarrinhoService', () => {
     TestBed.resetTestingModule();
     const restaurado = TestBed.inject(CarrinhoService);
     expect(restaurado.quantidadeTotal()).toBe(2);
-    expect(restaurado.subtotalCentavos()).toBe(20);
+    expect(restaurado.subtotalCentavos()).toBe(20n);
     expect(restaurado.itens()[0]?.disponivel).toBeNull();
   });
 
@@ -121,7 +121,7 @@ describe('CarrinhoService', () => {
       ]),
     );
     const restaurado = TestBed.inject(CarrinhoService);
-    expect(restaurado.itens()).toEqual([{ ...base, imagem: null, disponivel: null }]);
+    expect(restaurado.itens()).toEqual([{ ...base, precoCentavos: '10', imagem: null, disponivel: null }]);
   });
 
   it('recusa disponibilidade desconhecida, opção esgotada e sinaliza mudanças para itens existentes', () => {

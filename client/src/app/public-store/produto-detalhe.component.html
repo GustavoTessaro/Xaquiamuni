@@ -124,7 +124,7 @@
         </p>
         @if (opcaoParaEstoque; as option) {
           <div class="product-detail__price" aria-live="polite">
-            <strong>{{ formatPrice(option.precoVenda) }}</strong>
+            <strong>{{ formatPrice(option.precoVenda, option.preco?.finalCentavos) }}</strong>
             <span>{{ formatUnit(option.unidadeVenda) }}</span>
           </div>
           @if (measures(option).length) {

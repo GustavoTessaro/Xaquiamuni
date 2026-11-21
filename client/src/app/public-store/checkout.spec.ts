@@ -76,6 +76,12 @@ const pedido: PedidoCliente = {
   ],
 };
 
+const pedidoComPrecoAceito: PedidoCliente = {
+  ...pedido,
+  totalCentavos: '250',
+  itens: [{ ...pedido.itens[0], precoUnitarioCentavos: '250', subtotalCentavos: '250' }],
+};
+
 describe('checkout integrado aos contratos HTTP', () => {
   let http: HttpTestingController;
   let carrinho: CarrinhoService;
@@ -144,7 +150,7 @@ describe('checkout integrado aos contratos HTTP', () => {
     return post;
   }
 
-  it('cria uma vez, usa apenas os itens e mostra os centavos definitivos ao consultar', async () => {
+  it('cria uma vez com a condição aceita e mostra o valor congelado', async () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');
     const view = harness.routeNativeElement!;
@@ -155,23 +161,23 @@ describe('checkout integrado aos contratos HTTP', () => {
     botao.click();
     botao.click();
     const post = await postAposCsrf();
-    expect(post.request.body).toEqual({ itens: [item] });
+    expect(post.request.body).toEqual({ itens: [{ ...item, precoAceitoCentavos: '250' }] });
     expect(post.request.headers.get('Idempotency-Key')).toMatch(/^[a-f0-9-]{36}$/i);
     expect(localStorage.getItem(chaveLocal)).not.toContain(clienteId);
     expect(localStorage.getItem(chaveLocal)).not.toContain('token-de-teste');
     expect(carrinho.itens()).toHaveLength(1);
     harness.detectChanges();
     expect(view.querySelector('[role="status"]')?.textContent).toContain('Processando');
-    post.flush(pedido, { status: 201, statusText: 'Created' });
+    post.flush(pedidoComPrecoAceito, { status: 201, statusText: 'Created' });
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe(`/pedidos/${pedidoId}`));
     http.expectNone({ method: 'GET', url: `/api/pedidos/${pedidoId}` });
     harness.detectChanges();
     const confirmado = harness.routeNativeElement!;
-    expect(confirmado.textContent).toContain('92.233.720.368.547.758,07');
+    expect(confirmado.textContent).toContain('2,50');
     expect(confirmado.textContent).toContain('Aguardando pagamento');
     http.expectOne({ method: 'GET', url: `/api/pedidos/${pedidoId}/pagamento` }).flush({
       situacao: 'configuracao_ausente',
-      valorCentavos: pedido.totalCentavos,
+      valorCentavos: pedidoComPrecoAceito.totalCentavos,
       prazoPagamentoEmUtc: pedido.prazoPagamentoEmUtc,
       pix: null,
     });
@@ -183,6 +189,53 @@ describe('checkout integrado aos contratos HTTP', () => {
     );
     expect(carrinho.itens()).toEqual([]);
     expect(localStorage.getItem(chaveLocal)).toBeNull();
+  });
+
+  it('apresenta o preço atual e só reenvia após confirmação explícita com nova chave', async () => {
+    carrinho.adicionar(produto, varianteId);
+    const harness = await RouterTestingHarness.create('/checkout');
+    harness.routeNativeElement!.querySelector('button')!.click();
+    const primeira = await postAposCsrf();
+    expect(primeira.request.body.itens[0].precoAceitoCentavos).toBe('250');
+    primeira.flush({
+      codigo: 'preco_alterado',
+      precosAtuais: [{
+        produtoId, produtoVarianteId: varianteId,
+        preco: { regularCentavos: '300', finalCentavos: '300', economiaCentavos: '0',
+          offPontosBase: 0, promocaoId: null },
+      }],
+    }, { status: 409, statusText: 'Conflict' });
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(harness.routeNativeElement!.textContent).toContain('Confirmar preços atuais');
+    });
+    expect(harness.routeNativeElement!.textContent).toContain('3,00');
+    expect(checkout.pendente()).toBeNull();
+    http.expectNone({ method: 'POST', url: '/api/pedidos' });
+    harness.routeNativeElement!.querySelector('button')!.click();
+    const segunda = await postAposCsrf();
+    expect(segunda.request.headers.get('Idempotency-Key')).not.toBe(primeira.request.headers.get('Idempotency-Key'));
+    expect(segunda.request.body.itens[0].precoAceitoCentavos).toBe('300');
+    segunda.error(new ProgressEvent('error'));
+    await vi.waitFor(() => expect(checkout.enviando()).toBe(false));
+    const restaurado = TestBed.runInInjectionContext(() => new CheckoutService());
+    expect(restaurado.pendente()?.itens[0].precoAceitoCentavos).toBe('300');
+    expect(restaurado.pendente()?.chave).toBe(segunda.request.headers.get('Idempotency-Key'));
+    http.expectNone({ method: 'POST', url: '/api/pedidos' });
+    const recuperacao = restaurado.enviar([], true);
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-de-recuperacao' });
+    let repeticao: TestRequest | undefined;
+    await vi.waitFor(() => {
+      repeticao = http.expectOne({ method: 'POST', url: '/api/pedidos' });
+    });
+    expect(repeticao!.request.body).toEqual(segunda.request.body);
+    expect(repeticao!.request.headers.get('Idempotency-Key')).toBe(segunda.request.headers.get('Idempotency-Key'));
+    repeticao!.flush({
+      ...pedidoComPrecoAceito,
+      totalCentavos: '300',
+      itens: [{ ...pedidoComPrecoAceito.itens[0], precoUnitarioCentavos: '300', subtotalCentavos: '300' }],
+    });
+    expect(await recuperacao).toMatchObject({ estado: 'sucesso' });
   });
 
   it('mantém o carrinho no redirecionamento e retorna à revisão após login', async () => {

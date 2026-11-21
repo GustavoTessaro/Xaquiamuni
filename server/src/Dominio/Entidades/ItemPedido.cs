@@ -7,7 +7,10 @@ public sealed record DadosItemPedido(
     string NomeProduto,
     string NomeVariante,
     int Quantidade,
-    long PrecoUnitarioCentavos);
+    long PrecoUnitarioCentavos,
+    long? PrecoAceitoCentavos = null,
+    long? PrecoRegularCentavos = null,
+    Guid? PromocaoId = null);
 
 public sealed class ItemPedido
 {
@@ -23,6 +26,9 @@ public sealed class ItemPedido
     public string NomeVariante { get; private set; } = null!;
     public int Quantidade { get; private set; }
     public long PrecoUnitarioCentavos { get; private set; }
+    public long? PrecoAceitoCentavos { get; private set; }
+    public long? PrecoRegularCentavos { get; private set; }
+    public Guid? PromocaoId { get; private set; }
     public long SubtotalCentavos => checked(PrecoUnitarioCentavos * Quantidade);
 
     internal static ItemPedido Criar(Guid pedidoId, DadosItemPedido dados)
@@ -43,6 +49,9 @@ public sealed class ItemPedido
             NomeVariante = NormalizarNome(dados.NomeVariante, ProdutoVariante.IdentificacaoMaxLength, nameof(dados.NomeVariante)),
             Quantidade = dados.Quantidade,
             PrecoUnitarioCentavos = dados.PrecoUnitarioCentavos,
+            PrecoAceitoCentavos = dados.PrecoAceitoCentavos,
+            PrecoRegularCentavos = dados.PrecoRegularCentavos,
+            PromocaoId = dados.PromocaoId,
         };
     }
 

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Aplicacao.Catalogo.Imagens;
 using Xaquiamuni.Aplicacao.Catalogo.Publico;
 using Xaquiamuni.Dominio.Entidades;
@@ -67,6 +69,7 @@ public static class CatalogoPublicoEndpoints
     }
 
     private static async Task<IResult> ListarProdutosAsync(
+        HttpContext context,
         string? busca,
         Guid? categoriaId,
         int? pagina,
@@ -74,6 +77,7 @@ public static class CatalogoPublicoEndpoints
         IConsultarCatalogoPublico catalogo,
         CancellationToken cancellationToken)
     {
+        context.Response.Headers.CacheControl = "no-store";
         var paginaSolicitada = pagina ?? 1;
         var tamanhoPagina = itensPorPagina ?? TamanhoPaginaPadrao;
         var termo = string.IsNullOrWhiteSpace(busca) ? null : busca.Trim();
@@ -114,10 +118,12 @@ public static class CatalogoPublicoEndpoints
     }
 
     private static async Task<IResult> ConsultarProdutoAsync(
+        HttpContext context,
         Guid produtoId,
         IConsultarCatalogoPublico catalogo,
         CancellationToken cancellationToken)
     {
+        context.Response.Headers.CacheControl = "no-store";
         var produto = await catalogo.ConsultarProdutoAsync(produtoId, cancellationToken)
             .ConfigureAwait(false);
         return produto is null
@@ -185,21 +191,26 @@ public sealed record ProdutoCatalogoResumoResponse(
     decimal PrecoMaximo,
     IReadOnlyList<string> UnidadesVenda,
     IReadOnlyList<ProdutoCatalogoMedidaResponse> Medidas,
-    bool Disponivel)
+    bool Disponivel,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PrecoExtremoCatalogo? MenorPreco = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PrecoExtremoCatalogo? MaiorPreco = null)
 {
     public static ProdutoCatalogoResumoResponse From(ProdutoCatalogoPublico item)
     {
         var produto = item.Produto;
         var opcoesAtivas = produto.Variantes.Where(variante => variante.Ativa).ToArray();
         var imagemPrincipal = produto.Imagens.Single(imagem => imagem.Principal);
+        var ordenados = item.Precos?.OrderBy(p => p.Value.FinalCentavos).ThenBy(p => p.Key).ToArray();
+        var menor = ordenados is { Length: > 0 } ? new PrecoExtremoCatalogo(ordenados[0].Key, ordenados[0].Value) : null;
+        var maior = ordenados is { Length: > 0 } ? new PrecoExtremoCatalogo(ordenados[^1].Key, ordenados[^1].Value) : null;
         return new ProdutoCatalogoResumoResponse(
             produto.Id,
             produto.Nome,
             produto.CategoriaId,
             produto.Categoria.Nome,
             ProdutoCatalogoFotoPrincipalResponse.From(produto.Id, imagemPrincipal),
-            opcoesAtivas.Min(opcao => opcao.PrecoVenda),
-            opcoesAtivas.Max(opcao => opcao.PrecoVenda),
+            menor?.Preco.FinalCentavos / 100m ?? opcoesAtivas.Min(opcao => opcao.PrecoVenda),
+            maior?.Preco.FinalCentavos / 100m ?? opcoesAtivas.Max(opcao => opcao.PrecoVenda),
             opcoesAtivas
                 .Select(opcao => opcao.UnidadeVenda)
                 .Distinct(StringComparer.Ordinal)
@@ -213,9 +224,11 @@ public sealed record ProdutoCatalogoResumoResponse(
                     opcao.PesoLiquidoGramas,
                     opcao.VolumeLiquidoMililitros))
                 .ToArray(),
-            item.OpcoesDisponiveis.Count > 0);
+            item.OpcoesDisponiveis.Count > 0, menor, maior);
     }
 }
+
+public sealed record PrecoExtremoCatalogo(Guid VarianteId, PrecoComercial Preco);
 
 /// <summary>Uma página ordenada de produtos públicos com metadados de paginação.</summary>
 public sealed record CatalogoPublicoPaginaResponse(
@@ -275,7 +288,8 @@ public sealed record ProdutoCatalogoOpcaoResponse(
     decimal? PesoLiquidoGramas,
     decimal? VolumeLiquidoMililitros,
     IReadOnlyList<ProdutoCatalogoCaracteristicaSelecaoResponse> Caracteristicas,
-    bool Disponivel);
+    bool Disponivel,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] PrecoComercial? Preco = null);
 
 /// <summary>Uma característica e o valor efetivamente associados a uma opção.</summary>
 public sealed record ProdutoCatalogoCaracteristicaSelecaoResponse(
@@ -352,7 +366,7 @@ public sealed record ProdutoCatalogoDetalheResponse(
                 opcao.Id,
                 isSimpleProduct ? null : opcao.Identificacao,
                 opcao.UnidadeVenda,
-                opcao.PrecoVenda,
+                item.Precos?.GetValueOrDefault(opcao.Id)?.FinalCentavos / 100m ?? opcao.PrecoVenda,
                 opcao.Padrao,
                 opcao.PesoLiquidoGramas,
                 opcao.VolumeLiquidoMililitros,
@@ -365,7 +379,7 @@ public sealed record ProdutoCatalogoDetalheResponse(
                         associacao.Valor.Nome,
                         associacao.Valor.ValorMedidaCanonico))
                     .ToArray(),
-                item.OpcoesDisponiveis.Contains(opcao.Id)))
+                item.OpcoesDisponiveis.Contains(opcao.Id), item.Precos?.GetValueOrDefault(opcao.Id)))
             .ToArray();
         var imagemPrincipal = galeria.Single(imagem => imagem.Principal);
 

@@ -2,6 +2,8 @@ import { HttpClient, HttpResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { map, timeout } from 'rxjs';
 import { CsrfService } from '../core/security/csrf.service';
+import { precoValido } from './catalogo-formatacao';
+import type { PrecoCatalogo } from './catalogo-publico.service';
 
 const url = '/api/pedidos';
 export const limiteItensPedido = 100;
@@ -20,6 +22,13 @@ export interface ItemCompra {
   produtoId: string;
   produtoVarianteId: string;
   quantidade: number;
+  precoAceitoCentavos?: string;
+}
+
+export interface PrecoAtualPedido {
+  produtoId: string;
+  produtoVarianteId: string;
+  preco: PrecoCatalogo;
 }
 
 export interface ItemPedido extends ItemCompra {
@@ -27,6 +36,8 @@ export interface ItemPedido extends ItemCompra {
   nomeVariante: string;
   precoUnitarioCentavos: string;
   subtotalCentavos: string;
+  precoRegularCentavos?: string;
+  promocaoId?: string;
 }
 
 export interface PedidoCliente {
@@ -71,7 +82,8 @@ export function itensCompraValidos(itens: unknown): itens is ItemCompra[] {
         uuidValido(item?.produtoVarianteId) &&
         Number.isInteger(item?.quantidade) &&
         item.quantidade > 0 &&
-        item.quantidade <= limiteQuantidadePedido,
+        item.quantidade <= limiteQuantidadePedido &&
+        (item.precoAceitoCentavos === undefined || precoValido(item.precoAceitoCentavos)),
     ) &&
     new Set(itens.map((item) => item.produtoVarianteId.toLowerCase())).size === itens.length
   );
@@ -105,10 +117,11 @@ export class PedidosService {
       .post<PedidoCliente>(
         url,
         {
-          itens: itens.map(({ produtoId, produtoVarianteId, quantidade }) => ({
+          itens: itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }) => ({
             produtoId,
             produtoVarianteId,
             quantidade,
+            ...(precoAceitoCentavos === undefined ? {} : { precoAceitoCentavos }),
           })),
         },
         {
@@ -122,6 +135,11 @@ export class PedidosService {
           const pedido = lerPedido(response, [200, 201]);
           if (!mesmosItensCompra(itens, pedido.itens)) {
             throw new Error('Itens do pedido diferentes da tentativa registrada.');
+          }
+          if (itens.some(item => item.precoAceitoCentavos !== undefined &&
+              !pedido.itens.some(gravado => gravado.produtoVarianteId.toLowerCase() ===
+                item.produtoVarianteId.toLowerCase() && gravado.precoUnitarioCentavos === item.precoAceitoCentavos))) {
+            throw new Error('Preço do pedido diferente da condição enviada.');
           }
           return pedido;
         }),

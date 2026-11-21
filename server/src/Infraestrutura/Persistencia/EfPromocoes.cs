@@ -77,12 +77,7 @@ public sealed class EfPromocoes(XaquiamuniDbContext db, TimeProvider relogio)
         {
             await using var transacao = await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct);
             // Todos os comandos ficam serializados antes de ler promoções, preços ou idempotência.
-            await db.Database.ExecuteSqlRawAsync("""
-                DECLARE @resultado int;
-                EXEC @resultado = sys.sp_getapplock @Resource = 'catalog-promotions', @LockMode = 'Exclusive',
-                    @LockOwner = 'Transaction', @LockTimeout = 10000;
-                IF @resultado < 0 THROW 51000, 'Promotion lock unavailable.', 1;
-                """, ct);
+            await PromocoesComerciaisSql.BloquearAsync(db, escrita: true, ct);
             var operacao = await db.Set<OperacaoPromocao>().FindAsync([autor, chave], ct);
             if (operacao is not null)
                 return operacao.Impressao == impressao

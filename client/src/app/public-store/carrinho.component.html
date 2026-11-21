@@ -1,5 +1,8 @@
 <section class="cart" aria-labelledby="cart-title">
   <h1 id="cart-title">Carrinho</h1>
+  @if (precoMudou()) {
+    <p role="status">Os preços do carrinho foram atualizados.</p>
+  }
   @if (carrinho.persistenciaIndisponivel()) {
     <p role="status">O navegador não conseguiu salvar o carrinho para a próxima visita.</p>
   }
@@ -62,7 +65,7 @@
               }
             </div>
             <div class="cart__line-total">
-              <strong>{{ formatarPreco(item.precoCentavos * item.quantidade) }}</strong>
+              <strong>{{ formatarPreco(carrinho.subtotalItem(item)) }}</strong>
               <button
                 type="button"
                 (click)="remover(item.varianteId)"

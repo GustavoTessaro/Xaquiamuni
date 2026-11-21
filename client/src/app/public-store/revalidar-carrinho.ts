@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { catchError, from, map, mergeMap, of, tap, timeout } from 'rxjs';
+import { catchError, from, map, mergeMap, of, timeout } from 'rxjs';
 import { CarrinhoService } from './carrinho.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
 
@@ -21,12 +21,13 @@ export function revalidarCarrinho(carrinho: CarrinhoService, catalogo: CatalogoP
         ),
       4,
     ),
-    tap(({ id, produto, ausente }) => {
+    map(({ id, produto, ausente }) => {
       if (produto?.id === id) {
-        carrinho.atualizarDisponibilidade(produto);
+        return carrinho.atualizarDisponibilidade(produto);
       } else if (ausente) {
         carrinho.sinalizarDisponibilidade(id, false);
       }
+      return false;
     }),
   );
 }

@@ -113,7 +113,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         }
 
         using (var grande = await PostPedidoAsync(cliente,
-            new StringContent(new string(' ', 16 * 1024 + 1), Encoding.UTF8, "application/json"), chave, token))
+            new StringContent(new string(' ', 24 * 1024 + 1), Encoding.UTF8, "application/json"), chave, token))
         {
             Assert.Equal(HttpStatusCode.RequestEntityTooLarge, grande.StatusCode);
         }
@@ -222,7 +222,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 
     private static WebApplicationFactory<Program> CriarApiPedidos(
         SqlServerTestDatabase database,
-        RelogioSqlControlado? relogio = null)
+        RelogioSqlControlado? relogio = null,
+        bool promocoesComerciais = false)
     {
         using var context = database.CreateVerificationContext();
         var connectionString = context.Database.GetConnectionString()
@@ -236,6 +237,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
                     ["ConnectionStrings:SqlServer"] = connectionString,
                     ["EmailOutboxWorker:Enabled"] = "false",
                     ["ResendEmail:Enabled"] = "false",
+                    ["PromocoesComerciais:Habilitadas"] = promocoesComerciais.ToString(),
                 }));
             builder.ConfigureTestServices(services =>
             {

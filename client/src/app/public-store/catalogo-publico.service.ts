@@ -14,6 +14,19 @@ export interface ProdutoCatalogoMedida {
   volumeLiquidoMililitros: number | null;
 }
 
+export interface PrecoCatalogo {
+  regularCentavos: string;
+  finalCentavos: string;
+  economiaCentavos: string;
+  offPontosBase: number;
+  promocaoId: string | null;
+}
+
+export interface PrecoExtremoCatalogo {
+  varianteId: string;
+  preco: PrecoCatalogo;
+}
+
 export interface ProdutoCatalogoResumo {
   id: string;
   nome: string;
@@ -25,6 +38,8 @@ export interface ProdutoCatalogoResumo {
   };
   precoMinimo: number;
   precoMaximo: number;
+  menorPreco?: PrecoExtremoCatalogo;
+  maiorPreco?: PrecoExtremoCatalogo;
   unidadesVenda: string[];
   medidas: ProdutoCatalogoMedida[];
   disponivel: boolean;
@@ -81,6 +96,7 @@ export interface ProdutoCatalogoOpcao {
   identificacao: string | null;
   unidadeVenda: string;
   precoVenda: number;
+  preco?: PrecoCatalogo;
   principal: boolean;
   pesoLiquidoGramas: number | null;
   volumeLiquidoMililitros: number | null;
