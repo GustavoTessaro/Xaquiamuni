@@ -55,6 +55,7 @@ try {
   const respostas = new Map();
   const compras = new Map();
   const falhasPix = new Map();
+  const quitacoesSemResposta = new Map();
   call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
@@ -73,6 +74,22 @@ try {
     if (data.method === 'Fetch.requestPaused') {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
+      const perda = quitacoesSemResposta.get(data.sessionId);
+      if (local && perda && request.method === 'POST' && new URL(request.url).pathname === perda.rota) {
+        if (data.params.responseStatusCode === undefined) {
+          postsFinanceiros++;
+          perda.chave = Object.entries(request.headers).find(([nome]) => nome.toLowerCase() === 'idempotency-key')?.[1];
+          perda.corpo = JSON.parse(request.postData);
+          void call('Fetch.continueRequest', { requestId, interceptResponse: true }, data.sessionId)
+            .catch(erro => { perda.erro = erro.message; });
+        } else {
+          perda.status = data.params.responseStatusCode;
+          quitacoesSemResposta.delete(data.sessionId);
+          void call('Fetch.failRequest', { requestId, errorReason: 'ConnectionClosed' }, data.sessionId)
+            .catch(erro => { perda.erro = erro.message; });
+        }
+        return;
+      }
       if (!local) externos++;
       if (local && request.method === 'POST' && new URL(request.url).pathname.startsWith('/api/admin/financeiro/'))
         postsFinanceiros++;
@@ -437,33 +454,76 @@ try {
         campo.dispatchEvent(new Event(campo.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
       }
     })()`);
-    for (const width of [375, 1280]) {
-      const tipo = width === 375 ? 'Saida' : 'Entrada';
-      const direcao = tipo === 'Saida' ? 'APagar' : 'AReceber';
-      const descricao = 'Conta E2E ' + width;
-      const acaoQuitar = tipo === 'Saida' ? 'Marcar como pago' : 'Marcar como recebido';
-      const clicarFinanceiro = async rotulo => {
-        await waitFor(() => a.ev(`!!(${botaoFinanceiro(rotulo)})`), 'Botão indisponível: ' + rotulo);
-        await a.ev(`(${botaoFinanceiro(rotulo)}).click()`);
-      };
-      const detalhe = () => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === ${JSON.stringify(descricao)}`);
-      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+    const clicarFinanceiro = async rotulo => {
+      await waitFor(() => a.ev(`!!(${botaoFinanceiro(rotulo)})`), 'Botão indisponível: ' + rotulo);
+      await a.ev(`(${botaoFinanceiro(rotulo)}).click()`);
+    };
+    const base = '/api/admin/financeiro';
+    const ler = rota => a.ev(`fetch(${JSON.stringify(base + rota)}).then(async r => {
+      if (!r.ok) throw Error('Consulta financeira: ' + r.status);
+      return r.json();
+    })`);
+    const escrever = (rota, corpo, chave) => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(base + rota)}, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken,
+          'Idempotency-Key': ${chave ? JSON.stringify(chave) : 'crypto.randomUUID()'} },
+        body: ${JSON.stringify(JSON.stringify(corpo))},
+      });
+      return { status: r.status, corpo: await r.json() };
+    })()`);
+    const localizar = async descricao => {
+      const registro = (await ler('/lancamentos')).find(item => item.descricao === descricao);
+      assert.ok(registro, descricao);
+      return registro;
+    };
+    const movimentos = async id => (await ler('/movimentacoes')).itens.filter(item => item.recursoId === id);
+    const criarPendencia = async (tipo, descricao, vencimento) => {
       await a.ir('/admin/financeiro');
       await clicarFinanceiro('Lançamentos');
       await clicarFinanceiro('Novo lançamento');
       await preencherConta({ tipo, inicial: 'pendente', categoria: 'Ensaio', descricao,
         valor: '19,90', contraparte: 'Pessoa E2E' });
       await waitFor(() => a.ev(`!!document.querySelector('main input[name="vencimento"]')`), 'Vencimento ausente');
-      await preencherConta({ vencimento: '2020-01-02' });
+      await preencherConta({ vencimento });
       assert.ok(await a.ev(`!document.querySelector('main input[name="data"]') && document.documentElement.scrollWidth <= innerWidth`));
       await clicarFinanceiro('Confirmar');
-      await waitFor(detalhe, 'Criação pendente não abriu o detalhe');
+      await waitFor(() => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === ${JSON.stringify(descricao)}`),
+        'Criação pendente não abriu o detalhe');
+      const registro = await localizar(descricao);
+      assert.equal(registro.categoria, 'Ensaio');
+      assert.equal(registro.contraparte, 'Pessoa E2E');
+      assert.equal(registro.situacao, 'Pendente');
+      return registro;
+    };
+    for (const width of [375, 1280]) {
+      const tipo = width === 375 ? 'Saida' : 'Entrada';
+      const direcao = tipo === 'Saida' ? 'APagar' : 'AReceber';
+      const descricao = 'Conta E2E ' + width;
+      const acaoQuitar = tipo === 'Saida' ? 'Marcar como pago' : 'Marcar como recebido';
+      const detalhe = () => a.ev(`document.querySelector('#lancamento-titulo')?.textContent.trim() === ${JSON.stringify(descricao)}`);
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      const anterior = await ler('/resumo');
+      const registro = await criarPendencia(tipo, descricao, '2020-01-02');
+      assert.deepEqual(await movimentos(registro.id), []);
+      const aberto = await ler('/resumo');
+      assert.deepEqual(aberto.fluxoPeriodo, anterior.fluxoPeriodo);
+      const grupo = direcao === 'APagar' ? 'aPagar' : 'aReceber';
+      assert.equal(BigInt(aberto.posicaoAtual.contasEmAberto[grupo].valorCentavos)
+        - BigInt(anterior.posicaoAtual.contasEmAberto[grupo].valorCentavos), 1990n);
+      assert.equal(aberto.posicaoAtual.contasEmAberto[grupo].quantidade
+        - anterior.posicaoAtual.contasEmAberto[grupo].quantidade, 1);
       await a.ir('/admin');
       const atalho = `[...document.querySelectorAll('main a')].find(a => a.href.includes('direcao=${direcao}') && a.href.includes('classificacao=Vencidas'))`;
       await waitFor(() => a.ev(`!!(${atalho})`), 'Alerta de conta vencida ausente no Dashboard');
       assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
       await a.ev(`(${atalho}).focus()`);
-      assert.ok(await a.ev(`document.activeElement === (${atalho})`));
+      assert.ok(await a.ev(`(() => {
+        const link = (${atalho});
+        const estilo = getComputedStyle(link);
+        return document.activeElement === link && link.matches(':focus-visible')
+          && estilo.outlineStyle !== 'none' && parseFloat(estilo.outlineWidth) > 0;
+      })()`));
       await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }, a.sessionId);
       await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13 }, a.sessionId);
       const conta = `[...document.querySelectorAll('app-admin-contas-em-aberto article')].find(a => a.textContent.includes(${JSON.stringify(descricao)}))`;
@@ -476,13 +536,134 @@ try {
       assert.ok(await a.ev(`document.querySelector('#formulario-financeiro')?.textContent.includes('quitação integral')
         && document.documentElement.scrollWidth <= innerWidth`));
       await a.ev(`document.querySelector('main input[name="confirmacao"]').click()`);
+      const rota = '/lancamentos/' + registro.id + '/quitar';
+      const perda = { rota: base + rota };
+      const antesDosPosts = postsFinanceiros;
+      if (tipo === 'Entrada') quitacoesSemResposta.set(a.sessionId, perda);
       await clicarFinanceiro('Confirmar');
+      if (tipo === 'Entrada') {
+        await waitFor(() => a.ev(`document.querySelector('main [role="alert"]')?.textContent.includes('conexão interrompida')`),
+          'A quitação sem resposta não foi reconhecida como tentativa incerta');
+        assert.equal(perda.erro, undefined);
+        assert.equal(perda.status, 200);
+        const guardada = await a.ev(`JSON.parse(sessionStorage.getItem('xaquiamuni:financeiro:v1:' + ${adminId}))`);
+        assert.equal(guardada.chave, perda.chave);
+        assert.deepEqual(guardada.corpo, perda.corpo);
+        const persistida = await ler('/lancamentos/' + registro.id);
+        assert.equal(persistida.situacao, 'Realizado');
+        const rotaTentativa = '/tentativas/' + perda.chave;
+        await a.ir('/admin/financeiro');
+        await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Operação recuperada')`),
+          'O resultado persistido da quitação não foi recuperado na recarga');
+        assert.equal(postsFinanceiros, antesDosPosts + 1);
+        assert.equal(respostas.get(base + rotaTentativa), 200);
+        const tentativa = await ler(rotaTentativa);
+        assert.equal(tentativa.operacao, 'quitar');
+        assert.deepEqual(tentativa.resultado, persistida);
+        const replay = await escrever(rota, perda.corpo, perda.chave);
+        assert.equal(replay.status, 200);
+        assert.deepEqual(replay.corpo, tentativa.resultado);
+        assert.equal((await escrever(rota, { ...perda.corpo, meio: 'Pix' }, perda.chave)).status, 409);
+        assert.equal((await escrever(rota, perda.corpo)).status, 409);
+        console.log('D: resposta HTTP 200 interrompida após commit, recuperação sem escrita, replay idêntico e conflitos 409.');
+      }
       await waitFor(() => a.ev(`document.querySelector('main')?.textContent.includes('Quitação registrada em')`), 'Quitação não refletida no detalhe');
       await a.ir('/admin/financeiro?secao=contas&direcao=' + direcao + '&classificacao=Vencidas');
       await waitFor(() => a.ev(`document.querySelector('app-admin-contas-em-aberto')?.textContent.includes('Nenhuma conta em aberto')`),
         'Conta quitada continuou na lista');
-      console.log('Contas em ' + width + ' px: cadastro, alerta no Dashboard, filtro por teclado, quitação integral e remoção da lista.');
+      const eventos = await movimentos(registro.id);
+      assert.deepEqual(eventos.map(({ tipo, data, valorCentavos, origem }) => ({ tipo, data, valorCentavos, origem })),
+        [{ tipo, data: '2020-01-03', valorCentavos: '1990', origem: 'LancamentoManual' }]);
+      const quitado = await ler('/resumo');
+      assert.deepEqual(quitado.posicaoAtual.contasEmAberto, anterior.posicaoAtual.contasEmAberto);
+      const caixa = tipo === 'Saida' ? 'saidasPagasCentavos' : 'entradasRecebidasCentavos';
+      assert.equal(BigInt(quitado.fluxoPeriodo[caixa]) - BigInt(anterior.fluxoPeriodo[caixa]), 1990n);
+      console.log('A/B em ' + width + ' px: pendência de 1990 centavos, caixa intacto até quitação, um evento na data efetiva.');
     }
+
+    for (const tipo of ['Entrada', 'Saida']) {
+      const antes = await ler('/resumo');
+      const registro = await criarPendencia(tipo, 'Cancelamento E2E ' + tipo, '2020-01-02');
+      const vencidas = '/contas-em-aberto?classificacao=Vencidas';
+      assert.ok((await ler(vencidas)).itens.some(item => item.id === registro.id));
+      await clicarFinanceiro('Cancelar lançamento');
+      await preencherConta({ motivo: 'Cancelamento de homologação' });
+      await a.ev(`document.querySelector('main input[name="confirmacao"]').click()`);
+      await clicarFinanceiro('Confirmar');
+      await waitFor(() => a.ev(`document.querySelector('main article[aria-labelledby="lancamento-titulo"]')?.textContent.includes('Cancelamento de homologação')`),
+        'Auditoria do cancelamento ausente');
+      const cancelado = await ler('/lancamentos/' + registro.id);
+      assert.equal(cancelado.situacao, 'Cancelado');
+      assert.equal(cancelado.canceladoPorId, admin.Id);
+      assert.equal(cancelado.motivoCancelamento, 'Cancelamento de homologação');
+      assert.ok(await a.ev(`!(${botaoFinanceiro('Marcar como pago')}) && !(${botaoFinanceiro('Marcar como recebido')})`));
+      assert.ok(!(await ler(vencidas)).itens.some(item => item.id === registro.id));
+      assert.deepEqual(await movimentos(registro.id), []);
+      assert.deepEqual(await ler('/resumo'), antes);
+      assert.equal((await escrever('/lancamentos/' + registro.id + '/quitar', { data: '2020-01-03', meio: 'Dinheiro' })).status, 409);
+      console.log('C: ' + tipo + ' cancelada com auditoria, fora dos alertas e sem caixa.');
+    }
+
+    const contasCompras = (await ler('/contas-em-aberto?origem=Compra')).itens;
+    for (const id of comprasTeste) {
+      const compraEmAberto = contasCompras.find(item => item.id === id);
+      assert.equal(compraEmAberto?.vencimento, null);
+      assert.equal(compraEmAberto.situacao, 'EmAberto');
+      assert.deepEqual(await movimentos(id), []);
+    }
+    assert.ok(!(await ler('/contas-em-aberto?origem=VendaExterna')).itens.some(item => item.id === vendaId));
+    assert.deepEqual((await movimentos(vendaId)).map(evento => [evento.origem, evento.tipo, evento.valorCentavos]),
+      [['VendaExterna', 'Entrada', '500']]);
+    console.log('E/F: compra sem vencimento e sem caixa, venda externa quitada com um único recebimento de 500 centavos.');
+    const posicaoAntes = (await ler('/resumo')).posicaoAtual.contasEmAberto;
+    const deslocar = dias => {
+      const data = new Date(posicaoAntes.dataOperacional + 'T00:00:00Z');
+      data.setUTCDate(data.getUTCDate() + dias);
+      return data.toISOString().slice(0, 10);
+    };
+    const classificacoes = [
+      [-1, 'Vencida', 'Vencidas'], [0, 'VenceHoje', 'VenceHoje'],
+      [3, 'VencendoEmBreve', 'ProximosTresDias'], [4, 'EmAberto', null],
+    ];
+    for (const [dias, situacao, filtro] of classificacoes) {
+      const { status, corpo } = await escrever('/lancamentos/pendentes', {
+        tipo: 'Saida', categoria: 'Ensaio', descricao: 'Limite E2E ' + dias,
+        valorCentavos: '101', vencimento: deslocar(dias),
+      });
+      assert.equal(status, 201);
+      const rota = filtro ? '/contas-em-aberto?classificacao=' + filtro : '/contas-em-aberto';
+      assert.equal((await ler(rota)).itens.find(item => item.id === corpo.id)?.situacao, situacao);
+      if (!filtro) {
+        assert.ok(!(await ler('/contas-em-aberto?classificacao=VencendoEmBreve')).itens.some(item => item.id === corpo.id));
+      }
+    }
+    const posicao = (await ler('/resumo')).posicaoAtual.contasEmAberto;
+    assert.equal(posicao.aPagar.quantidade - posicaoAntes.aPagar.quantidade, 4);
+    assert.equal(BigInt(posicao.aPagar.valorCentavos) - BigInt(posicaoAntes.aPagar.valorCentavos), 404n);
+    for (const grupo of ['vencidas', 'venceHoje', 'proximosTresDias']) {
+      assert.equal(posicao.aPagar[grupo].quantidade - posicaoAntes.aPagar[grupo].quantidade, 1);
+      assert.equal(BigInt(posicao.aPagar[grupo].valorCentavos) - BigInt(posicaoAntes.aPagar[grupo].valorCentavos), 101n);
+    }
+    const lerCartoes = () => a.ev(`[...document.querySelectorAll('.grade-contas section')].map(cartao => ({
+      total: cartao.querySelector('p').textContent.trim(),
+      alertas: [...cartao.querySelectorAll('.alertas-contas a')].map(a => [a.search, a.textContent.trim()]),
+    }))`);
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await a.ir('/admin/financeiro');
+      await waitFor(async () => (await lerCartoes()).length === 2, 'Indicadores do Financeiro ausentes');
+      const financeiro = await lerCartoes();
+      await a.ir('/admin');
+      await waitFor(async () => (await lerCartoes()).length === 2, 'Indicadores do Dashboard ausentes');
+      const dashboard = await lerCartoes();
+      assert.equal(dashboard[0].alertas.length, 3);
+      for (const [i, cartao] of dashboard.entries()) {
+        assert.equal(cartao.total, financeiro[i].total);
+        for (const alerta of cartao.alertas) assert.deepEqual(alerta, financeiro[i].alertas.find(a => a[0] === alerta[0]));
+      }
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+    }
+    console.log('E: ontem, hoje, +3 e +4 pela data operacional da API; cartões conciliados entre Financeiro e Dashboard.');
 
   }
 
