@@ -30,14 +30,18 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
     private DateTimeOffset? _retirada;
     private DateTimeOffset? _entrega;
 
-    internal async Task<object> SemearAsync(string nomeProduto = "Sabonete E2E", string nomeCategoria = "Artesanais E2E")
+    internal async Task<object> SemearAsync(string nomeProduto = "Sabonete E2E", string nomeCategoria = "Artesanais E2E",
+        bool comVariante = false)
     {
         await using var scope = host.Services.CreateAsyncScope();
         var sp = scope.ServiceProvider;
         var db = sp.GetRequiredService<XaquiamuniDbContext>();
         var categoria = Categoria.Criar(nomeCategoria, null, 0);
-        var produto = Produto.CriarSimples(nomeProduto, null, categoria, "UN", 13.90m);
-        var variante = Assert.Single(produto.Variantes);
+        var produto = comVariante
+            ? Produto.Criar(nomeProduto, null, categoria,
+                [ProdutoVariante.Criar("Lavanda", "UN", 13.90m, padrao: true), ProdutoVariante.Criar("Alecrim", "UN", 20m)])
+            : Produto.CriarSimples(nomeProduto, null, categoria, "UN", 13.90m);
+        var variante = produto.Variantes.Single(v => v.Padrao);
         using var bitmap = new SKBitmap(64, 64);
         bitmap.Erase(SKColors.ForestGreen);
         using var imagem = SKImage.FromBitmap(bitmap);
@@ -64,7 +68,15 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
         _produto = produto.Id;
         _variante = variante.Id;
         _lotes = lotes.ToArray();
-        return new { produto = _produto, variante = _variante };
+        var alternativa = produto.Variantes.SingleOrDefault(v => !v.Padrao);
+        if (alternativa is not null)
+        {
+            var entrada = await estoque.RegistrarEntradaAsync(new(alternativa.Id, admin, TipoMovimentoProdutoAcabado.EntradaManual,
+                3, CondicaoEstoqueProdutoAcabado.Vendavel, "Seed E2E", Guid.NewGuid().ToString("N"),
+                DataFabricacaoNovoLote: hoje, DataValidadeNovoLote: hoje.AddDays(5)));
+            Assert.True(entrada.Sucesso);
+        }
+        return new { produto = _produto, variante = _variante, alternativa = alternativa?.Id };
     }
 
     internal async Task<string> CapturarConfirmacaoAsync(CancellationToken token)

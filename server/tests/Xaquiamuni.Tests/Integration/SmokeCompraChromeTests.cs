@@ -12,7 +12,7 @@ using Xunit.Abstractions;
 
 namespace Xaquiamuni.Tests.Integration;
 
-public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
+public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
 {
     private const string TemporarioPrefixo = "xaquiamuni-compra-e2e-";
 
@@ -195,7 +195,8 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
         }
     }
 
-    private async Task RodarChromeAsync(string script, object parametros, JornadaCompraE2E? fluxo, AmbienteDemonstracao? demo = null)
+    private async Task RodarChromeAsync(string script, object parametros, JornadaCompraE2E? fluxo,
+        AmbienteDemonstracao? demo = null, Func<string, Task<object>>? checkpoint = null)
     {
         var start = new ProcessStartInfo("node")
         {
@@ -214,13 +215,15 @@ public sealed class SmokeCompraChromeTests(ITestOutputHelper output)
             string? linha;
             while ((linha = await processo.StandardOutput.ReadLineAsync(limite.Token)) is not null)
             {
-                if ((fluxo is not null || demo is not null) && linha.StartsWith("@checkpoint ", StringComparison.Ordinal))
+                if ((fluxo is not null || demo is not null || checkpoint is not null) && linha.StartsWith("@checkpoint ", StringComparison.Ordinal))
                 {
                     var partes = linha.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                     var etapa = partes[1];
                     output.WriteLine($"Checkpoint: {etapa}");
                     object resposta = true;
-                    if (etapa == "email")
+                    if (checkpoint is not null)
+                        resposta = await checkpoint(etapa);
+                    else if (etapa == "email")
                     {
                         resposta = demo is not null
                             ? await demo.ProximaConfirmacaoAsync(limite.Token)

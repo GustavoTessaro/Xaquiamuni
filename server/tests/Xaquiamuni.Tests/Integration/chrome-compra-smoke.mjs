@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline';
 import { validarJornada } from './chrome-compra-jornada.mjs';
+import { validarPromocoes } from './chrome-promocoes.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
@@ -161,6 +162,9 @@ try {
   assert.equal(await a.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 200);
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
+
+  if (dados.promocoes)
+    await validarPromocoes({ dados, cliente: c, admin: a, call, waitFor, checkpoint, abrir, login });
 
   if (dados.agenda) {
     assert.equal(await c.ev('fetch("/api/admin/agenda").then(r => r.status)'), 403);

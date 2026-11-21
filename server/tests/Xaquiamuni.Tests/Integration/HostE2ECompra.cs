@@ -35,7 +35,8 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     private readonly WebApplicationFactory<Program> _factory;
     private readonly X509Certificate2 _certificado;
 
-    public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null)
+    public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null,
+        bool promocoesComerciais = false)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -66,6 +67,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
             ["ExpiracaoPedidosWorker:Enabled"] = "false",
             ["EmailOutboxWorker:Enabled"] = "false",
             ["ResendEmail:Enabled"] = "false",
+            ["PromocoesComerciais:Habilitadas"] = promocoesComerciais.ToString(),
             ["ProductImages:Storage:RootPath"] = Path.Combine(temporario, "imagens"),
             ["CpfProtection:CurrentEncryptionKeyVersion"] = "e2e",
             ["CpfProtection:EncryptionKeys:e2e"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
