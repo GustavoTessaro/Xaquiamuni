@@ -104,6 +104,54 @@ export interface PeriodoFinanceiro {
   dataFinal: string;
 }
 
+export type DirecaoConta = 'APagar' | 'AReceber';
+export type OrigemConta = 'Manual' | 'Compra' | 'VendaExterna';
+export type FiltroVencimento = 'Todas' | 'Vencidas' | 'VencendoEmBreve';
+export type SituacaoVencimento = 'EmAberto' | 'Vencida' | 'VenceHoje' | 'VencendoEmBreve';
+
+export interface FiltroContasEmAberto {
+  direcao?: DirecaoConta;
+  classificacao?: FiltroVencimento;
+  origem?: OrigemConta;
+}
+
+export interface ContaEmAberto {
+  id: string;
+  direcao: DirecaoConta;
+  origem: OrigemConta;
+  descricao: string;
+  contraparte: string | null;
+  valorPendenteCentavos: string;
+  vencimento: string | null;
+  situacao: SituacaoVencimento;
+  referenciaApi: string;
+}
+
+export interface PaginaContasEmAberto {
+  dataOperacional: string;
+  pagina: number;
+  tamanhoPagina: number;
+  temProxima: boolean;
+  itens: ContaEmAberto[];
+}
+
+export interface TotalContas {
+  quantidade: number;
+  valorCentavos: string;
+}
+
+export interface IndicadoresDirecaoConta extends TotalContas {
+  vencidas: TotalContas;
+  venceHoje: TotalContas;
+  vencendoEmBreve: TotalContas;
+}
+
+export interface IndicadoresContasEmAberto {
+  dataOperacional: string;
+  aPagar: IndicadoresDirecaoConta;
+  aReceber: IndicadoresDirecaoConta;
+}
+
 export interface ResumoFinanceiro {
   fluxoPeriodo: {
     dataInicial: string | null;
@@ -116,6 +164,7 @@ export interface ResumoFinanceiro {
     aReceberCentavos: string;
     aPagarCentavos: string;
     comprasValorAConferir: number;
+    contasEmAberto?: IndicadoresContasEmAberto;
   };
 }
 
@@ -140,6 +189,17 @@ export class FinanceiroService {
       if (valor) params[nome] = valor;
     }
     return this.http.get<PaginaMovimentacoes>(this.base + '/movimentacoes', { params });
+  }
+
+  contasEmAberto({ direcao, classificacao, origem }: FiltroContasEmAberto, pagina = 1) {
+    return this.http.get<PaginaContasEmAberto>(this.base + '/contas-em-aberto', {
+      params: {
+        pagina,
+        ...(direcao ? { direcao } : {}),
+        ...(classificacao ? { classificacao } : {}),
+        ...(origem ? { origem } : {}),
+      },
+    });
   }
 
   consultarTentativa(chave: string) {

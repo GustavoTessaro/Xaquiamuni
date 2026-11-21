@@ -36,7 +36,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     private readonly X509Certificate2 _certificado;
 
     public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null,
-        bool promocoesComerciais = false)
+        bool promocoesComerciais = false, TimeProvider? relogioAplicacao = null)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -86,6 +86,11 @@ internal sealed class HostE2ECompra : IAsyncDisposable
             });
             builder.ConfigureTestServices(services =>
             {
+                if (relogioAplicacao is not null)
+                {
+                    services.RemoveAll<TimeProvider>();
+                    services.AddSingleton(relogioAplicacao);
+                }
                 services.RemoveAll<IDbContextOptionsConfiguration<XaquiamuniDbContext>>();
                 services.AddDbContext<XaquiamuniDbContext>(options =>
                 {

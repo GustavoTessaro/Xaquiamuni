@@ -102,7 +102,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var resumo = await ObterResumoAsync(admin, "?dataInicial=2026-10-01&dataFinal=2026-10-02");
         Assert.Equal(new FluxoFinanceiroDto(inicio, fim, "9223372036854781307", "2500", "9223372036854778807"),
             resumo.FluxoPeriodo);
-        Assert.Equal(new PosicaoFinanceiraDto("3000", "4650", 0), resumo.PosicaoAtual);
+        Assert.Equal(("3000", "4650", 0L), (resumo.PosicaoAtual.AReceberCentavos, resumo.PosicaoAtual.APagarCentavos,
+            resumo.PosicaoAtual.ComprasValorAConferir));
         var apenasFim = await ObterResumoAsync(admin, "?dataInicial=2026-10-02&dataFinal=2026-10-02");
         Assert.Equal(new FluxoFinanceiroDto(fim, fim, "5000", "1600", "3400"), apenasFim.FluxoPeriodo);
         Assert.Equal(resumo.PosicaoAtual, apenasFim.PosicaoAtual);

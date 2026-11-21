@@ -48,6 +48,7 @@ public sealed record ResultadoFinanceiro<T>(StatusFinanceiro Status, T? Dados = 
 public interface IGerenciarFinanceiro
 {
     Task<ResumoFinanceiroDto> ResumirAsync(DateOnly? inicio, DateOnly? fim, CancellationToken ct);
+    Task<PaginaContasEmAberto> ListarContasEmAbertoAsync(FiltroContasEmAberto filtro, CancellationToken ct);
     Task<PaginaMovimentacoesFinanceiras> ListarMovimentacoesAsync(FiltroMovimentacoesFinanceiras filtro, CancellationToken ct);
     Task<TentativaFinanceiraDto?> ConsultarTentativaAsync(Guid autor, Guid chave, CancellationToken ct);
     Task<IReadOnlyList<LancamentoDto>> ListarAsync(int pagina, CancellationToken ct,

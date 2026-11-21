@@ -20,6 +20,7 @@ public static class AdminFinanceiroEndpoints
         });
 
         grupo.MapGet("/movimentacoes", ListarMovimentacoesAsync);
+        grupo.MapGet("/contas-em-aberto", ListarContasEmAbertoAsync);
         grupo.MapGet("/resumo", async Task<IResult> (DateOnly? dataInicial, DateOnly? dataFinal,
             IGerenciarFinanceiro financeiro, CancellationToken ct) =>
             dataInicial > dataFinal
@@ -71,6 +72,18 @@ public static class AdminFinanceiroEndpoints
     }
 
     private static bool PaginaValida(int? pagina) => pagina is null or (>= 1 and <= 10000);
+
+    private static async Task<IResult> ListarContasEmAbertoAsync(string? direcao, string? classificacao,
+        string? origem, int? pagina, IGerenciarFinanceiro financeiro, CancellationToken ct)
+    {
+        if (!PaginaValida(pagina)) return Invalida("Informe uma página entre 1 e 10000.");
+        if (!LerFiltro(direcao, out DirecaoConta? direcaoFiltro) ||
+            !LerFiltro(classificacao, out FiltroVencimento? vencimentoFiltro) ||
+            !LerFiltro(origem, out OrigemConta? origemFiltro))
+            return Invalida("Confira a direção, a classificação e a origem da conta.");
+        return Results.Ok(await financeiro.ListarContasEmAbertoAsync(
+            new(direcaoFiltro, vencimentoFiltro ?? FiltroVencimento.Todas, origemFiltro, pagina ?? 1), ct));
+    }
 
     private static async Task<IResult> ListarLancamentosAsync(int? pagina, string? situacao, string? tipo,
         IGerenciarFinanceiro financeiro, CancellationToken ct)

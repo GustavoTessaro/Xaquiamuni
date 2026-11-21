@@ -7,4 +7,5 @@ public sealed record ResumoFinanceiroDto(
 public sealed record FluxoFinanceiroDto(DateOnly? DataInicial, DateOnly? DataFinal,
     string EntradasRecebidasCentavos, string SaidasPagasCentavos, string MovimentacaoLiquidaCentavos);
 
-public sealed record PosicaoFinanceiraDto(string AReceberCentavos, string APagarCentavos, long ComprasValorAConferir);
+public sealed record PosicaoFinanceiraDto(string AReceberCentavos, string APagarCentavos, long ComprasValorAConferir,
+    IndicadoresContasEmAbertoDto ContasEmAberto);

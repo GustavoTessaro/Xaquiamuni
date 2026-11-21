@@ -84,6 +84,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(("3597", "2000", "1597"),
             (financeiro.FluxoPeriodo.EntradasRecebidasCentavos, financeiro.FluxoPeriodo.SaidasPagasCentavos, financeiro.FluxoPeriodo.MovimentacaoLiquidaCentavos));
         Assert.Equal(("2650", 1L), (financeiro.PosicaoAtual.APagarCentavos, financeiro.PosicaoAtual.ComprasValorAConferir));
+        Assert.Equal(("2650", 1L, 0L), (financeiro.PosicaoAtual.ContasEmAberto.APagar.ValorCentavos,
+            financeiro.PosicaoAtual.ContasEmAberto.APagar.Quantidade, financeiro.PosicaoAtual.ContasEmAberto.APagar.Vencidas.Quantidade));
     }
 }
 
