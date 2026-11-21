@@ -12,7 +12,11 @@
               <p>{{ item.nomeVariante }}</p>
               <p>
                 Quantidade: {{ item.quantidade }} ·
-                {{ formatarPreco(item.precoUnitarioCentavos) }} por unidade
+                <app-preco-exibido
+                  [textoNormal]="formatarPreco(item.precoUnitarioCentavos)"
+                  [regularHistorico]="item.promocaoId ? item.precoRegularCentavos : undefined"
+                  [finalHistorico]="item.precoUnitarioCentavos"
+                /> por unidade
               </p>
             </div>
             <strong>{{ formatarPreco(item.subtotalCentavos) }}</strong>

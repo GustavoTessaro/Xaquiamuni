@@ -20,6 +20,7 @@ import {
 } from './catalogo-publico.service';
 import { formatarUnidadeVenda } from './catalogo-formatacao';
 import { CarrinhoService, formatarCentavos } from './carrinho.service';
+import { PrecoExibidoComponent } from './preco-exibido.component';
 import { StorefrontContext } from './storefront-context';
 
 type ProdutoResult =
@@ -28,7 +29,7 @@ type ProdutoResult =
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [RouterLink, PrecoExibidoComponent],
   selector: 'app-produto-detalhe',
   styleUrl: './produto-detalhe.component.css',
   templateUrl: './produto-detalhe.component.html',

@@ -5,12 +5,13 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { EMPTY, Subject, catchError, finalize, of, startWith, switchMap } from 'rxjs';
 import { formatarCentavos } from './carrinho.service';
+import { PrecoExibidoComponent } from './preco-exibido.component';
 import { PedidoPixComponent } from './pedido-pix.component';
 import { PedidoCliente, PedidosService, situacoesPedido, uuidValido } from './pedidos.service';
 
 @Component({
   selector: 'app-pedido-confirmacao',
-  imports: [DatePipe, RouterLink, PedidoPixComponent],
+  imports: [DatePipe, RouterLink, PedidoPixComponent, PrecoExibidoComponent],
   templateUrl: './pedido-confirmacao.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

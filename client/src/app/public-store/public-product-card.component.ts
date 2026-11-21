@@ -4,10 +4,11 @@ import { CatalogoPublicoRetorno, ProdutoCatalogoResumo } from './catalogo-public
 import { formatarUnidadeVenda } from './catalogo-formatacao';
 import { StorefrontContext } from './storefront-context';
 import { formatarCentavos } from './carrinho.service';
+import { PrecoExibidoComponent } from './preco-exibido.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink],
+  imports: [RouterLink, PrecoExibidoComponent],
   selector: 'app-public-product-card',
   styleUrl: './public-product-card.component.css',
   templateUrl: './public-product-card.component.html',

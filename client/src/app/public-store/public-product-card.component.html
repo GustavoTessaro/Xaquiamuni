@@ -55,7 +55,10 @@
         @if (temFaixaPreco) {
           <span class="product-card__from">A partir de</span>
         }
-        {{ formatPrice(product().precoMinimo, product().menorPreco?.preco.finalCentavos) }}
+        <app-preco-exibido
+          [textoNormal]="formatPrice(product().precoMinimo, product().menorPreco?.preco.finalCentavos)"
+          [preco]="product().menorPreco?.preco"
+        />
       </p>
       @if (hasSelectableOptions) {
         <span class="product-card__options">Variações</span>

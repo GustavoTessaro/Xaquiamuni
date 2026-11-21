@@ -6,7 +6,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 
 export type AdminWorkspacePage =
-  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases' | 'recipes' | 'production' | 'external-sales' | 'finance' | 'agenda' | 'themes';
+  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases' | 'recipes' | 'production' | 'external-sales' | 'finance' | 'agenda' | 'themes' | 'promotions';
 
 interface GrupoAdmin {
   titulo: string;
@@ -24,6 +24,7 @@ const grupos: readonly GrupoAdmin[] = [
   { titulo: 'Cat\u00e1logo', icone: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', itens: [
     { pagina: 'products', nome: 'Produtos', rota: '/admin/produtos' },
     { pagina: 'categories', nome: 'Categorias', rota: '/admin/categorias' },
+    { pagina: 'promotions', nome: 'Promoções', rota: '/admin/promocoes' },
   ] },
   { titulo: 'Produ\u00e7\u00e3o e estoque', icone: 'M12 3l8 4v10l-8 4-8-4V7zM4 7l8 4 8-4M12 11v10', itens: [
     { pagina: 'recipes', nome: 'Receitas', rota: '/admin/receitas' },

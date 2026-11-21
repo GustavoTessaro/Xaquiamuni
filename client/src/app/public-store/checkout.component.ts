@@ -14,10 +14,11 @@ import { CatalogoPublicoService } from './catalogo-publico.service';
 import { CheckoutService } from './checkout.service';
 import { itensCompraValidos, mesmosItensCompra } from './pedidos.service';
 import { revalidarCarrinho } from './revalidar-carrinho';
+import { PrecoExibidoComponent } from './preco-exibido.component';
 
 @Component({
   selector: 'app-checkout',
-  imports: [RouterLink],
+  imports: [RouterLink, PrecoExibidoComponent],
   templateUrl: './checkout.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

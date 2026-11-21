@@ -13,10 +13,11 @@ import { CarrinhoService, ItemCarrinho, formatarCentavos } from './carrinho.serv
 import { CatalogoPublicoService } from './catalogo-publico.service';
 import { revalidarCarrinho } from './revalidar-carrinho';
 import { lerTentativaCompra } from './checkout.service';
+import { PrecoExibidoComponent } from './preco-exibido.component';
 
 @Component({
   selector: 'app-carrinho',
-  imports: [RouterLink],
+  imports: [RouterLink, PrecoExibidoComponent],
   templateUrl: './carrinho.component.html',
   styleUrl: './carrinho.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

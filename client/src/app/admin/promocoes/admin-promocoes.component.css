@@ -1,0 +1,38 @@
+.pagina, .painel, .previa { display: grid; gap: 1rem; min-width: 0; }
+.pagina :is(h1, h2, h3, h4) { font-weight: 700; }
+.pagina h1 { font-size: 1.5rem; }
+.pagina h2 { font-size: 1.2rem; }
+.painel, .cartao {
+  padding: 1rem;
+  min-width: 0;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius);
+  background: var(--brand-surface);
+}
+.campos, .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: .75rem;
+  min-width: 0;
+}
+.cartao { display: grid; gap: .45rem; align-content: start; overflow-wrap: anywhere; }
+.cartao dl { display: grid; grid-template-columns: auto 1fr; gap: .3rem .6rem; font-size: .9rem; }
+.cartao dd { font-weight: 600; }
+.acoes, .selecao { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; }
+.variantes { display: grid; gap: .5rem; }
+.pagina legend { margin-bottom: .4rem; font-weight: 600; }
+.pagina label:not(.selecao) { display: grid; gap: .3rem; min-width: 0; }
+.pagina :is(select, input:not([type='checkbox']), button) {
+  min-height: 2.75rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: .45rem .65rem;
+  border: 1px solid var(--brand-control-line);
+  border-radius: var(--brand-radius-sm);
+  background: var(--brand-white);
+}
+.pagina button { justify-self: start; font-weight: 600; }
+.pagina .principal { background: var(--brand-green); color: var(--brand-white); border-color: var(--brand-green); }
+.pagina :is(input, select, button):focus-visible { outline: 2px solid var(--brand-focus); outline-offset: 2px; }
+.pagina :disabled { opacity: .65; }
+.alerta { color: var(--brand-error); overflow-wrap: anywhere; }

@@ -45,8 +45,9 @@
                 <p>{{ item.variante }}</p>
               }
               <p>
-                Quantidade: {{ item.quantidade }} · {{ formatarPreco(item.precoCentavos) }} por
-                unidade
+                Quantidade: {{ item.quantidade }} ·
+                <app-preco-exibido [textoNormal]="formatarPreco(item.precoCentavos)" [preco]="item.preco" />
+                por unidade
               </p>
               @if (item.disponivel === false) {
                 <p class="aviso">Opção indisponível.</p>

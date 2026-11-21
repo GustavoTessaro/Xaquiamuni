@@ -33,7 +33,7 @@
               @if (item.variante) {
                 <p>{{ item.variante }}</p>
               }
-              <p>{{ formatarPreco(item.precoCentavos) }} por unidade</p>
+              <p><app-preco-exibido [textoNormal]="formatarPreco(item.precoCentavos)" [preco]="item.preco" /> por unidade</p>
               <p class="cart__availability" aria-live="polite">
                 @if (item.disponivel === false) {
                   Opção indisponível.

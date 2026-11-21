@@ -1,0 +1,181 @@
+<app-admin-workspace activePage="promotions">
+  <section class="pagina" aria-labelledby="promocoes-titulo">
+    <header class="admin-page-heading acoes">
+      <div>
+        <h1 id="promocoes-titulo">Promoções</h1>
+        <p>Prepare descontos e confira os preços por variante. A aplicação na loja ainda está desabilitada.</p>
+      </div>
+      <button class="principal" type="button" (click)="nova()" [disabled]="ocupado()">Nova promoção</button>
+    </header>
+
+    @if (erro()) { <p class="alerta" role="alert">{{ erro() }}</p> }
+    @if (aviso()) { <p role="status">{{ aviso() }}</p> }
+    @if (api.pendente()) {
+      <div class="acoes alerta">
+        <p>A resposta ainda não foi confirmada. Repita a tentativa original com a mesma conta.</p>
+        <button type="button" (click)="executar()" [disabled]="api.gravando()">Recuperar tentativa</button>
+      </div>
+    }
+    @if (carregandoDetalhe() || api.gravando()) { <p role="status">Aguarde…</p> }
+    @if (produtos(); as produtosDisponiveis) {
+      @if (produtosDisponiveis.estado === 'erro') { <p class="alerta" role="alert">{{ produtosDisponiveis.mensagem }}</p> }
+    } @else { <p role="status">Carregando produtos…</p> }
+
+    @if (formulario(); as f) {
+      <form class="painel" aria-labelledby="form-promocao" (ngSubmit)="salvar()">
+        <h2 id="form-promocao" #tituloFormulario tabindex="-1">{{ atual() ? 'Detalhes da promoção' : 'Nova promoção' }}</h2>
+        @if (atual(); as p) { <p>Situação: <strong>{{ status(p) }}</strong></p> }
+        <fieldset class="campos" [disabled]="ocupado() || desatualizada()">
+          <legend>Configuração do desconto</legend>
+          <label>Produto
+            <select name="produto" [ngModel]="f.produtoId" (ngModelChange)="alterar({ produtoId: $event, variantesIds: [] })" [disabled]="!!atual()" required>
+              <option value="">Selecione um produto</option>
+              @for (produto of produtosProntos(); track produto.id) { <option [value]="produto.id">{{ produto.nome }}</option> }
+            </select>
+          </label>
+          <label>Aplicação do desconto
+            <select name="escopo" [ngModel]="f.escopo" (ngModelChange)="alterar({ escopo: $event })">
+              <option value="TodasVariantes">Todas as variantes</option>
+              <option value="VariantesSelecionadas">Somente variantes selecionadas</option>
+            </select>
+          </label>
+          <label>Forma de desconto
+            <select name="tipo" [ngModel]="f.tipo" (ngModelChange)="alterar({ tipo: $event, valor: '' })">
+              <option value="Percentual">Porcentagem (%)</option>
+              <option value="PrecoFixo">Novo preço promocional (R$)</option>
+            </select>
+          </label>
+          <label>{{ f.tipo === 'Percentual' ? 'Desconto (%)' : 'Novo preço (R$)' }}
+            <input name="valor" inputmode="decimal" maxlength="32" required [ngModel]="f.valor" (ngModelChange)="alterar({ valor: $event })"
+              [placeholder]="f.tipo === 'Percentual' ? '12,5' : '19,90'" />
+          </label>
+          <label>Início (opcional)
+            <input name="inicio" type="datetime-local" [ngModel]="f.inicio" (ngModelChange)="alterar({ inicio: $event })" aria-describedby="fuso-promocao" />
+          </label>
+          <label>Término (opcional)
+            <input name="fim" type="datetime-local" [ngModel]="f.fim" (ngModelChange)="alterar({ fim: $event })" aria-describedby="fuso-promocao" />
+          </label>
+          <p id="fuso-promocao">Datas e horários locais deste dispositivo.</p>
+        </fieldset>
+        @if (f.escopo === 'VariantesSelecionadas' && f.produtoId) {
+          <fieldset class="variantes" [disabled]="ocupado() || desatualizada()">
+            <legend>Variantes da promoção</legend>
+            @for (variante of varianteOpcoes(); track variante.id) {
+              <label class="selecao">
+                <input type="checkbox" [checked]="f.variantesIds.includes(variante.id)"
+                  (change)="selecionarVariante(variante.id, $any($event.target).checked)" />
+                {{ variante.identificacao }} @if (!variante.ativa) { (inativa) }
+              </label>
+            } @empty { <p>Nenhuma variante encontrada.</p> }
+          </fieldset>
+        }
+        @if (f.tipo === 'PrecoFixo') {
+          <p>O preço vale para todas as variantes abrangidas. Para preços diferentes, crie uma promoção separada para cada variante ou grupo com o mesmo preço.</p>
+        }
+        @if (validacao().erro; as problema) { <p class="alerta" role="status">{{ problema }}</p> }
+
+        <section class="previa" aria-labelledby="previa-promocao">
+          <h3 id="previa-promocao">Prévia de preços</h3>
+          @let simulacao = previa();
+          @switch (simulacao.estado) {
+            @case ('carregando') { <p role="status">Calculando prévia…</p> }
+            @case ('inicial') { <p>Preencha a promoção para consultar a prévia.</p> }
+            @case ('erro') {
+              <p class="alerta" role="alert">{{ simulacao.mensagem }}</p>
+              <button type="button" (click)="atualizarPrevia()">Recalcular prévia</button>
+            }
+            @case ('pronto') {
+              <p>Simulação em {{ simulacao.dados.instanteUtc | date: 'dd/MM/yyyy HH:mm' }}.</p>
+              @if (simulacao.dados.conflitos.length) {
+                <p role="alert" class="alerta">Existe outra promoção ativa para o mesmo escopo e período. Ajuste a vigência ou o escopo antes de ativar.</p>
+              }
+              <ul class="cards" aria-label="Preços por variante">
+                @for (v of abrangidas(); track v.varianteId) {
+                  <li class="cartao">
+                    <h4>{{ v.identificacao }} @if (!v.ativa) { (inativa) }</h4>
+                    <dl>
+                      <dt>Preço regular</dt><dd>{{ moeda(v.regularCentavos) }}</dd>
+                      @if (v.precoProposto; as proposta) {
+                        <dt>Preço proposto</dt><dd>{{ moeda(proposta.finalCentavos) }}</dd>
+                        <dt>Economia</dt><dd>{{ moeda(proposta.economiaCentavos) }} · {{ off(proposta.offPontosBase) }}% OFF</dd>
+                      }
+                      <dt>Preço que se aplica</dt><dd>{{ moeda(v.precoEfetivo.finalCentavos) }}</dd>
+                    </dl>
+                    @if (v.precoIncompativel) { <p class="alerta">O preço promocional deve ser positivo e menor que o preço regular.</p> }
+                    @if (v.propostaEfetiva) { <p>Esta promoção se aplica.</p> }
+                    @else if (v.promocaoEfetivaId) { <p>Outra promoção se aplica.</p> }
+                    @else { <p>Aplica-se o preço regular.</p> }
+                    @if (v.especificaPrevalece) {
+                      <p>A promoção específica prevalece sobre a geral, mesmo quando oferece um desconto menor.</p>
+                    }
+                  </li>
+                } @empty { <li>Nenhuma variante abrangida.</li> }
+              </ul>
+              @if (!revisaoValida()) { <p>Confira se há variantes ativas abrangidas e se o preço é válido para todas elas.</p> }
+            }
+          }
+        </section>
+        <div class="acoes">
+          @if (desatualizada() && atual(); as p) {
+            <button type="button" (click)="abrir(p.id)" [disabled]="ocupado()">Recarregar promoção</button>
+          } @else {
+            <button class="principal" type="submit"
+              [disabled]="ocupado() || !revisaoValida() || (!!atual()?.ativa && !semConflitos())">
+              {{ atual() ? 'Salvar alterações' : 'Salvar como inativa' }}
+            </button>
+            @if (atual(); as p) {
+              @if (!p.ativa) {
+                <button type="button" (click)="alterarStatus(true)"
+                  [disabled]="ocupado() || alterada() || !revisaoValida() || !semConflitos()">Ativar após revisão</button>
+              } @else if (desativando()) {
+                <button type="button" (click)="alterarStatus(false)" [disabled]="ocupado()">Confirmar desativação</button>
+                <button type="button" (click)="desativando.set(false)" [disabled]="ocupado()">Manter ativa</button>
+              } @else {
+                <button type="button" (click)="desativando.set(true)" [disabled]="ocupado()">Desativar</button>
+              }
+            }
+          }
+          <button type="button" (click)="fechar()" [disabled]="ocupado()">Fechar</button>
+        </div>
+      </form>
+    }
+
+    <section class="painel" aria-labelledby="lista-promocoes">
+      <h2 id="lista-promocoes">Promoções cadastradas</h2>
+      <label>Filtrar por produto
+        <select [ngModel]="filtro()" (ngModelChange)="filtrar($event)" [disabled]="ocupado()">
+          <option value="">Todos os produtos</option>
+          @for (produto of produtosProntos(); track produto.id) { <option [value]="produto.id">{{ produto.nome }}</option> }
+        </select>
+      </label>
+      @let dados = lista();
+      @switch (dados.estado) {
+        @case ('carregando') { <p role="status">Carregando promoções…</p> }
+        @case ('erro') {
+          <p class="alerta" role="alert">{{ dados.mensagem }}</p>
+          <button type="button" (click)="atualizarLista()">Consultar novamente</button>
+        }
+        @case ('pronto') {
+          <ul class="cards">
+            @for (p of dados.dados; track p.id) {
+              <li class="cartao">
+                <h3>{{ nome(p.produtoId) }}</h3>
+                <p>{{ status(p) }} · {{ p.escopo === 'TodasVariantes' ? 'Todas as variantes' : 'Variantes selecionadas' }}</p>
+                <p>{{ p.tipo === 'Percentual' ? off(+p.valor) + '%' : moeda(p.valor) }}</p>
+                <button type="button" (click)="abrir(p.id)" [disabled]="ocupado()"
+                  [attr.aria-label]="'Ver detalhes de ' + nome(p.produtoId)">Ver detalhes</button>
+              </li>
+            } @empty { <li>Nenhuma promoção nesta página.</li> }
+          </ul>
+          @if (pagina() > 1 || dados.dados.length === 50) {
+            <nav class="acoes" aria-label="Páginas de promoções">
+              <button type="button" (click)="pagina.set(pagina() - 1)" [disabled]="pagina() <= 1">Anterior</button>
+              <span>Página {{ pagina() }}</span>
+              <button type="button" (click)="pagina.set(pagina() + 1)" [disabled]="dados.dados.length < 50">Próxima</button>
+            </nav>
+          }
+        }
+      }
+    </section>
+  </section>
+</app-admin-workspace>
