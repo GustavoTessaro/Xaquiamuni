@@ -45,6 +45,9 @@ describe('Meus pedidos', () => {
 
   afterEach(() => {
     http.expectNone({ method: 'POST', url: base });
+    http.match(req => req.method === 'GET' && req.url.endsWith('/comprovante-pix'))
+      .filter(req => !req.cancelled)
+      .forEach(req => req.flush(null, { status: 404, statusText: 'Ausente' }));
     http.verify();
   });
 
@@ -139,6 +142,32 @@ describe('Meus pedidos', () => {
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/pedidos?pagina=2'));
     listar(2).flush(pagina(2, [resumo], 21));
   });
+
+  it.each(['AguardandoPagamento', 'Cancelado', 'PagamentoConfirmado'] as const)(
+    'mostra apenas a consulta de comprovante quando o PIX está indisponível em %s',
+    async situacao => {
+      const h = await RouterTestingHarness.create('/pedidos/' + id);
+      http.expectOne(base + '/' + id).flush({
+        ...resumo, situacao, modalidadeEntrega: 'RetiradaLocal',
+        itens: [{ produtoId: outro, produtoVarianteId: outro, quantidade: 1, nomeProduto: 'Sabonete',
+          nomeVariante: 'Lavanda', precoUnitarioCentavos: resumo.totalCentavos, subtotalCentavos: resumo.totalCentavos }],
+      });
+      h.detectChanges();
+      http.expectOne(base + '/' + id + '/pagamento').flush({
+        situacao: 'pagamento_indisponivel', valorCentavos: resumo.totalCentavos,
+        prazoPagamentoEmUtc: resumo.prazoPagamentoEmUtc, pix: null,
+      });
+      http.expectOne(base + '/' + id + '/comprovante-pix').flush({
+        id: outro, pedidoId: id, versao: outro, enviadoEmUtc: resumo.criadoEmUtc,
+        tipo: 'application/pdf', tamanhoBytes: 512,
+      });
+      h.detectChanges();
+      const painel = h.routeNativeElement!.querySelector('app-comprovante-pix')!;
+      expect(painel.textContent).toContain('Baixar comprovante');
+      expect(painel.textContent).not.toContain('aguardando conferência');
+      expect(painel.querySelector('input')).toBeNull();
+    },
+  );
 
   it('preserva a recusa de um pedido fora da conta e não busca o PIX', async () => {
     const h = await RouterTestingHarness.create('/pedidos/' + outro);

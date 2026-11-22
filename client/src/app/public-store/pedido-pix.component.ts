@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   input,
+  output,
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
@@ -14,11 +15,12 @@ import {
   statusPix,
   tiposChavePix,
 } from '../core/pagamento-pix.service';
+import { ComprovantePixComponent } from '../shared/comprovante-pix/comprovante-pix.component';
 import { formatarCentavos } from './carrinho.service';
 
 @Component({
   selector: 'app-pedido-pix',
-  imports: [RouterLink],
+  imports: [RouterLink, ComprovantePixComponent],
   templateUrl: './pedido-pix.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,6 +28,9 @@ import { formatarCentavos } from './carrinho.service';
 export class PedidoPixComponent {
   readonly pedidoId = input.required<string>();
   readonly aguardandoPagamento = input.required<boolean>();
+  readonly revalidarPedido = output<void>();
+  protected readonly podeEnviarComprovante = computed(() => this.aguardandoPagamento() &&
+    !this.vencido() && this.resposta() !== null && this.resposta()?.situacao !== 'pagamento_indisponivel');
   private readonly api = inject(PagamentoPixService);
   private readonly tentativa = signal(0);
   private readonly resposta = signal<PagamentoPixPedido | null>(null);
@@ -58,7 +63,7 @@ export class PedidoPixComponent {
           this.resposta.set(pagamento);
           const restante = Date.parse(pagamento.prazoPagamentoEmUtc) - Date.now();
           this.vencido.set(!(restante > 0));
-          if (pagamento.situacao === 'disponivel' && restante > 0) {
+          if (pagamento.situacao !== 'pagamento_indisponivel' && restante > 0) {
             timer = setTimeout(() => this.vencido.set(true), restante);
           }
           this.carregando.set(false);
@@ -73,6 +78,11 @@ export class PedidoPixComponent {
         clearTimeout(timer);
       });
     });
+  }
+
+  protected revalidarComprovante(): void {
+    this.consultarNovamente();
+    this.revalidarPedido.emit();
   }
 
   protected consultarNovamente() {

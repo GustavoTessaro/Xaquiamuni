@@ -135,6 +135,9 @@ describe('checkout integrado aos contratos HTTP', () => {
   });
 
   afterEach(() => {
+    http.match(req => req.method === 'GET' && req.url.endsWith('/comprovante-pix'))
+      .filter(req => !req.cancelled)
+      .forEach(req => req.flush(null, { status: 404, statusText: 'Ausente' }));
     http.verify();
     localStorage.removeItem(chaveLocal);
     localStorage.removeItem(chaveCarrinho);

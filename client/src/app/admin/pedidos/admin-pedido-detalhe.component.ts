@@ -1,3 +1,4 @@
+import { ComprovantePixComponent } from '../../shared/comprovante-pix/comprovante-pix.component';
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import {
@@ -90,7 +91,7 @@ type EstadoDetalhe =
 
 @Component({
   selector: 'app-admin-pedido-detalhe',
-  imports: [AdminWorkspaceComponent, DatePipe, RouterLink],
+  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent],
   templateUrl: './admin-pedido-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

@@ -58,7 +58,7 @@ export class PedidoConfirmacaoComponent {
   }
 
   private consultar(id: string | null) {
-    this.pedido.set(null);
+    if (this.pedido()?.id !== id) this.pedido.set(null);
     this.erro.set('');
     this.requerLogin.set(false);
     if (!uuidValido(id)) {
@@ -66,7 +66,7 @@ export class PedidoConfirmacaoComponent {
       return EMPTY;
     }
 
-    this.carregando.set(true);
+    this.carregando.set(!this.pedido());
     return this.pedidos.consultar(id).pipe(
       catchError((falha: unknown) => {
         const status = falha instanceof HttpErrorResponse ? falha.status : 0;

@@ -37,7 +37,12 @@ describe('PedidoPixComponent', () => {
     };
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match(req => req.method === 'GET' && req.url.endsWith('/comprovante-pix'))
+      .filter(req => !req.cancelled)
+      .forEach(req => req.flush(null, { status: 404, statusText: 'Ausente' }));
+    http.verify();
+  });
 
   it.each([pix, { ...pix, tipoChave: 'Cnpj', chavePix: '12ABC34501DE35' }])(
     'mostra valor exato e copia somente a chave $tipoChave com feedback',

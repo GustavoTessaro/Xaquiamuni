@@ -65,7 +65,12 @@ describe('Pedidos administrativos', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match(req => req.method === 'GET' && req.url.endsWith('/comprovante-pix'))
+      .filter(req => !req.cancelled)
+      .forEach(req => req.flush(null, { status: 404, statusText: 'Ausente' }));
+    http.verify();
+  });
 
   function clicar(harness: RouterTestingHarness, texto: string): void {
     const botao = Array.from(harness.routeNativeElement!.querySelectorAll('button')).find(

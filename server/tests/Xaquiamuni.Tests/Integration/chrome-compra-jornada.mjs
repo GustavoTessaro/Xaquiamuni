@@ -89,7 +89,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
 
   async function verificarPixInativo(id) {
     await tem(c, 'O pagamento não está disponível para a situação atual do pedido.');
-    assert.equal(await c.ev('!document.querySelector("app-pedido-pix button")'), true);
+    assert.equal(await c.ev('!document.querySelector("app-pedido-pix > section button")'), true);
     const r = await api(c, '/api/pedidos/' + id + '/pagamento');
     assert.equal(r.status, 200);
     assert.match(r.cache ?? '', /\bno-store\b/i);
@@ -223,7 +223,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       const pedido = (await api(c, '/api/pedidos/' + id)).body;
       assert.deepEqual([ausente.situacao, ausente.valorCentavos, ausente.prazoPagamentoEmUtc, ausente.pix],
         ['configuracao_ausente', '2780', pedido.prazoPagamentoEmUtc, null]);
-      assert.equal(await c.ev('!document.querySelector("app-pedido-pix button")'), true);
+      assert.equal(await c.ev('!document.querySelector("app-pedido-pix > section button")'), true);
       semCache(await api(a, config), 404);
       await a.ir(tela);
       await tem(a, 'A loja ainda não tem uma configuração PIX.');
@@ -286,6 +286,97 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       await checkpoint('pedido', id);
       await estoque(7, 2, 5);
       console.log('PIX: ausência, cadastro, atualização, recarga, CSRF, valor, prazo local, no-store e retry conferidos.');
+      etapa = 'comprovante PIX';
+      const anexo = '/api/pedidos/' + id + '/comprovante-pix';
+      const painel = 'app-comprovante-pix';
+      const largura = (b, width) => call('Emulation.setDeviceMetricsOverride',
+        { width, height: 900, mobile: false, deviceScaleFactor: 1 }, b.sessionId);
+      const legivel = browser => browser.ev(`(() => {
+        const painel = document.querySelector('${painel} section');
+        if (!painel) return false;
+        const estilo = getComputedStyle(painel);
+        const luminancia = cor => (cor.match(/[0-9]+/g) ?? []).slice(0, 3)
+          .map(v => Number(v) / 255).map(v => v <= .04045 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4)
+          .reduce((total, v, i) => total + v * [.2126, .7152, .0722][i], 0);
+        const [escuro, claro] = [luminancia(estilo.color), luminancia(estilo.backgroundColor)].sort((a,b)=>a-b);
+        return (claro + .05) / (escuro + .05) >= 4.5 && document.documentElement.scrollWidth <= innerWidth;
+      })()`);
+      async function escolher(nome, cor) {
+        await pronto(c, `!!document.querySelector('${painel} input[type=file]')`, 'Campo de comprovante');
+        await c.ev(`(async () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 2; canvas.height = 2;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = ${JSON.stringify(cor)}; ctx.fillRect(0, 0, 2, 2);
+          const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+          const campo = document.querySelector('${painel} input');
+          const transferencia = new DataTransfer();
+          transferencia.items.add(new File([blob], ${JSON.stringify(nome)}, { type: 'image/png' }));
+          campo.files = transferencia.files;
+          campo.dispatchEvent(new Event('change', { bubbles: true }));
+        })()`);
+      }
+      async function baixar(browser) {
+        await browser.ev(`(() => {
+          const criar = URL.createObjectURL;
+          URL.createObjectURL = blob => {
+            document.documentElement.dataset.downloadComprovante = blob.type + ':' + blob.size;
+            URL.createObjectURL = criar;
+            return criar.call(URL, blob);
+          };
+        })()`);
+        await clicar(browser, 'Baixar comprovante', painel + ' button');
+        await pronto(browser, "document.documentElement.dataset.downloadComprovante?.startsWith('image/png:')", 'Download privado');
+      }
+      await largura(c, 375);
+      await escolher('comprovante.png', 'green');
+      await clicar(c, 'Enviar comprovante', painel + ' button');
+      await tem(c, 'Comprovante enviado — aguardando conferência');
+      const primeiro = (await api(c, anexo)).body;
+      await largura(c, 1280);
+      await escolher('substituto.png', 'blue');
+      await clicar(c, 'Substituir comprovante', painel + ' button');
+      await clicar(c, 'Confirmar substituição', painel + ' button');
+      await pronto(c, `fetch(${JSON.stringify(anexo)}).then(r => r.json()).then(d => d.versao !== ${JSON.stringify(primeiro.versao)})`, 'Versão atualizada');
+      await baixar(c);
+      assert.equal((await api(c, '/api/pedidos/' + id)).body.situacao, 'AguardandoPagamento');
+      await a.ir('/admin/pedidos/' + id);
+      await tem(a, 'Comprovante PIX recebido');
+      for (const width of [375, 1280]) {
+        await largura(a, width);
+        for (const modo of ['light', 'dark']) {
+          await a.ev(`(() => {
+            const shell = document.querySelector('.admin-shell');
+            if (shell.dataset.adminTheme !== '${modo}') shell.querySelector('.admin-theme-toggle').click();
+          })()`);
+          await pronto(a, `document.querySelector('.admin-shell')?.dataset.adminTheme === '${modo}'`, 'Modo ADMIN');
+          assert.ok(await legivel(a), 'Contraste ou largura do comprovante ADMIN');
+          assert.ok(await a.ev(`!document.querySelector('${painel} input')`));
+        }
+      }
+      await baixar(a);
+      const temaUrl = '/api/admin/loja/tema';
+      const temaInicial = (await api(a, temaUrl)).body.publicacao;
+      let publicada = temaInicial;
+      for (const tema of ['original', 'natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes']) {
+        if (publicada.chave !== tema) {
+          const troca = await api(a, temaUrl, 'PUT', JSON.stringify({ chave: tema, revisaoEsperada: publicada.revisao }),
+            await a.ev('crypto.randomUUID()'));
+          assert.equal(troca.status, 200);
+          publicada = troca.body;
+        }
+        for (const width of [375, 1280]) {
+          await largura(c, width);
+          await c.ir(caminho);
+          await pronto(c, `document.querySelector('app-store-layout')?.dataset.theme === '${tema}'`, tema);
+          await tem(c, 'Comprovante enviado — aguardando conferência');
+          assert.ok(await legivel(c), 'Contraste ou largura em ' + tema);
+        }
+      }
+      assert.equal((await api(a, temaUrl, 'PUT', JSON.stringify({ chave: temaInicial.chave, revisaoEsperada: publicada.revisao }),
+        await a.ev('crypto.randomUUID()'))).status, 200);
+      console.log('Comprovantes PIX: envio, substituição e downloads reais, seis temas em 375 e 1280 px e ADMIN nos dois modos.');
+
     }
 
     if (pixCnpj) {
@@ -339,6 +430,10 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       etapa = 'PIX após pagamento manual';
       await c.ir(caminho);
       await verificarPixInativo(id);
+      if (pixManual) {
+        await tem(c, 'Baixar comprovante');
+        assert.ok(await c.ev("!document.querySelector('app-comprovante-pix input')"));
+      }
     }
     const pago = await postAdmin(id, 'confirmar-pagamento', { recebimentoConferido: true });
     assert.deepEqual([pago.status, pago.body?.repetida], [200, true]);

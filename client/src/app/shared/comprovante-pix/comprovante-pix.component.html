@@ -1,0 +1,61 @@
+<section class="comprovante" aria-label="Comprovante de pagamento PIX">
+  @if (!admin() || comprovante() || consultaFalhou()) {
+    <h3>{{ admin() && comprovante() ? 'Comprovante PIX recebido' : 'Comprovante de pagamento PIX' }}</h3>
+  }
+  @if (consultando() && !comprovante()) {
+    <p role="status">Consultando comprovante…</p>
+  } @else if (consultaFalhou()) {
+    <p role="alert">Não foi possível consultar o comprovante.</p>
+    <button type="button" (click)="consultarNovamente()">Consultar novamente</button>
+  } @else if (comprovante(); as anexo) {
+    @if (!admin() && pagamentoPendente()) {
+      <p>Comprovante enviado — aguardando conferência</p>
+    }
+    <p>
+      Enviado em <time [attr.datetime]="anexo.enviadoEmUtc">{{ anexo.enviadoEmUtc | date: 'dd/MM/yyyy HH:mm' }}</time>
+      · {{ tipos[anexo.tipo] ?? 'Arquivo' }} · {{ tamanho(anexo.tamanhoBytes) }}
+    </p>
+    @if (admin()) {
+      <p>O comprovante não confirma o crédito bancário. Confira o recebimento antes de confirmar o pagamento.</p>
+    }
+    <button type="button" [disabled]="baixando()" (click)="baixar()">
+      {{ baixando() ? 'Preparando download…' : 'Baixar comprovante' }}
+    </button>
+  } @else {
+    <p>Nenhum comprovante enviado.</p>
+  }
+
+  @if (podeSelecionar()) {
+    <p>Após pagar, você pode anexar o comprovante. O envio é opcional.</p>
+    <label>
+      {{ comprovante() ? 'Selecionar arquivo para substituir' : 'Selecionar comprovante' }}
+      <input type="file" accept=".pdf,.jpg,.jpeg,.png" [disabled]="enviando()" (change)="selecionar($event)" />
+    </label>
+    <p>PDF, JPG, JPEG ou PNG, até 5 MiB.</p>
+    @if (arquivo(); as selecionado) {
+      <p class="arquivo">{{ selecionado.name }} · {{ tamanho(selecionado.size) }}</p>
+      <div class="acoes">
+        @if (!confirmarSubstituicao()) {
+          <button type="button" [disabled]="enviando()" (click)="enviar()">
+            {{ comprovante() ? 'Substituir comprovante' : 'Enviar comprovante' }}
+          </button>
+          <button type="button" [disabled]="enviando()" (click)="limparSelecao()">Remover seleção</button>
+        } @else {
+          <p role="status">O novo arquivo ficará disponível no lugar do comprovante atual.</p>
+          <button type="button" (click)="enviar(true)">Confirmar substituição</button>
+          <button type="button" (click)="limparSelecao()">Cancelar substituição</button>
+        }
+      </div>
+    }
+  }
+
+  @if (tentativa()) {
+    <div class="acoes">
+      <button type="button" [disabled]="enviando()" (click)="recuperar()">Recuperar envio</button>
+    </div>
+    <p>O arquivo desta tentativa fica disponível enquanto este detalhe permanecer aberto.</p>
+  }
+  @if (enviando()) { <p role="status">Enviando comprovante…</p> }
+  @if (mensagem()) { <p role="status">{{ mensagem() }}</p> }
+  @if (erro()) { <p class="erro" role="alert">{{ erro() }}</p> }
+</section>

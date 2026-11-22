@@ -1,0 +1,58 @@
+:host {
+  display: block;
+  min-width: 0;
+  --comprovante-fundo: var(--tema-painel, var(--brand-surface));
+  --comprovante-texto: var(--tema-texto, var(--brand-ink));
+  --comprovante-borda: var(--brand-line);
+  --comprovante-controle: var(--tema-texto, var(--brand-control-line));
+  --comprovante-foco: var(--tema-texto, var(--brand-focus));
+  --comprovante-erro: var(--tema-texto, var(--brand-error));
+}
+
+:host(.comprovante-admin) {
+  --comprovante-fundo: var(--admin-surface);
+  --comprovante-texto: var(--admin-text);
+  --comprovante-borda: var(--admin-border);
+  --comprovante-controle: var(--admin-control);
+  --comprovante-foco: var(--admin-focus);
+  --comprovante-erro: var(--admin-error);
+}
+
+.comprovante {
+  display: grid;
+  gap: .55rem;
+  margin-block-start: .8rem;
+  padding: .8rem;
+  border: 1px solid var(--comprovante-borda);
+  border-radius: .7rem;
+  background: var(--comprovante-fundo);
+  color: var(--comprovante-texto);
+  overflow-wrap: anywhere;
+}
+
+h3 { font-weight: 700; }
+p { margin: 0; }
+label { display: grid; gap: .35rem; min-width: 0; font-weight: 600; }
+input { max-width: 100%; min-width: 0; }
+input::file-selector-button {
+  min-height: 2.75rem;
+  margin-inline-end: .45rem;
+  padding-inline: .65rem;
+  border: 1px solid var(--comprovante-controle);
+  border-radius: .45rem;
+  color: inherit;
+}
+.acoes { display: flex; flex-wrap: wrap; gap: .5rem; }
+.acoes p { flex-basis: 100%; }
+button {
+  width: fit-content;
+  min-height: 2.75rem;
+  padding: .35rem .65rem;
+  border: 1px solid var(--comprovante-controle);
+  border-radius: .45rem;
+  color: inherit;
+  text-align: start;
+}
+button:disabled { opacity: .65; }
+:is(button, input):focus-visible { outline: 2px solid var(--comprovante-foco); outline-offset: 2px; }
+.erro { color: var(--comprovante-erro); }

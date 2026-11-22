@@ -60,3 +60,10 @@
     <p>O pagamento não está disponível para a situação atual do pedido.</p>
   }
 </section>
+
+<app-comprovante-pix
+  [pedidoId]="pedidoId()"
+  [pagamentoPendente]="podeEnviarComprovante()"
+  [podeEnviar]="podeEnviarComprovante()"
+  (revalidarPedido)="revalidarComprovante()"
+/>
