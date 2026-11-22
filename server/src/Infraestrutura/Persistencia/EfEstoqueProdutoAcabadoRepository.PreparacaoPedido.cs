@@ -2,6 +2,7 @@ using System.Data;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Pedidos;
+using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -28,6 +29,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IPrepararPedidoC
             {
                 return PrepararPedidoStatus.PedidoNaoEncontrado;
             }
+            if (etapa == EtapaPreparacaoPedido.LiberarParaRetirada &&
+                pedido.ModalidadeEntrega != ModalidadeEntregaPedido.RetiradaLocal)
+                return PrepararPedidoStatus.EstadoIncompativel;
 
             var reservas = await _dbContext.ReservasProdutoAcabado.AsNoTracking()
                 .Where(reserva => reserva.PedidoId == pedidoId)

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xaquiamuni.Api.Autenticacao;
@@ -137,8 +138,12 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(new[] { "email", "nome" }, contato.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal("cliente-pedidos@example.test", contato.GetProperty("email").GetString());
         var pedidoJson = raiz.GetProperty("pedido");
-        Assert.Equal(new[] { "criadoEmUtc", "id", "itens", "modalidadeEntrega", "prazoPagamentoEmUtc",
-            "situacao", "totalCentavos" }, pedidoJson.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal(new[] { "criadoEmUtc", "entrega", "freteCentavos", "id", "itens", "modalidadeEntrega",
+            "prazoPagamentoEmUtc", "situacao", "subtotalProdutosCentavos", "totalCentavos" },
+            pedidoJson.EnumerateObject().Select(p => p.Name).Order());
+        Assert.Equal("0", pedidoJson.GetProperty("freteCentavos").GetString());
+        Assert.Equal("1199", pedidoJson.GetProperty("subtotalProdutosCentavos").GetString());
+        Assert.Equal(JsonValueKind.Null, pedidoJson.GetProperty("entrega").ValueKind);
         var itemJson = Assert.Single(pedidoJson.GetProperty("itens").EnumerateArray());
         Assert.Equal(new[] { "nomeProduto", "nomeVariante", "precoUnitarioCentavos", "produtoId", "produtoVarianteId",
             "quantidade", "subtotalCentavos" }, itemJson.EnumerateObject().Select(p => p.Name).Order());

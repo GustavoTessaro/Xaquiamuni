@@ -36,7 +36,8 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     private readonly X509Certificate2 _certificado;
 
     public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null,
-        bool promocoesComerciais = false, TimeProvider? relogioAplicacao = null)
+        bool promocoesComerciais = false, TimeProvider? relogioAplicacao = null,
+        IReadOnlyDictionary<string, string>? municipiosPorCep = null)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -74,6 +75,9 @@ internal sealed class HostE2ECompra : IAsyncDisposable
             ["CpfProtection:CurrentFingerprintKeyVersion"] = "e2e",
             ["CpfProtection:FingerprintKeys:e2e"] = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32)),
         };
+        if (municipiosPorCep is not null)
+            foreach (var (cep, ibge) in municipiosPorCep)
+                configuracao[$"EntregaCheckout:MunicipiosPorCep:{cep}"] = ibge;
 
         _factory = _baseFactory.WithWebHostBuilder(builder =>
         {

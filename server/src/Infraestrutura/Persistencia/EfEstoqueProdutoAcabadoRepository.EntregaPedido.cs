@@ -30,7 +30,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IConfirmarEntreg
             {
                 return new(ConfirmarEntregaPedidoStatus.PedidoNaoEncontrado);
             }
-            if (pedido.Situacao is not (SituacaoPedido.ProntoParaRetirada or SituacaoPedido.Entregue))
+            if (pedido.ModalidadeEntrega != ModalidadeEntregaPedido.RetiradaLocal
+                || pedido.Situacao is not (SituacaoPedido.ProntoParaRetirada or SituacaoPedido.Entregue))
             {
                 return new(ConfirmarEntregaPedidoStatus.EstadoIncompativel);
             }

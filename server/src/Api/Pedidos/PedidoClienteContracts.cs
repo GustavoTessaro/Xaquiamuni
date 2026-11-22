@@ -4,7 +4,12 @@ using Xaquiamuni.Dominio.Entidades;
 namespace Xaquiamuni.Api.Pedidos;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CriarPedidoClienteRequest(ItemPedidoClienteRequest?[]? Itens);
+public sealed record CriarPedidoClienteRequest(ItemPedidoClienteRequest?[]? Itens, string? OfertaEntregaId = null);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record CotarEntregaRequest(ItemPedidoClienteRequest?[]? Itens,
+    Guid? EnderecoCadastradoId = null, Xaquiamuni.Aplicacao.Pedidos.EnderecoCotacaoEntrega? Endereco = null,
+    bool UsarEnderecoPadrao = false);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ItemPedidoClienteRequest(Guid ProdutoId, Guid ProdutoVarianteId, int Quantidade,
@@ -23,13 +28,24 @@ public sealed record PedidoClienteResponse(
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos,
     IReadOnlyList<ItemPedidoClienteResponse> Itens)
 {
+    [JsonNumberHandling(JsonNumberHandling.WriteAsString)]
+    public long FreteCentavos { get; init; }
+    [JsonNumberHandling(JsonNumberHandling.WriteAsString)]
+    public long SubtotalProdutosCentavos { get; init; }
+    public DadosEntregaPedido? Entrega { get; init; }
+
     internal static PedidoClienteResponse From(Pedido pedido) => new(
         pedido.Id, pedido.Situacao.ToString(), pedido.ModalidadeEntrega.ToString(),
         pedido.CriadoEmUtc, pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos,
         pedido.Itens.OrderBy(item => item.ProdutoVarianteId)
             .Select(item => new ItemPedidoClienteResponse(item.ProdutoId, item.ProdutoVarianteId,
                 item.NomeProduto, item.NomeVariante, item.Quantidade,
-                item.PrecoUnitarioCentavos, item.SubtotalCentavos, item.PrecoRegularCentavos, item.PromocaoId)).ToArray());
+                item.PrecoUnitarioCentavos, item.SubtotalCentavos, item.PrecoRegularCentavos, item.PromocaoId)).ToArray())
+        {
+            FreteCentavos = pedido.FreteCentavos,
+            SubtotalProdutosCentavos = pedido.SubtotalProdutosCentavos,
+            Entrega = pedido.Entrega,
+        };
 }
 
 public sealed record ItemPedidoClienteResponse(

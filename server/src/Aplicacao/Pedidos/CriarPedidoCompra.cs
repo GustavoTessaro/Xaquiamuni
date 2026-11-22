@@ -8,7 +8,7 @@ public sealed record ItemCompraInput(Guid ProdutoId, Guid ProdutoVarianteId, int
 public sealed record PrecoAtualPedido(Guid ProdutoId, Guid ProdutoVarianteId, PrecoComercial Preco);
 
 public sealed record CriarPedidoCompraInput(
-    Guid ClienteId, Guid ChaveIdempotencia, IReadOnlyList<ItemCompraInput> Itens);
+    Guid ClienteId, Guid ChaveIdempotencia, IReadOnlyList<ItemCompraInput> Itens, string? OfertaEntregaId = null);
 
 public enum CriarPedidoCompraStatus
 {
@@ -21,6 +21,7 @@ public enum CriarPedidoCompraStatus
     ConflitoIdempotencia,
     ConflitoConcorrencia,
     PrecoAlterado,
+    OfertaEntregaInvalida,
 }
 
 public sealed record CriarPedidoCompraResult(
@@ -46,13 +47,20 @@ public sealed class CriarPedidoCompra(ICriarPedidoCompraRepository repository)
             return DadosInvalidos();
         }
 
+        var itens = NormalizarItens(input.Itens);
+        return itens is null ? DadosInvalidos()
+            : repository.CriarAsync(input with { Itens = itens }, cancellationToken);
+    }
+
+    public static ItemCompraInput[]? NormalizarItens(IReadOnlyList<ItemCompraInput> itens)
+    {
         var porVariante = new Dictionary<Guid, ItemCompraInput>();
-        foreach (var item in input.Itens)
+        foreach (var item in itens)
         {
             if (item is null || item.ProdutoId == Guid.Empty || item.ProdutoVarianteId == Guid.Empty
                 || item.Quantidade <= 0 || item.PrecoAceitoCentavos is <= 0)
             {
-                return DadosInvalidos();
+                return null;
             }
 
             if (porVariante.TryGetValue(item.ProdutoVarianteId, out var anterior))
@@ -60,7 +68,7 @@ public sealed class CriarPedidoCompra(ICriarPedidoCompraRepository repository)
                 if (anterior.ProdutoId != item.ProdutoId || anterior.Quantidade > int.MaxValue - item.Quantidade
                     || anterior.PrecoAceitoCentavos != item.PrecoAceitoCentavos)
                 {
-                    return DadosInvalidos();
+                    return null;
                 }
 
                 porVariante[item.ProdutoVarianteId] = item with { Quantidade = anterior.Quantidade + item.Quantidade };
@@ -71,10 +79,7 @@ public sealed class CriarPedidoCompra(ICriarPedidoCompraRepository repository)
             }
         }
 
-        return repository.CriarAsync(input with
-        {
-            Itens = porVariante.Values.OrderBy(item => item.ProdutoVarianteId).ToArray(),
-        }, cancellationToken);
+        return porVariante.Values.OrderBy(item => item.ProdutoVarianteId).ToArray();
     }
 
     private static Task<CriarPedidoCompraResult> DadosInvalidos() =>

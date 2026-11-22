@@ -16,7 +16,16 @@ public enum SituacaoPedido : short
 public enum ModalidadeEntregaPedido : short
 {
     RetiradaLocal = 1,
+    EntregaPropria = 2,
 }
+
+public sealed record EnderecoEntregaPedido(
+    string Cep, string Uf, string Cidade, string Bairro, string Logradouro, string Numero,
+    string? Complemento, string CodigoIbge);
+
+public sealed record DadosEntregaPedido(
+    EnderecoEntregaPedido? Destino = null, Guid? CidadeId = null,
+    string? EnderecoRetirada = null, string? InstrucoesRetirada = null);
 
 public sealed class Pedido
 {
@@ -35,6 +44,10 @@ public sealed class Pedido
     public SituacaoPedido Situacao { get; private set; }
     public ModalidadeEntregaPedido ModalidadeEntrega { get; private set; }
     public long TotalCentavos { get; private set; }
+    public long FreteCentavos { get; private set; }
+    public long SubtotalProdutosCentavos { get; private set; }
+    public DadosEntregaPedido? Entrega { get; private set; }
+    public string? HashOfertaEntrega { get; private set; }
     public IReadOnlyList<ItemPedido> Itens => _itens.AsReadOnly();
     public DateTimeOffset? PagamentoConfirmadoEmUtc { get; private set; }
     public Guid? PagamentoConfirmadoPorId { get; private set; }
@@ -46,11 +59,16 @@ public sealed class Pedido
     public Guid? EncerradoPorId { get; private set; }
     public string? MotivoCancelamento { get; private set; }
 
-    public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens, Guid? pedidoId = null)
+    public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens,
+        Guid? pedidoId = null, DadosEntregaPedido? entrega = null, long freteCentavos = 0)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(clienteId, Guid.Empty);
         ArgumentNullException.ThrowIfNull(itens);
         ArgumentOutOfRangeException.ThrowIfEqual(pedidoId, Guid.Empty);
+        ArgumentOutOfRangeException.ThrowIfNegative(freteCentavos);
+        if ((entrega?.Destino is null) != (entrega?.CidadeId is null)
+            || (entrega?.Destino is null && freteCentavos != 0))
+            throw new ArgumentException("Dados de entrega inconsistentes.", nameof(entrega));
         ValidarUtc(criadoEmUtc, nameof(criadoEmUtc));
         if (criadoEmUtc > DateTimeOffset.MaxValue.Subtract(PrazoPagamentoCompra.Duracao))
         {
@@ -64,7 +82,10 @@ public sealed class Pedido
             CriadoEmUtc = criadoEmUtc,
             PrazoPagamentoEmUtc = criadoEmUtc.Add(PrazoPagamentoCompra.Duracao),
             Situacao = SituacaoPedido.AguardandoPagamento,
-            ModalidadeEntrega = ModalidadeEntregaPedido.RetiradaLocal,
+            ModalidadeEntrega = entrega?.Destino is null
+                ? ModalidadeEntregaPedido.RetiradaLocal : ModalidadeEntregaPedido.EntregaPropria,
+            Entrega = entrega,
+            FreteCentavos = freteCentavos,
         };
         pedido._itens.AddRange(itens.Select(item => ItemPedido.Criar(pedido.Id, item)));
         if (pedido._itens.Count == 0)
@@ -79,7 +100,8 @@ public sealed class Pedido
 
         try
         {
-            pedido.TotalCentavos = pedido._itens.Sum(item => item.SubtotalCentavos);
+            pedido.SubtotalProdutosCentavos = pedido._itens.Sum(item => item.SubtotalCentavos);
+            pedido.TotalCentavos = checked(pedido.SubtotalProdutosCentavos + freteCentavos);
         }
         catch (OverflowException)
         {

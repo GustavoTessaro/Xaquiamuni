@@ -16,6 +16,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
+builder.Services.AddDataProtection();
 builder.Services.AddInfrastructureServices(builder.Configuration);
 builder.Services.AddXaquiamuniAuthentication();
 builder.Services.AddXaquiamuniAntiforgery();

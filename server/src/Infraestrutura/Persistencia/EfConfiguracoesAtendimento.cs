@@ -12,6 +12,7 @@ internal sealed record OperacaoAtendimento(Guid Autor, Guid Chave, string Impres
 
 public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, TimeProvider relogio) : IConfiguracoesAtendimento
 {
+    internal const string RecursoLock = "store-fulfillment-config";
     private static readonly string[] Ufs =
         ["11RO", "12AC", "13AM", "14RR", "15PA", "16AP", "17TO", "21MA", "22PI", "23CE", "24RN",
          "25PB", "26PE", "27AL", "28SE", "29BA", "31MG", "32ES", "33RJ", "35SP", "41PR", "42SC",
@@ -152,9 +153,9 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
         var impressao = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { operacao, cidadeId, input }, Json)));
         await using var transacao = await db.Database.BeginTransactionAsync(ct);
         // Todas as escritas compartilham o lock, inclusive quando a configuração ainda não existe.
-        await db.Database.ExecuteSqlRawAsync("""
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
             DECLARE @resultado int;
-            EXEC @resultado = sys.sp_getapplock @Resource = N'store-fulfillment-config',
+            EXEC @resultado = sys.sp_getapplock @Resource = {RecursoLock},
                 @LockMode = N'Exclusive', @LockOwner = N'Transaction', @LockTimeout = 10000;
             IF @resultado < 0 THROW 51000, 'Store configuration lock unavailable.', 1;
             """, ct);

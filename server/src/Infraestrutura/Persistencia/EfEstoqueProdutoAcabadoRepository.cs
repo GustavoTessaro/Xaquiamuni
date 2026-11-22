@@ -1,6 +1,7 @@
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -15,17 +16,23 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private readonly TimeProvider _timeProvider;
     private readonly ICalendarioOperacionalEstoque _calendario;
     private readonly bool _promocoesHabilitadas;
+    private readonly IDataProtector? _ofertasEntrega;
+    private readonly IReadOnlyDictionary<string, string> _municipiosPorCep;
 
     public EfEstoqueProdutoAcabadoRepository(
         XaquiamuniDbContext dbContext,
         TimeProvider timeProvider,
         ICalendarioOperacionalEstoque calendario,
-        IOptions<PromocoesComerciaisOptions>? promocoes = null)
+        IOptions<PromocoesComerciaisOptions>? promocoes = null,
+        IDataProtectionProvider? protecao = null,
+        IOptions<EntregaCheckoutOptions>? entrega = null)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
         _calendario = calendario;
         _promocoesHabilitadas = promocoes?.Value.Habilitadas == true;
+        _ofertasEntrega = protecao?.CreateProtector("Xaquiamuni.Checkout.OfertaEntrega.v1");
+        _municipiosPorCep = entrega?.Value.MunicipiosPorCep ?? new Dictionary<string, string>();
     }
 
     public async Task<ConfigurarPoliticaProdutoAcabadoResult> ConfigurarPoliticaAsync(
@@ -1294,13 +1301,14 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private Task AdquirirLockVarianteAsync(Guid varianteId, CancellationToken cancellationToken) =>
         AdquirirLockAsync($"finished-variant:{varianteId:D}", cancellationToken);
 
-    private async Task AdquirirLockAsync(string resource, CancellationToken cancellationToken)
+    private async Task AdquirirLockAsync(string resource, CancellationToken cancellationToken, bool compartilhado = false)
     {
+        var modo = compartilhado ? "Shared" : "Exclusive";
         var result = await _dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             DECLARE @lockResult int;
             EXEC @lockResult = sys.sp_getapplock
                 @Resource = {resource},
-                @LockMode = N'Exclusive',
+                @LockMode = {modo},
                 @LockOwner = N'Transaction',
                 @LockTimeout = 15000;
             IF @lockResult < 0

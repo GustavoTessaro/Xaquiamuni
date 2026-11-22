@@ -25,6 +25,9 @@ public static class PedidosClienteEndpoints
 
     public static IEndpointRouteBuilder MapPedidosClienteEndpoints(this IEndpointRouteBuilder endpoints)
     {
+        endpoints.MapPost("/api/checkout/cotacoes-entrega", CotarEntregaAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .RequireXaquiamuniAntiforgery().WithTags("Pedidos do cliente");
         var group = endpoints.MapGroup(BasePath)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .WithTags("Pedidos do cliente");
@@ -58,14 +61,57 @@ public static class PedidosClienteEndpoints
             return Invalido(IdempotencyHeader, "Informe uma chave UUID válida.");
         }
 
-        if (!context.Request.HasJsonContentType())
+        var (request, erro) = await LerCompraAsync<CriarPedidoClienteRequest>(context.Request, cancellationToken);
+        if (erro is not null)
+            return erro;
+        var itens = NormalizarItens(request?.Itens, out var precoInvalido);
+        if (precoInvalido)
+            return Invalido("precoAceitoCentavos", "Informe um preço positivo em centavos.");
+        if (itens is null)
+            return Invalido("itens", $"Informe de 1 a {MaxItensCompra} itens com quantidades e preços válidos.");
+        if (request!.OfertaEntregaId is { Length: 0 or > 16000 })
+            return Conflito("oferta_entrega_invalida", "Solicite uma nova cotação de entrega.");
+
+        var input = new CriarPedidoCompraInput(clienteId, chave, itens, request.OfertaEntregaId);
+        var resultado = await criarPedido.ExecuteAsync(input, cancellationToken).ConfigureAwait(false);
+        return ResponderCriacao(resultado);
+    }
+
+    private static async Task<IResult> CotarEntregaAsync(
+        HttpContext context, ICotarEntrega cotacao, CancellationToken cancellationToken)
+    {
+        if (!TentarObterCliente(context, out var clienteId))
+            return Results.Unauthorized();
+
+        context.Response.Headers.CacheControl = "private, no-store";
+        var (request, erro) = await LerCompraAsync<CotarEntregaRequest>(context.Request, cancellationToken);
+        if (erro is not null)
+            return erro;
+        var itens = NormalizarItens(request?.Itens, out var precoInvalido);
+        if (precoInvalido)
+            return Invalido("precoAceitoCentavos", "Informe um preço positivo em centavos.");
+        if (itens is null)
+            return Invalido("itens", $"Informe de 1 a {MaxItensCompra} itens válidos.");
+        if (request!.EnderecoCadastradoId == Guid.Empty ||
+            (request.EnderecoCadastradoId.HasValue && request.Endereco is not null) ||
+            (request.UsarEnderecoPadrao && (request.EnderecoCadastradoId.HasValue || request.Endereco is not null)))
+            return Invalido("endereco", "Escolha um endereço cadastrado ou informe um endereço para este pedido.");
+
+        return Results.Ok(await cotacao.CotarAsync(clienteId, itens, request.EnderecoCadastradoId,
+            request.Endereco, request.UsarEnderecoPadrao, cancellationToken));
+    }
+
+    private static async Task<(T? Request, IResult? Erro)> LerCompraAsync<T>(
+        HttpRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.HasJsonContentType())
         {
-            return Results.Problem(statusCode: 415, title: "Envie um corpo JSON.");
+            return (default, Results.Problem(statusCode: 415, title: "Envie um corpo JSON."));
         }
 
-        if (context.Request.ContentLength > MaxBytesCompra)
+        if (request.ContentLength > MaxBytesCompra)
         {
-            return CorpoMuitoGrande();
+            return (default, CorpoMuitoGrande());
         }
 
         // Aplica o limite também quando a solicitação chega sem Content-Length.
@@ -73,35 +119,38 @@ public static class PedidosClienteEndpoints
         int bytes;
         try
         {
-            bytes = await context.Request.Body.ReadAtLeastAsync(
+            bytes = await request.Body.ReadAtLeastAsync(
                 buffer, buffer.Length, false, cancellationToken).ConfigureAwait(false);
         }
         catch (BadHttpRequestException exception) when (exception.StatusCode is 400 or 413)
         {
-            return exception.StatusCode == 413
+            return (default, exception.StatusCode == 413
                 ? CorpoMuitoGrande()
-                : Invalido("corpo", "O corpo do pedido está incompleto.");
+                : Invalido("corpo", "O corpo do pedido está incompleto."));
         }
 
         if (bytes > MaxBytesCompra)
         {
-            return CorpoMuitoGrande();
+            return (default, CorpoMuitoGrande());
         }
 
-        CriarPedidoClienteRequest? request;
         try
         {
-            request = JsonSerializer.Deserialize<CriarPedidoClienteRequest>(buffer.AsSpan(0, bytes), JsonCompra);
+            return (JsonSerializer.Deserialize<T>(buffer.AsSpan(0, bytes), JsonCompra), null);
         }
         catch (JsonException)
         {
-            return Invalido("corpo", "O corpo do pedido possui um formato inválido.");
+            return (default, Invalido("corpo", "O corpo do pedido possui um formato inválido."));
         }
+    }
 
-        if (request?.Itens is not { Length: > 0 and <= MaxItensCompra } itens
+    private static ItemCompraInput[]? NormalizarItens(ItemPedidoClienteRequest?[]? itens, out bool precoInvalido)
+    {
+        precoInvalido = false;
+        if (itens is not { Length: > 0 and <= MaxItensCompra }
             || itens.Any(item => item is null))
         {
-            return Invalido("itens", $"Informe de 1 a {MaxItensCompra} itens válidos.");
+            return null;
         }
 
         var itensCompra = new List<ItemCompraInput>(itens.Length);
@@ -111,14 +160,19 @@ public static class PedidosClienteEndpoints
             if (item!.PrecoAceitoCentavos is { } texto)
             {
                 if (!long.TryParse(texto, NumberStyles.None, CultureInfo.InvariantCulture, out var centavos) || centavos <= 0)
-                    return Invalido("precoAceitoCentavos", "Informe um preço positivo em centavos.");
+                {
+                    precoInvalido = true;
+                    return null;
+                }
                 aceito = centavos;
             }
             itensCompra.Add(new(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade, aceito));
         }
-        var input = new CriarPedidoCompraInput(clienteId, chave, itensCompra);
-        var resultado = await criarPedido.ExecuteAsync(input, cancellationToken).ConfigureAwait(false);
-        return resultado.Status switch
+        return CriarPedidoCompra.NormalizarItens(itensCompra);
+    }
+
+    private static IResult ResponderCriacao(CriarPedidoCompraResult resultado) =>
+        resultado.Status switch
         {
             CriarPedidoCompraStatus.Sucesso when resultado.Pedido is { } pedido =>
                 resultado.Repetida ? Results.Ok(PedidoClienteResponse.From(pedido))
@@ -140,9 +194,10 @@ public static class PedidosClienteEndpoints
                     }),
             CriarPedidoCompraStatus.ConflitoConcorrencia =>
                 Conflito("conflito_concorrencia", "Tente novamente com a mesma chave."),
+            CriarPedidoCompraStatus.OfertaEntregaInvalida =>
+                Conflito("oferta_entrega_invalida", "Solicite uma nova cotação e confirme o frete antes de continuar."),
             _ => Results.Problem(statusCode: 500, title: "Não foi possível concluir a solicitação."),
         };
-    }
 
     private static async Task<IResult> ListarAsync(
         HttpContext context, int? pagina, int? itensPorPagina,

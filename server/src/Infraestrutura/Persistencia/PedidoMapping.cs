@@ -15,7 +15,11 @@ internal static class PedidoMapping
             {
                 tabela.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty",
                     $"[Id] <> {GuidVazio} AND [ClienteId] <> {GuidVazio}");
-                tabela.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "[ModalidadeEntrega] = 1");
+                tabela.HasCheckConstraint("CK_Pedidos_Modalidade_Valid",
+                    "([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR "
+                    + "([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)");
+                tabela.HasCheckConstraint("CK_Pedidos_Frete_Valid",
+                    "[FreteCentavos] >= 0 AND [FreteCentavos] <= [TotalCentavos]");
                 tabela.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
                 tabela.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas",
                     "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 "
@@ -58,6 +62,12 @@ internal static class PedidoMapping
             pedido.Property(entity => entity.Id).ValueGeneratedNever();
             pedido.Property(entity => entity.Situacao).HasConversion<short>().HasColumnType("smallint");
             pedido.Property(entity => entity.ModalidadeEntrega).HasConversion<short>().HasColumnType("smallint");
+            pedido.Property(entity => entity.Entrega).HasConversion(
+                dados => System.Text.Json.JsonSerializer.Serialize(dados, (System.Text.Json.JsonSerializerOptions?)null),
+                json => System.Text.Json.JsonSerializer.Deserialize<DadosEntregaPedido>(json, (System.Text.Json.JsonSerializerOptions?)null));
+            pedido.Property(entity => entity.HashOfertaEntrega).HasMaxLength(64).IsUnicode(false);
+            pedido.Property(entity => entity.SubtotalProdutosCentavos)
+                .HasComputedColumnSql("[TotalCentavos] - [FreteCentavos]", stored: true);
             pedido.Property(entity => entity.MotivoCancelamento).HasMaxLength(Pedido.MotivoCancelamentoMaxLength);
             pedido.Property<byte[]>("Versao").IsRowVersion().IsRequired();
             pedido.HasOne<ClientePerfil>().WithMany().HasForeignKey(entity => entity.ClienteId)

@@ -47,6 +47,7 @@ public static class DependencyInjection
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<EfPromocoes>();
         services.Configure<PromocoesComerciaisOptions>(configuration.GetSection("PromocoesComerciais"));
+        services.Configure<EntregaCheckoutOptions>(configuration.GetSection("EntregaCheckout"));
         services.AddOptions<CalendarioOperacionalEstoqueOptions>()
             .Bind(configuration.GetSection(CalendarioOperacionalEstoque.SectionName))
             .Validate(
@@ -75,6 +76,7 @@ public static class DependencyInjection
         services.AddScoped<IConsultarEstoqueInsumo, ConsultarEstoqueInsumo>();
         services.AddScoped<IRegistrarEntradaInsumo, RegistrarEntradaInsumo>();
         services.AddScoped<ICriarPedidoCompraRepository, EfEstoqueProdutoAcabadoRepository>();
+        services.AddScoped<ICotarEntrega, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<CriarPedidoCompra>();
         services.AddScoped<IConfirmarPagamentoPedidoRepository, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<ConfirmarPagamentoPedido>();

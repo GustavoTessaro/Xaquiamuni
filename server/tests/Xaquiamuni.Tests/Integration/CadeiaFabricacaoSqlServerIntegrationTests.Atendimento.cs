@@ -71,7 +71,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public async Task Atendimento_CidadesTarifaConcorrenciaEInvariantePreservamPedidoAntigo()
     {
-        await using var ambiente = await Ambiente.CriarAsync("20261121231543_RegistrarComprovantesPix");
+        await using var ambiente = await Ambiente.CriarAsync();
         using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
         using var cliente = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
         await using var db = ambiente.Banco.CreateVerificationContext();
@@ -85,6 +85,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var reserva = await db.ReservasProdutoAcabado.AsNoTracking().SingleAsync();
         var movimento = await db.MovimentosProdutoAcabado.CountAsync();
         var caixaAntes = (await admin.Http.GetFromJsonAsync<PaginaMovimentacoesFinanceiras>(Movimentacoes))!.Itens;
+        await db.Database.MigrateAsync("20261121231543_RegistrarComprovantesPix");
         await db.Database.MigrateAsync();
 
         var vacaria = new SalvarCidade("4322509", "Vacaria", "rs", 1250, false);

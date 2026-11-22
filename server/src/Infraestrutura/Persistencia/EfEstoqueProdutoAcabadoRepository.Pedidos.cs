@@ -32,11 +32,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                     .Select(item => new ItemCompraInput(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade,
                         item.PrecoAceitoCentavos))
                     .SequenceEqual(input.Itens);
-                return mesmosItens
+                return mesmosItens && existente.HashOfertaEntrega == HashOferta(input.OfertaEntregaId)
                     ? new(CriarPedidoCompraStatus.Sucesso, existente, Repetida: true)
                     : new(CriarPedidoCompraStatus.ConflitoIdempotencia);
             }
 
+            await BloquearConfiguracaoEntregaAsync(cancellationToken);
             if (_promocoesHabilitadas)
                 await PromocoesComerciaisSql.BloquearAsync(_dbContext, escrita: false, cancellationToken);
 
@@ -59,14 +60,18 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 return new(CriarPedidoCompraStatus.ItemNaoCompravel);
             }
             if (input.Itens.Where((item, i) =>
-                (_promocoesHabilitadas || item.PrecoAceitoCentavos.HasValue) &&
+                ((_promocoesHabilitadas && input.OfertaEntregaId is null) || item.PrecoAceitoCentavos.HasValue) &&
                 item.PrecoAceitoCentavos != dados[i].PrecoUnitarioCentavos).Any())
                 return new(CriarPedidoCompraStatus.PrecoAlterado, PrecosAtuais: precos);
+
+            var entrega = await ValidarEntregaAsync(input, dados, agora, cancellationToken);
+            if (entrega is null)
+                return new(CriarPedidoCompraStatus.OfertaEntregaInvalida);
 
             Pedido pedido;
             try
             {
-                pedido = Pedido.Criar(input.ClienteId, agora, dados, pedidoId);
+                pedido = Pedido.Criar(input.ClienteId, agora, dados, pedidoId, entrega.Value.Dados, entrega.Value.Frete);
             }
             catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "itens")
             {
@@ -88,7 +93,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 reservas.AddRange(alocacoes);
             }
 
-            _dbContext.Pedidos.Add(pedido).Property<Guid?>("ChaveIdempotencia").CurrentValue = input.ChaveIdempotencia;
+            var registro = _dbContext.Pedidos.Add(pedido);
+            registro.Property<Guid?>("ChaveIdempotencia").CurrentValue = input.ChaveIdempotencia;
+            registro.Property(entity => entity.HashOfertaEntrega).CurrentValue = HashOferta(input.OfertaEntregaId);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             _dbContext.ReservasProdutoAcabado.AddRange(reservas);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);

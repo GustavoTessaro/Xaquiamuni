@@ -630,6 +630,17 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("EncerradoPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("Entrega")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long>("FreteCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("HashOfertaEntrega")
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
                     b.Property<short>("ModalidadeEntrega")
                         .HasColumnType("smallint");
 
@@ -661,6 +672,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<short>("Situacao")
                         .HasColumnType("smallint");
 
+                    b.Property<long>("SubtotalProdutosCentavos")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bigint")
+                        .HasComputedColumnSql("[TotalCentavos] - [FreteCentavos]", true);
+
                     b.Property<long>("TotalCentavos")
                         .HasColumnType("bigint");
 
@@ -688,9 +704,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_Pedidos_Encerramento_Valid", "(([Situacao] IN (5, 6) AND [EncerradoPorId] IS NOT NULL AND [EncerradoPorId] <> '00000000-0000-0000-0000-000000000000') OR ([Situacao] NOT IN (5, 6) AND [EncerradoPorId] IS NULL)) AND (([Situacao] = 6 AND [MotivoCancelamento] IS NOT NULL AND LEN(LTRIM(RTRIM([MotivoCancelamento]))) > 0) OR ([Situacao] <> 6 AND [MotivoCancelamento] IS NULL))");
 
+                            t.HasCheckConstraint("CK_Pedidos_Frete_Valid", "[FreteCentavos] >= 0 AND [FreteCentavos] <= [TotalCentavos]");
+
                             t.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [ClienteId] <> '00000000-0000-0000-0000-000000000000'");
 
-                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "[ModalidadeEntrega] = 1");
+                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR ([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)");
 
                             t.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas", "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 AND DATEDIFF_BIG(hour, [CriadoEmUtc], [PrazoPagamentoEmUtc]) = 24 AND CAST([CriadoEmUtc] AS time(7)) = CAST([PrazoPagamentoEmUtc] AS time(7))");
 
