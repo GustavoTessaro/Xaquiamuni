@@ -252,6 +252,61 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.CidadeEntregaPropria", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AlteradoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("AlteradoPor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Ativa")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("CodigoIbge")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("nchar(7)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset>("CriadoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("CriadoPor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("Revisao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<long>("TarifaCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Uf")
+                        .IsRequired()
+                        .HasMaxLength(2)
+                        .HasColumnType("nchar(2)")
+                        .IsFixedLength();
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CodigoIbge")
+                        .IsUnique();
+
+                    b.ToTable("CidadesEntregaPropria", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CidadesEntregaPropria_Tarifa", "[TarifaCentavos] >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ClienteEndereco", b =>
                 {
                     b.Property<Guid>("Id")
@@ -335,6 +390,57 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasKey("UserId");
 
                     b.ToTable("ClientePerfis", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ConfiguracaoAtendimento", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("int");
+
+                    b.Property<Guid>("AdministradorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("AlteradoEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("EnderecoRetirada")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<bool>("EntregaPropriaHabilitada")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("InstrucoesRetirada")
+                        .HasMaxLength(600)
+                        .HasColumnType("nvarchar(600)");
+
+                    b.Property<bool>("RetiradaHabilitada")
+                        .HasColumnType("bit");
+
+                    b.Property<int>("Revisao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.Property<string>("WhatsApp")
+                        .HasMaxLength(16)
+                        .HasColumnType("nvarchar(16)");
+
+                    b.Property<bool>("WhatsAppConfirmado")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("WhatsAppHabilitado")
+                        .HasColumnType("bit");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ConfiguracoesAtendimento", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Modalidade", "[RetiradaHabilitada] = 1 OR [EntregaPropriaHabilitada] = 1");
+
+                            t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Unica", "[Id] = 1");
+
+                            t.HasCheckConstraint("CK_ConfiguracoesAtendimento_WhatsApp", "([WhatsAppConfirmado] = 0 OR [WhatsApp] IS NOT NULL) AND ([WhatsAppHabilitado] = 0 OR [WhatsAppConfirmado] = 1)");
+                        });
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.ConfiguracaoPixManual", b =>
@@ -2599,6 +2705,40 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasName("PK_OperacoesAgenda");
 
                     b.ToTable("OperacoesAgenda", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoAtendimento", b =>
+                {
+                    b.Property<Guid>("Autor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("CidadeId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
+                    b.Property<string>("Operacao")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<DateTimeOffset>("RegistradaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ResultadoJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Autor", "Chave");
+
+                    b.ToTable("OperacoesAtendimento", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoFinanceira", b =>

@@ -99,6 +99,7 @@ public sealed class XaquiamuniDbContext
             fornecedor.HasIndex(f => f.NomeNormalizado).IsUnique().HasDatabaseName("UX_Fornecedores_NomeNormalizado");
         });
         PedidoMapping.Configurar(builder);
+        AtendimentoMapping.Configurar(builder);
         builder.Entity<EnvioComprovantePix>(e =>
         {
             e.ToTable("EnviosComprovantePix");

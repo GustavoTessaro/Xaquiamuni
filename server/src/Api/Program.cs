@@ -120,6 +120,7 @@ app.MapAdminEstoqueInsumoEndpoints();
 app.MapAdminEstoqueProdutoAcabadoEndpoints();
 app.MapCatalogoPublicoEndpoints();
 app.MapTemaLojaEndpoints();
+app.MapConfiguracoesAtendimentoEndpoints();
 app.MapPedidosClienteEndpoints();
 app.MapAdminPedidosEndpoints();
 app.MapPagamentoPixManualEndpoints();
