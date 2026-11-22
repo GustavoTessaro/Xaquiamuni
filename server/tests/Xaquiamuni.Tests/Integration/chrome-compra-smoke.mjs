@@ -57,6 +57,7 @@ try {
   const compras = new Map();
   const falhasPix = new Map();
   const quitacoesSemResposta = new Map();
+  const comprovantesEmRecuperacao = new Map();
   call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
@@ -75,6 +76,23 @@ try {
     if (data.method === 'Fetch.requestPaused') {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
+      const comprovante = comprovantesEmRecuperacao.get(data.sessionId);
+      if (local && comprovante && request.method === 'POST' && new URL(request.url).pathname === comprovante.rota) {
+        if (data.params.responseStatusCode === undefined) {
+          const headers = Object.fromEntries(Object.entries(request.headers).map(([nome, valor]) => [nome.toLowerCase(), valor]));
+          comprovante.envios.push({ chave: headers['idempotency-key'], versao: headers['x-comprovante-versao'] });
+          void call('Fetch.continueRequest', { requestId, interceptResponse: true }, data.sessionId)
+            .catch(erro => { comprovante.erro = erro.message; });
+        } else {
+          comprovante.status.push(data.params.responseStatusCode);
+          const primeira = comprovante.status.length === 1;
+          if (!primeira) comprovantesEmRecuperacao.delete(data.sessionId);
+          void call(primeira ? 'Fetch.failRequest' : 'Fetch.continueResponse',
+            primeira ? { requestId, errorReason: 'ConnectionClosed' } : { requestId }, data.sessionId)
+            .catch(erro => { comprovante.erro = erro.message; });
+        }
+        return;
+      }
       const perda = quitacoesSemResposta.get(data.sessionId);
       if (local && perda && request.method === 'POST' && new URL(request.url).pathname === perda.rota) {
         if (data.params.responseStatusCode === undefined) {
@@ -145,6 +163,11 @@ try {
     })()`), true);
     assert.equal(await ev('fetch("/health").then(r => r.status)'), 200);
     return { ev, sessionId, browserContextId,
+      perderRespostaComprovante: rota => {
+        const observacao = { rota, envios: [], status: [] };
+        comprovantesEmRecuperacao.set(sessionId, observacao);
+        return observacao;
+      },
       falharProximaConsultaPix: path => falhasPix.set(sessionId, path), compra: () => compras.get(sessionId), ir: async destino => {
       const resultado = await call('Page.navigate', { url: origin + destino }, sessionId);
       if (resultado.errorText) throw new Error('Falha de navega??o na jornada');

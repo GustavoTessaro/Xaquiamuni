@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
@@ -5,6 +6,8 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SkiaSharp;
 using Xaquiamuni.Aplicacao.Financeiro;
 using Xaquiamuni.Aplicacao.Pedidos;
@@ -19,6 +22,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     public async Task ComprovantePix_ValidaAcessoFormatosConcorrenciaReplayEIntegridadeComercial()
     {
         await using var ambiente = await Ambiente.CriarAsync();
+        using var logs = new LogsComprovante();
+        ambiente.Host.Services.GetRequiredService<ILoggerFactory>().AddProvider(logs);
         using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
         using var cliente = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
         using var outro = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
@@ -39,7 +44,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var token = await TokenComprovanteAsync(cliente);
         var png = ImagemComprovante(SKEncodedImageFormat.Png);
         var jpg = ImagemComprovante(SKEncodedImageFormat.Jpeg);
-        var pdf = PdfComprovante();
+        const string marcador = "MARCADOR_ARQUIVO_PRIVADO_TESTE";
+        var pdf = PdfComprovante("/Marcador (" + marcador + ")");
 
         using var semCsrf = await EnviarComprovanteAsync(cliente, rota, png, "recibo.png", "image/png", null);
         Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
@@ -143,14 +149,33 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(png, await cliente.Http.GetByteArrayAsync(rota + "/conteudo"));
         Assert.Equal(id, Assert.Single((await admin.Http.GetFromJsonAsync<PaginaMovimentacoesFinanceiras>(Movimentacoes))!.Itens).EventoId);
 
+        await admin.PostAsync<JsonElement>($"/api/admin/pedidos/{id:D}/iniciar-preparacao", new { }, HttpStatusCode.OK);
+        using var emPreparacao = await EnviarComprovanteAsync(cliente, rota, jpg, "scan.jpg", "image/jpeg", token, versao: final.Versao);
+        Assert.Equal(HttpStatusCode.Conflict, emPreparacao.StatusCode);
+        Assert.Equal(png, await cliente.Http.GetByteArrayAsync(rota + "/conteudo"));
+
         var sessao = await cliente.Http.GetFromJsonAsync<JsonElement>("/api/auth/me");
         var instante = DateTimeOffset.UtcNow.AddHours(-25);
         Pedido NovoVencido() => Pedido.Criar(sessao.GetProperty("userId").GetGuid(), instante,
             [new DadosItemPedido(produto.Id, variante.Id, produto.Nome, variante.Identificacao, 1, 1000)]);
         var prazoEncerrado = NovoVencido();
-        var expirado = NovoVencido();
-        expirado.Expirar(DateTimeOffset.UtcNow);
+        var expirado = Pedido.Criar(sessao.GetProperty("userId").GetGuid(), DateTimeOffset.UtcNow,
+            [new DadosItemPedido(produto.Id, variante.Id, produto.Nome, variante.Identificacao, 1, 1000)]);
         db.Pedidos.AddRange(prazoEncerrado, expirado);
+        await db.SaveChangesAsync();
+        var rotaExpirado = $"/api/pedidos/{expirado.Id:D}/comprovante-pix";
+        using var anexoAntesDaExpiracao = await EnviarComprovanteAsync(cliente, rotaExpirado, png, "scan.png", "image/png", token);
+        Assert.Equal(HttpStatusCode.Created, anexoAntesDaExpiracao.StatusCode);
+        var metaExpirado = (await anexoAntesDaExpiracao.Content.ReadFromJsonAsync<ComprovantePixDto>())!;
+        var prazo = instante.AddHours(24);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE Pedidos SET CriadoEmUtc = {instante}, PrazoPagamentoEmUtc = {prazo} WHERE Id = {expirado.Id}
+            """);
+        using var substituicaoVencida = await EnviarComprovanteAsync(cliente, rotaExpirado, jpg, "scan.jpg", "image/jpeg", token, versao: metaExpirado.Versao);
+        Assert.Equal(HttpStatusCode.Conflict, substituicaoVencida.StatusCode);
+        await db.Entry(expirado).ReloadAsync();
+        Assert.Equal(SituacaoPedido.AguardandoPagamento, expirado.Situacao);
+        expirado.Expirar(DateTimeOffset.UtcNow);
         var cancelavel = await cliente.PostAsync<JsonElement>(Pedidos, carrinho, HttpStatusCode.Created, Guid.NewGuid());
         var canceladoId = cancelavel.GetProperty("id").GetGuid();
         var rotaCancelado = $"/api/pedidos/{canceladoId:D}/comprovante-pix";
@@ -159,6 +184,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await admin.PostAsync<JsonElement>($"/api/admin/pedidos/{canceladoId:D}/cancelar", new { motivo = "Teste" }, HttpStatusCode.OK);
         await db.SaveChangesAsync();
         Assert.Equal(png, await cliente.Http.GetByteArrayAsync(rotaCancelado + "/conteudo"));
+        Assert.Equal(png, await cliente.Http.GetByteArrayAsync(rotaExpirado + "/conteudo"));
+        using var falsaUrlPublica = await outro.Http.GetAsync($"/comprovantes-pix/{final.Id:D}/conteudo");
+        Assert.False(falsaUrlPublica.Content.Headers.ContentType?.MediaType is "image/png" or "application/pdf" or "image/jpeg");
         foreach (var encerrado in new[] { prazoEncerrado.Id, expirado.Id, canceladoId })
         {
             using var negado = await EnviarComprovanteAsync(cliente, $"/api/pedidos/{encerrado:D}/comprovante-pix", png, "scan.png", "image/png", token);
@@ -171,6 +199,22 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
         using var postAnonimo = await EnviarComprovanteAsync(cliente, rota, png, "scan.png", "image/png", null);
         Assert.Equal(HttpStatusCode.Unauthorized, postAnonimo.StatusCode);
+        Assert.NotEmpty(logs.Mensagens);
+        Assert.False(logs.Mensagens.Any(m => m.Contains(marcador, StringComparison.Ordinal)
+            || m.Contains("nome-pessoal.pdf", StringComparison.Ordinal)
+            || m.Contains(Convert.ToBase64String(pdf), StringComparison.Ordinal)),
+            "O host registrou nome original ou conteúdo sintético do comprovante.");
+    }
+
+    private sealed class LogsComprovante : ILoggerProvider, ILogger
+    {
+        public ConcurrentQueue<string> Mensagens { get; } = new();
+        public ILogger CreateLogger(string categoryName) => this;
+        public bool IsEnabled(LogLevel logLevel) => logLevel != LogLevel.None;
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception,
+            Func<TState, Exception?, string> formatter) => Mensagens.Enqueue(formatter(state, exception));
+        public void Dispose() { }
     }
 
     private static async Task<string> TokenComprovanteAsync(Sessao sessao) =>

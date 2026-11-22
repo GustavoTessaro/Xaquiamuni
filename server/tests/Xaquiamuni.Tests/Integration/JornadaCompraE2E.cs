@@ -152,6 +152,28 @@ internal sealed class JornadaCompraE2E(HostE2ECompra host, RelogioJornadaCompra 
             return;
         }
 
+        if (etapa == "comprovante-recuperado")
+        {
+            var envios = await db.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS [Value] FROM EnviosComprovantePix WHERE PedidoId = {id}").SingleAsync(token);
+            var ativos = await db.Database.SqlQuery<int>(
+                $"SELECT COUNT(*) AS [Value] FROM ComprovantesPixAtivos WHERE PedidoId = {id}").SingleAsync(token);
+            var cadeia = await db.Database.SqlQuery<int>($"""
+                SELECT COUNT(*) AS [Value]
+                FROM EnviosComprovantePix anterior
+                JOIN EnviosComprovantePix atual ON atual.VersaoAnterior = anterior.Id
+                JOIN ComprovantesPixAtivos ativo ON ativo.EnvioId = atual.Id AND ativo.PedidoId = atual.PedidoId
+                WHERE anterior.PedidoId = {id} AND atual.PedidoId = {id} AND anterior.Sha256 <> atual.Sha256
+                """).SingleAsync(token);
+            Assert.Equal((2, 1, 1), (envios, ativos, cadeia));
+            Assert.Equal(SituacaoPedido.AguardandoPagamento, pedido.Situacao);
+            Assert.Null(pedido.PagamentoConfirmadoEmUtc);
+            Assert.Empty(movimentos);
+            Assert.All(reservas, reserva => Assert.Equal(EstadoReservaProdutoAcabado.Ativa, reserva.Estado));
+            Assert.Equal(7, saldos.Sum(saldo => saldo.QuantidadeFisica));
+            return;
+        }
+
         if (etapa == "pedido") _pedidoPrincipal = id;
         Assert.Equal(_pedidoPrincipal, id);
         Assert.Equal(1, await db.Pedidos.CountAsync(token));
