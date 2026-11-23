@@ -59,8 +59,8 @@
         @let pedido = detalhe.dados.pedido;
         <dl class="grid gap-3 rounded-xl border border-slate-200 p-4 sm:grid-cols-2">
           <div class="min-w-0">
-            <dt class="font-semibold">Identificador</dt>
-            <dd class="wrap-anywhere">{{ pedido.id }}</dd>
+            <dt class="font-semibold">Número do pedido</dt>
+            <dd class="wrap-anywhere">{{ pedido.numeroPublico || 'Indisponível' }}</dd>
           </div>
           <div>
             <dt class="font-semibold">Situação</dt>
@@ -168,6 +168,7 @@
                   @if ('orientacao' in confirmacao) {
                     <p>{{ confirmacao.orientacao }}</p>
                   }
+                  @if (pedido.numeroPublico; as numero) { <p>Pedido <strong>{{ numero }}</strong></p> }
                   @if (acao() === 'postagem') {
                     <label class="grid gap-1">Serviço postal utilizado
                       <input required maxlength="60" [readOnly]="operacaoPostalIncerta()" [value]="servicoPostal()" (input)="servicoPostal.set($any($event.target).value)" />

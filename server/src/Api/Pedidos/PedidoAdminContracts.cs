@@ -17,7 +17,7 @@ public sealed record ConfirmarEntregaPostalRequest(bool Confirmado);
 
 public sealed record PedidoAdminResumoResponse(
     Guid Id, string Situacao, DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
-    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos, string NomeCliente);
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos, string NomeCliente, string NumeroPublico);
 
 public sealed record PedidoAdminPaginaResponse(
     IReadOnlyList<PedidoAdminResumoResponse> Itens, int Pagina, int ItensPorPagina, int TotalItens, int TotalPaginas);

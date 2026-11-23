@@ -264,7 +264,7 @@ public static class PedidosClienteEndpoints
             .ConfigureAwait(false);
         var itens = resultado.Itens.Select(pedido => new PedidoClienteResumoResponse(
             pedido.Id, pedido.Situacao.ToString(), pedido.CriadoEmUtc,
-            pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos)).ToArray();
+            pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos, pedido.NumeroPublico)).ToArray();
         var totalPaginas = (int)((resultado.TotalItens + tamanho - 1L) / tamanho);
         return Results.Ok(new PedidoClientePaginaResponse(itens, numero, tamanho, resultado.TotalItens, totalPaginas));
     }

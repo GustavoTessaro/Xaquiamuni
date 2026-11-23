@@ -12,6 +12,7 @@ const id = '22d6d00f-ab3f-4252-a48d-81717dcba777';
 const outro = '133cbbb0-09eb-43c4-8e62-94d639dd9e22';
 const resumo: ResumoPedidoCliente = {
   id,
+  numeroPublico: 'XQ-234567ACDE',
   situacao: 'AguardandoPagamento',
   criadoEmUtc: '2026-11-18T14:00:00Z',
   prazoPagamentoEmUtc: '2026-11-19T14:00:00Z',
@@ -60,7 +61,9 @@ describe('Meus pedidos', () => {
     h.detectChanges();
     const view = h.routeNativeElement!;
     const itens = Array.from(view.querySelectorAll('ul li'), (li) => li.textContent);
-    expect(itens[0]).toContain(id);
+    expect(itens[0]).toContain(resumo.numeroPublico);
+    expect(itens[0]).not.toContain(id);
+    expect(view.querySelector('ul a')?.getAttribute('href')).toBe('/pedidos/' + id + '?pagina=1');
     expect(itens[0]).toContain('92.233.720.368.547.758,07');
     expect(itens[1]).toContain('Pronto para retirada');
     expect(view.querySelector('time')?.dateTime).toBe(resumo.criadoEmUtc);
@@ -91,12 +94,12 @@ describe('Meus pedidos', () => {
     h.routeNativeElement!.querySelector('button')!.click();
     listar().flush(pagina(1, [resumo], 21));
     h.detectChanges();
-    expect(h.routeNativeElement!.textContent).toContain(id);
+    expect(h.routeNativeElement!.textContent).toContain(resumo.numeroPublico);
     h.routeNativeElement!.querySelector<HTMLAnchorElement>('a[href="/pedidos?pagina=2"]')!.click();
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/pedidos?pagina=2'));
     listar(2).flush(null, { status: 401, statusText: 'Unauthorized' });
     h.detectChanges();
-    expect(h.routeNativeElement!.textContent).not.toContain(id);
+    expect(h.routeNativeElement!.textContent).not.toContain(resumo.numeroPublico);
     expect(h.routeNativeElement!.textContent).toContain('Entre na sua conta');
   });
 
@@ -138,6 +141,8 @@ describe('Meus pedidos', () => {
     });
     h.detectChanges();
     expect(h.routeNativeElement!.textContent).toContain('Copiar chave PIX');
+    expect(h.routeNativeElement!.querySelector('h1')?.textContent).toBe('Pedido ' + resumo.numeroPublico);
+    expect(h.routeNativeElement!.textContent).not.toContain(id);
     h.routeNativeElement!.querySelector<HTMLAnchorElement>('a[href="/pedidos?pagina=2"]')!.click();
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/pedidos?pagina=2'));
     listar(2).flush(pagina(2, [resumo], 21));

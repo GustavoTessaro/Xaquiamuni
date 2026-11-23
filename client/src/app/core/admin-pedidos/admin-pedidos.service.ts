@@ -7,6 +7,7 @@ import { CsrfService } from '../security/csrf.service';
 export type SituacaoPedido = PedidoCliente['situacao'];
 
 export interface ResumoPedidoAdmin {
+  numeroPublico?: string;
   id: string;
   situacao: SituacaoPedido;
   criadoEmUtc: string;

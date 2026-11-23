@@ -276,6 +276,8 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     await botaoTexto('Confirmar valor e finalizar compra', c);
     const id = await waitFor(() => c.ev("location.pathname.startsWith('/pedidos/') && location.pathname.split('/').at(-1)"), 'Pedido entregue pela loja');
     const rota = '/admin/pedidos/' + id;
+    const titulo = await waitFor(() => c.ev("document.querySelector('#pedido-title')?.textContent.match(/XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}/)?.[0]"),
+      'Número público em entrega própria');
     const endereco = width === 375 ? 'Rua cadastrada do ensaio' : 'Rua do ensaio';
     await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes(${JSON.stringify(endereco)})`), 'Destino congelado');
     assert.deepEqual(await conferirWhatsApp(c), whatsapp);
@@ -311,11 +313,31 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
     await botaoTexto('Registrar recebimento', a);
     await waitFor(() => a.ev("document.querySelector('main dl')?.textContent.includes('Entregue')"), 'Recebimento registrado');
+    for (const modo of ['light', 'dark']) {
+      if (await a.ev(tema) !== modo) await alternar(modo);
+      assert.ok(await a.ev(`document.querySelector('main dl')?.textContent.includes(${JSON.stringify(titulo)})`));
+      assert.ok(await semEstouro(a));
+    }
     const eventos = await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json())
       .then(p=>p.itens.filter(m=>m.recursoId === '${id}').map(m=>m.valorCentavos))`);
     assert.deepEqual(eventos, ['2499']);
     assert.ok(await semEstouro(a));
     console.log(`Entrega própria em ${width} px: endereço, frete, total e ações administrativas confirmados.`);
+  }
+  const pedidoTema = await c.ev("(async () => (await (await fetch('/api/pedidos')).json()).itens[0])()");
+  for (const chavePublica of temas) {
+    const { publicacao } = await a.ev("fetch('/api/admin/loja/tema').then(r => r.json())");
+    if (publicacao.chave !== chavePublica) {
+      assert.equal(await escrever('/api/admin/loja/tema', 'PUT', {
+        chave: chavePublica, revisaoEsperada: publicacao.revisao,
+      }), 200);
+    }
+    for (const width of [375, 1280]) {
+      await viewport(c, width);
+      await abrir(c, '/pedidos/' + pedidoTema.id, `document.querySelector('app-store-layout')?.dataset.theme === '${chavePublica}'
+        && document.querySelector('#pedido-title')?.textContent.includes('${pedidoTema.numeroPublico}')`);
+      assert.ok(await semEstouro(c), 'Número público em ' + chavePublica + ' a ' + width + ' px');
+    }
   }
   const atual = await lerAtendimento('');
   assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {

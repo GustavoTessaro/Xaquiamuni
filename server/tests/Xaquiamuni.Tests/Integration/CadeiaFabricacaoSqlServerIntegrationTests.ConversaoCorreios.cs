@@ -213,6 +213,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var pedido = await criada.Content.ReadFromJsonAsync<JsonElement>();
         var pedidoId = pedido.GetProperty("id").GetGuid();
         Assert.Equal("Correios", pedido.GetProperty("modalidadeEntrega").GetString());
+        Assert.Matches("^XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}$", pedido.GetProperty("numeroPublico").GetString()!);
         Assert.Equal("3100", pedido.GetProperty("totalCentavos").GetString());
         Assert.Equal("1800", pedido.GetProperty("subtotalProdutosCentavos").GetString());
         Assert.Equal(2, Assert.Single(pedido.GetProperty("itens").EnumerateArray()).GetProperty("quantidade").GetInt32());

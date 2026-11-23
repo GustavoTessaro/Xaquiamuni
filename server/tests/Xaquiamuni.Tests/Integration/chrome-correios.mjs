@@ -219,6 +219,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     }
     await texto(c, '24,89');
     const pedido = await c.ev('location.pathname');
+    const numeroPublico = await waitFor(() => c.ev("document.querySelector('#pedido-title')?.textContent.match(/XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}/)?.[0]"),
+      'Número público do pedido postal');
     const pix = await c.ev(`fetch(${JSON.stringify('/api' + pedido + '/pagamento')}).then(r=>r.json())`);
     assert.equal(pix.valorCentavos, '2489');
 
@@ -242,6 +244,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
 
     if (width === 375) a.falharProximaConsultaPix('/api/admin' + pedido + '/historico-rastreamento');
     await a.ir('/admin' + pedido);
+    await texto(a, numeroPublico);
     if (width === 375) {
       await texto(a, 'Não foi possível consultar o histórico de rastreamento.');
       const botao = "document.querySelector('app-historico-rastreamento button')";

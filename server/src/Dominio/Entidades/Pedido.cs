@@ -46,6 +46,7 @@ public sealed class Pedido
     }
 
     public Guid Id { get; private set; }
+    public string NumeroPublico { get; private set; } = null!;
     public Guid ClienteId { get; private set; }
     public DateTimeOffset CriadoEmUtc { get; private set; }
     public DateTimeOffset PrazoPagamentoEmUtc { get; private set; }
@@ -76,7 +77,7 @@ public sealed class Pedido
 
     public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens,
         Guid? pedidoId = null, DadosEntregaPedido? entrega = null, long freteCentavos = 0,
-        ModalidadeEntregaPedido modalidade = ModalidadeEntregaPedido.RetiradaLocal)
+        ModalidadeEntregaPedido modalidade = ModalidadeEntregaPedido.RetiradaLocal, string? numeroPublico = null)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(clienteId, Guid.Empty);
         ArgumentNullException.ThrowIfNull(itens);
@@ -104,6 +105,7 @@ public sealed class Pedido
         var pedido = new Pedido
         {
             Id = pedidoId ?? Guid.NewGuid(),
+            NumeroPublico = numeroPublico is null ? NumeroPublicoPedido.Gerar() : NumeroPublicoPedido.Validar(numeroPublico),
             ClienteId = clienteId,
             CriadoEmUtc = criadoEmUtc,
             PrazoPagamentoEmUtc = criadoEmUtc.Add(PrazoPagamentoCompra.Duracao),

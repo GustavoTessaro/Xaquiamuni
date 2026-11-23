@@ -101,7 +101,7 @@ public static class AdminPedidosEndpoints
             .ConfigureAwait(false);
         var itens = resultado.Itens.Select(pedido => new PedidoAdminResumoResponse(pedido.Id,
             pedido.Situacao.ToString(), pedido.CriadoEmUtc, pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos,
-            pedido.NomeCliente)).ToArray();
+            pedido.NomeCliente, pedido.NumeroPublico)).ToArray();
         var totalPaginas = (int)((resultado.TotalItens + tamanho - 1L) / tamanho);
         return Results.Ok(new PedidoAdminPaginaResponse(itens, numero, tamanho, resultado.TotalItens, totalPaginas));
     }

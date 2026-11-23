@@ -4,7 +4,7 @@ namespace Xaquiamuni.Aplicacao.Pedidos;
 
 public sealed record ResumoPedidoAdmin(
     Guid Id, SituacaoPedido Situacao, DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
-    long TotalCentavos, string NomeCliente);
+    long TotalCentavos, string NomeCliente, string NumeroPublico);
 
 public sealed record DetalhePedidoAdmin(Pedido Pedido, string NomeCliente, string? EmailCliente);
 

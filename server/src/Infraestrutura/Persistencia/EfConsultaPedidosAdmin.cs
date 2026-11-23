@@ -21,7 +21,7 @@ internal sealed class EfConsultaPedidosAdmin(XaquiamuniDbContext dbContext) : IC
             join perfil in dbContext.ClientePerfis on pedido.ClienteId equals perfil.UserId
             orderby pedido.CriadoEmUtc descending, pedido.Id descending
             select new ResumoPedidoAdmin(pedido.Id, pedido.Situacao, pedido.CriadoEmUtc,
-                pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos, perfil.NomeCompleto)
+                pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos, perfil.NomeCompleto, pedido.NumeroPublico)
         ).Skip(deslocamento).Take(limite).ToListAsync(cancellationToken).ConfigureAwait(false);
 
         return new(pedidos, total);

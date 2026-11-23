@@ -139,7 +139,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal("cliente-pedidos@example.test", contato.GetProperty("email").GetString());
         var pedidoJson = raiz.GetProperty("pedido");
         Assert.Equal(new[] { "criadoEmUtc", "entrega", "freteCentavos", "id", "itens", "modalidadeEntrega",
-            "prazoPagamentoEmUtc", "situacao", "subtotalProdutosCentavos", "totalCentavos" },
+            "numeroPublico", "prazoPagamentoEmUtc", "situacao", "subtotalProdutosCentavos", "totalCentavos" },
             pedidoJson.EnumerateObject().Select(p => p.Name).Order());
         Assert.Equal("0", pedidoJson.GetProperty("freteCentavos").GetString());
         Assert.Equal("1199", pedidoJson.GetProperty("subtotalProdutosCentavos").GetString());

@@ -32,7 +32,7 @@
                     [routerLink]="['/pedidos', pedido.id]"
                     [queryParams]="{ pagina: atual.dados.pagina }"
                   >
-                    Pedido {{ pedido.id }}
+                    Pedido{{ pedido.numeroPublico ? ' ' + pedido.numeroPublico : '' }}
                   </a>
                 </h2>
                 <p>

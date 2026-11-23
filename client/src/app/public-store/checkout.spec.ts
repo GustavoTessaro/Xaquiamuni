@@ -615,7 +615,8 @@ describe('checkout integrado aos contratos HTTP', () => {
     expect(harness.routeNativeElement!.querySelector('[role=status]')).not.toBeNull();
     http.expectOne({ method: 'GET', url: `/api/pedidos/${pedidoId}` }).flush(pedido);
     harness.detectChanges();
-    expect(harness.routeNativeElement!.textContent).toContain(pedidoId);
+    expect(harness.routeNativeElement!.textContent).not.toContain(pedidoId);
+    expect(harness.routeNativeElement!.querySelector('h1')?.textContent).toBe('Pedido');
     expect(
       harness.routeNativeElement!.querySelector('ul[aria-label="Itens do pedido"]'),
     ).not.toBeNull();

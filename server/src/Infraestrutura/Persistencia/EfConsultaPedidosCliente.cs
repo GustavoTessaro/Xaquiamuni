@@ -15,7 +15,7 @@ internal sealed class EfConsultaPedidosCliente(XaquiamuniDbContext dbContext) : 
             .ThenByDescending(pedido => pedido.Id)
             .Skip(deslocamento).Take(limite)
             .Select(pedido => new ResumoPedidoCliente(pedido.Id, pedido.Situacao, pedido.CriadoEmUtc,
-                pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos))
+                pedido.PrazoPagamentoEmUtc, pedido.TotalCentavos, pedido.NumeroPublico))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
         return new(pedidos, total);
     }

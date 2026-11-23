@@ -115,11 +115,15 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
             if (postal is not null)
                 dados = dados.Select(x => x with { PrecoAceitoCentavos = x.PrecoUnitarioCentavos }).ToArray();
 
+            var numeroPublico = await ReservarNumeroPublicoAsync(cancellationToken);
+            if (numeroPublico is null)
+                return new(CriarPedidoCompraStatus.ConflitoConcorrencia);
+
             Pedido pedido;
             try
             {
                 pedido = Pedido.Criar(input.ClienteId, agora, dados, pedidoId, entrega.Value.Dados,
-                    entrega.Value.Frete, entrega.Value.Modalidade);
+                    entrega.Value.Frete, entrega.Value.Modalidade, numeroPublico);
             }
             catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "itens")
             {
@@ -160,6 +164,26 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
         {
             _dbContext.ChangeTracker.Clear();
         }
+    }
+
+    private async Task<string?> ReservarNumeroPublicoAsync(CancellationToken ct)
+    {
+        for (var tentativa = 0; tentativa < 5; tentativa++)
+        {
+            var numero = NumeroPublicoPedido.Validar(_gerarNumeroPublico());
+            var recurso = $"purchase-number:{numero}";
+            var resultado = await _dbContext.Database.SqlQuery<int>($"""
+                DECLARE @resultado int;
+                EXEC @resultado = sys.sp_getapplock @Resource = {recurso}, @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction', @LockTimeout = 0;
+                SELECT @resultado AS [Value];
+                """).ToListAsync(ct);
+            if (resultado.Single() >= 0 &&
+                !await _dbContext.Pedidos.AnyAsync(x => x.NumeroPublico == numero, ct))
+                return numero;
+        }
+
+        return null;
     }
 
     private async Task<List<ReservaProdutoAcabado>> PlanejarReservasCompraAsync(Guid pedidoId,

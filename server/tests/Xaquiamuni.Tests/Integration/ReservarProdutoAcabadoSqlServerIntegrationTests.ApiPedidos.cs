@@ -147,6 +147,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         using var json = await LerJsonPedidosAsync(inicial);
         var pedido = json.RootElement;
         var pedidoId = pedido.GetProperty("id").GetGuid();
+        var numeroPublico = pedido.GetProperty("numeroPublico").GetString()!;
+        Assert.Equal(numeroPublico, NumeroPublicoPedido.Validar(numeroPublico));
         var url = $"{PedidosUrl}/{pedidoId:D}";
         Assert.Equal(url, inicial.Headers.Location?.OriginalString);
         Assert.True(inicial.Headers.CacheControl?.NoStore);
@@ -161,7 +163,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(JsonValueKind.Null, pedido.GetProperty("entrega").ValueKind);
         Assert.Equal(new[]
         {
-            "criadoEmUtc", "entrega", "freteCentavos", "id", "itens", "modalidadeEntrega", "prazoPagamentoEmUtc",
+            "criadoEmUtc", "entrega", "freteCentavos", "id", "itens", "modalidadeEntrega", "numeroPublico", "prazoPagamentoEmUtc",
             "situacao", "subtotalProdutosCentavos", "totalCentavos",
         },
             pedido.EnumerateObject().Select(prop => prop.Name).Order(StringComparer.Ordinal));
@@ -207,7 +209,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(2, primeiraJson.RootElement.GetProperty("totalPaginas").GetInt32());
         var primeiroItem = Assert.Single(primeiraJson.RootElement.GetProperty("itens").EnumerateArray());
         Assert.Equal(maisRecenteId, primeiroItem.GetProperty("id").GetGuid());
-        Assert.Equal(new[] { "criadoEmUtc", "id", "prazoPagamentoEmUtc", "situacao", "totalCentavos" },
+        Assert.Equal(new[] { "criadoEmUtc", "id", "numeroPublico", "prazoPagamentoEmUtc", "situacao", "totalCentavos" },
             primeiroItem.EnumerateObject().Select(prop => prop.Name).Order(StringComparer.Ordinal));
         Assert.Equal(pedidoId, Assert.Single(segundaJson.RootElement.GetProperty("itens").EnumerateArray()).GetProperty("id").GetGuid());
 

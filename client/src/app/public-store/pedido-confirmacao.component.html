@@ -1,5 +1,5 @@
 <section class="compra" aria-labelledby="pedido-title">
-  <h1 id="pedido-title">Pedido</h1>
+  <h1 id="pedido-title">Pedido{{ pedido()?.numeroPublico ? ' ' + pedido()?.numeroPublico : '' }}</h1>
   @if (carregando()) {
     <p role="status">Consultando seu pedido…</p>
   } @else if (pedido(); as confirmado) {
@@ -25,9 +25,11 @@
       </ul>
       <section class="painel resumo" aria-labelledby="pedido-resumo">
         <h2 id="pedido-resumo">{{ situacoes[confirmado.situacao] }}</h2>
-        <p>
-          Número do pedido: <strong class="identificador">{{ confirmado.id }}</strong>
-        </p>
+        @if (confirmado.numeroPublico; as numero) {
+          <p>Número do pedido: <strong>{{ numero }}</strong></p>
+          <button class="min-h-11 underline" type="button" (click)="copiarNumero(numero)">Copiar número do pedido</button>
+          @if (avisoCopia()) { <p role="status">{{ avisoCopia() }}</p> }
+        }
         <app-dados-entrega [modalidade]="confirmado.modalidadeEntrega" [dados]="confirmado.entrega" />
         @if (confirmado.modalidadeEntrega === 'Correios') { <app-postagem-pedido [postagem]="confirmado.postagem" /> }
         @if (confirmado.situacao === 'EmEntrega') {

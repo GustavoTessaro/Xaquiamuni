@@ -275,6 +275,9 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     const replay = await api(c, '/api/pedidos', 'POST', compra.corpo, compra.chave);
     assert.equal(replay.status, 200);
     assert.equal(replay.body.id === id, true);
+    assert.match(replay.body.numeroPublico, /^XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}$/);
+    await tem(c, replay.body.numeroPublico);
+    assert.ok(await c.ev("!document.querySelector('main h1')?.textContent.includes(location.pathname.split('/').at(-1))"));
     await checkpoint('pedido', id);
     await estoque(7, 2, 5);
 

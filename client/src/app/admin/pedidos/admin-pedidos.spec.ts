@@ -19,6 +19,7 @@ const api = '/api/admin/pedidos';
 const prazo = '2090-11-19T08:30:00+00:00';
 const resumo: ResumoPedidoAdmin = {
   id,
+  numeroPublico: 'XQ-234567ACDE',
   situacao: 'AguardandoPagamento',
   criadoEmUtc: '2026-11-18T08:30:00+00:00',
   prazoPagamentoEmUtc: prazo,
@@ -29,6 +30,7 @@ const detalhe: DetalhePedidoAdmin = {
   cliente: { nome: 'Cliente Teste', email: 'cliente@example.test' },
   pedido: {
     id,
+    numeroPublico: resumo.numeroPublico,
     situacao: resumo.situacao,
     criadoEmUtc: resumo.criadoEmUtc,
     prazoPagamentoEmUtc: prazo,
@@ -152,6 +154,9 @@ describe('Pedidos administrativos', () => {
     harness.detectChanges();
     lista(1).flush(pagina(1));
     harness.detectChanges();
+    const linkPedido = harness.routeNativeElement!.querySelector(`a[href="${caminho}/${id}"]`);
+    expect(linkPedido?.textContent).toContain(resumo.numeroPublico);
+    expect(linkPedido?.textContent).not.toContain(id);
     expect(
       harness.routeNativeElement!.querySelector('a[aria-current="page"]')?.textContent?.trim(),
     ).toBe('Pedidos');
@@ -221,7 +226,8 @@ describe('Pedidos administrativos', () => {
     harness.detectChanges();
     const view = harness.routeNativeElement!;
     expect(view.textContent).toContain('Cliente Teste');
-    expect(view.textContent).toContain(id);
+    expect(view.textContent).toContain(resumo.numeroPublico);
+    expect(view.textContent).not.toContain(id);
     expect(view.textContent).toContain('92.233.720.368.547.758,07');
     clicar(harness, 'Próxima');
     await harness.fixture.whenStable();

@@ -18,7 +18,7 @@ public sealed record ItemPedidoClienteRequest(Guid ProdutoId, Guid ProdutoVarian
 
 public sealed record PedidoClienteResumoResponse(
     Guid Id, string Situacao, DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
-    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos);
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos, string NumeroPublico);
 
 public sealed record PedidoClientePaginaResponse(
     IReadOnlyList<PedidoClienteResumoResponse> Itens, int Pagina, int ItensPorPagina, int TotalItens, int TotalPaginas);
@@ -34,7 +34,7 @@ public sealed record PedidoClienteResponse(
     Guid Id, string Situacao, string ModalidadeEntrega,
     DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos,
-    IReadOnlyList<ItemPedidoClienteResponse> Itens)
+    IReadOnlyList<ItemPedidoClienteResponse> Itens, string NumeroPublico)
 {
     [JsonNumberHandling(JsonNumberHandling.WriteAsString)]
     public long FreteCentavos { get; init; }
@@ -50,7 +50,7 @@ public sealed record PedidoClienteResponse(
         pedido.Itens.OrderBy(item => item.ProdutoVarianteId)
             .Select(item => new ItemPedidoClienteResponse(item.ProdutoId, item.ProdutoVarianteId,
                 item.NomeProduto, item.NomeVariante, item.Quantidade,
-                item.PrecoUnitarioCentavos, item.SubtotalCentavos, item.PrecoRegularCentavos, item.PromocaoId)).ToArray())
+                item.PrecoUnitarioCentavos, item.SubtotalCentavos, item.PrecoRegularCentavos, item.PromocaoId)).ToArray(), pedido.NumeroPublico)
         {
             FreteCentavos = pedido.FreteCentavos,
             SubtotalProdutosCentavos = pedido.SubtotalProdutosCentavos,

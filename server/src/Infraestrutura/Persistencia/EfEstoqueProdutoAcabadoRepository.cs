@@ -1,4 +1,5 @@
 using System.Data;
+using Xaquiamuni.Dominio.Entidades;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.AspNetCore.DataProtection;
@@ -20,6 +21,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private readonly IDataProtector? _conversoesCorreios;
     private readonly IReadOnlyDictionary<string, string> _municipiosPorCep;
 
+    private readonly Func<string> _gerarNumeroPublico;
+
     public EfEstoqueProdutoAcabadoRepository(
         XaquiamuniDbContext dbContext,
         TimeProvider timeProvider,
@@ -27,9 +30,10 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
         IOptions<PromocoesComerciaisOptions>? promocoes = null,
         IDataProtectionProvider? protecao = null,
         IOptions<EntregaCheckoutOptions>? entrega = null,
-        IOptions<CorreiosManualOptions>? correiosManual = null)
+        IOptions<CorreiosManualOptions>? correiosManual = null, Func<string>? gerarNumeroPublico = null)
     {
         _dbContext = dbContext;
+        _gerarNumeroPublico = gerarNumeroPublico ?? NumeroPublicoPedido.Gerar;
         _timeProvider = timeProvider;
         _municipiosPostais = correiosManual?.Value.MunicipiosPorCep ?? [];
         _calendario = calendario;

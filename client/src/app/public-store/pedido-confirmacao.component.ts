@@ -22,6 +22,7 @@ export class PedidoConfirmacaoComponent {
   protected readonly pedido = signal<PedidoCliente | null>(null);
   protected readonly carregando = signal(false);
   protected readonly erro = signal('');
+  protected readonly avisoCopia = signal('');
   protected readonly requerLogin = signal(false);
   protected readonly formatarPreco = formatarCentavos;
   protected readonly situacoes = situacoesPedido;
@@ -38,6 +39,7 @@ export class PedidoConfirmacaoComponent {
         switchMap((params) => {
           const id = params.get('id');
           this.idPedido.set(id);
+          this.avisoCopia.set('');
           const confirmado = this.router.currentNavigation()?.extras.info as
             PedidoCliente | undefined;
           const carregamento =
@@ -53,6 +55,17 @@ export class PedidoConfirmacaoComponent {
         takeUntilDestroyed(this.destroy),
       )
       .subscribe((pedido) => this.pedido.set(pedido));
+  }
+
+  protected async copiarNumero(numero: string): Promise<void> {
+    let aviso: string;
+    try {
+      await navigator.clipboard.writeText(numero);
+      aviso = 'Número do pedido copiado.';
+    } catch {
+      aviso = 'Não foi possível copiar. Selecione o número para copiar manualmente.';
+    }
+    if (this.pedido()?.numeroPublico === numero) this.avisoCopia.set(aviso);
   }
 
   protected tentarNovamente() {

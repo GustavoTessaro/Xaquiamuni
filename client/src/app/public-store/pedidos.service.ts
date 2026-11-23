@@ -53,6 +53,7 @@ export interface PostagemPostal {
 
 export interface PedidoCliente {
   postagem?: PostagemPostal | null;
+  numeroPublico?: string;
   id: string;
   situacao: keyof typeof situacoesPedido;
   modalidadeEntrega: ModalidadeEntrega;
@@ -67,7 +68,7 @@ export interface PedidoCliente {
 
 export type ResumoPedidoCliente = Pick<
   PedidoCliente,
-  'id' | 'situacao' | 'criadoEmUtc' | 'prazoPagamentoEmUtc' | 'totalCentavos'
+  'id' | 'numeroPublico' | 'situacao' | 'criadoEmUtc' | 'prazoPagamentoEmUtc' | 'totalCentavos'
 >;
 
 export interface PaginaPedidosCliente {

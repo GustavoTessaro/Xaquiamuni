@@ -13,6 +13,10 @@ internal static class PedidoMapping
         {
             pedido.ToTable("Pedidos", tabela =>
             {
+                tabela.HasCheckConstraint("CK_Pedidos_NumeroPublico_Formato",
+                    "LEN([NumeroPublico]) = 13 AND LEFT([NumeroPublico], 3) COLLATE Latin1_General_100_BIN2 = 'XQ-' "
+                    + "AND SUBSTRING([NumeroPublico], 4, 10) COLLATE Latin1_General_100_BIN2 "
+                    + $"NOT LIKE '%[^{NumeroPublicoPedido.Alfabeto}]%'");
                 tabela.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty",
                     $"[Id] <> {GuidVazio} AND [ClienteId] <> {GuidVazio}");
                 tabela.HasCheckConstraint("CK_Pedidos_Modalidade_Valid",
@@ -81,6 +85,8 @@ internal static class PedidoMapping
             });
             pedido.HasKey(entity => entity.Id);
             pedido.Property(entity => entity.Id).ValueGeneratedNever();
+            pedido.Property(entity => entity.NumeroPublico).HasMaxLength(13).IsUnicode(false).IsRequired();
+            pedido.HasIndex(entity => entity.NumeroPublico).IsUnique();
             pedido.Property(entity => entity.Situacao).HasConversion<short>().HasColumnType("smallint");
             pedido.Property(entity => entity.ModalidadeEntrega).HasConversion<short>().HasColumnType("smallint");
             pedido.Property(entity => entity.Entrega).HasConversion(
