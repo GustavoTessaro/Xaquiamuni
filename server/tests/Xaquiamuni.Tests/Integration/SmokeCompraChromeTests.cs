@@ -207,7 +207,11 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         Assert.All(entregas, p =>
                         {
                             Assert.Equal(SituacaoPedido.Entregue, p.Situacao);
-                            Assert.Equal((1199L, 1300L, 2499L), (p.SubtotalProdutosCentavos, p.FreteCentavos, p.TotalCentavos));
+                            var retiradaDoCadastro = p.Entrega!.Destino!.Logradouro == "Rua cadastrada do ensaio";
+                            Assert.Equal(retiradaDoCadastro ? (1199L, 1170L, 2369L) : (1199L, 0L, 1199L),
+                                (p.SubtotalProdutosCentavos, p.FreteCentavos, p.TotalCentavos));
+                            Assert.Equal(1300L, p.Entrega.DescontoFrete?.OriginalCentavos);
+                            Assert.Equal(retiradaDoCadastro ? 130L : 1300L, p.Entrega.DescontoFrete?.DescontoCentavos);
                             Assert.Equal("4322509", p.Entrega!.Destino!.CodigoIbge);
                             Assert.NotNull(p.SaidaEntregaEmUtc);
                         });
@@ -221,7 +225,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         var reservaIds = reservas.Select(r => (Guid?)r.Id).ToArray();
                         Assert.Equal(2, await verificacao.MovimentosProdutoAcabado.CountAsync(m =>
                             reservaIds.Contains(m.ReservaProdutoAcabadoId)));
-                        output.WriteLine("SQL: dois snapshots de 1199 + 1300 = 2499 centavos e uma baixa por entrega.");
+                        output.WriteLine("SQL: snapshots de 1199 + 1170 = 2369 e 1199 + 0 = 1199 centavos, com uma baixa por entrega.");
                     }
                     if (postal)
                     {

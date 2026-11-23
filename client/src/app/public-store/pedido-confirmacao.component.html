@@ -38,7 +38,7 @@
           <p>Seu pedido está pronto para retirada.</p>
         }
         <p>Subtotal: <strong>{{ formatarPreco(confirmado.subtotalProdutosCentavos ?? confirmado.totalCentavos) }}</strong></p>
-        <p>Frete: <strong>{{ formatarPreco(confirmado.freteCentavos ?? '0') }}</strong></p>
+        <app-frete-pedido [frete]="confirmado.freteCentavos ?? '0'" [desconto]="confirmado.entrega?.descontoFrete" />
         <p>
           Total: <strong>{{ formatarPreco(confirmado.totalCentavos) }}</strong>
         </p>

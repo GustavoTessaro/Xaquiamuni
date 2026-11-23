@@ -38,6 +38,7 @@ import { formatarCentavos } from '../../public-store/carrinho.service';
 import { situacoesPedido, uuidValido } from '../../public-store/pedidos.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
 import { PostagemPedidoComponent } from '../../shared/postagem-pedido.component';
+import { FretePedidoComponent } from '../../shared/frete-pedido.component';
 import { DadosEntregaComponent } from '../../shared/dados-entrega.component';
 
 const acoes = {
@@ -127,7 +128,7 @@ type EstadoDetalhe =
 
 @Component({
   selector: 'app-admin-pedido-detalhe',
-  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent, DadosEntregaComponent, PostagemPedidoComponent, HistoricoRastreamentoComponent],
+  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent, DadosEntregaComponent, FretePedidoComponent, PostagemPedidoComponent, HistoricoRastreamentoComponent],
   templateUrl: './admin-pedido-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })

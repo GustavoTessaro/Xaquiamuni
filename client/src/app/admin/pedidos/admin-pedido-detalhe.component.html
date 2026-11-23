@@ -124,7 +124,7 @@
             }
           </ul>
           <p>Subtotal: {{ formatarPreco(pedido.subtotalProdutosCentavos ?? pedido.totalCentavos) }}</p>
-          <p>Frete: {{ formatarPreco(pedido.freteCentavos ?? '0') }}</p>
+          <app-frete-pedido [frete]="pedido.freteCentavos ?? '0'" [desconto]="pedido.entrega?.descontoFrete" />
           <p class="wrap-anywhere font-semibold">
             Total definitivo: {{ formatarPreco(pedido.totalCentavos) }}
           </p>

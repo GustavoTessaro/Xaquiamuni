@@ -8,12 +8,13 @@ import { formatarCentavos } from './carrinho.service';
 import { PrecoExibidoComponent } from './preco-exibido.component';
 import { PedidoPixComponent } from './pedido-pix.component';
 import { PostagemPedidoComponent } from '../shared/postagem-pedido.component';
+import { FretePedidoComponent } from '../shared/frete-pedido.component';
 import { DadosEntregaComponent } from '../shared/dados-entrega.component';
 import { PedidoCliente, PedidosService, situacoesPedido, uuidValido } from './pedidos.service';
 
 @Component({
   selector: 'app-pedido-confirmacao',
-  imports: [DatePipe, RouterLink, PedidoPixComponent, PrecoExibidoComponent, DadosEntregaComponent, PostagemPedidoComponent],
+  imports: [DatePipe, RouterLink, PedidoPixComponent, PrecoExibidoComponent, DadosEntregaComponent, FretePedidoComponent, PostagemPedidoComponent],
   templateUrl: './pedido-confirmacao.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

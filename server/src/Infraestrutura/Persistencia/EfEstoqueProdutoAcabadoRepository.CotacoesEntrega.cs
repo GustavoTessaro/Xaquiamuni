@@ -19,7 +19,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
 {
     private sealed record OfertaProtegida(Guid ClienteId, string Carrinho, DateTimeOffset ValidaAteUtc,
         int RevisaoConfiguracao, Guid? EnderecoCadastradoId, int? RevisaoCidade,
-        long Frete, DadosEntregaPedido Dados);
+        long Frete, DadosEntregaPedido Dados, int? RevisaoCampanha = null);
 
     private Task BloquearConfiguracaoEntregaAsync(CancellationToken ct) =>
         AdquirirLockAsync(EfConfiguracoesAtendimento.RecursoLock, ct, compartilhado: true);
@@ -75,9 +75,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
                 motivo = destino is null ? "destino_nao_validado" : "municipio_nao_atendido";
                 if (cidade is not null)
                 {
-                    if (cidade.TarifaCentavos <= long.MaxValue - subtotal)
+                    var (frete, desconto, revisaoCampanha) = await EfPromocoesFrete.CalcularEntregaPropriaAsync(
+                        _dbContext, cidade.TarifaCentavos, subtotal, agora, ct);
+                    if (frete <= long.MaxValue - subtotal)
                     {
-                        AdicionarOferta(new(destino, cidade.Id), cidade.TarifaCentavos, cidade.Revisao);
+                        AdicionarOferta(new(destino, cidade.Id, DescontoFrete: desconto), frete, cidade.Revisao, revisaoCampanha);
                         motivo = null;
                     }
                     else
@@ -87,10 +89,10 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
 
             return new(ofertas, precos!, motivo);
 
-            void AdicionarOferta(DadosEntregaPedido entrega, long frete, int? revisaoCidade = null)
+            void AdicionarOferta(DadosEntregaPedido entrega, long frete, int? revisaoCidade = null, int? revisaoCampanha = null)
             {
                 var oferta = new OfertaProtegida(clienteId, carrinho, validade, configuracao.Revisao,
-                    entrega.Destino is null ? null : enderecoCadastradoId, revisaoCidade, frete, entrega);
+                    entrega.Destino is null ? null : enderecoCadastradoId, revisaoCidade, frete, entrega, revisaoCampanha);
                 var id = _ofertasEntrega!.Protect(JsonSerializer.Serialize(oferta));
                 var modalidade = entrega.Destino is null
                     ? ModalidadeEntregaPedido.RetiradaLocal : ModalidadeEntregaPedido.EntregaPropria;
@@ -140,8 +142,13 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
             return null;
 
         var cidade = await BuscarCidadeAsync(destino, ct);
-        return cidade is not null && cidade.Id == oferta.Dados.CidadeId && cidade.Revisao == oferta.RevisaoCidade
-            && cidade.TarifaCentavos == oferta.Frete
+        if (cidade is null || cidade.Id != oferta.Dados.CidadeId || cidade.Revisao != oferta.RevisaoCidade ||
+            !TentarCalcularTotalCompra(itens, 0, out var subtotal, out _))
+            return null;
+
+        var (frete, desconto, revisaoCampanha) = await EfPromocoesFrete.CalcularEntregaPropriaAsync(
+            _dbContext, cidade.TarifaCentavos, subtotal, agora, ct);
+        return frete == oferta.Frete && desconto == oferta.Dados.DescontoFrete && revisaoCampanha == oferta.RevisaoCampanha
             ? (oferta.Dados, oferta.Frete, ModalidadeEntregaPedido.EntregaPropria) : null;
     }
 

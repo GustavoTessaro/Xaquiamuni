@@ -9,7 +9,14 @@ export interface EnderecoEntrega {
   cep: string; uf: string; cidade: string; bairro: string; logradouro: string; numero: string;
   complemento: string | null;
 }
+export interface DescontoFrete {
+  campanhaId: string;
+  nomeCampanha: string;
+  originalCentavos: string;
+  descontoCentavos: string;
+}
 export interface DadosEntrega {
+  descontoFrete?: DescontoFrete | null;
   propostaPostal?: import('./cotacoes-correios.service').ReferenciaPostal | null;
   destino: (EnderecoEntrega & { codigoIbge: string }) | null;
   cidadeId: string | null;

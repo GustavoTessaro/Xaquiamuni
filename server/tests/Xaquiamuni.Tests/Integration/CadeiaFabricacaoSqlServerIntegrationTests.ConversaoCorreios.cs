@@ -118,6 +118,11 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.NotFound, alheia.StatusCode);
         using (var semCsrf = await EscreverPostalAsync(cliente, rota, new { }, csrf: false))
             Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
+        var campanhaPostal = PromocaoFrete.Criar(new("Frete postal fora da etapa", TipoDescontoFrete.FreteGratis, 0,
+            ModalidadesPromocaoFrete.CorreiosManual, 0, null, null), Guid.NewGuid(), relogio.Agora);
+        campanhaPostal.AlterarStatus(true, campanhaPostal.CriadaPorId, relogio.Agora);
+        db.Add(campanhaPostal);
+        await db.SaveChangesAsync();
         var primeira = await cliente.PostAsync<JsonElement>(rota, new { }, HttpStatusCode.OK);
         Assert.Equal("2398", primeira.GetProperty("subtotalProdutosCentavos").GetString());
         Assert.Equal("1300", primeira.GetProperty("freteCentavos").GetString());
@@ -161,6 +166,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var pedidoLocal = await outro.PostAsync<JsonElement>("/api/pedidos", new { itens = carrinhoDiferente },
             HttpStatusCode.Created, Guid.NewGuid());
         var localId = pedidoLocal.GetProperty("id").GetGuid();
+        Assert.Equal("0", pedidoLocal.GetProperty("freteCentavos").GetString());
         var semSaldo = await cliente.PostAsync<JsonElement>("/api/pedidos", new { conversaoCorreiosId = token },
             HttpStatusCode.Conflict, Guid.NewGuid());
         Assert.Equal("itens_indisponiveis", semSaldo.GetProperty("codigo").GetString());
@@ -213,6 +219,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var pedido = await criada.Content.ReadFromJsonAsync<JsonElement>();
         var pedidoId = pedido.GetProperty("id").GetGuid();
         Assert.Equal("Correios", pedido.GetProperty("modalidadeEntrega").GetString());
+        Assert.False(pedido.GetProperty("entrega").TryGetProperty("descontoFrete", out _));
         Assert.Matches("^XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}$", pedido.GetProperty("numeroPublico").GetString()!);
         Assert.Equal("3100", pedido.GetProperty("totalCentavos").GetString());
         Assert.Equal("1800", pedido.GetProperty("subtotalProdutosCentavos").GetString());

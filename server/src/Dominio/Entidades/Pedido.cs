@@ -30,7 +30,12 @@ public sealed record EnderecoEntregaPedido(
 public sealed record DadosEntregaPedido(
     EnderecoEntregaPedido? Destino = null, Guid? CidadeId = null,
     string? EnderecoRetirada = null, string? InstrucoesRetirada = null,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DadosPropostaPostal? PropostaPostal = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DadosPropostaPostal? PropostaPostal = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DadosDescontoFrete? DescontoFrete = null);
+
+public sealed record DadosDescontoFrete(Guid CampanhaId, string NomeCampanha,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long OriginalCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long DescontoCentavos);
 
 public sealed record DadosPropostaPostal(Guid SolicitacaoId, int Revisao, string Servico, int PrazoDias,
     DateTimeOffset PublicadaEmUtc, DateTimeOffset ValidaAteUtc);
@@ -94,6 +99,12 @@ public sealed class Pedido
                 && proposta.SolicitacaoId != Guid.Empty,
             _ => false,
         };
+        if (entrega?.DescontoFrete is { } desconto &&
+            (modalidade != ModalidadeEntregaPedido.EntregaPropria || desconto.CampanhaId == Guid.Empty ||
+             string.IsNullOrWhiteSpace(desconto.NomeCampanha) ||
+             desconto.DescontoCentavos <= 0 || desconto.OriginalCentavos < desconto.DescontoCentavos ||
+             desconto.OriginalCentavos - desconto.DescontoCentavos != freteCentavos))
+            throw new ArgumentException("Desconto de frete inconsistente.", nameof(entrega));
         if (!dadosValidos)
             throw new ArgumentException("Dados de entrega inconsistentes.", nameof(entrega));
         ValidarUtc(criadoEmUtc, nameof(criadoEmUtc));

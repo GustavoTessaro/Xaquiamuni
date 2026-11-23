@@ -243,11 +243,36 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     return [links.length, links[0]?.pathname, links[0] && new URL(links[0].href).searchParams.get('text')];
   })()`);
   const whatsapp = [1, '/5554999990000', 'Olá! Gostaria de falar com a Xaquiamuni.'];
+  const campanha = {
+    nome: 'Economia na entrega', tipo: 'Percentual', valor: '1000',
+    modalidades: ['EntregaPropria'], subtotalMinimoCentavos: '1199',
+  };
+  const campanhaRota = await a.ev(`(async () => {
+    const rota = '/api/admin/promocoes-frete';
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    const resposta = await fetch(rota, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken },
+      body: JSON.stringify(${JSON.stringify(campanha)}),
+    });
+    if (resposta.status !== 201) return null;
+    return rota + '/' + (await resposta.json()).id;
+  })()`);
+  assert.ok(campanhaRota);
+  const escreverCampanha = (metodo, sufixo, dados, versao) => a.ev(`(async () => {
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    return (await fetch(${JSON.stringify(campanhaRota + sufixo)}, { method: ${JSON.stringify(metodo)},
+      headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken,
+        'If-Match': ${JSON.stringify('"' + versao + '"')} },
+      body: JSON.stringify(${JSON.stringify(dados)}),
+    })).status;
+  })()`);
+  assert.equal(await escreverCampanha('PATCH', '/status', { ativa: true }, 1), 200);
 
   for (const width of [375, 1280]) {
     await viewport(c, width);
     await viewport(a, width);
     if (width === 1280) {
+      assert.equal(await escreverCampanha('PUT', '', { ...campanha, tipo: 'FreteGratis', valor: '0' }, 2), 200);
       await abrir(c, '/produtos/' + dados.produtoFinanceiro, '!!document.querySelector("#product-name")');
       await botaoTexto('Adicionar ao carrinho', c);
     }
@@ -264,17 +289,28 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
         await campo(c, `main fieldset label:nth-of-type(${i + 1}) input`, campos[i]);
     }
     await botaoTexto('Consultar valores de entrega', c);
-    const totalCotado = width === 375 ? '24,49' : '24,99';
-    await waitFor(() => c.ev(`document.querySelector('main').textContent.includes('${totalCotado}')`), 'Total com frete');
-    console.log(`Entrega própria em ${width} px: cotação real confirmada.`);
+    const totalCotado = width === 375 ? '23,24' : '11,99';
+    await waitFor(() => c.ev(`document.querySelector('app-frete-pedido')?.textContent.includes('Economia na entrega')
+      && [...document.querySelectorAll('main p')].some(p => p.textContent.includes('Total final:') && p.textContent.includes('${totalCotado}'))`),
+      'Total com frete promocional');
+    if (width === 1280) assert.ok(await c.ev("document.querySelector('app-frete-pedido')?.textContent.includes('Frete grátis')"));
+    console.log(`Entrega própria em ${width} px: cotação real com desconto conferida.`);
     assert.ok(await semEstouro(c));
     if (width === 375) {
       assert.equal(await alterar(true, '1300'), 200);
       await botaoTexto('Confirmar valor e finalizar compra', c);
-      await waitFor(() => c.ev("location.pathname === '/checkout' && document.querySelector('main').textContent.includes('Confira a nova cotação') && document.querySelector('main').textContent.includes('24,99')"), 'Reconfirmação após mudar a tarifa');
+      await waitFor(() => c.ev("location.pathname === '/checkout' && document.querySelector('main').textContent.includes('Confira a nova cotação') && document.querySelector('main').textContent.includes('23,69')"), 'Reconfirmação após mudar a tarifa');
     }
+    const perdaDesconto = width === 1280 ? c.perderResposta('/api/pedidos') : null;
     await botaoTexto('Confirmar valor e finalizar compra', c);
+    if (perdaDesconto) {
+      await botaoTexto('Recuperar tentativa original', c);
+    }
     const id = await waitFor(() => c.ev("location.pathname.startsWith('/pedidos/') && location.pathname.split('/').at(-1)"), 'Pedido entregue pela loja');
+    if (perdaDesconto) {
+      assert.equal(perdaDesconto.status[0], 201);
+      assert.deepEqual(perdaDesconto.envios[0], perdaDesconto.envios[1]);
+    }
     const rota = '/admin/pedidos/' + id;
     const titulo = await waitFor(() => c.ev("document.querySelector('#pedido-title')?.textContent.match(/XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}/)?.[0]"),
       'Número público em entrega própria');
@@ -282,7 +318,8 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes(${JSON.stringify(endereco)})`), 'Destino congelado');
     assert.deepEqual(await conferirWhatsApp(c), whatsapp);
     const pix = await c.ev(`fetch('/api/pedidos/${id}/pagamento').then(r=>r.json())`);
-    assert.equal(pix.valorCentavos, '2499');
+    const totalPedido = width === 375 ? '2369' : '1199';
+    assert.equal(pix.valorCentavos, totalPedido);
     if (width === 375) {
       await waitFor(() => c.ev("!!document.querySelector('app-comprovante-pix input[type=file]')"), 'Campo de comprovante');
       await c.ev(`(async () => {
@@ -317,10 +354,11 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       if (await a.ev(tema) !== modo) await alternar(modo);
       assert.ok(await a.ev(`document.querySelector('main dl')?.textContent.includes(${JSON.stringify(titulo)})`));
       assert.ok(await semEstouro(a));
+      assert.ok(await a.ev("document.querySelector('app-frete-pedido')?.textContent.includes('Economia na entrega')"));
     }
     const eventos = await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json())
       .then(p=>p.itens.filter(m=>m.recursoId === '${id}').map(m=>m.valorCentavos))`);
-    assert.deepEqual(eventos, ['2499']);
+    assert.deepEqual(eventos, [totalPedido]);
     assert.ok(await semEstouro(a));
     console.log(`Entrega própria em ${width} px: endereço, frete, total e ações administrativas confirmados.`);
   }
@@ -335,10 +373,12 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     for (const width of [375, 1280]) {
       await viewport(c, width);
       await abrir(c, '/pedidos/' + pedidoTema.id, `document.querySelector('app-store-layout')?.dataset.theme === '${chavePublica}'
-        && document.querySelector('#pedido-title')?.textContent.includes('${pedidoTema.numeroPublico}')`);
-      assert.ok(await semEstouro(c), 'Número público em ' + chavePublica + ' a ' + width + ' px');
+        && document.querySelector('#pedido-title')?.textContent.includes('${pedidoTema.numeroPublico}')
+        && document.querySelector('app-frete-pedido')?.textContent.includes('Frete grátis')`);
+      assert.ok(await semEstouro(c), 'Número público e desconto em ' + chavePublica + ' a ' + width + ' px');
     }
   }
+  console.log('Desconto congelado conferido nos seis temas em 375 e 1280 px.');
   const atual = await lerAtendimento('');
   assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
     numero: atual.whatsApp, confirmado: true, habilitado: false, revisao: atual.revisao,

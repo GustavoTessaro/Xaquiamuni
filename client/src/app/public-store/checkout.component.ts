@@ -15,6 +15,7 @@ import { DatePipe } from '@angular/common';
 import { finalize, firstValueFrom } from 'rxjs';
 import { HttpErrorResponse } from '@angular/common/http';
 import { AtendimentoService, EnderecoEntrega, ModalidadeEntrega, ModalidadesPublicas, OfertaEntrega } from '../core/atendimento.service';
+import { FretePedidoComponent } from '../shared/frete-pedido.component';
 import { DadosEntregaComponent } from '../shared/dados-entrega.component';
 import { CarrinhoService, formatarCentavos } from './carrinho.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
@@ -29,7 +30,7 @@ const enderecoVazio: EnderecoEntrega = {
 
 @Component({
   selector: 'app-checkout',
-  imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, DatePipe],
+  imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, FretePedidoComponent, DatePipe],
   templateUrl: './checkout.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

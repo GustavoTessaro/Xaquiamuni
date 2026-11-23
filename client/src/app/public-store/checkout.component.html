@@ -140,7 +140,7 @@
           @if (oferta(); as selecionada) {
             <app-dados-entrega [modalidade]="selecionada.modalidade" [dados]="selecionada.dadosEntrega" />
             <p>Subtotal dos produtos: <strong>{{ formatarPreco(subtotalOferta()) }}</strong></p>
-            <p>Frete: <strong>{{ formatarPreco(selecionada.freteCentavos) }}</strong></p>
+            <app-frete-pedido [frete]="selecionada.freteCentavos" [desconto]="selecionada.dadosEntrega.descontoFrete" />
             <p>Total final: <strong>{{ formatarPreco(selecionada.totalCentavos) }}</strong></p>
             <p>Cotação válida até {{ selecionada.validaAteUtc | date:'HH:mm:ss' }}.</p>
           }

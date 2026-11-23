@@ -532,8 +532,10 @@ describe('checkout integrado aos contratos HTTP', () => {
     consultar.click();
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
     http.expectOne('/api/checkout/cotacoes-entrega').flush({
-      ofertas: [{ id: 'entrega', modalidade: 'EntregaPropria', freteCentavos: '1250', totalCentavos: '1500',
-        validaAteUtc: new Date(Date.now() - 1).toISOString(), dadosEntrega: { destino: {
+      ofertas: [{ id: 'entrega', modalidade: 'EntregaPropria', freteCentavos: '1000', totalCentavos: '1250',
+        validaAteUtc: new Date(Date.now() - 1).toISOString(), dadosEntrega: {
+          descontoFrete: { campanhaId: 'frete', nomeCampanha: 'Desconto da loja', originalCentavos: '1250', descontoCentavos: '250' },
+          destino: {
           logradouro: 'Rua das Flores', numero: '8', bairro: 'Centro', cidade: 'Vacaria', uf: 'RS', cep: '95200000',
         } } }],
       precosAtuais: [],
@@ -542,7 +544,8 @@ describe('checkout integrado aos contratos HTTP', () => {
     harness.detectChanges();
     expect(view.textContent).toContain('Rua das Flores');
     expect(view.textContent).toContain('12,50');
-    expect(view.textContent).toContain('15,00');
+    expect(view.textContent).toContain('10,00');
+    expect(view.textContent).toContain('Desconto da loja');
     finalizar.click();
     expect(view.querySelector('[data-acao="finalizar"]')).not.toBeNull();
     http.expectNone('/api/pedidos');

@@ -209,19 +209,65 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Empty(await db.Pedidos.ToListAsync());
         Assert.Empty(await db.ReservasProdutoAcabado.ToListAsync());
 
-        ofertaId = Assert.Single(await CotarAsync(destino)).GetProperty("id").GetString()!;
+        const string campanhas = "/api/admin/promocoes-frete";
+        var dadosCampanha = new { nome = "Frete pela metade", tipo = "Percentual", valor = "5000",
+            modalidades = new[] { "EntregaPropria" }, subtotalMinimoCentavos = "2398",
+            inicioUtc = vencimento.AddMinutes(-1), fimUtc = (DateTimeOffset?)vencimento.AddMinutes(1) };
+        var campanha = await admin.PostAsync<JsonElement>(campanhas, dadosCampanha, HttpStatusCode.Created);
+        var campanhaId = campanha.GetProperty("id").GetGuid();
+        var rotaCampanha = campanhas + "/" + campanhaId;
+        async Task<HttpResponseMessage> EditarCampanhaAsync(HttpMethod metodo, string sufixo, object dados, int versao)
+        {
+            using var request = new HttpRequestMessage(metodo, rotaCampanha + sufixo) { Content = JsonContent.Create(dados) };
+            request.Headers.Add("If-Match", $"\"{versao}\"");
+            request.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
+            return await admin.Http.SendAsync(request);
+        }
+
+        async Task<string> CotarIdAsync() =>
+            Assert.Single(await CotarAsync(destino)).GetProperty("id").GetString()!;
+        var semCampanha = Assert.Single(await CotarAsync(destino));
+        Assert.Equal("1300", semCampanha.GetProperty("freteCentavos").GetString());
+        Assert.False(semCampanha.GetProperty("dadosEntrega").TryGetProperty("descontoFrete", out _));
+        using var ativa = await EditarCampanhaAsync(HttpMethod.Patch, "/status", new { ativa = true }, 1);
+        Assert.Equal(HttpStatusCode.OK, ativa.StatusCode);
+        await RecusarAsync(cliente, semCampanha.GetProperty("id").GetString()!);
+        var antesDaEdicao = await CotarIdAsync();
+        using var editada = await EditarCampanhaAsync(HttpMethod.Put, "", dadosCampanha with { nome = "Economia na entrega" }, 2);
+        Assert.Equal(HttpStatusCode.OK, editada.StatusCode);
+        await RecusarAsync(cliente, antesDaEdicao);
+        var antesDaExpiracao = await CotarIdAsync();
+        relogio.Definir(dadosCampanha.fimUtc!.Value);
+        await RecusarAsync(cliente, antesDaExpiracao);
+        Assert.Empty(await db.Pedidos.ToListAsync());
+        Assert.Empty(await db.ReservasProdutoAcabado.ToListAsync());
+
+        using var prorrogada = await EditarCampanhaAsync(HttpMethod.Put, "",
+            dadosCampanha with { nome = "Economia na entrega", fimUtc = null }, 3);
+        Assert.Equal(HttpStatusCode.OK, prorrogada.StatusCode);
+        var cotacaoPromocional = Assert.Single(await CotarAsync(destino));
+        Assert.Equal("650", cotacaoPromocional.GetProperty("freteCentavos").GetString());
+        Assert.Equal("3048", cotacaoPromocional.GetProperty("totalCentavos").GetString());
+        ofertaId = cotacaoPromocional.GetProperty("id").GetString()!;
         var chave = Guid.NewGuid();
         var payload = new { itens, ofertaEntregaId = ofertaId };
         var pedido = await cliente.PostAsync<JsonElement>("/api/pedidos", payload, HttpStatusCode.Created, chave);
         var pedidoId = pedido.GetProperty("id").GetGuid();
         Assert.Equal("EntregaPropria", pedido.GetProperty("modalidadeEntrega").GetString());
         Assert.Equal("2398", pedido.GetProperty("subtotalProdutosCentavos").GetString());
-        Assert.Equal("1300", pedido.GetProperty("freteCentavos").GetString());
-        Assert.Equal("3698", pedido.GetProperty("totalCentavos").GetString());
+        Assert.Equal("650", pedido.GetProperty("freteCentavos").GetString());
+        var desconto = pedido.GetProperty("entrega").GetProperty("descontoFrete");
+        Assert.Equal(campanhaId, desconto.GetProperty("campanhaId").GetGuid());
+        Assert.Equal("Economia na entrega", desconto.GetProperty("nomeCampanha").GetString());
+        Assert.Equal("1300", desconto.GetProperty("originalCentavos").GetString());
+        Assert.Equal("650", desconto.GetProperty("descontoCentavos").GetString());
+        Assert.Equal("3048", pedido.GetProperty("totalCentavos").GetString());
         Assert.Equal("4322509", pedido.GetProperty("entrega").GetProperty("destino").GetProperty("codigoIbge").GetString());
         Assert.Equal(2, (await db.ReservasProdutoAcabado.AsNoTracking().SingleAsync()).Quantidade);
         Assert.Equal(12, (await db.SaldosProdutoAcabado.AsNoTracking().SingleAsync()).QuantidadeFisica);
 
+        using var inativada = await EditarCampanhaAsync(HttpMethod.Patch, "/status", new { ativa = false }, 4);
+        Assert.Equal(HttpStatusCode.OK, inativada.StatusCode);
         relogio.Definir(vencimento.AddMinutes(6));
         var replay = await cliente.PostAsync<JsonElement>("/api/pedidos", payload, HttpStatusCode.OK, chave);
         Assert.True(JsonElement.DeepEquals(pedido, replay));
@@ -266,7 +312,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         configurarPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
         using var pixConfigurado = await admin.Http.SendAsync(configurarPix);
         Assert.Equal(HttpStatusCode.OK, pixConfigurado.StatusCode);
-        Assert.Equal("3698", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento"))
+        Assert.Equal("3048", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento"))
             .GetProperty("valorCentavos").GetString());
         var confirmar = $"/api/admin/pedidos/{pedidoId:D}/confirmar-pagamento";
         var chavePix = Guid.NewGuid();
@@ -276,7 +322,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.Conflict, antesDaPreparacao.StatusCode);
         var caixa = Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes))
             .GetProperty("itens").EnumerateArray());
-        Assert.Equal("3698", caixa.GetProperty("valorCentavos").GetString());
+        Assert.Equal("3048", caixa.GetProperty("valorCentavos").GetString());
         Assert.Equal(pedidoId, caixa.GetProperty("recursoId").GetGuid());
         await admin.PostAsync<JsonElement>($"/api/admin/pedidos/{pedidoId:D}/iniciar-preparacao",
             new { }, HttpStatusCode.OK, Guid.NewGuid());
@@ -349,7 +395,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var baixa = await db.MovimentosProdutoAcabado.AsNoTracking().SingleAsync(x => x.ReservaProdutoAcabadoId != null);
         Assert.Equal("Saída para entrega própria", baixa.Motivo);
         Assert.Equal(baixa.RegistradoEmUtc, await db.Pedidos.Select(x => x.SaidaEntregaEmUtc).SingleAsync());
-        Assert.Equal("3698", Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes))
+        Assert.Equal("3048", Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes))
             .GetProperty("itens").EnumerateArray()).GetProperty("valorCentavos").GetString());
         await admin.PostAsync<JsonElement>(rotaAdmin + "/cancelar", new { motivo = "Após saída" },
             HttpStatusCode.Conflict, Guid.NewGuid());
@@ -376,6 +422,28 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(2, await db.MovimentosProdutoAcabado.CountAsync());
         Assert.Equal(PdfComprovante(), await cliente.Http.GetByteArrayAsync(caminho + "/comprovante-pix/conteudo"));
         Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes)).GetProperty("itens").EnumerateArray());
+
+        using var reativada = await EditarCampanhaAsync(HttpMethod.Patch, "/status", new { ativa = true }, 5);
+        Assert.Equal(HttpStatusCode.OK, reativada.StatusCode);
+        var ofertaDisputada = await CotarIdAsync();
+        var disputa = cliente.EnviarAsync("/api/pedidos", new { itens, ofertaEntregaId = ofertaDisputada }, Guid.NewGuid());
+        using var alteracao = await EditarCampanhaAsync(HttpMethod.Put, "",
+            dadosCampanha with { valor = "10000", fimUtc = null }, 6);
+        Assert.Equal(HttpStatusCode.OK, alteracao.StatusCode);
+        using var resultado = await disputa;
+        if (resultado.StatusCode == HttpStatusCode.Created)
+        {
+            Assert.Equal("3048", (await resultado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("totalCentavos").GetString());
+            Assert.Equal(2, await db.Pedidos.CountAsync());
+            Assert.Equal(2, await db.ReservasProdutoAcabado.CountAsync());
+        }
+        else
+        {
+            Assert.Equal(HttpStatusCode.Conflict, resultado.StatusCode);
+            Assert.Equal("oferta_entrega_invalida", (await resultado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codigo").GetString());
+            Assert.Equal(1, await db.Pedidos.CountAsync());
+            Assert.Equal(1, await db.ReservasProdutoAcabado.CountAsync());
+        }
     }
 
     private sealed class FalharAoGravarSaida : SaveChangesInterceptor
