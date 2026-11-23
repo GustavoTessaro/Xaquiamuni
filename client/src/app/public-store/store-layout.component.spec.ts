@@ -32,6 +32,8 @@ describe('tema da loja pública', () => {
       const layout = fixture.nativeElement as HTMLElement;
       expect(layout.dataset['theme']).toBe('original');
       const req = TestBed.inject(HttpTestingController).expectOne('/api/loja/tema');
+      TestBed.inject(HttpTestingController).expectOne('/api/loja/contato')
+        .flush({ whatsApp: chave ? '+555492560258' : null });
       if (chave === null) req.flush(null, { status: 503, statusText: 'Unavailable' });
       else req.flush({ chave, revisao: 2 });
       fixture.detectChanges();
@@ -41,6 +43,7 @@ describe('tema da loja pública', () => {
       expect(layout.closest('[data-admin-theme]')).toBeNull();
       expect(layout.style.getPropertyValue('--admin-bg')).toBe('');
       expect(layout.querySelector('main router-outlet')).not.toBeNull();
+      expect(!!layout.querySelector('a[href^="https://wa.me/555492560258"]')).toBe(!!chave);
       expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
       TestBed.inject(HttpTestingController).verify();
     },
@@ -50,6 +53,8 @@ describe('tema da loja pública', () => {
     const http = TestBed.inject(HttpTestingController);
     const layout = fixture.nativeElement as HTMLElement;
     http.expectOne('/api/loja/tema').flush({ chave: 'natal', revisao: 1 });
+    fixture.detectChanges();
+    http.expectOne('/api/loja/contato').flush({ whatsApp: null });
     fixture.detectChanges();
     expect(layout.dataset['theme']).toBe('natal');
 

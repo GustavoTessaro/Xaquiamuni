@@ -18,7 +18,6 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       headers: { 'Content-Type':'application/json', 'X-XSRF-TOKEN':requestToken, 'Idempotency-Key':crypto.randomUUID() },
       body: JSON.stringify(${JSON.stringify(corpo)}),
     });
-    if (!r.ok) throw new Error('${metodo} ${rota}: HTTP ' + r.status);
     return ${lerCorpo} ? { status: r.status, corpo: await r.json() } : r.status;
   })()`);
   const teclado = async (key, code, windowsVirtualKeyCode) => {
@@ -36,6 +35,7 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     '/admin/configuracoes/pix-manual', '/admin/vendas-externas', '/admin/estoque/produtos-acabados',
     '/admin/estoque/insumos', '/admin/estoque/insumos/entradas', '/admin/estoque/insumos/novo',
     '/admin/fornecedores', '/admin/compras', '/admin/receitas', '/admin/producao', '/admin/temas',
+    '/admin/configuracoes/atendimento',
   ];
 
   await abrirAdmin('/admin/financeiro');
@@ -136,10 +136,14 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       }
       await alternar('dark');
     }
-    console.log('Modo ADMIN em ' + width + ' px: 19 URLs nos dois modos, contraste de títulos, campos e alertas, foco, recarga, sessão, conta, agenda e produção reais.');
+    console.log('Modo ADMIN em ' + width + ' px: 20 URLs nos dois modos, contraste de títulos, campos e alertas, foco, recarga, sessão, conta, agenda e produção reais.');
   }
 
   let itemAdicionado = false;
+  const atendimento = '/api/admin/loja/atendimento';
+  assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
+    numero: '+5554999990000', confirmado: true, habilitado: true, revisao: 0,
+  }), 200);
   const temas = ['original','natal','black-friday','pascoa','ano-novo','dia-das-maes'];
   for (const width of [375, 1280]) {
     await viewport(a, width);
@@ -157,6 +161,7 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       const temaPronto = `document.querySelector('app-store-layout')?.dataset.theme === '${chavePublica}'`;
       if (await a.ev(tema) !== 'light') await alternar('light');
       await abrir(c, '/', temaPronto);
+      await waitFor(() => c.ev("!!document.querySelector('a[href^=\"https://wa.me/5554999990000\"]')"), 'Contato autorizado');
       const referencia = await layout(c);
       assert.equal(referencia[2], false);
       assert.equal(!!referencia[1], chavePublica !== 'original');
@@ -180,5 +185,68 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       assert.deepEqual(await a.ev("fetch('/api/loja/tema').then(r=>r.json())"), atual);
       console.log('Tema ' + chavePublica + ' em ' + width + ' px: loja, catálogo, detalhe, carrinho, checkout, login e prévia isolados.');
     }
+  }
+
+  const botaoTexto = (texto, contexto) => waitFor(() => contexto.ev(`(() => {
+    const botao = [...document.querySelectorAll('main button')].find(e => e.textContent.trim() === ${JSON.stringify(texto)});
+    if (!botao || botao.disabled) return false;
+    botao.click();
+    return true;
+  })()`), texto);
+  const campo = (contexto, seletor, valor) => contexto.ev(`(() => {
+    const campo = document.querySelector(${JSON.stringify(seletor)});
+    campo.value = ${JSON.stringify(valor)};
+    campo.dispatchEvent(new Event(campo.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+  })()`);
+  await viewport(a, 375);
+  console.log('Entrega própria: cadastro de cidade pelo formulário ADMIN.');
+  await abrirAdmin('/admin/configuracoes/atendimento');
+  await waitFor(() => a.ev("!!document.querySelector('input[name=tarifa]')"), 'Formulário de cidades');
+  for (const [seletor, valor] of Object.entries({ cidade: 'Vacaria', uf: 'RS', ibge: '4322509', tarifa: '12,50' }))
+    await campo(a, `input[name=${seletor}]`, valor);
+  await a.ev("document.querySelector('input[name=ativa]').click()");
+  await botaoTexto('Salvar cidade', a);
+  await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Vacaria/RS')"), 'Cidade gravada');
+  await a.ev("document.querySelector('input[name=entrega]').click()");
+  await botaoTexto('Salvar modalidades', a);
+  await waitFor(() => a.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json()).then(x=>x.entregaPropria)"), 'Entrega própria habilitada');
+  console.log('Entrega própria: modalidade habilitada e cidade ativa.');
+
+  for (const width of [375, 1280]) {
+    await viewport(c, width);
+    await viewport(a, width);
+    if (width === 1280) {
+      await abrir(c, '/produtos/' + dados.produtoFinanceiro, '!!document.querySelector("#product-name")');
+      await botaoTexto('Adicionar ao carrinho', c);
+    }
+    await abrir(c, '/checkout', "!!document.querySelector('#modalidade-entrega option[value=EntregaPropria]')");
+    await campo(c, '#modalidade-entrega', 'EntregaPropria');
+    await c.ev("document.querySelector('main input[type=checkbox]').click()");
+    const campos = ['95200-000', 'RS', 'Vacaria', 'Centro', 'Rua do ensaio', '12'];
+    for (let i = 0; i < campos.length; i++)
+      await campo(c, `main fieldset label:nth-of-type(${i + 1}) input`, campos[i]);
+    await botaoTexto('Consultar valores de entrega', c);
+    await waitFor(() => c.ev("document.querySelector('main').textContent.includes('24,49')"), 'Total com frete');
+    console.log(`Entrega própria em ${width} px: cotação real confirmada.`);
+    assert.ok(await semEstouro(c));
+    await botaoTexto('Confirmar valor e finalizar compra', c);
+    const id = await waitFor(() => c.ev("location.pathname.startsWith('/pedidos/') && location.pathname.split('/').at(-1)"), 'Pedido entregue pela loja');
+    const rota = '/admin/pedidos/' + id;
+    await waitFor(() => c.ev("document.querySelector('main')?.textContent.includes('Rua do ensaio')"), 'Destino congelado');
+    await abrirAdmin(rota);
+    await botaoTexto('Confirmar pagamento', a);
+    await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
+    await botaoTexto('Registrar confirmação', a);
+    await botaoTexto('Iniciar preparação', a);
+    await botaoTexto('Confirmar início', a);
+    await botaoTexto('Iniciar entrega própria', a);
+    await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
+    await botaoTexto('Registrar saída e baixar estoque', a);
+    await botaoTexto('Confirmar recebimento', a);
+    await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
+    await botaoTexto('Registrar recebimento', a);
+    await waitFor(() => a.ev("document.querySelector('main dl')?.textContent.includes('Entregue')"), 'Recebimento registrado');
+    assert.ok(await semEstouro(a));
+    console.log(`Entrega própria em ${width} px: endereço, frete, total e ações administrativas confirmados.`);
   }
 }

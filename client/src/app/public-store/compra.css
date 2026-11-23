@@ -97,7 +97,30 @@ a {
   cursor: default;
 }
 
-:is(a, button):focus-visible {
+.resumo :is(select, input:not([type='checkbox'])) {
+  min-height: 44px;
+  min-width: 0;
+  color: var(--brand-green);
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius-sm);
+  padding-inline: 0.5rem;
+}
+
+.consulta-entrega {
+  justify-self: start;
+  min-height: 44px;
+  color: var(--brand-link);
+  text-align: start;
+  text-decoration: underline;
+}
+
+.consulta-entrega:disabled {
+  color: var(--brand-green);
+  text-decoration: none;
+}
+
+:is(a, button, select, input):focus-visible {
   outline: 2px solid var(--brand-green);
   outline-offset: 3px;
 }

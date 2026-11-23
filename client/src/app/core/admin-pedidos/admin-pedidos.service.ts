@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, switchMap, timeout } from 'rxjs';
+import { Observable, map, switchMap, timeout } from 'rxjs';
 import type { PedidoCliente } from '../../public-store/pedidos.service';
 import { CsrfService } from '../security/csrf.service';
 
@@ -26,7 +26,10 @@ export interface PaginaPedidosAdmin {
 export interface DetalhePedidoAdmin {
   pedido: PedidoCliente;
   cliente: { nome: string; email: string | null };
+  etag?: string | null;
 }
+
+export type AcaoEntregaPropria = 'iniciar-entrega-propria' | 'confirmar-recebimento';
 
 export interface ResultadoPedidoAdmin {
   id: string;
@@ -53,7 +56,21 @@ export class AdminPedidosService {
   }
 
   consultar(id: string): Observable<DetalhePedidoAdmin> {
-    return this.http.get<DetalhePedidoAdmin>(this.urlPedido(id)).pipe(timeout(30_000));
+    return this.http.get<DetalhePedidoAdmin>(this.urlPedido(id), { observe: 'response' }).pipe(
+      timeout(30_000),
+      map(resposta => ({ ...resposta.body!, etag: resposta.headers.get('ETag') })),
+    );
+  }
+
+  entregaPropria(id: string, acao: AcaoEntregaPropria, etag: string, chave: string) {
+    return this.csrf.getRequestToken().pipe(
+      switchMap(({ requestToken }) =>
+        this.http.post<ResultadoPedidoAdmin>(`${this.urlPedido(id)}/${acao}`, { confirmado: true }, {
+          headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave, 'If-Match': etag },
+        }),
+      ),
+      timeout(30_000),
+    );
   }
 
   confirmarPagamento(id: string): Observable<ResultadoPedidoAdmin> {

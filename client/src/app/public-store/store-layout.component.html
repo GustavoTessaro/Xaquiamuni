@@ -10,5 +10,6 @@
 <app-store-header />
 <main class="store-main">
   <router-outlet />
+  @if (!contexto.preview) { <app-contato-whatsapp /> }
 </main>
 <app-store-footer />

@@ -59,13 +59,46 @@
       </ul>
       <section class="painel resumo" aria-labelledby="checkout-summary">
         <h2 id="checkout-summary">Resumo</h2>
-        <p>Modalidade: <strong>Retirada local</strong></p>
-        <p>
-          Subtotal estimado: <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong>
-        </p>
+        @if (!checkout.pendente()) {
+          @if (modalidades(); as opcoes) {
+            <label for="modalidade-entrega">Modalidade de recebimento</label>
+            <select id="modalidade-entrega" [ngModel]="modalidade()" (ngModelChange)="modalidade.set($event)" [disabled]="checkout.enviando()">
+              @if (opcoes.retiradaLocal) { <option value="RetiradaLocal">Retirada na loja</option> }
+              @if (opcoes.entregaPropria) { <option value="EntregaPropria">Entrega própria</option> }
+            </select>
+            @if (modalidade() === 'EntregaPropria') {
+              <label>
+                <input type="checkbox" [ngModel]="usarPadrao()" (ngModelChange)="usarPadrao.set($event)" />
+                Usar meu endereço cadastrado
+              </label>
+              @if (!usarPadrao()) {
+                <fieldset class="min-w-0 grid gap-2">
+                  <legend>Endereço para este pedido</legend>
+                  @for (campo of camposEndereco; track campo.campo) {
+                    <label>
+                      {{ campo.rotulo }}
+                      <input class="block w-full min-w-0" [ngModel]="endereco()[campo.campo]" (ngModelChange)="alterarEndereco(campo.campo, $event)"
+                        [maxlength]="campo.limite" [required]="campo.campo !== 'complemento'"
+                        [attr.inputmode]="campo.campo === 'cep' ? 'numeric' : null" />
+                    </label>
+                  }
+                </fieldset>
+              }
+            }
+            <button class="consulta-entrega" type="button" (click)="cotar()" [disabled]="cotando() || consultando() || indisponivel() || !valido() || checkout.enviando()">
+              Consultar valores de entrega
+            </button>
+            @if (cotando()) { <p role="status">Consultando valores…</p> }
+          } @else {
+            <button type="button" (click)="carregarModalidades()">Atualizar opções de recebimento</button>
+          }
+        }
+        @if (!oferta()) {
+          <p>Subtotal estimado: <strong>{{ formatarPreco(carrinho.subtotalCentavos()) }}</strong></p>
+        }
         <p>O servidor revalida preços e disponibilidade ao criar o pedido.</p>
         @if (precoMudou() && !checkout.pendente()) {
-          <p role="alert" class="aviso">Os preços mudaram. Confira os valores atuais antes de confirmar.</p>
+          <p role="alert" class="aviso">Os valores ou as condições de entrega mudaram. Confira a nova cotação antes de confirmar.</p>
         }
         @if (consultando() && !checkout.pendente()) {
           <p role="status">Consultando disponibilidade…</p>
@@ -80,13 +113,21 @@
           </p>
         }
         @if (!checkout.pendente()) {
+          @if (oferta(); as selecionada) {
+            <app-dados-entrega [modalidade]="selecionada.modalidade" [dados]="selecionada.dadosEntrega" />
+            <p>Subtotal dos produtos: <strong>{{ formatarPreco(subtotalOferta()) }}</strong></p>
+            <p>Frete: <strong>{{ formatarPreco(selecionada.freteCentavos) }}</strong></p>
+            <p>Total final: <strong>{{ formatarPreco(selecionada.totalCentavos) }}</strong></p>
+            <p>Cotação válida até {{ selecionada.validaAteUtc | date:'HH:mm:ss' }}.</p>
+          }
           <button
+            data-acao="finalizar"
             class="principal"
             type="button"
             (click)="enviar(false)"
-            [disabled]="checkout.enviando() || consultando() || indisponivel() || !valido()"
+            [disabled]="checkout.enviando() || consultando() || indisponivel() || !valido() || !oferta()"
           >
-            {{ precoMudou() ? 'Confirmar preços atuais' : 'Finalizar compra' }}
+            Confirmar valor e finalizar compra
           </button>
         }
         <a routerLink="/carrinho">Voltar ao carrinho</a>

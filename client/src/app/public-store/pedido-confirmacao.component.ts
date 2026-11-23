@@ -7,11 +7,12 @@ import { EMPTY, Subject, catchError, finalize, of, startWith, switchMap } from '
 import { formatarCentavos } from './carrinho.service';
 import { PrecoExibidoComponent } from './preco-exibido.component';
 import { PedidoPixComponent } from './pedido-pix.component';
+import { DadosEntregaComponent } from '../shared/dados-entrega.component';
 import { PedidoCliente, PedidosService, situacoesPedido, uuidValido } from './pedidos.service';
 
 @Component({
   selector: 'app-pedido-confirmacao',
-  imports: [DatePipe, RouterLink, PedidoPixComponent, PrecoExibidoComponent],
+  imports: [DatePipe, RouterLink, PedidoPixComponent, PrecoExibidoComponent, DadosEntregaComponent],
   templateUrl: './pedido-confirmacao.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,

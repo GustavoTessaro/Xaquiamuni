@@ -36,6 +36,7 @@ import {
 import { formatarCentavos } from '../../public-store/carrinho.service';
 import { situacoesPedido, uuidValido } from '../../public-store/pedidos.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
+import { DadosEntregaComponent } from '../../shared/dados-entrega.component';
 
 const acoes = {
   pagamento: {
@@ -81,6 +82,23 @@ const acoes = {
     sucesso: 'Entrega registrada.',
     repetida: 'A entrega deste pedido já estava registrada.',
   },
+  saidaPropria: {
+    rotulo: 'Iniciar entrega própria',
+    titulo: 'Confirmar saída da loja',
+    enviar: 'Registrar saída e baixar estoque',
+    orientacao: 'A saída física consome a reserva e registra a baixa definitiva de estoque.',
+    declaracao: 'A preparação terminou e os produtos saíram da loja.',
+    sucesso: 'Pedido em entrega.',
+    repetida: 'A saída já estava registrada.',
+  },
+  recebimento: {
+    rotulo: 'Confirmar recebimento',
+    titulo: 'Confirmar recebimento pelo cliente',
+    enviar: 'Registrar recebimento',
+    declaracao: 'O cliente recebeu os produtos.',
+    sucesso: 'Recebimento registrado.',
+    repetida: 'O recebimento já estava registrado.',
+  },
 };
 
 type Acao = keyof typeof acoes;
@@ -91,7 +109,7 @@ type EstadoDetalhe =
 
 @Component({
   selector: 'app-admin-pedido-detalhe',
-  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent],
+  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent, DadosEntregaComponent],
   templateUrl: './admin-pedido-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -108,6 +126,7 @@ export class AdminPedidoDetalheComponent {
   private readonly titulo = viewChild<ElementRef<HTMLElement>>('titulo');
   private readonly agora = signal(Date.now());
   private readonly prazoEncerradoServidor = signal(false);
+  private tentativaEntrega?: { id: string; acao: Acao; etag: string; chave: string };
 
   protected readonly estado = signal<EstadoDetalhe>({ tipo: 'carregando' });
   protected readonly acao = signal<Acao | null>(null);
@@ -140,7 +159,9 @@ export class AdminPedidoDetalheComponent {
       case 'PagamentoConfirmado':
         return ['preparacao'];
       case 'EmPreparacao':
-        return ['retirada'];
+        return this.pedido()?.modalidadeEntrega === 'EntregaPropria' ? ['saidaPropria'] : ['retirada'];
+      case 'EmEntrega':
+        return this.pedido()?.modalidadeEntrega === 'EntregaPropria' ? ['recebimento'] : [];
       case 'ProntoParaRetirada':
         return ['entrega'];
       default:
@@ -157,6 +178,7 @@ export class AdminPedidoDetalheComponent {
           this.prazoEncerradoServidor.set(false);
           this.sucesso.set('');
           this.erro.set('');
+          this.tentativaEntrega = undefined;
           this.limparAcao();
         }),
         switchMap((id) =>
@@ -263,6 +285,13 @@ export class AdminPedidoDetalheComponent {
       return;
     }
 
+    const estadoAntes = this.estado();
+    const etag = estadoAntes.tipo === 'pronto' ? estadoAntes.dados.etag : null;
+    const entregaPropria = acao === 'saidaPropria' || acao === 'recebimento';
+    if (entregaPropria && !etag) {
+      this.tratarConflito('versao_desatualizada');
+      return;
+    }
     this.enviando.set(true);
     this.erro.set('');
     const { id } = pedido;
@@ -272,6 +301,15 @@ export class AdminPedidoDetalheComponent {
       preparacao: () => this.pedidos.iniciarPreparacao(id),
       retirada: () => this.pedidos.liberarRetirada(id),
       entrega: () => this.pedidos.confirmarEntrega(id),
+      saidaPropria: () => executarEntrega('iniciar-entrega-propria'),
+      recebimento: () => executarEntrega('confirmar-recebimento'),
+    };
+    const executarEntrega = (rota: 'iniciar-entrega-propria' | 'confirmar-recebimento') => {
+      const anterior = this.tentativaEntrega;
+      const tentativa = anterior?.id === id && anterior.acao === acao && anterior.etag === etag
+        ? anterior : { id, acao, etag: etag!, chave: crypto.randomUUID() };
+      this.tentativaEntrega = tentativa;
+      return this.pedidos.entregaPropria(id, rota, tentativa.etag, tentativa.chave);
     };
     const operacao = operacoes[acao]();
     operacao
@@ -283,6 +321,7 @@ export class AdminPedidoDetalheComponent {
         next: (resultado) => {
           const estado = this.estado();
           if (estado.tipo !== 'pronto' || estado.dados.pedido.id !== pedido.id) return;
+          if (entregaPropria) this.tentativaEntrega = undefined;
           this.estado.set({
             tipo: 'pronto',
             dados: {
@@ -292,7 +331,7 @@ export class AdminPedidoDetalheComponent {
           });
           this.sucesso.set(resultado.repetida ? acoes[acao].repetida : acoes[acao].sucesso);
           this.limparAcao();
-          if (acao === 'preparacao' || acao === 'retirada' || acao === 'entrega') {
+          if (entregaPropria || acao === 'preparacao' || acao === 'retirada' || acao === 'entrega') {
             this.recarregar();
           }
           this.titulo()?.nativeElement.focus();
@@ -310,6 +349,7 @@ export class AdminPedidoDetalheComponent {
       this.estado.set({ tipo: 'erro', status });
       this.titulo()?.nativeElement.focus();
     } else if (falha instanceof HttpErrorResponse && status === 409) {
+      this.tentativaEntrega = undefined;
       this.tratarConflito(falha.error?.codigo);
     } else if (status === 400) {
       this.erro.set('A solicitação foi recusada. Revise os dados e tente novamente.');
@@ -341,6 +381,7 @@ export class AdminPedidoDetalheComponent {
         'O saldo dos lotes reservados é insuficiente para a entrega. Verifique o estoque antes de tentar novamente.',
       ],
       ['conflito_concorrencia', 'Outra operação está atualizando este pedido.'],
+      ['versao_desatualizada', 'O pedido mudou. Confira os dados atualizados antes de confirmar novamente.'],
     ]);
     if (codigo === 'prazo_encerrado') this.prazoEncerradoServidor.set(true);
     this.erro.set(mensagens.get(String(codigo)) ?? 'O pedido mudou. Consulte a situação atual.');

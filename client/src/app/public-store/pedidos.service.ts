@@ -4,6 +4,7 @@ import { map, timeout } from 'rxjs';
 import { CsrfService } from '../core/security/csrf.service';
 import { precoValido } from './catalogo-formatacao';
 import type { PrecoCatalogo } from './catalogo-publico.service';
+import type { DadosEntrega, ModalidadeEntrega } from '../core/atendimento.service';
 
 const url = '/api/pedidos';
 export const limiteItensPedido = 100;
@@ -13,6 +14,7 @@ export const situacoesPedido = {
   PagamentoConfirmado: 'Pagamento confirmado',
   EmPreparacao: 'Em preparação',
   ProntoParaRetirada: 'Pronto para retirada',
+  EmEntrega: 'Em entrega',
   Entregue: 'Entregue',
   Cancelado: 'Cancelado',
   Expirado: 'Expirado',
@@ -43,7 +45,10 @@ export interface ItemPedido extends ItemCompra {
 export interface PedidoCliente {
   id: string;
   situacao: keyof typeof situacoesPedido;
-  modalidadeEntrega: 'RetiradaLocal';
+  modalidadeEntrega: ModalidadeEntrega;
+  entrega?: DadosEntrega | null;
+  subtotalProdutosCentavos?: string;
+  freteCentavos?: string;
   criadoEmUtc: string;
   prazoPagamentoEmUtc: string;
   totalCentavos: string;
@@ -112,11 +117,12 @@ export class PedidosService {
     return this.csrf.getRequestToken().pipe(timeout(30_000));
   }
 
-  criar(itens: readonly ItemCompra[], chave: string, requestToken: string) {
+  criar(itens: readonly ItemCompra[], chave: string, requestToken: string, ofertaEntregaId?: string) {
     return this.http
       .post<PedidoCliente>(
         url,
         {
+          ...(ofertaEntregaId === undefined ? {} : { ofertaEntregaId }),
           itens: itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }) => ({
             produtoId,
             produtoVarianteId,
@@ -175,7 +181,7 @@ function lerPedido(
     !body ||
     !uuidValido(body.id) ||
     !Object.hasOwn(situacoesPedido, body.situacao) ||
-    body.modalidadeEntrega !== 'RetiradaLocal' ||
+    (body.modalidadeEntrega !== 'RetiradaLocal' && body.modalidadeEntrega !== 'EntregaPropria') ||
     !dataUtcValida(body.criadoEmUtc) ||
     !dataUtcValida(body.prazoPagamentoEmUtc) ||
     !centavosValidos(body.totalCentavos) ||

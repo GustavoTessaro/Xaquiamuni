@@ -20,12 +20,14 @@ interface TentativaCompra {
   chave: string;
   vinculo: string;
   itens: ItemCompra[];
+  ofertaEntregaId?: string;
 }
 
 export type ResultadoCheckout =
   | { estado: 'login' }
   | { estado: 'erro'; mensagem: string }
   | { estado: 'preco_alterado' }
+  | { estado: 'oferta_alterada' }
   | { estado: 'sucesso'; pedido: PedidoCliente };
 
 @Injectable({ providedIn: 'root' })
@@ -43,14 +45,14 @@ export class CheckoutService {
     this.pendenteInterna.set(lerTentativaCompra(this.janela));
   }
 
-  async enviar(itens: ItemCompra[], recuperar: boolean): Promise<ResultadoCheckout | null> {
+  async enviar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string): Promise<ResultadoCheckout | null> {
     if (this.enviando()) {
       return null;
     }
 
     this.enviandoInterno.set(true);
     try {
-      const executar = () => this.processar(itens, recuperar);
+      const executar = () => this.processar(itens, recuperar, ofertaEntregaId);
       const locks = this.janela?.navigator.locks;
       return await (locks
         ? locks.request(chaveLocal, { ifAvailable: true }, (lock) =>
@@ -74,7 +76,7 @@ export class CheckoutService {
     }
   }
 
-  private async processar(itens: ItemCompra[], recuperar: boolean): Promise<ResultadoCheckout> {
+  private async processar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string): Promise<ResultadoCheckout> {
     const armazenamento = this.janela?.localStorage;
     if (!armazenamento)
       return erro('Permita o armazenamento local para registrar a tentativa de compra.');
@@ -134,7 +136,7 @@ export class CheckoutService {
       return erro('Entre com a conta usada na tentativa original para recuperar a compra.');
     }
 
-    const tentativa = anterior ?? { chave: this.janela.crypto.randomUUID(), vinculo, itens };
+    const tentativa = anterior ?? { chave: this.janela.crypto.randomUUID(), vinculo, itens, ofertaEntregaId };
     if (!anterior) {
       armazenamento.setItem(chaveLocal, JSON.stringify(tentativa));
       this.pendenteInterna.set(tentativa);
@@ -143,7 +145,7 @@ export class CheckoutService {
     let pedido: PedidoCliente;
     try {
       pedido = await firstValueFrom(
-        this.pedidos.criar(tentativa.itens, tentativa.chave, requestToken),
+        this.pedidos.criar(tentativa.itens, tentativa.chave, requestToken, tentativa.ofertaEntregaId),
       );
     } catch (falha) {
       return this.tratarFalha(falha, !!anterior, armazenamento);
@@ -182,6 +184,10 @@ export class CheckoutService {
           this.carrinho.atualizarPrecos(dados.precosAtuais.filter(p => p && typeof p === 'object'));
         return { estado: 'preco_alterado' };
       }
+      if (falha.status === 409 && codigo === 'oferta_entrega_invalida') {
+        armazenamento.removeItem(chaveLocal);
+        return { estado: 'oferta_alterada' };
+      }
       if (falha.status === 409 && codigo === 'chave_em_uso') {
         return erro(
           'A tentativa entrou em conflito com um pedido registrado. Ela foi preservada para evitar uma segunda compra.',
@@ -214,13 +220,16 @@ export function lerTentativaCompra(janela: Window | null): TentativaCompra | nul
       !uuidValido(tentativa.chave) ||
       typeof tentativa.vinculo !== 'string' ||
       !/^[a-f0-9]{64}$/.test(tentativa.vinculo) ||
-      !itensCompraValidos(tentativa.itens)
+      !itensCompraValidos(tentativa.itens) ||
+      (tentativa.ofertaEntregaId !== undefined &&
+        (typeof tentativa.ofertaEntregaId !== 'string' || !tentativa.ofertaEntregaId || tentativa.ofertaEntregaId.length > 16000))
     ) {
       return null;
     }
     return {
       chave: tentativa.chave,
       vinculo: tentativa.vinculo,
+      ofertaEntregaId: tentativa.ofertaEntregaId,
       itens: tentativa.itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }: ItemCompra) => ({
         produtoId,
         produtoVarianteId,

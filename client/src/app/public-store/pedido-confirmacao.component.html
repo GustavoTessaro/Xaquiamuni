@@ -28,7 +28,14 @@
         <p>
           Número do pedido: <strong class="identificador">{{ confirmado.id }}</strong>
         </p>
-        <p>Modalidade: <strong>Retirada local</strong></p>
+        <app-dados-entrega [modalidade]="confirmado.modalidadeEntrega" [dados]="confirmado.entrega" />
+        @if (confirmado.situacao === 'EmEntrega') {
+          <p>O pedido saiu da loja e está a caminho do endereço informado.</p>
+        } @else if (confirmado.situacao === 'ProntoParaRetirada') {
+          <p>Seu pedido está pronto para retirada.</p>
+        }
+        <p>Subtotal: <strong>{{ formatarPreco(confirmado.subtotalProdutosCentavos ?? confirmado.totalCentavos) }}</strong></p>
+        <p>Frete: <strong>{{ formatarPreco(confirmado.freteCentavos ?? '0') }}</strong></p>
         <p>
           Total: <strong>{{ formatarPreco(confirmado.totalCentavos) }}</strong>
         </p>

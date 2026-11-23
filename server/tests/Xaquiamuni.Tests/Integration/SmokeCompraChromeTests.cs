@@ -147,7 +147,8 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                 nomeBanco = db.NomeBanco;
                 conexaoMaster = new SqlConnectionStringBuilder(db.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
                 var relogio = jornada ? new RelogioJornadaCompra() : null;
-                await using (var host = new HostE2ECompra(db, dist, temporario, relogio))
+                await using (var host = new HostE2ECompra(db, dist, temporario, relogio,
+                    municipiosPorCep: modoAdmin ? new Dictionary<string, string> { ["95200000"] = "4322509" } : null))
                 {
                     endereco = new Uri(host.Origin);
                     Assert.Equal("https", endereco.Scheme);

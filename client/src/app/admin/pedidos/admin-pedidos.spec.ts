@@ -104,7 +104,9 @@ describe('Pedidos administrativos', () => {
     expect(harness.routeNativeElement!.querySelector('[role=status]')?.textContent).toContain(
       'Carregando pedido',
     );
-    http.expectOne({ method: 'GET', url: `${api}/${id}` }).flush(dados);
+    http.expectOne({ method: 'GET', url: `${api}/${id}` }).flush(dados, {
+      headers: { ETag: '"AAAAAAAAAAE="' },
+    });
     harness.detectChanges();
     return harness;
   }
@@ -243,7 +245,7 @@ describe('Pedidos administrativos', () => {
       const harness = await abrirPedido();
       const view = harness.routeNativeElement!;
       expect(view.textContent).toContain('cliente@example.test');
-      expect(view.textContent).toContain('Retirada local');
+      expect(view.textContent).toContain('Retirada na loja');
       expect(view.textContent).toContain('Sabonete · Lavanda');
       expect(view.textContent).toContain('92.233.720.368.547.758,07');
       expect(view.querySelector(`time[datetime="${prazo}"]`)).not.toBeNull();
@@ -388,6 +390,49 @@ describe('Pedidos administrativos', () => {
     caixa.click();
     harness.detectChanges();
   }
+
+  it('registra saída e recebimento com versões diferentes e proteção contra duplo envio', async () => {
+    const dados = comSituacao('EmPreparacao');
+    dados.pedido = {
+      ...dados.pedido, modalidadeEntrega: 'EntregaPropria', subtotalProdutosCentavos: '250', freteCentavos: '1250',
+      totalCentavos: '1500', entrega: { destino: {
+        logradouro: 'Rua das Flores', numero: '8', bairro: 'Centro', cidade: 'Vacaria', uf: 'RS',
+        cep: '95200000', codigoIbge: '4322509', complemento: null,
+      }, cidadeId: null, enderecoRetirada: null, instrucoesRetirada: null },
+    };
+    const harness = await abrirPedido(dados);
+    expect(harness.routeNativeElement!.textContent).toContain('Rua das Flores');
+    expect(harness.routeNativeElement!.textContent).not.toContain('Liberar para retirada');
+    const executar = (acao: string, rota: string, versao: string) => {
+      clicar(harness, acao);
+      const form = harness.routeNativeElement!.querySelector('[aria-labelledby="pedido-acoes"] form')!;
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      http.expectNone('/api/auth/csrf');
+      declararEntrega(harness);
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      form.dispatchEvent(new Event('submit', { cancelable: true }));
+      const post = enviarComando(rota);
+      expect(post.request.body).toEqual({ confirmado: true });
+      expect(post.request.headers.get('If-Match')).toBe(versao);
+      expect(post.request.headers.get('Idempotency-Key')).toMatch(/^[a-f0-9-]{36}$/i);
+      return post;
+    };
+    const saida = executar('Iniciar entrega própria', 'iniciar-entrega-propria', '"AAAAAAAAAAE="');
+    saida.flush({ id, situacao: 'EmEntrega', repetida: false });
+    http.expectOne({ method: 'GET', url: `${api}/${id}` }).flush({
+      ...dados, pedido: { ...dados.pedido, situacao: 'EmEntrega' },
+    }, { headers: { ETag: '"AAAAAAAAAAI="' } });
+    harness.detectChanges();
+    const recebimento = executar('Confirmar recebimento', 'confirmar-recebimento', '"AAAAAAAAAAI="');
+    expect(recebimento.request.headers.get('Idempotency-Key')).not.toBe(saida.request.headers.get('Idempotency-Key'));
+    recebimento.flush({ codigo: 'versao_desatualizada' }, { status: 409, statusText: 'Conflict' });
+    http.expectOne({ method: 'GET', url: `${api}/${id}` }).flush({
+      ...dados, pedido: { ...dados.pedido, situacao: 'Entregue' },
+    });
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.textContent).toContain('Entregue');
+    expect(harness.routeNativeElement!.textContent).not.toContain('Confirmar recebimento');
+  });
 
   it.each(etapas.flatMap((etapa) => [false, true].map((repetida) => ({ ...etapa, repetida }))))(
     '$acao solicita confirmação, atualiza pela API e trata repetição $repetida',

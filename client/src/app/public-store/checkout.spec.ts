@@ -153,18 +153,38 @@ describe('checkout integrado aos contratos HTTP', () => {
     return post;
   }
 
+  async function modalidades(harness: RouterTestingHarness, entregaPropria = false) {
+    http.expectOne('/api/loja/modalidades-entrega').flush({ retiradaLocal: true, entregaPropria });
+    await Promise.resolve();
+    harness.detectChanges();
+  }
+
+  async function responderCotacao(harness: RouterTestingHarness, id: string, totalCentavos: string) {
+    await vi.waitFor(() => http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-cotacao' }));
+    http.expectOne('/api/checkout/cotacoes-entrega').flush({
+      ofertas: [{ id, modalidade: 'RetiradaLocal', validaAteUtc: new Date(Date.now() + 60_000).toISOString(),
+        freteCentavos: '0', totalCentavos, dadosEntrega: {} }],
+      precosAtuais: [],
+    });
+    await Promise.resolve();
+    harness.detectChanges();
+  }
+
   it('cria uma vez com a condição aceita e mostra o valor congelado', async () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness);
     const view = harness.routeNativeElement!;
-    expect(view.textContent).toContain('Retirada local');
+    expect(view.textContent).toContain('Retirada na loja');
     expect(view.textContent).toContain('2,50');
-    const botao = view.querySelector<HTMLButtonElement>('button')!;
+    view.querySelector<HTMLButtonElement>('button')!.click();
+    await responderCotacao(harness, 'oferta-retirada', '250');
+    const botao = view.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')!;
     expect(botao.type).toBe('button');
     botao.click();
     botao.click();
     const post = await postAposCsrf();
-    expect(post.request.body).toEqual({ itens: [{ ...item, precoAceitoCentavos: '250' }] });
+    expect(post.request.body).toEqual({ ofertaEntregaId: 'oferta-retirada', itens: [{ ...item, precoAceitoCentavos: '250' }] });
     expect(post.request.headers.get('Idempotency-Key')).toMatch(/^[a-f0-9-]{36}$/i);
     expect(localStorage.getItem(chaveLocal)).not.toContain(clienteId);
     expect(localStorage.getItem(chaveLocal)).not.toContain('token-de-teste');
@@ -197,7 +217,10 @@ describe('checkout integrado aos contratos HTTP', () => {
   it('apresenta o preço atual e só reenvia após confirmação explícita com nova chave', async () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness);
     harness.routeNativeElement!.querySelector('button')!.click();
+    await responderCotacao(harness, 'oferta-antiga', '250');
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')!.click();
     const primeira = await postAposCsrf();
     expect(primeira.request.body.itens[0].precoAceitoCentavos).toBe('250');
     primeira.flush({
@@ -210,12 +233,14 @@ describe('checkout integrado aos contratos HTTP', () => {
     }, { status: 409, statusText: 'Conflict' });
     await vi.waitFor(() => {
       harness.detectChanges();
-      expect(harness.routeNativeElement!.textContent).toContain('Confirmar preços atuais');
+      expect(harness.routeNativeElement!.textContent).toContain('Confira a nova cotação');
     });
     expect(harness.routeNativeElement!.textContent).toContain('3,00');
     expect(checkout.pendente()).toBeNull();
     http.expectNone({ method: 'POST', url: '/api/pedidos' });
-    harness.routeNativeElement!.querySelector('button')!.click();
+    await modalidades(harness);
+    await responderCotacao(harness, 'oferta-nova', '300');
+    harness.routeNativeElement!.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')!.click();
     const segunda = await postAposCsrf();
     expect(segunda.request.headers.get('Idempotency-Key')).not.toBe(primeira.request.headers.get('Idempotency-Key'));
     expect(segunda.request.body.itens[0].precoAceitoCentavos).toBe('300');
@@ -223,6 +248,7 @@ describe('checkout integrado aos contratos HTTP', () => {
     await vi.waitFor(() => expect(checkout.enviando()).toBe(false));
     const restaurado = TestBed.runInInjectionContext(() => new CheckoutService());
     expect(restaurado.pendente()?.itens[0].precoAceitoCentavos).toBe('300');
+    expect(restaurado.pendente()?.ofertaEntregaId).toBe('oferta-nova');
     expect(restaurado.pendente()?.chave).toBe(segunda.request.headers.get('Idempotency-Key'));
     http.expectNone({ method: 'POST', url: '/api/pedidos' });
     const recuperacao = restaurado.enviar([], true);
@@ -245,8 +271,10 @@ describe('checkout integrado aos contratos HTTP', () => {
     sessao = null;
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness);
     harness.routeNativeElement!.querySelector<HTMLButtonElement>('button')!.click();
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'token' });
+    http.expectOne('/api/checkout/cotacoes-entrega').flush(null, { status: 401, statusText: 'Unauthorized' });
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/login?retorno=checkout'));
     http.expectNone('/api/pedidos');
     expect(carrinho.itens()).toHaveLength(1);
@@ -263,6 +291,7 @@ describe('checkout integrado aos contratos HTTP', () => {
     }
     login.querySelector('form')!.dispatchEvent(new Event('submit', { cancelable: true }));
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/checkout'));
+    await modalidades(harness);
     expect(carrinho.itens()).toHaveLength(1);
     http.expectNone('/api/pedidos');
   });
@@ -314,6 +343,50 @@ describe('checkout integrado aos contratos HTTP', () => {
     expect(localStorage.getItem(chaveLocal)).toBeNull();
   });
 
+  it('usa endereço padrão e tarifa do servidor, rejeita destino incompatível e bloqueia oferta vencida', async () => {
+    carrinho.adicionar(produto, varianteId);
+    const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness, true);
+    const view = harness.routeNativeElement!;
+    const seletor = view.querySelector<HTMLSelectElement>('select')!;
+    seletor.value = 'EntregaPropria';
+    seletor.dispatchEvent(new Event('change'));
+    harness.detectChanges();
+    const consultar = view.querySelector<HTMLButtonElement>('.consulta-entrega')!;
+    const finalizar = view.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')!;
+    consultar.click();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+    const incompatível = http.expectOne('/api/checkout/cotacoes-entrega');
+    expect(incompatível.request.body.usarEnderecoPadrao).toBe(true);
+    incompatível.flush({ ofertas: [], precosAtuais: [], motivoEntregaPropriaIndisponivel: 'municipio_nao_atendido' });
+    await Promise.resolve();
+    harness.detectChanges();
+    expect(view.textContent).toContain('município atendido');
+    expect(finalizar.disabled).toBe(true);
+
+    consultar.click();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+    http.expectOne('/api/checkout/cotacoes-entrega').flush({
+      ofertas: [{ id: 'entrega', modalidade: 'EntregaPropria', freteCentavos: '1250', totalCentavos: '1500',
+        validaAteUtc: new Date(Date.now() - 1).toISOString(), dadosEntrega: { destino: {
+          logradouro: 'Rua das Flores', numero: '8', bairro: 'Centro', cidade: 'Vacaria', uf: 'RS', cep: '95200000',
+        } } }],
+      precosAtuais: [],
+    });
+    await Promise.resolve();
+    harness.detectChanges();
+    expect(view.textContent).toContain('Rua das Flores');
+    expect(view.textContent).toContain('12,50');
+    expect(view.textContent).toContain('15,00');
+    finalizar.click();
+    expect(view.querySelector('[data-acao="finalizar"]')).not.toBeNull();
+    http.expectNone('/api/pedidos');
+    await vi.waitFor(() => {
+      harness.detectChanges();
+      expect(finalizar.disabled).toBe(true);
+    });
+  });
+
   it.each([
     [409, 'itens_indisponiveis', false, 'Não há estoque'],
     [409, 'chave_em_uso', true, 'entrou em conflito'],
@@ -348,12 +421,14 @@ describe('checkout integrado aos contratos HTTP', () => {
 
   it('impede novo pedido vazio ou com indisponibilidade conhecida', async () => {
     const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness);
     expect(harness.routeNativeElement!.textContent).toContain('Seu carrinho está vazio.');
     expect(harness.routeNativeElement!.querySelector('button')).toBeNull();
     carrinho.adicionar(produto, varianteId);
     consultarProduto.mockReturnValue(of({ ...produto, opcoes: [{ ...opcao, disponivel: false }] }));
     await harness.navigateByUrl('/login');
     await harness.navigateByUrl('/checkout');
+    await modalidades(harness);
     expect(harness.routeNativeElement!.querySelector('button')?.disabled).toBe(true);
     expect(harness.routeNativeElement!.textContent).toContain('Opção indisponível.');
     http.expectNone('/api/pedidos');

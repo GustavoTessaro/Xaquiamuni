@@ -7,10 +7,11 @@ import { RouterLink, RouterOutlet } from '@angular/router';
 import { StoreFooterComponent } from './store-footer.component';
 import { StoreHeaderComponent } from './store-header.component';
 import { StorefrontContext } from './storefront-context';
+import { ContatoWhatsAppComponent } from './contato-whatsapp.component';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterOutlet, StoreFooterComponent, StoreHeaderComponent],
+  imports: [RouterLink, RouterOutlet, StoreFooterComponent, StoreHeaderComponent, ContatoWhatsAppComponent],
   providers: [StorefrontContext],
   selector: 'app-store-layout',
   host: { '[attr.data-theme]': 'contexto.tema()', '[style]': 'contexto.manifesto()?.sazonal?.tokens' },

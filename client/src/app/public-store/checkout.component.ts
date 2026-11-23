@@ -8,7 +8,12 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
-import { finalize } from 'rxjs';
+import { FormsModule } from '@angular/forms';
+import { DatePipe } from '@angular/common';
+import { finalize, firstValueFrom } from 'rxjs';
+import { HttpErrorResponse } from '@angular/common/http';
+import { AtendimentoService, EnderecoEntrega, ModalidadeEntrega, ModalidadesPublicas, OfertaEntrega } from '../core/atendimento.service';
+import { DadosEntregaComponent } from '../shared/dados-entrega.component';
 import { CarrinhoService, formatarCentavos } from './carrinho.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
 import { CheckoutService } from './checkout.service';
@@ -18,7 +23,7 @@ import { PrecoExibidoComponent } from './preco-exibido.component';
 
 @Component({
   selector: 'app-checkout',
-  imports: [RouterLink, PrecoExibidoComponent],
+  imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, DatePipe],
   templateUrl: './checkout.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,6 +37,30 @@ export class CheckoutComponent {
   protected readonly precoMudou = signal(false);
   private readonly destroy = inject(DestroyRef);
   private readonly router = inject(Router);
+  private readonly atendimento = inject(AtendimentoService);
+  protected readonly modalidades = signal<ModalidadesPublicas | null>(null);
+  protected readonly modalidade = signal<ModalidadeEntrega>('RetiradaLocal');
+  protected readonly usarPadrao = signal(true);
+  protected readonly endereco = signal<EnderecoEntrega>({
+    cep: '', uf: '', cidade: '', bairro: '', logradouro: '', numero: '', complemento: null,
+  });
+  protected readonly camposEndereco = [
+    { campo: 'cep', rotulo: 'CEP', limite: 9 }, { campo: 'uf', rotulo: 'UF', limite: 2 },
+    { campo: 'cidade', rotulo: 'Cidade', limite: 100 }, { campo: 'bairro', rotulo: 'Bairro', limite: 100 },
+    { campo: 'logradouro', rotulo: 'Logradouro', limite: 150 }, { campo: 'numero', rotulo: 'Número', limite: 20 },
+    { campo: 'complemento', rotulo: 'Complemento (opcional)', limite: 100 },
+  ] as const;
+  protected readonly cotando = signal(false);
+  private readonly cotacao = signal<{ chave: string; oferta: OfertaEntrega } | null>(null);
+  private timer?: ReturnType<typeof setTimeout>;
+  protected readonly oferta = computed(() => {
+    const cotacao = this.cotacao();
+    return cotacao?.chave === this.chaveCotacao() ? cotacao.oferta : null;
+  });
+  protected readonly subtotalOferta = computed(() => {
+    const oferta = this.oferta();
+    return oferta ? (BigInt(oferta.totalCentavos) - BigInt(oferta.freteCentavos)).toString() : '0';
+  });
   protected readonly itensCompra = computed(() =>
     this.carrinho.itens().map((item) => ({
       produtoId: item.produtoId,
@@ -59,6 +88,8 @@ export class CheckoutComponent {
 
   constructor() {
     this.checkout.atualizarTentativa();
+    void this.carregarModalidades();
+    this.destroy.onDestroy(() => clearTimeout(this.timer));
     revalidarCarrinho(this.carrinho, inject(CatalogoPublicoService))
       .pipe(
         takeUntilDestroyed(this.destroy),
@@ -69,6 +100,77 @@ export class CheckoutComponent {
       });
   }
 
+  protected async carregarModalidades(): Promise<void> {
+    try {
+      const modalidades = await firstValueFrom(this.atendimento.modalidades().pipe(takeUntilDestroyed(this.destroy)));
+      if (this.destroy.destroyed) return;
+      this.modalidades.set(modalidades);
+      if (!modalidades.retiradaLocal && modalidades.entregaPropria) this.modalidade.set('EntregaPropria');
+      if (modalidades.retiradaLocal && !modalidades.entregaPropria) this.modalidade.set('RetiradaLocal');
+    } catch {
+      if (this.destroy.destroyed) return;
+      this.modalidades.set(null);
+      this.erro.set('Não foi possível consultar as modalidades. Atualize as opções para continuar.');
+    }
+  }
+
+  protected alterarEndereco(campo: keyof EnderecoEntrega, valor: string): void {
+    this.endereco.update(atual => ({ ...atual, [campo]: valor }));
+  }
+
+  private chaveCotacao(): string {
+    return JSON.stringify([this.itensCompra(), this.modalidade(), this.usarPadrao(), this.endereco()]);
+  }
+
+  protected async cotar(): Promise<void> {
+    if (this.cotando() || this.consultando() || !this.valido() || this.indisponivel()) return;
+    const modalidade = this.modalidade();
+    const modalidades = this.modalidades();
+    if (!modalidades || (modalidade === 'RetiradaLocal' ? !modalidades.retiradaLocal : !modalidades.entregaPropria)) return;
+    const destino = modalidade === 'EntregaPropria' ? this.usarPadrao() ? 'padrao' : this.endereco() : undefined;
+    this.erro.set('');
+    this.cotacao.set(null);
+    if (destino && destino !== 'padrao' &&
+        (!/^\d{5}-?\d{3}$/.test(destino.cep.trim()) || !/^[a-z]{2}$/i.test(destino.uf.trim()) ||
+         this.camposEndereco.some(({ campo }) => campo !== 'complemento' && !destino[campo]?.trim()))) {
+      this.erro.set('Preencha o endereço completo, com CEP de oito dígitos e UF.');
+      return;
+    }
+    const chave = this.chaveCotacao();
+    this.cotando.set(true);
+    try {
+      const resultado = await firstValueFrom(this.atendimento.cotar(this.itensCompra(), destino).pipe(
+        takeUntilDestroyed(this.destroy),
+      ));
+      if (this.destroy.destroyed || chave !== this.chaveCotacao()) return;
+      this.carrinho.atualizarPrecos(resultado.precosAtuais);
+      const oferta = resultado.ofertas.find(item => item.modalidade === modalidade);
+      if (!oferta) {
+        const motivos: Record<string, string> = {
+          destino_nao_validado: 'Não foi possível validar o CEP deste endereço. Confira os dados ou informe outro endereço.',
+          municipio_nao_atendido: 'O CEP, a cidade e a UF devem corresponder a um município atendido.',
+          itens_indisponiveis: 'Revise a disponibilidade dos itens do carrinho.',
+        };
+        this.erro.set(motivos[resultado.motivoEntregaPropriaIndisponivel ?? ''] ?? 'Não há cotação para esta modalidade.');
+        return;
+      }
+      this.cotacao.set({ chave: this.chaveCotacao(), oferta });
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => {
+        if (this.cotacao()?.oferta.id !== oferta.id) return;
+        this.cotacao.set(null);
+        if (!this.checkout.pendente()) this.erro.set('A cotação venceu. Consulte os valores novamente.');
+      }, Math.max(0, Date.parse(oferta.validaAteUtc) - Date.now()));
+    } catch (erro) {
+      if (this.destroy.destroyed) return;
+      if (erro instanceof HttpErrorResponse && erro.status === 401)
+        await this.router.navigate(['/login'], { queryParams: { retorno: 'checkout' } });
+      else this.erro.set('Não foi possível consultar o frete. Tente novamente.');
+    } finally {
+      this.cotando.set(false);
+    }
+  }
+
   protected async enviar(recuperar: boolean): Promise<void> {
     if (
       this.checkout.enviando() ||
@@ -77,7 +179,12 @@ export class CheckoutComponent {
       return;
     }
     this.erro.set('');
-    const resultado = await this.checkout.enviar(this.itensCompra(), recuperar);
+    const oferta = this.oferta();
+    if (!recuperar && (!oferta || Date.parse(oferta.validaAteUtc) <= Date.now())) {
+      this.erro.set('Consulte uma cotação válida antes de confirmar a compra.');
+      return;
+    }
+    const resultado = await this.checkout.enviar(this.itensCompra(), recuperar, oferta?.id);
     if (this.destroy.destroyed || !resultado) return;
     switch (resultado.estado) {
       case 'login':
@@ -87,7 +194,11 @@ export class CheckoutComponent {
         this.erro.set(resultado.mensagem);
         break;
       case 'preco_alterado':
+      case 'oferta_alterada':
         this.precoMudou.set(true);
+        this.cotacao.set(null);
+        await this.carregarModalidades();
+        await this.cotar();
         break;
       case 'sucesso':
         await this.router.navigate(['/pedidos', resultado.pedido.id], { info: resultado.pedido });

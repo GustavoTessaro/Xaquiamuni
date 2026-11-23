@@ -1,0 +1,58 @@
+<app-admin-workspace activePage="fulfillment">
+  <div class="grid gap-5">
+    <header class="flex flex-wrap items-center justify-between gap-3">
+      <h1 class="text-2xl font-semibold">Entregas e contato</h1>
+      <button type="button" class="admin-button" [disabled]="ocupado()" (click)="recarregar()">Recarregar dados</button>
+    </header>
+    @if (ocupado()) { <p role="status">Consultando atendimento…</p> }
+    @if (erro()) { <p role="alert">{{ erro() }}</p> }
+    @if (sucesso()) { <p role="status">{{ sucesso() }}</p> }
+    @if (config(); as dados) {
+      <form class="rounded-xl border border-slate-200 p-4" (ngSubmit)="salvarModalidades(dados)">
+        <fieldset class="grid gap-3" [disabled]="ocupado() || revisar()">
+          <legend class="text-lg font-semibold">Modalidades</legend>
+          <label><input type="checkbox" name="retirada" [(ngModel)]="dados.retiradaHabilitada" /> Retirada na loja (gratuita)</label>
+          <label>Endereço de retirada <input class="block w-full" name="endereco" [(ngModel)]="dados.enderecoRetirada" /></label>
+          <label>Instruções de retirada <textarea class="block w-full" name="instrucoes" [(ngModel)]="dados.instrucoesRetirada"></textarea></label>
+          <label><input type="checkbox" name="entrega" [(ngModel)]="dados.entregaPropriaHabilitada" /> Entrega própria</label>
+          <p>Correios indisponíveis.</p>
+          <button class="admin-button justify-self-start">Salvar modalidades</button>
+        </fieldset>
+      </form>
+      <form class="rounded-xl border border-slate-200 p-4" (ngSubmit)="salvarContato(dados)">
+        <fieldset class="grid gap-3" [disabled]="ocupado() || revisar()">
+          <legend class="text-lg font-semibold">WhatsApp</legend>
+          <label>Número internacional <input class="block w-full" type="tel" name="numero" [ngModel]="dados.whatsApp"
+            (ngModelChange)="alterarNumero(dados, $event)" /></label>
+          <label><input type="checkbox" name="confirmado" [(ngModel)]="dados.whatsAppConfirmado" /> Conferi que o número está correto</label>
+          <label><input type="checkbox" name="publicado" [(ngModel)]="dados.whatsAppHabilitado" /> Exibir contato na loja</label>
+          <button class="admin-button justify-self-start">Salvar contato</button>
+        </fieldset>
+      </form>
+      <section class="grid gap-3 rounded-xl border border-slate-200 p-4">
+        <h2 class="text-lg font-semibold">Cidades atendidas</h2>
+        @for (item of cidades(); track item.id) {
+          <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
+            <span class="grow wrap-anywhere">{{ item.nome }}/{{ item.uf }} · {{ reais(item.tarifaCentavos) }} · {{ item.ativa ? 'Ativa' : 'Inativa' }}</span>
+            <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="editarCidade(item)">Editar</button>
+            <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="excluir(item)">Excluir</button>
+          </div>
+        } @empty { <p>Nenhuma cidade cadastrada.</p> }
+        <form (ngSubmit)="salvarCidade()">
+          <fieldset class="grid gap-3" [disabled]="ocupado() || revisar()">
+            <legend class="font-semibold">{{ cidade().id ? 'Editar cidade' : 'Cadastrar cidade' }}</legend>
+            <label>Nome <input class="block w-full" name="cidade" [(ngModel)]="cidade().nome" required /></label>
+            <label>UF <input class="block w-full" name="uf" [(ngModel)]="cidade().uf" maxlength="2" pattern="[A-Za-z]{2}" required /></label>
+            <label>Código IBGE <input class="block w-full" name="ibge" [(ngModel)]="cidade().codigoIbge" inputmode="numeric" pattern="[0-9]{7}" required /></label>
+            <label>Tarifa (R$) <input class="block w-full" name="tarifa" [(ngModel)]="cidade().tarifa" inputmode="decimal" required /></label>
+            <label><input type="checkbox" name="ativa" [(ngModel)]="cidade().ativa" /> Cidade ativa</label>
+            <div class="flex flex-wrap gap-2">
+              <button class="admin-button">Salvar cidade</button>
+              @if (cidade().id) { <button type="button" class="admin-button" (click)="editarCidade()">Cancelar edição</button> }
+            </div>
+          </fieldset>
+        </form>
+      </section>
+    }
+  </div>
+</app-admin-workspace>

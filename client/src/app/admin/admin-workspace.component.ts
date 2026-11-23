@@ -7,7 +7,7 @@ import { AdminAuthService } from '../core/admin-auth/admin-auth.service';
 import { TemaAdminService } from './tema-admin.service';
 
 export type AdminWorkspacePage =
-  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases' | 'recipes' | 'production' | 'external-sales' | 'finance' | 'agenda' | 'themes' | 'promotions';
+  'overview' | 'categories' | 'products' | 'stock' | 'orders' | 'pix' | 'suppliers' | 'purchases' | 'recipes' | 'production' | 'external-sales' | 'finance' | 'agenda' | 'themes' | 'promotions' | 'fulfillment';
 
 interface GrupoAdmin {
   titulo: string;
@@ -20,6 +20,7 @@ const grupos: readonly GrupoAdmin[] = [
   { titulo: 'Vendas', icone: 'M4 5h2l2 10h11l2-7H7M9 19h.01M18 19h.01', itens: [
     { pagina: 'orders', nome: 'Pedidos', rota: '/admin/pedidos' },
     { pagina: 'pix', nome: 'PIX manual', rota: '/admin/configuracoes/pix-manual' },
+    { pagina: 'fulfillment', nome: 'Entregas e contato', rota: '/admin/configuracoes/atendimento' },
     { pagina: 'external-sales', nome: 'Vendas externas', rota: '/admin/vendas-externas' },
   ] },
   { titulo: 'Cat\u00e1logo', icone: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', itens: [
