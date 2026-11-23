@@ -21,7 +21,7 @@ internal static class PedidoMapping
                     + "AND [CotacaoCorreiosId] IS NULL AND [RevisaoCotacaoCorreios] IS NULL) OR "
                     + "([ModalidadeEntrega] = 3 AND [Entrega] IS NOT NULL AND [CotacaoCorreiosId] IS NOT NULL "
                     + "AND [RevisaoCotacaoCorreios] IS NOT NULL AND [RevisaoCotacaoCorreios] > 0 "
-                    + "AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 5, 8))");
+                    + "AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 8))");
                 tabela.HasCheckConstraint("CK_Pedidos_Frete_Valid",
                     "[FreteCentavos] >= 0 AND [FreteCentavos] <= [TotalCentavos]");
                 tabela.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
@@ -45,11 +45,19 @@ internal static class PedidoMapping
                     + "AND [EncerradoEmUtc] >= COALESCE([SaidaEntregaEmUtc], [RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], "
                     + "[PagamentoConfirmadoEmUtc], [CriadoEmUtc])))");
                 tabela.HasCheckConstraint("CK_Pedidos_SaidaEntrega_Valid",
-                    "([SaidaEntregaEmUtc] IS NULL AND [Situacao] <> 8 "
+                    "([SaidaEntregaEmUtc] IS NULL AND [Situacao] NOT IN (8, 9) "
                     + "AND ([Situacao] <> 5 OR [ModalidadeEntrega] = 1)) "
-                    + "OR ([SaidaEntregaEmUtc] IS NOT NULL AND [ModalidadeEntrega] = 2 "
-                    + "AND [Situacao] IN (5, 8) AND [RetiradaAutorizadaEmUtc] IS NULL "
+                    + "OR ([SaidaEntregaEmUtc] IS NOT NULL "
+                    + "AND (([ModalidadeEntrega] = 2 AND [Situacao] IN (5, 8)) "
+                    + "OR ([ModalidadeEntrega] = 3 AND [Situacao] IN (5, 9))) "
+                    + "AND [RetiradaAutorizadaEmUtc] IS NULL "
                     + "AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [SaidaEntregaEmUtc] >= [PreparacaoIniciadaEmUtc])");
+                tabela.HasCheckConstraint("CK_Pedidos_Postagem_Valid",
+                    "(([ModalidadeEntrega] <> 3 OR [SaidaEntregaEmUtc] IS NULL) "
+                    + "AND [ServicoPostalUtilizado] IS NULL AND [CodigoRastreamento] IS NULL) "
+                    + "OR ([ModalidadeEntrega] = 3 AND [SaidaEntregaEmUtc] IS NOT NULL "
+                    + "AND [ServicoPostalUtilizado] IS NOT NULL AND LEN(LTRIM(RTRIM([ServicoPostalUtilizado]))) > 0 "
+                    + "AND ([CodigoRastreamento] IS NULL OR LEN([CodigoRastreamento]) = 13))");
                 tabela.HasCheckConstraint("CK_Pedidos_Situacao_Valid",
                     "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL "
@@ -59,7 +67,7 @@ internal static class PedidoMapping
                     + "OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 5 AND COALESCE([RetiradaAutorizadaEmUtc], [SaidaEntregaEmUtc]) IS NOT NULL "
                     + "AND [EncerradoEmUtc] IS NOT NULL) "
-                    + "OR ([Situacao] = 8 AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) "
+                    + "OR ([Situacao] IN (8, 9) AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL "
                     + "AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) "
                     + "OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL "
@@ -82,6 +90,8 @@ internal static class PedidoMapping
             pedido.Property(entity => entity.SubtotalProdutosCentavos)
                 .HasComputedColumnSql("[TotalCentavos] - [FreteCentavos]", stored: true);
             pedido.Property(entity => entity.MotivoCancelamento).HasMaxLength(Pedido.MotivoCancelamentoMaxLength);
+            pedido.Property(entity => entity.ServicoPostalUtilizado).HasMaxLength(60);
+            pedido.Property(entity => entity.CodigoRastreamento).HasMaxLength(13).IsUnicode(false);
             pedido.Property(entity => entity.Versao).IsRowVersion().IsRequired();
             pedido.HasOne<ClientePerfil>().WithMany().HasForeignKey(entity => entity.ClienteId)
                 .OnDelete(DeleteBehavior.Restrict);
@@ -103,6 +113,16 @@ internal static class PedidoMapping
             operacao.ToTable("OperacoesEntregaPropria");
             operacao.HasKey(x => new { x.AdministradorId, x.Chave });
             operacao.Property(x => x.VersaoEsperada).HasMaxLength(8).IsFixedLength();
+            operacao.HasOne<Pedido>().WithMany().HasForeignKey(x => x.PedidoId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OperacaoEntregaPostal>(operacao =>
+        {
+            operacao.ToTable("OperacoesEntregaPostal");
+            operacao.HasKey(x => new { x.AdministradorId, x.Chave });
+            operacao.Property(x => x.Impressao).HasMaxLength(64).IsUnicode(false);
+            operacao.Property(x => x.CodigoAnterior).HasMaxLength(13).IsUnicode(false);
+            operacao.Property(x => x.CodigoNovo).HasMaxLength(13).IsUnicode(false);
             operacao.HasOne<Pedido>().WithMany().HasForeignKey(x => x.PedidoId).OnDelete(DeleteBehavior.Restrict);
         });
 

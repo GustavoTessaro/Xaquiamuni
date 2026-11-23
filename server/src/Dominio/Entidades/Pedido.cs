@@ -13,6 +13,7 @@ public enum SituacaoPedido : short
     Cancelado = 6,
     Expirado = 7,
     EmEntrega = 8,
+    Postado = 9,
 }
 
 public enum ModalidadeEntregaPedido : short
@@ -66,6 +67,8 @@ public sealed class Pedido
     public Guid? RetiradaAutorizadaPorId { get; private set; }
     public DateTimeOffset? SaidaEntregaEmUtc { get; private set; }
     public Guid? SaidaEntregaPorId { get; private set; }
+    public string? ServicoPostalUtilizado { get; private set; }
+    public string? CodigoRastreamento { get; private set; }
     public byte[] Versao { get; private set; } = [];
     public DateTimeOffset? EncerradoEmUtc { get; private set; }
     public Guid? EncerradoPorId { get; private set; }
@@ -185,6 +188,55 @@ public sealed class Pedido
         ExigirEntregaPropria(SituacaoPedido.EmEntrega);
         ValidarAcao(responsavelId, instanteUtc);
         Encerrar(SituacaoPedido.Entregue, instanteUtc, responsavelId);
+    }
+
+    public void RegistrarPostagem(Guid responsavelId, DateTimeOffset instanteUtc, string servico, string? codigo)
+    {
+        ExigirPedidoPostal();
+        ExigirSituacao(SituacaoPedido.EmPreparacao);
+        ValidarAcao(responsavelId, instanteUtc);
+        ArgumentException.ThrowIfNullOrWhiteSpace(servico);
+        if (servico.Length > 60) throw new ArgumentOutOfRangeException(nameof(servico));
+        var normalizado = codigo is null ? null : NormalizarCodigoRastreamento(codigo)
+            ?? throw new ArgumentException("Código de rastreamento inválido.", nameof(codigo));
+        ServicoPostalUtilizado = servico;
+        CodigoRastreamento = normalizado;
+        SaidaEntregaEmUtc = instanteUtc;
+        SaidaEntregaPorId = responsavelId;
+        Situacao = SituacaoPedido.Postado;
+    }
+
+    public void CorrigirRastreamentoPostal(string codigo)
+    {
+        ExigirPedidoPostal();
+        if (Situacao is not (SituacaoPedido.Postado or SituacaoPedido.Entregue))
+            throw new InvalidOperationException("O pedido precisa ter sido postado.");
+        CodigoRastreamento = NormalizarCodigoRastreamento(codigo)
+            ?? throw new ArgumentException("Código de rastreamento inválido.", nameof(codigo));
+    }
+
+    public static string? NormalizarCodigoRastreamento(string codigo)
+    {
+        var valor = codigo.Trim().Replace(" ", "", StringComparison.Ordinal);
+        if (valor.Length != 13) return null;
+        for (var i = 0; i < valor.Length; i++)
+            if (i is >= 2 and <= 10 ? !char.IsAsciiDigit(valor[i]) : !char.IsAsciiLetter(valor[i]))
+                return null;
+        return valor.ToUpperInvariant();
+    }
+
+    public void ConfirmarEntregaPostal(Guid responsavelId, DateTimeOffset instanteUtc)
+    {
+        ExigirPedidoPostal();
+        ExigirSituacao(SituacaoPedido.Postado);
+        ValidarAcao(responsavelId, instanteUtc);
+        Encerrar(SituacaoPedido.Entregue, instanteUtc, responsavelId);
+    }
+
+    private void ExigirPedidoPostal()
+    {
+        if (ModalidadeEntrega != ModalidadeEntregaPedido.Correios)
+            throw new InvalidOperationException("O pedido não é postal.");
     }
 
     private void ExigirEntregaPropria(SituacaoPedido situacao)

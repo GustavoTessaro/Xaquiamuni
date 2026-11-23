@@ -23,6 +23,13 @@ public sealed record PedidoClienteResumoResponse(
 public sealed record PedidoClientePaginaResponse(
     IReadOnlyList<PedidoClienteResumoResponse> Itens, int Pagina, int ItensPorPagina, int TotalItens, int TotalPaginas);
 
+public sealed record PostagemPedidoResponse(DateTimeOffset PostadaEmUtc, string ServicoPostalUtilizado,
+    string? CodigoRastreamento, DateTimeOffset? EntregueEmUtc)
+{
+    public string? UrlConsultaRastreamento => CodigoRastreamento is null
+        ? null : "https://rastreamento.correios.com.br/app/index.php";
+}
+
 public sealed record PedidoClienteResponse(
     Guid Id, string Situacao, string ModalidadeEntrega,
     DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
@@ -34,6 +41,8 @@ public sealed record PedidoClienteResponse(
     [JsonNumberHandling(JsonNumberHandling.WriteAsString)]
     public long SubtotalProdutosCentavos { get; init; }
     public DadosEntregaPedido? Entrega { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public PostagemPedidoResponse? Postagem { get; init; }
 
     internal static PedidoClienteResponse From(Pedido pedido) => new(
         pedido.Id, pedido.Situacao.ToString(), pedido.ModalidadeEntrega.ToString(),
@@ -46,6 +55,8 @@ public sealed record PedidoClienteResponse(
             FreteCentavos = pedido.FreteCentavos,
             SubtotalProdutosCentavos = pedido.SubtotalProdutosCentavos,
             Entrega = pedido.Entrega,
+            Postagem = pedido.ModalidadeEntrega == ModalidadeEntregaPedido.Correios && pedido.SaidaEntregaEmUtc is { } postada
+                ? new(postada, pedido.ServicoPostalUtilizado!, pedido.CodigoRastreamento, pedido.EncerradoEmUtc) : null,
         };
 }
 

@@ -631,6 +631,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("ClienteId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("CodigoRastreamento")
+                        .HasMaxLength(13)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(13)");
+
                     b.Property<Guid?>("CotacaoCorreiosId")
                         .HasColumnType("uniqueidentifier");
 
@@ -691,6 +696,10 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("SaidaEntregaPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("ServicoPostalUtilizado")
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
                     b.Property<short>("Situacao")
                         .HasColumnType("smallint");
 
@@ -736,13 +745,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [ClienteId] <> '00000000-0000-0000-0000-000000000000'");
 
-                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "((([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR ([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)) AND [CotacaoCorreiosId] IS NULL AND [RevisaoCotacaoCorreios] IS NULL) OR ([ModalidadeEntrega] = 3 AND [Entrega] IS NOT NULL AND [CotacaoCorreiosId] IS NOT NULL AND [RevisaoCotacaoCorreios] IS NOT NULL AND [RevisaoCotacaoCorreios] > 0 AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 5, 8))");
+                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "((([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR ([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)) AND [CotacaoCorreiosId] IS NULL AND [RevisaoCotacaoCorreios] IS NULL) OR ([ModalidadeEntrega] = 3 AND [Entrega] IS NOT NULL AND [CotacaoCorreiosId] IS NOT NULL AND [RevisaoCotacaoCorreios] IS NOT NULL AND [RevisaoCotacaoCorreios] > 0 AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 8))");
+
+                            t.HasCheckConstraint("CK_Pedidos_Postagem_Valid", "(([ModalidadeEntrega] <> 3 OR [SaidaEntregaEmUtc] IS NULL) AND [ServicoPostalUtilizado] IS NULL AND [CodigoRastreamento] IS NULL) OR ([ModalidadeEntrega] = 3 AND [SaidaEntregaEmUtc] IS NOT NULL AND [ServicoPostalUtilizado] IS NOT NULL AND LEN(LTRIM(RTRIM([ServicoPostalUtilizado]))) > 0 AND ([CodigoRastreamento] IS NULL OR LEN([CodigoRastreamento]) = 13))");
 
                             t.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas", "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 AND DATEDIFF_BIG(hour, [CriadoEmUtc], [PrazoPagamentoEmUtc]) = 24 AND CAST([CriadoEmUtc] AS time(7)) = CAST([PrazoPagamentoEmUtc] AS time(7))");
 
-                            t.HasCheckConstraint("CK_Pedidos_SaidaEntrega_Valid", "([SaidaEntregaEmUtc] IS NULL AND [Situacao] <> 8 AND ([Situacao] <> 5 OR [ModalidadeEntrega] = 1)) OR ([SaidaEntregaEmUtc] IS NOT NULL AND [ModalidadeEntrega] = 2 AND [Situacao] IN (5, 8) AND [RetiradaAutorizadaEmUtc] IS NULL AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [SaidaEntregaEmUtc] >= [PreparacaoIniciadaEmUtc])");
+                            t.HasCheckConstraint("CK_Pedidos_SaidaEntrega_Valid", "([SaidaEntregaEmUtc] IS NULL AND [Situacao] NOT IN (8, 9) AND ([Situacao] <> 5 OR [ModalidadeEntrega] = 1)) OR ([SaidaEntregaEmUtc] IS NOT NULL AND (([ModalidadeEntrega] = 2 AND [Situacao] IN (5, 8)) OR ([ModalidadeEntrega] = 3 AND [Situacao] IN (5, 9))) AND [RetiradaAutorizadaEmUtc] IS NULL AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [SaidaEntregaEmUtc] >= [PreparacaoIniciadaEmUtc])");
 
-                            t.HasCheckConstraint("CK_Pedidos_Situacao_Valid", "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 5 AND COALESCE([RetiradaAutorizadaEmUtc], [SaidaEntregaEmUtc]) IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) OR ([Situacao] = 8 AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NOT NULL AND [EncerradoEmUtc] >= [PrazoPagamentoEmUtc])");
+                            t.HasCheckConstraint("CK_Pedidos_Situacao_Valid", "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 5 AND COALESCE([RetiradaAutorizadaEmUtc], [SaidaEntregaEmUtc]) IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) OR ([Situacao] IN (8, 9) AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NOT NULL AND [EncerradoEmUtc] >= [PrazoPagamentoEmUtc])");
 
                             t.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
                         });
@@ -2830,6 +2841,49 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("OperacoesCotacoesCorreios", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPostal", b =>
+                {
+                    b.Property<Guid>("AdministradorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("CodigoAnterior")
+                        .HasMaxLength(13)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(13)");
+
+                    b.Property<string>("CodigoNovo")
+                        .HasMaxLength(13)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(13)");
+
+                    b.Property<short>("Etapa")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("RealizadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<short>("Resultado")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("AdministradorId", "Chave");
+
+                    b.HasIndex("PedidoId");
+
+                    b.ToTable("OperacoesEntregaPostal", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPropria", b =>
                 {
                     b.Property<Guid>("AdministradorId")
@@ -4074,6 +4128,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", null)
                         .WithMany()
                         .HasForeignKey("SolicitacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPostal", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithMany()
+                        .HasForeignKey("PedidoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

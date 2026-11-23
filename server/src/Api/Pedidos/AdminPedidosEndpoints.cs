@@ -51,6 +51,15 @@ public static class AdminPedidosEndpoints
         ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/confirmar-recebimento",
             (HttpContext ctx, Guid pedidoId, IEntregaPropriaPedido entrega, CancellationToken ct) =>
                 EntregaPropriaAsync(ctx, pedidoId, entrega, EtapaEntregaPropria.ConfirmarRecebimento, ct)));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/registrar-postagem",
+            (HttpContext ctx, Guid pedidoId, IEntregaPostal entrega, CancellationToken ct) =>
+                EntregaPostalAsync<RegistrarPostagemRequest>(ctx, pedidoId, entrega, EtapaEntregaPostal.Postar, ct)));
+        ConfigurarComandoOperacional(group.MapPut("/{pedidoId:guid}/rastreamento-postal",
+            (HttpContext ctx, Guid pedidoId, IEntregaPostal entrega, CancellationToken ct) =>
+                EntregaPostalAsync<CorrigirRastreamentoPostalRequest>(ctx, pedidoId, entrega, EtapaEntregaPostal.CorrigirRastreamento, ct)));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/confirmar-entrega-postal",
+            (HttpContext ctx, Guid pedidoId, IEntregaPostal entrega, CancellationToken ct) =>
+                EntregaPostalAsync<ConfirmarEntregaPostalRequest>(ctx, pedidoId, entrega, EtapaEntregaPostal.ConfirmarRecebimento, ct)));
 
         return endpoints;
     }
@@ -118,16 +127,8 @@ public static class AdminPedidosEndpoints
     {
         if (!TentarObterAdministrador(ctx, out var administrador))
             return Results.Unauthorized();
-        var chaves = ctx.Request.Headers["Idempotency-Key"];
-        if (chaves.Count != 1 || chaves[0] is not { Length: 36 } chaveTexto ||
-            !Guid.TryParseExact(chaveTexto, "D", out var chave) || chave == Guid.Empty)
-            return Invalido("Idempotency-Key", "Informe uma chave UUID válida.");
-        var cabecalho = ctx.Request.Headers.IfMatch;
-        var versao = new byte[8];
-        if (cabecalho.Count != 1 || cabecalho[0] is not { Length: 14 } etag ||
-            etag[0] != '"' || etag[^1] != '"' ||
-            !Convert.TryFromBase64Chars(etag.AsSpan(1, 12), versao, out var bytes) || bytes != versao.Length)
-            return Invalido("If-Match", "Informe a versão retornada no detalhe do pedido.");
+        var precondicao = LerPrecondicaoOperacional(ctx, out var chave, out var versao);
+        if (precondicao is not null) return precondicao;
         var (comando, erro) = await LerComandoAsync<TransicaoEntregaPropriaRequest>(ctx.Request, ct);
         if (erro is not null)
             return erro;
@@ -148,6 +149,48 @@ public static class AdminPedidosEndpoints
             StatusEntregaPropria.LoteInelegivel => Conflito("lote_inelegivel", "Há lotes reservados inelegíveis para saída."),
             StatusEntregaPropria.SaldoInsuficiente => Conflito("saldo_insuficiente", "O saldo dos lotes é insuficiente."),
             _ => Conflito("estado_incompativel", "O estado ou a modalidade do pedido não permite esta transição."),
+        };
+    }
+
+    private static IResult? LerPrecondicaoOperacional(HttpContext ctx, out Guid chave, out byte[] versao)
+    {
+        chave = default;
+        versao = new byte[8];
+        var chaves = ctx.Request.Headers["Idempotency-Key"];
+        if (chaves.Count != 1 || chaves[0] is not { Length: 36 } chaveTexto ||
+            !Guid.TryParseExact(chaveTexto, "D", out chave) || chave == Guid.Empty)
+            return Invalido("Idempotency-Key", "Informe uma chave UUID válida.");
+        var cabecalho = ctx.Request.Headers.IfMatch;
+        if (cabecalho.Count != 1 || cabecalho[0] is not { Length: 14 } etag ||
+            etag[0] != '"' || etag[^1] != '"' ||
+            !Convert.TryFromBase64Chars(etag.AsSpan(1, 12), versao, out var bytes) || bytes != versao.Length)
+            return Invalido("If-Match", "Informe a versão retornada no detalhe do pedido.");
+        return null;
+    }
+
+    private static async Task<IResult> EntregaPostalAsync<T>(HttpContext ctx, Guid pedidoId,
+        IEntregaPostal entrega, EtapaEntregaPostal etapa, CancellationToken ct) where T : class
+    {
+        if (!TentarObterAdministrador(ctx, out var administrador)) return Results.Unauthorized();
+        var precondicao = LerPrecondicaoOperacional(ctx, out var chave, out var versao);
+        if (precondicao is not null) return precondicao;
+        var (corpo, erro) = await LerComandoAsync<T>(ctx.Request, ct);
+        if (erro is not null) return erro;
+        var postagem = corpo as RegistrarPostagemRequest;
+        if (postagem is { Confirmado: false } || corpo is ConfirmarEntregaPostalRequest { Confirmado: false })
+            return Invalido("confirmado", "Confirme a operação física antes de registrar.");
+        var codigo = postagem?.CodigoRastreamento ?? (corpo as CorrigirRastreamentoPostalRequest)?.CodigoRastreamento;
+        var resultado = await entrega.ExecutarAsync(new(pedidoId, administrador, chave, versao,
+            etapa, postagem?.ServicoPostalUtilizado, codigo), ct);
+        return resultado.Status switch
+        {
+            200 => Atualizado(pedidoId, resultado.Situacao!.Value, resultado.Repetida),
+            403 => Results.Forbid(),
+            404 => Results.NotFound(),
+            400 when resultado.Codigo == "servico_postal_invalido" =>
+                Invalido("servicoPostalUtilizado", "Informe o serviço postal utilizado, com até 60 caracteres."),
+            400 => Invalido("codigoRastreamento", "Informe um código com duas letras, nove dígitos e duas letras finais."),
+            _ => Conflito(resultado.Codigo!, "Confira a situação e a versão atualizadas do pedido."),
         };
     }
 

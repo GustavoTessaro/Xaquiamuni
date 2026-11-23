@@ -54,7 +54,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEntregaPropriaP
                     return new(StatusEntregaPropria.ReservasInconsistentes);
 
                 var baixa = await PrepararBaixasRetiradaAsync(reservas, variantes, comando.AdministradorId, ct,
-                    entregaPropria: true);
+                    motivo: "Saída para entrega própria");
                 if (baixa.Status != ConsumirReservasStatus.Sucesso)
                     return new(baixa.Status switch
                     {
