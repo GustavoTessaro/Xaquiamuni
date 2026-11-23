@@ -103,6 +103,9 @@
             </dd>
           </div>
         </dl>
+        @if (pedido.modalidadeEntrega === 'Correios') {
+          <app-historico-rastreamento [pedidoId]="pedido.id" />
+        }
         <app-comprovante-pix [pedidoId]="pedido.id" [admin]="true" />
         <section class="space-y-3" aria-labelledby="pedido-itens">
           <h2 id="pedido-itens" class="text-lg font-semibold">Itens</h2>

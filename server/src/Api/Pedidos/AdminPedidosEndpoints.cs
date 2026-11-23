@@ -29,6 +29,9 @@ public static class AdminPedidosEndpoints
             .Produces<PedidoAdminPaginaResponse>().ProducesValidationProblem().Produces(401).Produces(403);
         group.MapGet("/{pedidoId:guid}", BuscarAsync).WithName("BuscarPedidoAdmin")
             .Produces<PedidoAdminResponse>().ProducesValidationProblem().Produces(401).Produces(403).Produces(404);
+        group.MapGet("/{pedidoId:guid}/historico-rastreamento", ConsultarHistoricoRastreamentoAsync)
+            .WithName("ConsultarHistoricoRastreamentoAdmin")
+            .Produces<IReadOnlyList<CorrecaoRastreamentoAdmin>>().Produces(401).Produces(403).Produces(404);
         group.MapPost("/{pedidoId:guid}/confirmar-pagamento", ConfirmarAsync).WithName("ConfirmarPagamentoAdmin")
             .WithSummary("Registra a confirmação manual após a conferência do recebimento no banco.")
             .RequireXaquiamuniAntiforgery().Produces<ResultadoPedidoAdminResponse>()
@@ -120,6 +123,17 @@ public static class AdminPedidosEndpoints
             context.Response.Headers.ETag = $"\"{Convert.ToBase64String(versao)}\"";
         return detalhe is null ? Results.NotFound() : Results.Ok(new PedidoAdminResponse(
             PedidoClienteResponse.From(detalhe.Pedido), new(detalhe.NomeCliente, detalhe.EmailCliente)));
+    }
+
+    private static async Task<IResult> ConsultarHistoricoRastreamentoAsync(
+        HttpContext context, Guid pedidoId, IConsultarPedidosAdmin consulta, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        if (!TentarObterAdministrador(context, out _))
+            return Results.Unauthorized();
+
+        var historico = await consulta.ConsultarHistoricoRastreamentoAsync(pedidoId, cancellationToken);
+        return historico is null ? Results.NotFound() : Results.Ok(historico);
     }
 
     private static async Task<IResult> EntregaPropriaAsync(HttpContext ctx, Guid pedidoId,

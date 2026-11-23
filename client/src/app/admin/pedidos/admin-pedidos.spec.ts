@@ -163,6 +163,39 @@ describe('Pedidos administrativos', () => {
     http.expectNone(`${api}/${id}`);
   });
 
+  it.each(['RetiradaLocal', 'EntregaPropria'] as const)('oculta o histórico na modalidade %s', async modalidadeEntrega => {
+    const harness = await abrirPedido({ ...detalhe, pedido: { ...detalhe.pedido, modalidadeEntrega } });
+    expect(harness.routeNativeElement!.querySelector('app-historico-rastreamento')).toBeNull();
+    http.expectNone(`${api}/${id}/historico-rastreamento`);
+  });
+
+  it('consulta o histórico novamente após confirmar a correção, separando os ETags operacionais', async () => {
+    const postal: DetalhePedidoAdmin = { ...detalhe, pedido: { ...detalhe.pedido, modalidadeEntrega: 'Correios', situacao: 'Postado' } };
+    const rotaHistorico = `${api}/${id}/historico-rastreamento`;
+    const harness = await abrirPedido(postal);
+    http.expectOne(rotaHistorico).flush([], { headers: { ETag: '"ignorar"' } });
+    harness.detectChanges();
+    clicar(harness, 'Corrigir rastreamento');
+    const campo = harness.routeNativeElement!.querySelector<HTMLInputElement>('form input[maxlength="32"]')!;
+    campo.value = 'AB123456789BR';
+    campo.dispatchEvent(new Event('input'));
+    harness.routeNativeElement!.querySelector<HTMLInputElement>('form input[type="checkbox"]')!.click();
+    harness.detectChanges();
+    clicar(harness, 'Salvar código');
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf-teste' });
+    const correcao = http.expectOne({ method: 'PUT', url: `${api}/${id}/rastreamento-postal` });
+    expect(correcao.request.headers.get('If-Match')).toBe('"AAAAAAAAAAE="');
+    correcao.flush({ id, situacao: 'Postado', repetida: false });
+    harness.detectChanges();
+    http.expectOne(`${api}/${id}`).flush(postal, { headers: { ETag: '"AAAAAAAAAAI="' } });
+    harness.detectChanges();
+    http.expectOne(rotaHistorico).flush([{
+      codigoAnterior: null, codigoNovo: 'AB123456789BR', administradorId: 'admin', realizadaEmUtc: '2026-11-23T10:30:00Z',
+    }]);
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.querySelector('app-historico-rastreamento')?.textContent).toContain('AB123456789BR');
+  });
+
   it('devolve o foco ao botão da ação ao fechar por Escape', async () => {
     const harness = await abrirPedido();
     clicar(harness, 'Confirmar pagamento');

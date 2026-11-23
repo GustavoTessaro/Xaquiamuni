@@ -168,7 +168,22 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       console.log('Pedido convertido aberto após recarregar em outro contexto Chrome autenticado, com armazenamento limpo.');
     }
 
+    if (width === 375) a.falharProximaConsultaPix('/api/admin' + pedido + '/historico-rastreamento');
     await a.ir('/admin' + pedido);
+    if (width === 375) {
+      await texto(a, 'Não foi possível consultar o histórico de rastreamento.');
+      const botao = "document.querySelector('app-historico-rastreamento button')";
+      const tecla = async (key, windowsVirtualKeyCode, code = key) => {
+        for (const type of ['keyDown', 'keyUp']) {
+          await call('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode }, a.sessionId);
+        }
+      };
+      await tecla('Tab', 9);
+      assert.ok(await a.ev(`(${botao}).focus(), document.activeElement === ${botao} &&
+        (${botao}).matches(':focus-visible') && getComputedStyle(${botao}).outlineStyle !== 'none'`));
+      await tecla(' ', 32, 'Space');
+    }
+    await texto(a, 'Nenhuma correção de rastreamento registrada.');
     const confirmar = async (acao, confirmar, preencher) => {
       await clicar(a, acao);
       if (preencher) await preencher();
@@ -194,7 +209,26 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     await confirmar('Corrigir rastreamento', 'Salvar código', async () => {
       assert.ok(await campo(a, 'form input[maxlength="32"]', 'AB123456789BR'));
     });
-    await texto(a, 'AB123456789BR');
+    await waitFor(() => a.ev(`document.querySelector('app-historico-rastreamento li')?.textContent.includes('AB123456789BR')`),
+      'Histórico atualizado após corrigir o código');
+    for (const tema of ['light', 'dark']) {
+      const temaAtual = () => a.ev("document.querySelector('.admin-shell')?.dataset.adminTheme");
+      if (await temaAtual() !== tema) await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      await waitFor(async () => await temaAtual() === tema, 'Tema administrativo ' + tema);
+      assert.ok(await largura(a));
+      assert.ok(await a.ev(`(() => {
+        const texto = document.querySelector('app-historico-rastreamento dd');
+        let fundo = texto;
+        while (getComputedStyle(fundo).backgroundColor === 'rgba(0, 0, 0, 0)' && fundo.parentElement)
+          fundo = fundo.parentElement;
+        const luz = css => css.match(/[0-9]+/g).slice(0,3).map(n => Number(n) / 255)
+          .map(n => n <= .04045 ? n / 12.92 : ((n + .055) / 1.055) ** 2.4)
+          .reduce((s, n, i) => s + n * [.2126, .7152, .0722][i], 0);
+        const cores = [luz(getComputedStyle(texto).color), luz(getComputedStyle(fundo).backgroundColor)].sort((a, b) => a - b);
+        return (cores[1] + .05) / (cores[0] + .05) >= 4.5;
+      })()`), 'Contraste do histórico em ' + tema + ', ' + width + ' px');
+    }
+    if (width === 375) await a.ev("document.querySelector('.admin-theme-toggle').click()");
     await confirmar('Confirmar entrega postal', 'Registrar entrega postal');
     await texto(a, 'Entrega confirmada em');
     await c.ir(pedido);

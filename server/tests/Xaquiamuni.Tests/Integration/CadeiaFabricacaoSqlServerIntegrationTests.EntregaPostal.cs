@@ -36,6 +36,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             HttpStatusCode.Created, Guid.NewGuid());
         var id = pedido.GetProperty("id").GetGuid();
         var rota = $"/api/admin/pedidos/{id:D}";
+        var rotaHistorico = rota + "/historico-rastreamento";
         var rotaCliente = $"/api/pedidos/{id:D}";
         var corpo = new { confirmado = true, servicoPostalUtilizado = "SEDEX" };
         var receber = new { confirmado = true };
@@ -56,6 +57,12 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         }
 
         var aguardando = await VersaoAsync();
+        using var proibidoHistorico = await cliente.Http.GetAsync(rotaHistorico);
+        Assert.Equal(HttpStatusCode.Forbidden, proibidoHistorico.StatusCode);
+        using var pedidoInexistente = await admin.Http.GetAsync($"/api/admin/pedidos/{Guid.NewGuid():D}/historico-rastreamento");
+        Assert.Equal(HttpStatusCode.NotFound, pedidoInexistente.StatusCode);
+        Assert.Empty((await admin.Http.GetFromJsonAsync<JsonElement>(rotaHistorico)).EnumerateArray());
+        Assert.Equal(aguardando, await VersaoAsync());
         using (var semPagamento = await EscreverPostalAsync(admin, rota + "/registrar-postagem", corpo, aguardando))
             await ConferirErroPostalAsync(semPagamento, 409, "estado_incompativel");
         using (var semCsrf = await EscreverPostalAsync(admin, rota + "/registrar-postagem", corpo, aguardando, csrf: false))
@@ -68,6 +75,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.NoContent, sair.StatusCode);
         using (var anonimo = await outro.Http.GetAsync(rotaCliente))
             Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+        using var historicoAnonimo = await outro.Http.GetAsync(rotaHistorico);
+        Assert.Equal(HttpStatusCode.Unauthorized, historicoAnonimo.StatusCode);
         var bytes = PdfComprovante();
         using (var comprovante = await EnviarComprovanteAsync(cliente, rotaCliente + "/comprovante-pix",
             bytes, "teste.pdf", "application/pdf", await TokenComprovanteAsync(cliente)))
@@ -133,7 +142,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal("1300", detalhe.GetProperty("freteCentavos").GetString());
         Assert.Equal(JsonValueKind.Null, detalhe.GetProperty("postagem").GetProperty("codigoRastreamento").ValueKind);
 
-        async Task<HttpResponseMessage> CorrigirAsync(string codigo, string versao)
+        Assert.Empty((await admin.Http.GetFromJsonAsync<JsonElement>(rotaHistorico)).EnumerateArray());
+        async Task<HttpResponseMessage> CorrigirAsync(string codigo, string versao, Guid? chaveCorrecao = null)
         {
             using var request = new HttpRequestMessage(HttpMethod.Put, rota + "/rastreamento-postal")
             {
@@ -141,11 +151,17 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             };
             request.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
             request.Headers.Add("If-Match", versao);
-            request.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
+            request.Headers.Add("Idempotency-Key", (chaveCorrecao ?? Guid.NewGuid()).ToString("D"));
             return await admin.Http.SendAsync(request);
         }
         using (var r = await CorrigirAsync("inválido", versaoPostada)) Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
-        using (var r = await CorrigirAsync("  aa 123 456 789 br ", versaoPostada)) Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        var chaveCorrecao = Guid.NewGuid();
+        using (var r = await CorrigirAsync("  aa 123 456 789 br ", versaoPostada, chaveCorrecao))
+            Assert.Equal(HttpStatusCode.OK, r.StatusCode);
+        using (var r = await CorrigirAsync("  aa 123 456 789 br ", versaoPostada, chaveCorrecao))
+            Assert.True((await r.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("repetida").GetBoolean());
+        var primeira = Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(rotaHistorico)).EnumerateArray());
+        Assert.Equal(JsonValueKind.Null, primeira.GetProperty("codigoAnterior").ValueKind);
         using (var r = await CorrigirAsync("AB123456789BR", await VersaoAsync())) Assert.Equal(HttpStatusCode.OK, r.StatusCode);
         var historico = await db.Set<OperacaoEntregaPostal>().AsNoTracking()
             .Where(x => x.Etapa == EtapaEntregaPostal.CorrigirRastreamento).ToListAsync();
@@ -174,6 +190,38 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal("Saída para postagem postal", movimento.Motivo);
         Assert.Equal(bytes, await cliente.Http.GetByteArrayAsync(rotaCliente + "/comprovante-pix/conteudo"));
         await VerificarFinanceiroAsync();
+
+        var versaoFinal = await VersaoAsync();
+        using var respostaHistorico = await admin.Http.GetAsync(rotaHistorico);
+        respostaHistorico.EnsureSuccessStatusCode();
+        Assert.True(respostaHistorico.Headers.CacheControl?.Private);
+        Assert.True(respostaHistorico.Headers.CacheControl?.NoStore);
+        Assert.Null(respostaHistorico.Headers.ETag);
+        var eventos = (await respostaHistorico.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray().ToArray();
+        Assert.Equal(new[] { "AB123456789BR", "AA123456789BR" }, eventos.Select(x => x.GetProperty("codigoNovo").GetString()));
+        Assert.All(eventos, evento =>
+        {
+            Assert.Equal(new[] { "administradorId", "codigoAnterior", "codigoNovo", "realizadaEmUtc" },
+                evento.EnumerateObject().Select(x => x.Name).Order(StringComparer.Ordinal));
+            Assert.Equal(TimeSpan.Zero, evento.GetProperty("realizadaEmUtc").GetDateTimeOffset().Offset);
+            Assert.NotEqual(Guid.Empty, evento.GetProperty("administradorId").GetGuid());
+        });
+        Assert.Equal(versaoFinal, await VersaoAsync());
+        Assert.False(detalhe.TryGetProperty("historicoRastreamento", out _));
+
+        var autorIndisponivel = Guid.NewGuid();
+        var instante = eventos[0].GetProperty("realizadaEmUtc").GetDateTimeOffset().AddMinutes(1);
+        db.Set<OperacaoEntregaPostal>().AddRange(
+            new OperacaoEntregaPostal(autorIndisponivel, new Guid("00000000-0000-0000-0000-000000000002"),
+                id, new string('b', 64), EtapaEntregaPostal.CorrigirRastreamento, instante,
+                SituacaoPedido.Entregue, "AB123456789BR", "AD123456789BR"),
+            new OperacaoEntregaPostal(autorIndisponivel, new Guid("00000000-0000-0000-0000-000000000001"),
+                id, new string('a', 64), EtapaEntregaPostal.CorrigirRastreamento, instante,
+                SituacaoPedido.Entregue, "AD123456789BR", "AC123456789BR"));
+        await db.SaveChangesAsync();
+        var comEmpate = (await admin.Http.GetFromJsonAsync<JsonElement>(rotaHistorico)).EnumerateArray().Take(2).ToArray();
+        Assert.Equal(new[] { "AC123456789BR", "AD123456789BR" }, comEmpate.Select(x => x.GetProperty("codigoNovo").GetString()));
+        Assert.All(comEmpate, evento => Assert.Equal(autorIndisponivel, evento.GetProperty("administradorId").GetGuid()));
     }
 
     private sealed class FalharAposBaixaPostal : SaveChangesInterceptor

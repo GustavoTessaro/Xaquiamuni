@@ -27,6 +27,22 @@ internal sealed class EfConsultaPedidosAdmin(XaquiamuniDbContext dbContext) : IC
         return new(pedidos, total);
     }
 
+    public async Task<IReadOnlyList<CorrecaoRastreamentoAdmin>?> ConsultarHistoricoRastreamentoAsync(
+        Guid pedidoId, CancellationToken cancellationToken)
+    {
+        if (!await dbContext.Pedidos.AnyAsync(pedido => pedido.Id == pedidoId, cancellationToken))
+            return null;
+
+        return await dbContext.Set<OperacaoEntregaPostal>().AsNoTracking()
+            .Where(operacao => operacao.PedidoId == pedidoId && operacao.Etapa == EtapaEntregaPostal.CorrigirRastreamento)
+            .OrderByDescending(operacao => operacao.RealizadaEmUtc)
+            .ThenBy(operacao => operacao.AdministradorId)
+            .ThenBy(operacao => operacao.Chave)
+            .Select(operacao => new CorrecaoRastreamentoAdmin(operacao.CodigoAnterior, operacao.CodigoNovo,
+                operacao.RealizadaEmUtc, operacao.AdministradorId))
+            .ToListAsync(cancellationToken);
+    }
+
     public Task<DetalhePedidoAdmin?> BuscarAsync(Guid pedidoId, CancellationToken cancellationToken) =>
         (from pedido in dbContext.Pedidos.AsNoTracking().Include(pedido => pedido.Itens)
          join perfil in dbContext.ClientePerfis on pedido.ClienteId equals perfil.UserId

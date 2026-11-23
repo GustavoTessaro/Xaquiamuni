@@ -29,6 +29,13 @@ export interface DetalhePedidoAdmin {
   etag?: string | null;
 }
 
+export interface CorrecaoRastreamentoAdmin {
+  codigoAnterior: string | null;
+  codigoNovo: string | null;
+  realizadaEmUtc: string;
+  administradorId: string;
+}
+
 export type AcaoEntregaPropria = 'iniciar-entrega-propria' | 'confirmar-recebimento';
 
 export interface ResultadoPedidoAdmin {
@@ -60,6 +67,11 @@ export class AdminPedidosService {
       timeout(30_000),
       map(resposta => ({ ...resposta.body!, etag: resposta.headers.get('ETag') })),
     );
+  }
+
+  consultarHistoricoRastreamento(id: string): Observable<CorrecaoRastreamentoAdmin[]> {
+    return this.http.get<CorrecaoRastreamentoAdmin[]>(this.urlPedido(id) + '/historico-rastreamento')
+      .pipe(timeout(30_000));
   }
 
   entregaPropria(id: string, acao: AcaoEntregaPropria, etag: string, chave: string) {
