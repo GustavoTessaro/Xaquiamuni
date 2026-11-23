@@ -51,10 +51,23 @@
     @if (modoFormulario()) {
       <app-categoria-form
         [categoria]="categoriaSelecionada()"
-        [saving]="salvando()"
+        [saving]="salvando()" [blocked]="!!exclusaoPendente() || versaoDesatualizada()"
         [errorMessage]="erroFormulario()"
         (save)="salvarCategoria($event)"
         (cancel)="cancelarFormulario()" />
+      @if (modoFormulario() === 'edit' && categoriaSelecionada()?.versao) {
+        <div class="flex flex-wrap gap-2">
+          @if (versaoDesatualizada()) {
+            <button type="button" (click)="recarregarVersao()" [disabled]="carregandoEdicao()"
+              class="min-h-11 rounded-lg px-3 font-semibold underline focus-visible:outline-2">Recarregar categoria</button>
+          } @else {
+            <button type="button" (click)="excluirCategoria()" [disabled]="salvando() || carregandoEdicao()"
+              class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2">
+              {{ salvando() && exclusaoPendente() ? 'Excluindo…' : exclusaoPendente() ? 'Recuperar exclusão' : 'Excluir categoria' }}
+            </button>
+          }
+        </div>
+      }
     }
 
     @if (!carregando() || categorias().length > 0) {

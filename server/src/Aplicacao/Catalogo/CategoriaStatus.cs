@@ -5,5 +5,6 @@ public enum CategoriaStatus
     Success,
     ValidationFailed,
     NotFound,
-    NameAlreadyExists
+    NameAlreadyExists,
+    VersionConflict
 }

@@ -27,6 +27,8 @@ public sealed class CategoriaResult
     public static CategoriaResult NotFound() =>
         new(CategoriaStatus.NotFound, null, Array.Empty<CategoriaValidationError>());
 
+    public static CategoriaResult VersionConflict() => new(CategoriaStatus.VersionConflict, null, []);
+
     public static CategoriaResult NameAlreadyExists() =>
         new(CategoriaStatus.NameAlreadyExists, null, Array.Empty<CategoriaValidationError>());
 }

@@ -68,6 +68,9 @@ public sealed class GerenciarCategorias : IGerenciarCategorias
             return CategoriaResult.NotFound();
         }
 
+        if (input.VersaoEsperada is { } versao && categoria.Versao != versao)
+            return CategoriaResult.VersionConflict();
+
         Categoria candidate;
         try
         {
@@ -88,9 +91,7 @@ public sealed class GerenciarCategorias : IGerenciarCategorias
         }
 
         categoria.AtualizarDados(input.Nome, input.Descricao, input.OrdemExibicao);
-        return await _repository.AtualizarAsync(categoria, cancellationToken).ConfigureAwait(false)
-            ? CategoriaResult.Success(categoria)
-            : CategoriaResult.NameAlreadyExists();
+        return await AtualizarAsync(categoria, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<CategoriaResult> AlterarStatusAsync(
@@ -110,9 +111,20 @@ public sealed class GerenciarCategorias : IGerenciarCategorias
         }
 
         categoria.DefinirAtiva(ativa.Value);
-        return await _repository.AtualizarAsync(categoria, cancellationToken).ConfigureAwait(false)
-            ? CategoriaResult.Success(categoria)
-            : CategoriaResult.NameAlreadyExists();
+        return await AtualizarAsync(categoria, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<CategoriaResult> AtualizarAsync(Categoria categoria, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await _repository.AtualizarAsync(categoria, cancellationToken).ConfigureAwait(false)
+                ? CategoriaResult.Success(categoria) : CategoriaResult.NameAlreadyExists();
+        }
+        catch (CategoriaVersaoException)
+        {
+            return CategoriaResult.VersionConflict();
+        }
     }
 
     private static CategoriaResult Invalid(string campo, string mensagem) =>

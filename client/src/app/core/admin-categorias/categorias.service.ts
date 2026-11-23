@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, switchMap } from 'rxjs';
+import { Observable, switchMap, timeout } from 'rxjs';
 import { CsrfService } from '../security/csrf.service';
 
 export interface AdminCategoria {
@@ -9,6 +9,7 @@ export interface AdminCategoria {
   descricao: string | null;
   ativa: boolean;
   ordemExibicao: number;
+  versao?: string;
 }
 
 export interface CategoriaWriteRequest {
@@ -42,14 +43,23 @@ export class CategoriasService {
     );
   }
 
-  editar(id: string, request: CategoriaWriteRequest): Observable<AdminCategoria> {
+  editar(id: string, request: CategoriaWriteRequest, versao?: string): Observable<AdminCategoria> {
     return this.withCsrf((requestToken) =>
       this.http.put<AdminCategoria>(
         `/api/admin/categorias/${encodeURIComponent(id)}`,
         request,
-        { headers: new HttpHeaders({ 'X-XSRF-TOKEN': requestToken }) },
+        { headers: new HttpHeaders({ 'X-XSRF-TOKEN': requestToken,
+          ...(versao && { 'If-Match': '"' + versao + '"' }) }) },
       ),
     );
+  }
+
+  excluir(id: string, versao: string, chave: string): Observable<void> {
+    return this.withCsrf(token =>
+      this.http.delete<void>(`/api/admin/categorias/${encodeURIComponent(id)}`, {
+        headers: { 'X-XSRF-TOKEN': token, 'If-Match': '"' + versao + '"', 'Idempotency-Key': chave },
+      }),
+    ).pipe(timeout(20_000));
   }
 
   alterarStatus(id: string, request: CategoriaStatusRequest): Observable<AdminCategoria> {

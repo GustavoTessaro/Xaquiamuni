@@ -16,12 +16,14 @@ describe('AdminCategoriasComponent', () => {
   let obter: ReturnType<typeof vi.fn<CategoriasService['obter']>>;
   let criar: ReturnType<typeof vi.fn<CategoriasService['criar']>>;
   let editar: ReturnType<typeof vi.fn<CategoriasService['editar']>>;
+  let excluir: ReturnType<typeof vi.fn<CategoriasService['excluir']>>;
   let alterarStatus: ReturnType<typeof vi.fn<CategoriasService['alterarStatus']>>;
   let navigateByUrl: ReturnType<typeof vi.fn<Router['navigateByUrl']>>;
 
   const categories: AdminCategoria[] = [
     {
       id: 'category-soap',
+      versao: '661ce433-8b05-4a12-b577-a6473f6ddf3d',
       nome: 'Sabonetes Artesanais',
       descricao: 'Feitos à mão',
       ativa: true,
@@ -48,6 +50,7 @@ describe('AdminCategoriasComponent', () => {
     obter = vi.fn<CategoriasService['obter']>();
     criar = vi.fn<CategoriasService['criar']>();
     editar = vi.fn<CategoriasService['editar']>();
+    excluir = vi.fn<CategoriasService['excluir']>();
     alterarStatus = vi.fn<CategoriasService['alterarStatus']>();
 
     await TestBed.configureTestingModule({
@@ -56,7 +59,7 @@ describe('AdminCategoriasComponent', () => {
         provideRouter([]),
         {
           provide: CategoriasService,
-          useValue: { listar, obter, criar, editar, alterarStatus },
+          useValue: { listar, obter, criar, editar, alterarStatus, excluir },
         },
       ],
     }).compileComponents();
@@ -171,9 +174,18 @@ describe('AdminCategoriasComponent', () => {
       nome: updated.nome,
       descricao: categories[0].descricao,
       ordemExibicao: categories[0].ordemExibicao,
-    });
+    }, categories[0].versao);
     expect(text()).toContain('Categoria atualizada com sucesso.');
     expect(categoryNames()).toContain(updated.nome);
+  });
+
+  it('refreshes form fields when switching the open category', () => {
+    obter.mockReturnValueOnce(of(categories[0])).mockReturnValueOnce(of(categories[1]));
+    render();
+    clickButton('Editar ' + categories[0].nome);
+    setField('category-name', 'Unsaved');
+    clickButton('Editar ' + categories[1].nome);
+    expect((root().querySelector('#category-name') as HTMLInputElement).value).toBe(categories[1].nome);
   });
 
   it('preserves form values and shows safe conflict and validation feedback', () => {
@@ -294,6 +306,49 @@ describe('AdminCategoriasComponent', () => {
     render();
     expect(text()).toContain('Você não tem permissão para acessar as categorias.');
     expect(text()).not.toContain('authorization internals');
+  });
+
+  it('confirms permanent deletion and retries a lost response with the original key', () => {
+    const confirm = vi.fn().mockReturnValue(false);
+    vi.stubGlobal('confirm', confirm);
+    obter.mockReturnValue(of(categories[0]));
+    const pending = new Subject<void>();
+    excluir.mockReturnValueOnce(pending).mockReturnValueOnce(of(void 0));
+    listar.mockReturnValueOnce(of(categories)).mockReturnValueOnce(of(categories.slice(1)));
+    render();
+    clickButton('Editar Sabonetes Artesanais');
+    clickButton('Excluir categoria');
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining(categories[0].nome));
+    expect(excluir).not.toHaveBeenCalled();
+    confirm.mockReturnValue(true);
+    clickButton('Excluir categoria');
+    clickButton('Excluindo…');
+    expect(excluir).toHaveBeenCalledOnce();
+    pending.error(new HttpErrorResponse({ status: 0 }));
+    fixture.detectChanges();
+    clickButton('Recuperar exclusão');
+    expect(excluir.mock.calls[1]).toEqual(excluir.mock.calls[0]);
+    expect(excluir.mock.calls[0]).toEqual([categories[0].id, categories[0].versao, expect.any(String)]);
+    expect(categoryNames()).toEqual(categories.slice(1).map(category => category.nome));
+  });
+
+  it('requires a fresh confirmation after an outdated version and reports linked products', () => {
+    const confirm = vi.fn().mockReturnValue(true);
+    vi.stubGlobal('confirm', confirm);
+    obter.mockReturnValue(of(categories[0]));
+    excluir
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409, error: { codigo: 'versao_desatualizada' } })))
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409, error: { codigo: 'categoria_com_produtos' } })));
+    render();
+    clickButton('Editar Sabonetes Artesanais');
+    clickButton('Excluir categoria');
+    expect(text()).toContain('Recarregar categoria');
+    clickButton('Recarregar categoria');
+    expect(excluir).toHaveBeenCalledOnce();
+    clickButton('Excluir categoria');
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('produtos vinculados');
+    expect(categoryNames()).toContain(categories[0].nome);
   });
 
   function render(): void {

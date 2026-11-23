@@ -29,6 +29,8 @@ export class AdminCategoriasComponent {
   protected readonly carregandoEdicao = signal(false);
   protected readonly salvando = signal(false);
   protected readonly erroFormulario = signal('');
+  protected readonly versaoDesatualizada = signal(false);
+  protected readonly exclusaoPendente = signal<{ id: string; versao: string; chave: string } | null>(null);
   protected readonly statusEmAtualizacao = signal<ReadonlySet<string>>(new Set());
 
   protected readonly total = computed(() => this.categorias().length);
@@ -82,18 +84,19 @@ export class AdminCategoriasComponent {
   }
 
   protected abrirNovaCategoria(): void {
-    if (this.salvando()) {
+    if (this.salvando() || this.exclusaoPendente()) {
       return;
     }
 
     this.mensagem.set('');
     this.erroFormulario.set('');
     this.categoriaSelecionada.set(null);
+    this.versaoDesatualizada.set(false);
     this.modoFormulario.set('create');
   }
 
   protected editarCategoria(categoria: AdminCategoria): void {
-    if (this.carregandoEdicao() || this.salvando()) {
+    if (this.carregandoEdicao() || this.salvando() || this.exclusaoPendente()) {
       return;
     }
 
@@ -107,6 +110,7 @@ export class AdminCategoriasComponent {
       )
       .subscribe({
         next: (categoriaAtualizada) => {
+          this.versaoDesatualizada.set(false);
           this.categoriaSelecionada.set(categoriaAtualizada);
           this.modoFormulario.set('edit');
         },
@@ -126,7 +130,7 @@ export class AdminCategoriasComponent {
   }
 
   protected cancelarFormulario(): void {
-    if (this.salvando()) {
+    if (this.salvando() || this.exclusaoPendente()) {
       return;
     }
     this.modoFormulario.set(null);
@@ -135,10 +139,11 @@ export class AdminCategoriasComponent {
   }
 
   protected salvarCategoria(request: CategoriaWriteRequest): void {
-    if (this.salvando()) {
+    if (this.salvando() || this.exclusaoPendente()) {
       return;
     }
 
+    if (this.versaoDesatualizada()) return;
     const modo = this.modoFormulario();
     const categoria = this.categoriaSelecionada();
     if (!modo || (modo === 'edit' && !categoria)) {
@@ -149,7 +154,7 @@ export class AdminCategoriasComponent {
     if (modo === 'create') {
       operation = this.categoriasService.criar(request);
     } else if (categoria) {
-      operation = this.categoriasService.editar(categoria.id, request);
+      operation = this.categoriasService.editar(categoria.id, request, categoria.versao);
     } else {
       return;
     }
@@ -176,7 +181,58 @@ export class AdminCategoriasComponent {
       });
   }
 
+  protected excluirCategoria(): void {
+    const categoria = this.categoriaSelecionada();
+    if (!categoria?.versao || this.salvando() || this.versaoDesatualizada()) return;
+    if (!this.exclusaoPendente()) {
+      if (!window.confirm(`Excluir a categoria “${categoria.nome}”? A exclusão é permanente.`)) return;
+      this.exclusaoPendente.set({ id: categoria.id, versao: categoria.versao, chave: crypto.randomUUID() });
+    }
+
+    const tentativa = this.exclusaoPendente()!;
+    this.salvando.set(true);
+    this.erroFormulario.set('');
+    this.categoriasService.excluir(tentativa.id, tentativa.versao, tentativa.chave)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.salvando.set(false)))
+      .subscribe({
+        next: () => {
+          this.exclusaoPendente.set(null);
+          this.categorias.update(lista => lista.filter(x => x.id !== tentativa.id));
+          this.categoriaSelecionada.set(null);
+          this.modoFormulario.set(null);
+          this.mensagem.set('Categoria excluída com sucesso.');
+          this.carregarCategorias();
+        },
+        error: (erro: unknown) => {
+          if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500) {
+            this.exclusaoPendente.set(null);
+            if (this.redirecionarSessaoExpirada(erro)) return;
+            if (erro.error?.codigo === 'versao_desatualizada' || erro.error?.codigo === 'conflito_concorrencia') {
+              this.marcarVersaoDesatualizada();
+            } else {
+              this.erroFormulario.set(erro.error?.codigo === 'categoria_com_produtos'
+                ? 'Esta categoria possui produtos vinculados e não pode ser excluída.'
+                : erro.status === 404 ? 'Esta categoria não está mais disponível.' : 'Não foi possível excluir a categoria.');
+            }
+          } else {
+            this.erroFormulario.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');
+          }
+        },
+      });
+  }
+
+  protected recarregarVersao(): void {
+    const categoria = this.categoriaSelecionada();
+    if (categoria) this.editarCategoria(categoria);
+  }
+
+  private marcarVersaoDesatualizada(): void {
+    this.versaoDesatualizada.set(true);
+    this.erroFormulario.set('A categoria foi alterada. Recarregue os dados antes de confirmar novamente.');
+  }
+
   protected alterarStatus(categoria: AdminCategoria): void {
+    if (this.salvando() || this.exclusaoPendente()) return;
     if (this.statusEmAtualizacao().has(categoria.id)) {
       return;
     }
@@ -253,6 +309,10 @@ export class AdminCategoriasComponent {
       }
       if (error.status === 404) {
         this.erroFormulario.set('Esta categoria não está mais disponível. Atualize a listagem.');
+        return;
+      }
+      if (error.status === 409 && error.error?.codigo === 'versao_desatualizada') {
+        this.marcarVersaoDesatualizada();
         return;
       }
       if (error.status === 409) {

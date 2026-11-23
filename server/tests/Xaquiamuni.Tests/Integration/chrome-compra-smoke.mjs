@@ -72,9 +72,15 @@ try {
     });
     socket.send(JSON.stringify({ id, method, params, sessionId }));
   });
+  const confirmacoes = new Map();
   socket.addEventListener('message', event => {
     const data = JSON.parse(event.data);
-    if (data.method === 'Fetch.requestPaused') {
+    if (data.method === 'Page.javascriptDialogOpening' && confirmacoes.has(data.sessionId)) {
+      const confirmacao = confirmacoes.get(data.sessionId);
+      confirmacao.mensagem = data.params.message;
+      void call('Page.handleJavaScriptDialog', { accept: confirmacao.aceitar }, data.sessionId)
+        .then(() => { confirmacao.processada = true; }).catch(() => {});
+    } else if (data.method === 'Fetch.requestPaused') {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
       const comprovante = respostasEmRecuperacao.get(data.sessionId);
@@ -210,7 +216,97 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
-  if (process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
+  if (dados.exclusaoCategorias) {
+    await call('Page.enable', {}, a.sessionId);
+    await a.ir('/admin/categorias');
+    await waitFor(() => a.ev("!!document.querySelector('.admin-shell .admin-theme-toggle')"), 'shell de categorias');
+    const botao = nome => "[...document.querySelectorAll('main button')].find(b => !b.disabled && "
+      + "(b.textContent.trim() === " + JSON.stringify(nome) + " || b.getAttribute('aria-label') === " + JSON.stringify(nome) + "))";
+    const acionar = async nome => {
+      const expr = botao(nome);
+      await waitFor(() => a.ev('!!(' + expr + ')'), nome);
+      await a.ev('(' + expr + ').click()');
+    };
+    const contem = texto => waitFor(() => a.ev("document.querySelector('main')?.innerText.includes(" + JSON.stringify(texto) + ")"), texto);
+    const confirmar = async (aceitar, nome) => {
+      const confirmacao = { aceitar };
+      confirmacoes.set(a.sessionId, confirmacao);
+      try {
+        await a.ev("setTimeout(() => (" + botao('Excluir categoria') + ").click(), 0)");
+        await waitFor(() => confirmacao.processada, 'confirmação nativa de exclusão');
+        assert.ok(confirmacao.mensagem.includes(nome) && confirmacao.mensagem.includes('permanente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    };
+    const api = (path, method, body, versao) => a.ev(`(async () => {
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(path)}, {
+        method: ${JSON.stringify(method)}, headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken,
+          ...( ${JSON.stringify(versao ?? null)} ? { 'If-Match': '"' + ${JSON.stringify(versao ?? null)} + '"' } : {}) },
+        body: JSON.stringify(${JSON.stringify(body)})
+      });
+      return [r.status, await r.json().catch(() => null)];
+    })()`);
+    for (const width of [375, 1280]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      if (width === 375) {
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+        assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), 'dark');
+      } else {
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+        assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), 'light');
+      }
+      const nome = 'Categoria descartavel ' + width;
+      await acionar('Nova categoria');
+      await waitFor(() => a.ev("!!document.querySelector('#category-name')"), 'formulário da categoria');
+      await a.ev(`(() => { const campo = document.querySelector('#category-name'); campo.value = ${JSON.stringify(nome)};
+        campo.dispatchEvent(new Event('input', { bubbles: true })); })()`);
+      await acionar('Salvar categoria');
+      await contem('Categoria criada com sucesso.');
+      await acionar('Editar ' + nome);
+      await waitFor(() => a.ev('!!(' + botao('Excluir categoria') + ')'), 'ação de exclusão');
+      const exclusaoBotao = '(' + botao('Excluir categoria') + ')';
+      await a.ev(exclusaoBotao + '.focus()');
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 }, a.sessionId);
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 }, a.sessionId);
+      assert.equal(await a.ev("document.activeElement.matches(':focus-visible')"), true);
+      await confirmar(false, nome);
+      await contem(nome);
+      assert.equal(await a.ev("document.documentElement.scrollWidth <= innerWidth"), true);
+      await confirmar(true, nome);
+      await contem('Categoria excluída com sucesso.');
+      await a.ir('/admin/categorias');
+      await waitFor(() => a.ev("!document.querySelector('app-categoria-form') && !!document.querySelector('main #category-search')"), 'listagem após recarregar');
+      const lista = await a.ev("fetch('/api/admin/categorias').then(r => r.json())");
+      assert.equal(lista.some(item => item.nome === nome), false);
+    }
+    const rota = '/api/admin/categorias';
+    const [criada, categoria] = await api(rota, 'POST', { nome: 'Categoria com vinculo', ordemExibicao: 0 });
+    assert.equal(criada, 201);
+    await a.ir('/admin/categorias');
+    await acionar('Editar Categoria com vinculo');
+    await waitFor(() => a.ev('!!(' + botao('Excluir categoria') + ')'), 'versão carregada');
+    const [editada] = await api(rota + '/' + categoria.id, 'PUT', { nome: categoria.nome, ordemExibicao: 1 }, categoria.versao);
+    assert.equal(editada, 200);
+    await confirmar(true, categoria.nome);
+    await acionar('Recarregar categoria');
+    const [criado, produto] = await api('/api/admin/produtos', 'POST', {
+      nome: 'Produto bloqueante', categoriaId: categoria.id, simples: true,
+      variantePadrao: { identificacao: null, unidadeVenda: 'UN', precoVenda: 19 },
+    });
+    assert.equal(criado, 201);
+    await confirmar(true, categoria.nome);
+    await contem('possui produtos vinculados');
+    assert.equal(await a.ev(`fetch('/api/admin/produtos/${produto.id}').then(r => r.status)`), 200);
+    await acionar('Editar Categoria com produto publicado');
+    await waitFor(() => a.ev("document.querySelector('#category-name')?.value === 'Categoria com produto publicado'"), 'categoria publicada carregada');
+    await confirmar(true, 'Categoria com produto publicado');
+    await contem('possui produtos vinculados');
+    console.log('Exclusão de categorias em 375 e 1280 px, versões antigas e produtos publicados e despublicados validados.');
+  }
+
+  if (!dados.exclusaoCategorias && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
     await a.ir('/admin/promocoes-frete');
     const botao = texto => waitFor(() => a.ev(`(() => {
       const alvo = [...document.querySelectorAll('main button')]

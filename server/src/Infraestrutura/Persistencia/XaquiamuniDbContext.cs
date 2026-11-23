@@ -1182,8 +1182,10 @@ public sealed class XaquiamuniDbContext
                 .IsRequired();
         });
 
+        ExclusaoCategoriaMapping.Configurar(builder);
         builder.Entity<Categoria>(categoria =>
         {
+            categoria.Property(x => x.Versao).HasDefaultValueSql("NEWID()").IsConcurrencyToken();
             categoria.ToTable("Categorias", table =>
                 table.HasCheckConstraint(
                     "CK_Categorias_OrdemExibicao_NonNegative",

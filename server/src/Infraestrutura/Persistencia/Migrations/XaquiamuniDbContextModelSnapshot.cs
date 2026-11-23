@@ -240,6 +240,12 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<int>("OrdemExibicao")
                         .HasColumnType("int");
 
+                    b.Property<Guid>("Versao")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uniqueidentifier")
+                        .HasDefaultValueSql("NEWID()");
+
                     b.HasKey("Id");
 
                     b.HasIndex("NomeNormalizado")
@@ -2990,6 +2996,40 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("PedidoId");
 
                     b.ToTable("OperacoesEntregaPropria", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoExclusaoCategoria", b =>
+                {
+                    b.Property<Guid>("AutorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("CategoriaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("ExcluidaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("NomeCategoria")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<Guid>("VersaoEsperada")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("AutorId", "Chave");
+
+                    b.HasIndex("CategoriaId");
+
+                    b.ToTable("OperacoesExclusaoCategoria", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoFinanceira", b =>

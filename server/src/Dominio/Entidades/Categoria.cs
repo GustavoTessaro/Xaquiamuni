@@ -28,6 +28,7 @@ public sealed class Categoria
     }
 
     public Guid Id { get; private set; }
+    public Guid Versao { get; private set; } = Guid.NewGuid();
     public string Nome { get; private set; } = null!;
     public string NomeNormalizado { get; private set; } = null!;
     public string? Descricao { get; private set; }
@@ -59,11 +60,13 @@ public sealed class Categoria
         NomeNormalizado = nomeNormalizado.ToUpperInvariant();
         Descricao = descricaoNormalizada;
         OrdemExibicao = ordem;
+        Versao = Guid.NewGuid();
     }
 
     public void DefinirAtiva(bool ativa)
     {
         Ativa = ativa;
+        Versao = Guid.NewGuid();
     }
 
     public override string ToString() => "[Categoria]";

@@ -6,15 +6,17 @@ using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class EfCategoriaRepository : ICategoriaRepository
+public sealed class EfCategoriaRepository : ICategoriaRepository, IExcluirCategoria
 {
     private const string NomeIndexName = "UX_Categorias_NomeNormalizado";
 
     private readonly XaquiamuniDbContext _dbContext;
+    private readonly TimeProvider _relogio;
 
-    public EfCategoriaRepository(XaquiamuniDbContext dbContext)
+    public EfCategoriaRepository(XaquiamuniDbContext dbContext, TimeProvider? relogio = null)
     {
         _dbContext = dbContext;
+        _relogio = relogio ?? TimeProvider.System;
     }
 
     public async Task<IReadOnlyList<Categoria>> ListarAsync(
@@ -91,6 +93,11 @@ public sealed class EfCategoriaRepository : ICategoriaRepository
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return true;
         }
+        catch (DbUpdateConcurrencyException)
+        {
+            _dbContext.Entry(categoria).State = EntityState.Detached;
+            throw new CategoriaVersaoException();
+        }
         catch (DbUpdateException exception) when (IsCategoryNameConflict(exception))
         {
             await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
@@ -98,6 +105,56 @@ public sealed class EfCategoriaRepository : ICategoriaRepository
             return false;
         }
     }
+
+    public async Task<ExclusaoCategoriaStatus> ExecutarAsync(Guid id, Guid versao, Guid autor, Guid chave, CancellationToken ct)
+    {
+        try
+        {
+            await using var transacao = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+            await BloquearAsync($"category-delete-key:{autor:D}:{chave:D}", ct);
+            var anterior = await _dbContext.Set<OperacaoExclusaoCategoria>().AsNoTracking().SingleOrDefaultAsync(
+                x => x.AutorId == autor && x.Chave == chave, ct);
+            if (anterior is not null)
+                return anterior.CategoriaId == id && anterior.VersaoEsperada == versao
+                    ? anterior.Resultado : ExclusaoCategoriaStatus.ChaveEmUso;
+
+            await BloquearAsync($"category-delete:{id:D}", ct);
+            var categoria = await _dbContext.Categorias.SingleOrDefaultAsync(x => x.Id == id, ct);
+            if (categoria is null) return ExclusaoCategoriaStatus.Ausente;
+            if (categoria.Versao != versao) return ExclusaoCategoriaStatus.VersaoDesatualizada;
+            if (await _dbContext.Produtos.AnyAsync(x => x.CategoriaId == id, ct))
+                return ExclusaoCategoriaStatus.ComProdutos;
+
+            _dbContext.Add(new OperacaoExclusaoCategoria(autor, chave, id, categoria.Nome, versao,
+                _relogio.GetUtcNow(), ExclusaoCategoriaStatus.Excluida));
+            _dbContext.Categorias.Remove(categoria);
+            await _dbContext.SaveChangesAsync(ct);
+            await transacao.CommitAsync(ct);
+            return ExclusaoCategoriaStatus.Excluida;
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return ExclusaoCategoriaStatus.VersaoDesatualizada;
+        }
+        catch (DbUpdateException e) when (e.InnerException is SqlException { Number: 547 } sql &&
+            sql.Message.Contains("FK_Produtos_Categorias_CategoriaId", StringComparison.Ordinal))
+        {
+            return ExclusaoCategoriaStatus.ComProdutos;
+        }
+        catch (Exception e) when (e is SqlException { Number: 1205 or 1222 or 51000 }
+            or DbUpdateException { InnerException: SqlException { Number: 1205 or 1222 } })
+        {
+            return ExclusaoCategoriaStatus.ConflitoConcorrencia;
+        }
+    }
+
+    private Task<int> BloquearAsync(string recurso, CancellationToken ct) =>
+        _dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            DECLARE @status int;
+            EXEC @status = sys.sp_getapplock @Resource = {recurso}, @LockMode = 'Exclusive',
+                @LockOwner = 'Transaction', @LockTimeout = 10000;
+            IF @status < 0 THROW 51000, 'Category deletion lock unavailable.', 1;
+            """, ct);
 
     private static bool IsCategoryNameConflict(DbUpdateException exception)
     {

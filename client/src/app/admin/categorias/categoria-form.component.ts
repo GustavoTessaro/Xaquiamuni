@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnChanges, SimpleChanges, input, output, signal } from '@angular/core';
 import {
   AbstractControl,
   FormControl,
@@ -30,9 +30,10 @@ function integerValue(control: AbstractControl<number | null>): ValidationErrors
   styleUrl: './categoria-form.component.css',
   templateUrl: './categoria-form.component.html',
 })
-export class CategoriaFormComponent implements OnInit {
+export class CategoriaFormComponent implements OnChanges {
   readonly categoria = input<AdminCategoria | null>(null);
   readonly saving = input(false);
+  readonly blocked = input(false);
   readonly errorMessage = input('');
   readonly save = output<CategoriaWriteRequest>();
   readonly cancel = output<void>();
@@ -52,15 +53,15 @@ export class CategoriaFormComponent implements OnInit {
     }),
   });
 
-  ngOnInit(): void {
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!changes['categoria']) return;
     const categoria = this.categoria();
-    if (categoria) {
-      this.form.setValue({
-        nome: categoria.nome,
-        descricao: categoria.descricao ?? '',
-        ordemExibicao: categoria.ordemExibicao,
-      });
-    }
+    this.submitted.set(false);
+    this.form.reset({
+      nome: categoria?.nome ?? '',
+      descricao: categoria?.descricao ?? '',
+      ordemExibicao: categoria?.ordemExibicao ?? 0,
+    });
   }
 
   protected get heading(): string {
@@ -102,7 +103,7 @@ export class CategoriaFormComponent implements OnInit {
   }
 
   protected submit(): void {
-    if (this.saving()) {
+    if (this.saving() || this.blocked()) {
       return;
     }
 

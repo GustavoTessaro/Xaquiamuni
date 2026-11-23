@@ -3,4 +3,4 @@ namespace Xaquiamuni.Aplicacao.Catalogo;
 public sealed record CategoriaInput(
     string? Nome,
     string? Descricao,
-    int? OrdemExibicao);
+    int? OrdemExibicao, Guid? VersaoEsperada = null);

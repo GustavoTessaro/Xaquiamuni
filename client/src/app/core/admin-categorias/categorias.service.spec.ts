@@ -79,14 +79,27 @@ describe('CategoriasService', () => {
   });
 
   it('gets the shared antiforgery request token before editing a category', () => {
-    service.editar(categoria.id, writeRequest).subscribe();
+    service.editar(categoria.id, writeRequest, 'versao-atual').subscribe();
 
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'edit-request-token' });
     const request = http.expectOne(`/api/admin/categorias/${categoria.id}`);
     expect(request.request.method).toBe('PUT');
     expect(request.request.body).toEqual(writeRequest);
     expect(request.request.headers.get('X-XSRF-TOKEN')).toBe('edit-request-token');
+    expect(request.request.headers.get('If-Match')).toBe('"versao-atual"');
     request.flush(categoria);
+  });
+
+  it('sends CSRF, the quoted version and the supplied idempotency key on DELETE', () => {
+    const chave = 'c2399a10-8097-4546-a77b-a0ec15a3ca82';
+    service.excluir(categoria.id, 'versao-atual', chave).subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'delete-request-token' });
+    const request = http.expectOne(`/api/admin/categorias/${categoria.id}`);
+    expect(request.request.method).toBe('DELETE');
+    expect(request.request.headers.get('X-XSRF-TOKEN')).toBe('delete-request-token');
+    expect(request.request.headers.get('If-Match')).toBe('"versao-atual"');
+    expect(request.request.headers.get('Idempotency-Key')).toBe(chave);
+    request.flush(null, { status: 204, statusText: 'No Content' });
   });
 
   it('gets the shared antiforgery request token before changing category status', () => {

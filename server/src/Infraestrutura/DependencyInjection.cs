@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IGerenciarReceitasProducao, EfReceitaProducaoRepository>();
         services.AddScoped<IGerenciarFornecedores, EfFornecedorRepository>();
         services.AddScoped<ICategoriaRepository, EfCategoriaRepository>();
+        services.AddScoped<IExcluirCategoria, EfCategoriaRepository>();
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
         services.AddScoped<IProdutoRepository, EfProdutoRepository>();
         services.AddScoped<IGerenciarProdutos, GerenciarProdutos>();
