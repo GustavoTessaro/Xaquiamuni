@@ -176,7 +176,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                     {
                         await using var verificacao = db.CreateVerificationContext();
                         var (produto, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
-                        if (modoAdmin)
+                        if (modoAdmin || postal)
                             verificacao.ClienteEnderecos.Add(ClienteEndereco.Criar(Guid.NewGuid(), cliente.Id,
                                 "95200000", "RS", "Vacaria", "Centro", "Rua cadastrada do ensaio", "12", null, true));
                         if (auditoriaAdmin) varianteAuditoria = variante.Id;
@@ -227,6 +227,11 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                     {
                         await using var verificacao = db.CreateVerificationContext();
                         var pedidos = await verificacao.Pedidos.AsNoTracking().ToListAsync();
+                        var enderecoCadastrado = await verificacao.ClienteEnderecos.AsNoTracking()
+                            .SingleAsync(x => x.ClienteUserId == cliente.Id && x.IsDefault);
+                        Assert.Equal(("Rua cadastrada do ensaio", "12"), (enderecoCadastrado.Logradouro, enderecoCadastrado.Numero));
+                        Assert.All(pedidos, pedido => Assert.Equal("Rua de teste", pedido.Entrega!.Destino!.Logradouro));
+                        Assert.Equal(new[] { "1280", "375" }, pedidos.Select(p => p.Entrega!.Destino!.Numero).Order());
                         Assert.Equal(2, pedidos.Count);
                         Assert.All(pedidos, pedido =>
                         {

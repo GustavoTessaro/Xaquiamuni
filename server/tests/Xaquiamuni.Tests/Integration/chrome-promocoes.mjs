@@ -196,8 +196,10 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   assert.deepEqual(await capturar(cliente), original);
   assert.equal(cliente.compra().total, envios);
   await clicar(cliente, 'Recuperar tentativa original');
+  await waitFor(() => cliente.ev(`location.pathname === ${literal('/pedidos/' + pedido.id)}`),
+    'Detalhe do pedido recuperado após o replay');
   await tem(cliente, '14,38% OFF');
-  assert.equal(cliente.compra().total, envios + 1);
+  assert.equal(cliente.compra().total, envios + 1, 'Envios observados após a recuperação do pedido');
   assert.equal(cliente.compra().chave, original.chave);
   assert.deepEqual(JSON.parse(cliente.compra().corpo).itens, original.itens);
   assert.equal((await consulta(cliente)).length, 1);
@@ -243,7 +245,7 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   await waitFor(() => outro.ev(`!!${botao('Confirmar valor e finalizar compra')} && !document.querySelector('main app-preco-exibido del')`),
     'Preço regular exibido antes da nova confirmação');
   const alterada = outro.compra();
-  assert.equal(alterada.total, 2);
+  assert.equal(alterada.total, 2, 'Envios observados após desativar a promoção');
   assert.notEqual(alterada.chave, expirada.chave);
   assert.equal((await consulta(outro)).length, 1);
   await clicar(outro, 'Confirmar valor e finalizar compra');

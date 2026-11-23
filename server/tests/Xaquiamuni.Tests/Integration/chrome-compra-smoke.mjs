@@ -216,7 +216,7 @@ try {
   if (dados.agenda) {
     assert.equal(await c.ev('fetch("/api/admin/agenda").then(r => r.status)'), 403);
     const botaoAgenda = rotulo => `[...document.querySelectorAll('main button')]
-      .find(b => b.textContent.trim() === ${JSON.stringify(rotulo)} && !b.disabled && b.getClientRects().length)`;
+      .find(b => b.textContent.trim() === ${JSON.stringify(rotulo)} && !b.matches(':disabled') && b.getClientRects().length)`;
     const clicarAgenda = async rotulo => {
       await waitFor(() => a.ev(`(() => {
         const botao = ${botaoAgenda(rotulo)};
@@ -236,6 +236,7 @@ try {
       }, a.sessionId);
       await a.ir('/admin/agenda');
       await waitFor(() => a.ev(`document.querySelector('main h1')?.textContent.trim() === 'Agenda'`), 'Agenda não abriu');
+      await waitFor(() => a.ev("!!document.querySelector('#agenda-dia ~ .itens')"), 'Consulta inicial da Agenda');
       await clicarAgenda('Novo compromisso');
       await waitFor(() => a.ev('!!document.querySelector("#agenda-form")'), 'Cadastro não abriu');
       assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));

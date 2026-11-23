@@ -66,10 +66,76 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     if (width === 375) await clicar(c, 'Adicionar ao carrinho');
     await c.ir('/checkout');
     await waitFor(() => c.ev("!!document.querySelector('#modalidade-entrega option[value=Correios]')"), 'Opção Correios');
-    assert.ok(await campo(c, '#modalidade-entrega', 'Correios'));
-    const valores = ['95200-000', 'RS', 'Vacaria', 'Centro', 'Rua de teste', String(width)];
-    for (let i = 0; i < valores.length; i++) {
-      assert.ok(await campo(c, '.resumo fieldset label:nth-of-type(' + (i + 1) + ') input', valores[i]));
+    const rotaEndereco = '/api/clientes/me/endereco-padrao';
+    const seletor = i => '.resumo fieldset label:nth-of-type(' + (i + 1) + ') input';
+    const preencher = async (i, valor) => assert.ok(await campo(c, seletor(i), valor));
+    const ler = i => c.ev(`document.querySelector(${JSON.stringify(seletor(i))})?.value`);
+    const selecionar = modalidade => campo(c, '#modalidade-entrega', modalidade);
+    if (width === 375) {
+      c.falharProximaConsultaPix(rotaEndereco);
+      assert.ok(await selecionar('Correios'));
+      await texto(c, 'Não foi possível consultar o endereço cadastrado');
+      await preencher(0, '95000000');
+      assert.equal(await ler(0), '95000000');
+      for (const [resposta, aviso] of [
+        [`new Response('{"endereco":null}', {status: 200})`, 'Endereço cadastrado ausente ou incompleto'],
+        [`new Response(null, {status: 401})`, 'Entre na sua conta para consultar o endereço cadastrado'],
+      ]) {
+        await selecionar('RetiradaLocal');
+        await c.ev(`(() => {
+          const original = window.fetch;
+          window.fetch = (url, opcoes) => {
+            if (new URL(url, location.origin).pathname !== ${JSON.stringify(rotaEndereco)})
+              return original(url, opcoes);
+            window.fetch = original;
+            return Promise.resolve(${resposta});
+          };
+        })()`);
+        assert.ok(await selecionar('Correios'));
+        await texto(c, aviso);
+        assert.equal(await ler(0), '95000000');
+      }
+      await selecionar('RetiradaLocal');
+      await c.ev(`(() => {
+        const original = window.fetch;
+        window.fetch = async (url, opcoes) => {
+          if (new URL(url, location.origin).pathname !== ${JSON.stringify(rotaEndereco)})
+            return original(url, opcoes);
+          window.fetch = original;
+          const espera = new Promise(resolve => window.liberarEndereco = resolve);
+          const resposta = await original(url, opcoes);
+          await espera;
+          return resposta;
+        };
+      })()`);
+    }
+    assert.ok(await selecionar('Correios'));
+    if (width === 375) {
+      await texto(c, 'Consultando endereço cadastrado');
+      await preencher(4, 'Digitado durante a consulta');
+      await waitFor(() => c.ev("typeof window.liberarEndereco === 'function'"), 'Consulta retida');
+      await c.ev('window.liberarEndereco()');
+      await texto(c, 'Usar endereço cadastrado');
+      assert.equal(await ler(4), 'Digitado durante a consulta');
+    }
+    await clicar(c, 'Usar endereço cadastrado');
+    for (const [i, esperado] of ['95200000', 'RS', 'Vacaria', 'Centro', 'Rua cadastrada do ensaio', '12', ''].entries())
+      assert.equal(await ler(i), esperado);
+    await clicar(c, 'Informar outro endereço');
+    assert.equal(await ler(0), '');
+    await clicar(c, 'Usar endereço cadastrado');
+    assert.equal(await ler(4), 'Rua cadastrada do ensaio');
+    await preencher(4, 'Rua de teste');
+    await preencher(5, String(width));
+    if (width === 375) {
+      await c.ev('window.confirm = () => true');
+      for (const [i, valor, original] of [[2, 'Caxias do Sul', 'Vacaria'], [1, 'SP', 'RS'], [0, '99999999', '95200000']]) {
+        await preencher(i, valor);
+        await clicar(c, 'Solicitar cotação');
+        await texto(c, 'O CEP precisa corresponder ao município informado');
+        await preencher(i, original);
+      }
+      console.log('Endereço postal: falha, ausência, 401, resposta tardia, alternativa e destinos divergentes verificados.');
     }
     await c.ev('window.confirm = () => true');
     const perdaSolicitacao = width === 375 ? c.perderResposta('/api/cotacoes-correios') : null;
@@ -94,6 +160,9 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     await waitFor(() => a.ev(`!!document.querySelector('a[href="${'/admin' + rota}"]')`), 'Cotação na lista filtrada');
     await a.ir('/admin' + rota);
     await texto(a, 'Rua de teste');
+    const snapshot = await c.ev(`fetch(${JSON.stringify('/api' + rota)}).then(r=>r.json()).then(x=>x.endereco)`);
+    assert.deepEqual([snapshot.cep, snapshot.uf, snapshot.cidade, snapshot.logradouro, snapshot.numero],
+      ['95200000', 'RS', 'Vacaria', 'Rua de teste', String(width)]);
     if (width === 1280) {
       await a.ev("document.querySelector('.admin-theme-toggle').click()");
       await waitFor(() => a.ev("document.querySelector('.admin-shell').dataset.adminTheme === 'dark'"), 'ADMIN escuro');
@@ -128,6 +197,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
 
     await c.ir(rota);
     await texto(c, 'Proposta disponível');
+    assert.ok(await c.ev("![...document.querySelectorAll('main a')].some(a => a.textContent.trim() === 'Ver meu pedido')"));
     await c.ev('window.confirm = () => true');
     await clicar(c, 'Aceitar proposta');
     await clicar(c, 'Continuar para pagamento');
@@ -149,6 +219,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     }
     await texto(c, '24,89');
     const pedido = await c.ev('location.pathname');
+    const pix = await c.ev(`fetch(${JSON.stringify('/api' + pedido + '/pagamento')}).then(r=>r.json())`);
+    assert.equal(pix.valorCentavos, '2489');
 
     if (width === 375) {
       const outroContexto = await abrir('/login');
@@ -192,6 +264,9 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     };
     await confirmar('Confirmar pagamento', 'Registrar confirmação');
     await texto(a, 'Pagamento confirmado');
+    const entradas = await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json()).then(x =>
+      x.itens.filter(m => m.recursoId === ${JSON.stringify(pedido.split('/').at(-1))}))`);
+    assert.deepEqual(entradas.map(m => m.valorCentavos), ['2489']);
     await clicar(a, 'Iniciar preparação');
     await clicar(a, 'Confirmar início');
     await texto(a, 'Em preparação');
@@ -206,11 +281,23 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     }
     await texto(a, 'Rastreamento não informado');
     if (perdaPostagem) assert.deepEqual(perdaPostagem.envios[0], perdaPostagem.envios[1]);
-    await confirmar('Corrigir rastreamento', 'Salvar código', async () => {
-      assert.ok(await campo(a, 'form input[maxlength="32"]', 'AB123456789BR'));
+    const corrigir = codigo => confirmar('Corrigir rastreamento', 'Salvar código', async () => {
+      assert.ok(await campo(a, 'form input[maxlength="32"]', codigo));
     });
-    await waitFor(() => a.ev(`document.querySelector('app-historico-rastreamento li')?.textContent.includes('AB123456789BR')`),
-      'Histórico atualizado após corrigir o código');
+    const lerHistoricoRastreamento = () => a.ev("Array.from(document.querySelectorAll('app-historico-rastreamento li'), linha => [...linha.querySelectorAll('dd')].map(campo => campo.textContent.trim()))");
+    await corrigir('AA123456789BR');
+    await waitFor(async () => (await lerHistoricoRastreamento())[0]?.[1] === 'AA123456789BR', 'Primeira correção no histórico');
+    assert.equal((await lerHistoricoRastreamento())[0][0], 'Não informado');
+    await corrigir('AB123456789BR');
+    await waitFor(async () => (await lerHistoricoRastreamento())[0]?.[1] === 'AB123456789BR', 'Segunda correção no histórico');
+    const correcoes = await lerHistoricoRastreamento();
+    assert.deepEqual(correcoes.map(linha => linha.slice(0, 2)), [
+      ['AA123456789BR', 'AB123456789BR'], ['Não informado', 'AA123456789BR'],
+    ]);
+    for (const [, , data, autor] of correcoes) {
+      assert.match(data, /^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}:\d{2}$/);
+      assert.match(autor, /^[a-f0-9-]{36}$/i);
+    }
     for (const tema of ['light', 'dark']) {
       const temaAtual = () => a.ev("document.querySelector('.admin-shell')?.dataset.adminTheme");
       if (await temaAtual() !== tema) await a.ev("document.querySelector('.admin-theme-toggle').click()");
