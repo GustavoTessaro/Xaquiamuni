@@ -227,6 +227,63 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(1, await context.MovimentosProdutoAcabado.CountAsync());
     }
 
+    [SqlServerIntegrationFact]
+    public async Task Checkout_EnderecoPadraoRetornaSomenteProjecaoDoTitularSemAlterarCadastro()
+    {
+        const string rota = "/api/clientes/me/endereco-padrao";
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var context = database.CreateVerificationContext();
+        var titular = await CriarClienteCompraAsync(context);
+        var outro = await CriarClienteCompraAsync(context);
+        var semEndereco = await CriarClienteCompraAsync(context);
+        var enderecoInvalido = await CriarClienteCompraAsync(context);
+        var semPerfil = Guid.NewGuid();
+        context.Users.Add(new XaquiamuniUser { Id = semPerfil, UserName = semPerfil.ToString() });
+        context.ClienteEnderecos.AddRange(
+            ClienteEndereco.Criar(Guid.NewGuid(), titular, "95200-000", "RS", "Vacaria", "Centro", "Rua padrão", "12", "Apto 1", true),
+            ClienteEndereco.Criar(Guid.NewGuid(), titular, "95200-000", "RS", "Vacaria", "Centro", "Rua alternativa", "34", null, false),
+            ClienteEndereco.Criar(Guid.NewGuid(), outro, "95200-000", "RS", "Vacaria", "Centro", "Rua de outra conta", "56", null, true),
+            ClienteEndereco.Criar(Guid.NewGuid(), enderecoInvalido, "95200-000", "RS", "Vacaria", "Centro", "Rua legada", "78", null, true));
+        await context.SaveChangesAsync();
+        await context.ClienteEnderecos.Where(x => x.ClienteUserId == enderecoInvalido)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.Uf, "XX"));
+
+        using var factory = CriarApiPedidos(database);
+        using var cliente = ClienteHttpPedidos(factory, titular);
+        using var anonimo = ClienteHttpPedidos(factory);
+        using var admin = ClienteHttpPedidos(factory, Guid.NewGuid(), XaquiamuniRoles.Administrador);
+        using var respostaAnonima = await anonimo.GetAsync(rota);
+        using var respostaAdmin = await admin.GetAsync(rota);
+        Assert.Equal(HttpStatusCode.Unauthorized, respostaAnonima.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, respostaAdmin.StatusCode);
+
+        using var resposta = await cliente.GetAsync($"{rota}?clienteId={outro:D}&userId={outro:D}");
+        Assert.Equal(HttpStatusCode.OK, resposta.StatusCode);
+        Assert.True(resposta.Headers.CacheControl?.Private);
+        Assert.True(resposta.Headers.CacheControl?.NoStore);
+        var corpo = await resposta.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("endereco", Assert.Single(corpo.EnumerateObject()).Name);
+        var endereco = corpo.GetProperty("endereco");
+        Assert.Equal(new[] { "bairro", "cep", "cidade", "complemento", "logradouro", "numero", "uf" },
+            endereco.EnumerateObject().Select(x => x.Name).Order(StringComparer.Ordinal));
+        Assert.Equal("Rua padrão", endereco.GetProperty("logradouro").GetString());
+        Assert.Equal("95200000", endereco.GetProperty("cep").GetString());
+
+        foreach (var id in new[] { semEndereco, semPerfil, enderecoInvalido })
+        {
+            using var semDados = ClienteHttpPedidos(factory, id);
+            using var resultado = await semDados.GetAsync(rota);
+            Assert.Equal(HttpStatusCode.OK, resultado.StatusCode);
+            var dados = await resultado.Content.ReadFromJsonAsync<JsonElement>();
+            Assert.Equal(JsonValueKind.Null, dados.GetProperty("endereco").ValueKind);
+        }
+
+        var persistidos = await context.ClienteEnderecos.AsNoTracking().ToListAsync();
+        Assert.Equal(4, persistidos.Count);
+        Assert.Equal("XX", Assert.Single(persistidos, x => x.ClienteUserId == enderecoInvalido).Uf);
+        Assert.Equal("Rua padrão", Assert.Single(persistidos, x => x.ClienteUserId == titular && x.IsDefault).Logradouro);
+    }
+
     private static WebApplicationFactory<Program> CriarApiPedidos(
         SqlServerTestDatabase database,
         RelogioSqlControlado? relogio = null,

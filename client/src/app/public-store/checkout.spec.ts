@@ -170,6 +170,130 @@ describe('checkout integrado aos contratos HTTP', () => {
     harness.detectChanges();
   }
 
+  const rotaEndereco = '/api/clientes/me/endereco-padrao';
+  const enderecoSalvo = {
+    cep: '95200000', uf: 'RS', cidade: 'Vacaria', bairro: 'Centro', logradouro: 'Rua cadastrada', numero: '12', complemento: null,
+  };
+
+  async function abrirPostal() {
+    carrinho.adicionar(produto, varianteId);
+    const harness = await RouterTestingHarness.create('/checkout');
+    http.expectOne('/api/loja/modalidades-entrega').flush({
+      retiradaLocal: true, entregaPropria: true, correiosCotacaoManual: true,
+    });
+    await Promise.resolve();
+    harness.detectChanges();
+    selecionarModalidade(harness, 'Correios');
+    return harness;
+  }
+
+  function selecionarModalidade(harness: RouterTestingHarness, modalidade: string) {
+    const select = harness.routeNativeElement!.querySelector<HTMLSelectElement>('#modalidade-entrega')!;
+    select.value = modalidade;
+    select.dispatchEvent(new Event('change'));
+    harness.detectChanges();
+  }
+
+  function campoEndereco(harness: RouterTestingHarness, indice: number, valor?: string) {
+    const campo = harness.routeNativeElement!.querySelectorAll<HTMLInputElement>('fieldset input')[indice];
+    if (valor !== undefined) {
+      campo.value = valor;
+      campo.dispatchEvent(new Event('input'));
+      harness.detectChanges();
+    }
+    return campo.value;
+  }
+
+  function acaoPostal(harness: RouterTestingHarness, titulo: string) {
+    return [...harness.routeNativeElement!.querySelectorAll('button')].find(b => b.textContent.trim() === titulo);
+  }
+
+  it('sugere o endereço sem sobrescrever a digitação e permite alternar e editar os campos', async () => {
+    const harness = await abrirPostal();
+    const consulta = http.expectOne(rotaEndereco);
+    expect(consulta.request.method).toBe('GET');
+    expect(acaoPostal(harness, 'Usar endereço cadastrado')).toBeUndefined();
+    acaoPostal(harness, 'Informar outro endereço')!.click();
+    campoEndereco(harness, 0, '95000000');
+    consulta.flush({ endereco: enderecoSalvo });
+    harness.detectChanges();
+    expect(campoEndereco(harness, 0)).toBe('95000000');
+
+    acaoPostal(harness, 'Usar endereço cadastrado')!.click();
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+    expect(campoEndereco(harness, 0)).toBe('95200000');
+    campoEndereco(harness, 4, 'Rua editada');
+    acaoPostal(harness, 'Informar outro endereço')!.click();
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+    expect(campoEndereco(harness, 4)).toBe('');
+    acaoPostal(harness, 'Usar endereço cadastrado')!.click();
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+    expect(campoEndereco(harness, 4)).toBe('Rua cadastrada');
+  });
+
+  it.each([
+    [200, 'Endereço cadastrado ausente ou incompleto'],
+    [0, 'Não foi possível consultar o endereço cadastrado'],
+    [401, 'Entre na sua conta para consultar o endereço cadastrado'],
+  ])('mantém preenchimento manual quando a consulta retorna %i', async (status, aviso) => {
+    const harness = await abrirPostal();
+    const consulta = http.expectOne(rotaEndereco);
+    if (status === 0) consulta.error(new ProgressEvent('error'));
+    else consulta.flush({ endereco: null }, { status, statusText: status === 200 ? 'OK' : 'Unauthorized' });
+    harness.detectChanges();
+    expect(harness.routeNativeElement!.textContent).toContain(aviso);
+    expect(acaoPostal(harness, 'Usar endereço cadastrado')).toBeUndefined();
+    expect(campoEndereco(harness, 4, 'Destino manual')).toBe('Destino manual');
+  });
+
+  it('cancela a consulta ao alternar modalidade ou navegar e consulta novamente no retorno', async () => {
+    const harness = await abrirPostal();
+    const primeira = http.expectOne(rotaEndereco);
+    selecionarModalidade(harness, 'RetiradaLocal');
+    expect(primeira.cancelled).toBe(true);
+    selecionarModalidade(harness, 'Correios');
+    const segunda = http.expectOne(rotaEndereco);
+    await harness.navigateByUrl('/login');
+    expect(segunda.cancelled).toBe(true);
+    await harness.navigateByUrl('/checkout');
+    http.expectOne('/api/loja/modalidades-entrega').flush({ retiradaLocal: true, entregaPropria: true, correiosCotacaoManual: true });
+    await Promise.resolve();
+    harness.detectChanges();
+    selecionarModalidade(harness, 'Correios');
+    http.expectOne(rotaEndereco).flush({ endereco: enderecoSalvo });
+    harness.detectChanges();
+    expect(campoEndereco(harness, 0)).toBe('');
+  });
+
+  it('envia somente o destino revisado e permite corrigir uma rejeição postal', async () => {
+    const harness = await abrirPostal();
+    http.expectOne(rotaEndereco).flush({ endereco: enderecoSalvo });
+    harness.detectChanges();
+    acaoPostal(harness, 'Usar endereço cadastrado')!.click();
+    harness.detectChanges();
+    campoEndereco(harness, 4, 'Rua editada');
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      acaoPostal(harness, 'Solicitar cotação')!.click();
+      http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-postal' });
+      const post = await vi.waitFor(() => http.expectOne('/api/cotacoes-correios'));
+      expect(post.request.body).toEqual({ endereco: { ...enderecoSalvo, logradouro: 'Rua editada' }, itens: [item] });
+      post.flush({ codigo: 'destino_nao_validado' }, { status: 400, statusText: 'Bad Request' });
+      await vi.waitFor(() => {
+        harness.detectChanges();
+        expect(harness.routeNativeElement!.textContent).toContain('O CEP precisa corresponder ao município');
+      });
+      expect(campoEndereco(harness, 4, 'Destino corrigido')).toBe('Destino corrigido');
+      expect(JSON.stringify(localStorage)).not.toContain('Rua editada');
+      expect(JSON.stringify(sessionStorage)).not.toContain('Rua editada');
+    } finally {
+      confirmacao.mockRestore();
+    }
+  });
+
   it('oculta Correios enquanto a solicitação manual não estiver habilitada', async () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');

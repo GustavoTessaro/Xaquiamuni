@@ -86,6 +86,9 @@ public static class AuthEndpoints
             .ProducesProblem(StatusCodes.Status401Unauthorized)
             .ProducesProblem(StatusCodes.Status403Forbidden);
 
+        endpoints.MapGet("/api/clientes/me/endereco-padrao", GetEnderecoPadraoAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado);
+
         endpoints.MapGet(MeEndpoint, GetCurrentClient)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .WithName("GetCurrentClient")
@@ -113,6 +116,18 @@ public static class AuthEndpoints
     {
         await context.SignOutAsync(AuthenticationConfiguration.CookieScheme).ConfigureAwait(false);
         return Results.NoContent();
+    }
+
+    private static async Task<IResult> GetEnderecoPadraoAsync(HttpContext context,
+        IConsultarEnderecoPadrao consulta, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var clienteId)
+            || clienteId == Guid.Empty)
+            return Results.Unauthorized();
+
+        var endereco = await consulta.BuscarAsync(clienteId, cancellationToken);
+        return Results.Ok(new { endereco });
     }
 
     private static IResult GetCurrentClient(HttpContext context)

@@ -73,13 +73,22 @@
                   Usar meu endereço cadastrado
                 </label>
               }
+              @if (modalidade() === 'Correios') {
+                <div class="flex flex-wrap gap-2">
+                  @if (enderecoPostalCadastrado()) {
+                    <button type="button" (click)="escolherEnderecoPostal(true)" [disabled]="cotando() || solicitacaoIncerta()">Usar endereço cadastrado</button>
+                  }
+                  <button type="button" (click)="escolherEnderecoPostal(false)" [disabled]="cotando() || solicitacaoIncerta()">Informar outro endereço</button>
+                </div>
+                @if (avisoEnderecoPostal()) { <p role="status">{{ avisoEnderecoPostal() }}</p> }
+              }
               @if (!usarPadrao() || modalidade() === 'Correios') {
                 <fieldset class="min-w-0 grid gap-2" [disabled]="cotando() || solicitacaoIncerta()">
                   <legend>Endereço para este pedido</legend>
                   @for (campo of camposEndereco; track campo.campo) {
                     <label>
                       {{ campo.rotulo }}
-                      <input class="block w-full min-w-0" [ngModel]="endereco()[campo.campo]" (ngModelChange)="alterarEndereco(campo.campo, $event)"
+                      <input class="block w-full min-w-0" [ngModel]="enderecoFormulario()[campo.campo]" (ngModelChange)="alterarEndereco(campo.campo, $event)"
                         [maxlength]="campo.limite" [required]="campo.campo !== 'complemento'"
                         [attr.inputmode]="campo.campo === 'cep' ? 'numeric' : null" />
                     </label>

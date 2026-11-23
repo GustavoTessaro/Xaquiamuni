@@ -73,6 +73,11 @@ export class CotacoesCorreiosService {
   private readonly janela = inject(DOCUMENT).defaultView;
   private readonly auth = inject(AuthService);
 
+  consultarEnderecoPadrao() {
+    return this.http.get<{ endereco: EnderecoEntrega | null }>('/api/clientes/me/endereco-padrao')
+      .pipe(timeout(15_000));
+  }
+
   private rota(admin: boolean) { return admin ? '/api/admin/cotacoes-correios' : '/api/cotacoes-correios'; }
 
   listar(admin: boolean, pagina: number, situacao: string) {

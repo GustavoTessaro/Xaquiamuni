@@ -9,3 +9,11 @@ public interface IClienteRepository
 
     void Adicionar(ClienteEndereco endereco);
 }
+
+public interface IConsultarEnderecoPadrao
+{
+    Task<EnderecoPadraoCliente?> BuscarAsync(Guid clienteId, CancellationToken cancellationToken);
+}
+
+public sealed record EnderecoPadraoCliente(string Cep, string Uf, string Cidade, string Bairro,
+    string Logradouro, string Numero, string? Complemento);

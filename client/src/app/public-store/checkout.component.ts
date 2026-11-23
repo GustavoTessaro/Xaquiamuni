@@ -3,6 +3,7 @@ import {
   Component,
   DestroyRef,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
@@ -22,6 +23,10 @@ import { itensCompraValidos, mesmosItensCompra } from './pedidos.service';
 import { revalidarCarrinho } from './revalidar-carrinho';
 import { PrecoExibidoComponent } from './preco-exibido.component';
 
+const enderecoVazio: EnderecoEntrega = {
+  cep: '', uf: '', cidade: '', bairro: '', logradouro: '', numero: '', complemento: null,
+};
+
 @Component({
   selector: 'app-checkout',
   imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, DatePipe],
@@ -37,7 +42,7 @@ export class CheckoutComponent {
 
   protected async solicitarCorreios(): Promise<void> {
     if (this.cotando() || this.checkout.enviando() || !this.modalidades()?.correiosCotacaoManual) return;
-    const endereco = this.endereco();
+    const endereco = this.enderecoPostal();
     if (!this.tentativaPostal) {
       if (!/^\d{5}-?\d{3}$/.test(endereco.cep.trim()) ||
           this.camposEndereco.some(({ campo }) => campo !== 'complemento' && !endereco[campo]?.trim())) {
@@ -98,9 +103,12 @@ export class CheckoutComponent {
   protected readonly modalidades = signal<ModalidadesPublicas | null>(null);
   protected readonly modalidade = signal<ModalidadeEntrega>('RetiradaLocal');
   protected readonly usarPadrao = signal(true);
-  protected readonly endereco = signal<EnderecoEntrega>({
-    cep: '', uf: '', cidade: '', bairro: '', logradouro: '', numero: '', complemento: null,
-  });
+  protected readonly endereco = signal<EnderecoEntrega>({ ...enderecoVazio });
+  private readonly enderecoPostal = signal<EnderecoEntrega>({ ...enderecoVazio });
+  protected readonly enderecoPostalCadastrado = signal<EnderecoEntrega | null>(null);
+  protected readonly avisoEnderecoPostal = signal('');
+  protected readonly enderecoFormulario = computed(() =>
+    this.modalidade() === 'Correios' ? this.enderecoPostal() : this.endereco());
   protected readonly camposEndereco = [
     { campo: 'cep', rotulo: 'CEP', limite: 9 }, { campo: 'uf', rotulo: 'UF', limite: 2 },
     { campo: 'cidade', rotulo: 'Cidade', limite: 100 }, { campo: 'bairro', rotulo: 'Bairro', limite: 100 },
@@ -144,6 +152,25 @@ export class CheckoutComponent {
   });
 
   constructor() {
+    effect(onCleanup => {
+      if (this.modalidade() !== 'Correios') {
+        this.enderecoPostalCadastrado.set(null);
+        return;
+      }
+      this.avisoEnderecoPostal.set('Consultando endereço cadastrado…');
+      const consulta = this.correios.consultarEnderecoPadrao().subscribe({
+        next: ({ endereco }) => {
+          this.enderecoPostalCadastrado.set(endereco);
+          this.avisoEnderecoPostal.set(endereco ? '' : 'Endereço cadastrado ausente ou incompleto. Informe o destino abaixo.');
+        },
+        error: (falha: unknown) => {
+          this.avisoEnderecoPostal.set(falha instanceof HttpErrorResponse && falha.status === 401
+            ? 'Entre na sua conta para consultar o endereço cadastrado. Você também pode preencher o destino.'
+            : 'Não foi possível consultar o endereço cadastrado. Informe o destino abaixo.');
+        },
+      });
+      onCleanup(() => consulta.unsubscribe());
+    });
     this.checkout.atualizarTentativa();
     void this.carregarModalidades();
     this.destroy.onDestroy(() => clearTimeout(this.timer));
@@ -173,7 +200,14 @@ export class CheckoutComponent {
   }
 
   protected alterarEndereco(campo: keyof EnderecoEntrega, valor: string): void {
-    this.endereco.update(atual => ({ ...atual, [campo]: valor }));
+    const endereco = this.modalidade() === 'Correios' ? this.enderecoPostal : this.endereco;
+    endereco.update(atual => ({ ...atual, [campo]: valor }));
+  }
+
+  protected escolherEnderecoPostal(cadastrado: boolean): void {
+    if (this.cotando() || this.solicitacaoIncerta()) return;
+    const endereco = cadastrado ? this.enderecoPostalCadastrado() : enderecoVazio;
+    if (endereco) this.enderecoPostal.set({ ...endereco });
   }
 
   private chaveCotacao(): string {
