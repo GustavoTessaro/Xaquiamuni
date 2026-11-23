@@ -924,7 +924,7 @@ try {
     console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');
   }
 
-  if (dados.postal) await validarCorreios({ a, c, call, waitFor, dados });
+  if (dados.postal) await validarCorreios({ a, c, call, waitFor, dados, abrir, login, cliente });
 
   if (dados.modoAdmin)
     await validarModoAdmin({ a, c, call, waitFor, login, dados, admin });

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function validarCorreios({ a, c, call, waitFor, dados }) {
+export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login, cliente }) {
   const escrever = (rota, metodo, corpo) => a.ev(`(async () => {
     const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
     return (await fetch(${JSON.stringify(rota)}, {
@@ -149,6 +149,24 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
     }
     await texto(c, '24,89');
     const pedido = await c.ev('location.pathname');
+
+    if (width === 375) {
+      const outroContexto = await abrir('/login');
+      await login(outroContexto, cliente, '/api/auth');
+      assert.equal(await outroContexto.ev('localStorage.length + sessionStorage.length'), 0);
+      const linkPedido = "Array.from(document.querySelectorAll('main a')).find(a => a.textContent.trim() === 'Ver meu pedido')";
+      await outroContexto.ir(rota);
+      await waitFor(() => outroContexto.ev(`(${linkPedido})?.getAttribute('href') === ${JSON.stringify(pedido)}`),
+        'Atalho em contexto limpo');
+      await outroContexto.ev('window.atalhoAntesDeRecarregar = true');
+      await call('Page.reload', {}, outroContexto.sessionId);
+      await waitFor(() => outroContexto.ev(`!window.atalhoAntesDeRecarregar && (${linkPedido})?.getAttribute('href') === ${JSON.stringify(pedido)}`),
+        'Atalho após recarregar');
+      await outroContexto.ev(`(${linkPedido}).click()`);
+      await waitFor(() => outroContexto.ev(`location.pathname === ${JSON.stringify(pedido)}`), 'Pedido vinculado');
+      await texto(outroContexto, 'Aguardando pagamento');
+      console.log('Pedido convertido aberto após recarregar em outro contexto Chrome autenticado, com armazenamento limpo.');
+    }
 
     await a.ir('/admin' + pedido);
     const confirmar = async (acao, confirmar, preencher) => {

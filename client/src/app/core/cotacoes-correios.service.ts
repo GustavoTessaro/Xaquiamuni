@@ -50,6 +50,7 @@ export interface DetalheCotacao {
   endereco: EnderecoEntrega;
   propostas: PropostaPostal[];
   revisaoAceita: number | null;
+  pedidoConvertidoId: string | null;
 }
 export interface RevisaoPostal {
   proposta: ReferenciaPostal;

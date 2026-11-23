@@ -1,4 +1,4 @@
-import { DOCUMENT, DatePipe, NgTemplateOutlet } from '@angular/common';
+import { DatePipe, NgTemplateOutlet } from '@angular/common';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -8,7 +8,6 @@ import { AdminWorkspaceComponent } from '../admin/admin-workspace.component';
 import { tarifaEmCentavos } from '../admin/admin-atendimento.component';
 import { CotacoesCorreiosService, DetalheCotacao, erroPostal, estadosCotacao, PaginaCotacoes, RevisaoPostal, VolumePostal } from '../core/cotacoes-correios.service';
 import { formatarCentavos } from '../public-store/carrinho.service';
-import { uuidValido } from '../public-store/pedidos.service';
 import { CheckoutService } from '../public-store/checkout.service';
 
 const novaProposta = () => ({
@@ -37,7 +36,6 @@ const novaProposta = () => ({
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CotacoesCorreiosComponent {
-  private readonly janela = inject(DOCUMENT).defaultView;
   private readonly api = inject(CotacoesCorreiosService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
@@ -101,15 +99,6 @@ export class CotacoesCorreiosComponent {
       }
     } finally {
       if (leitura === this.leitura) this.carregando.set(false);
-    }
-  }
-
-  protected pedidoConvertido(id: string) {
-    try {
-      const pedido = this.janela?.localStorage.getItem('xaquiamuni:pedido-postal:' + id);
-      return uuidValido(pedido) ? pedido : null;
-    } catch {
-      return null;
     }
   }
 
@@ -208,11 +197,6 @@ export class CotacoesCorreiosComponent {
     const resultado = await this.checkout.enviar([], recuperar, undefined, token ? { token, cotacaoId: id } : undefined);
     if (!resultado || this.id() !== id || this.destroy.destroyed) return;
     if (resultado.estado === 'sucesso') {
-      try {
-        this.janela?.localStorage.setItem('xaquiamuni:pedido-postal:' + id, resultado.pedido.id);
-      } catch {
-        // O pedido continua disponível em Meus pedidos.
-      }
       await this.router.navigate(['/pedidos', resultado.pedido.id], { info: resultado.pedido });
     } else if (resultado.estado === 'preco_alterado') {
       this.erro.set('Os preços mudaram. Confira o novo total e confirme novamente.');

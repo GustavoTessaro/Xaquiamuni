@@ -43,10 +43,20 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         if (cotacao is null) return null;
         var propostas = await _dbContext.Set<PropostaCorreios>().AsNoTracking()
             .Where(x => x.SolicitacaoId == id && x.Revisao <= cotacao.Revisao).OrderByDescending(x => x.Revisao).ToListAsync(ct);
+        Guid? pedidoConvertidoId = null;
+        if (titular is { } clienteId && cotacao.Situacao == SituacaoCotacaoCorreios.ConvertidaEmPedido)
+        {
+            pedidoConvertidoId = await _dbContext.Pedidos.AsNoTracking()
+                .Where(pedido => pedido.CotacaoCorreiosId == id && pedido.ClienteId == clienteId)
+                .Select(pedido => (Guid?)pedido.Id)
+                .SingleOrDefaultAsync(ct);
+        }
+
         return new(ResumoPostal(cotacao, agora), cotacao.Versao, LerPostal<ItemCongeladoCorreios[]>(cotacao.ItensJson),
             LerPostal<EnderecoEntregaPedido>(cotacao.EnderecoJson), propostas.Select(x =>
                 new PropostaCorreiosDto(x.Revisao, x.Servico, x.FreteCentavos, x.PrazoDias, x.ValidaAteUtc,
-                    x.PesoTotalGramas, LerPostal<VolumeCorreios[]>(x.VolumesJson), x.PublicadaEmUtc)).ToArray(), cotacao.RevisaoAceita);
+                    x.PesoTotalGramas, LerPostal<VolumeCorreios[]>(x.VolumesJson), x.PublicadaEmUtc)).ToArray(),
+            cotacao.RevisaoAceita, pedidoConvertidoId);
     }
 
     async Task<ResultadoCotacaoCorreios> ICotacoesCorreios.ExecutarAsync(ComandoCotacaoCorreios comando, CancellationToken ct)

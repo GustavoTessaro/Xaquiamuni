@@ -71,6 +71,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.True(detalhe.Headers.CacheControl?.NoStore);
         Assert.Equal("\"1\"", detalhe.Headers.ETag!.Tag);
         var congelada = (await detalhe.Content.ReadFromJsonAsync<DetalheCotacaoCorreios>())!;
+        Assert.Null(congelada.PedidoConvertidoId);
         Assert.Equal("4322509", congelada.Endereco.CodigoIbge);
         Assert.Equal(2, Assert.Single(congelada.Itens).Quantidade);
 
@@ -85,9 +86,11 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(HttpStatusCode.OK, segunda.StatusCode);
         using (var antiga = await EscreverPostalAsync(cliente, rota + "/aceitar", new { revisao = 1 }, "\"3\""))
             await ConferirErroPostalAsync(antiga, 409, "revisao_desatualizada");
+        await ConferirCotacaoSemPedidoAsync(cliente, rota, "PropostaDisponivel");
         var chaveAceite = Guid.NewGuid();
         using var aceita = await EscreverPostalAsync(cliente, rota + "/aceitar", new { revisao = 2 }, "\"3\"", chaveAceite);
         Assert.Equal(HttpStatusCode.OK, aceita.StatusCode);
+        await ConferirCotacaoSemPedidoAsync(cliente, rota, "Aceita");
         using (var revisao = await EscreverPostalAsync(admin, rotaAdmin + "/propostas", proposta, "\"4\""))
             await ConferirErroPostalAsync(revisao, 409, "estado_incompativel");
         using var cancelada = await EscreverPostalAsync(cliente, rota + "/cancelar", new { motivo = "Desistência" }, "\"4\"");
@@ -110,7 +113,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         using var pix = await cliente.Http.GetAsync($"/api/pedidos/{id:D}/pagamento");
         Assert.Equal(HttpStatusCode.NotFound, pix.StatusCode);
         using var sair = await outro.EnviarAsync("/api/auth/logout", new { });
-        using var anonimo = await outro.Http.GetAsync(Postal);
+        using var anonimo = await outro.Http.GetAsync(rota);
         Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
     }
 
@@ -164,6 +167,12 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(HttpStatusCode.OK, recusada.StatusCode);
         using var cancelada = await EscreverPostalAsync(cliente, $"{Postal}/{id3:D}/cancelar", new { }, "\"1\"");
         Assert.Equal(HttpStatusCode.OK, cancelada.StatusCode);
+        await ConferirCotacaoSemPedidoAsync(cliente, rota1, "Expirada");
+        await ConferirCotacaoSemPedidoAsync(cliente, $"{Postal}/{id2:D}", "Recusada");
+        await ConferirCotacaoSemPedidoAsync(cliente, $"{Postal}/{id3:D}", "Cancelada");
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE SolicitacoesCorreios SET Situacao = {(short)SituacaoCotacaoCorreios.ConvertidaEmPedido} WHERE Id = {id3}");
+        await ConferirCotacaoSemPedidoAsync(cliente, $"{Postal}/{id3:D}", "ConvertidaEmPedido");
         await CriarAsync(4);
         await CriarAsync(5);
         using (var frequencia = await EscreverPostalAsync(cliente, Postal, Nova(6)))
@@ -186,6 +195,13 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         if (versao is not null) request.Headers.Add("If-Match", versao);
         request.Headers.Add("Idempotency-Key", (chave ?? Guid.NewGuid()).ToString("D"));
         return await sessao.Http.SendAsync(request);
+    }
+
+    private static async Task ConferirCotacaoSemPedidoAsync(Sessao cliente, string rota, string situacao)
+    {
+        var detalhe = await cliente.Http.GetFromJsonAsync<JsonElement>(rota);
+        Assert.Equal(situacao, detalhe.GetProperty("resumo").GetProperty("situacao").GetString());
+        Assert.Equal(JsonValueKind.Null, detalhe.GetProperty("pedidoConvertidoId").ValueKind);
     }
 
     private static async Task ConferirErroPostalAsync(HttpResponseMessage resposta, int status, string codigo)

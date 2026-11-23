@@ -31,7 +31,7 @@ public sealed record ResumoCotacaoCorreios(Guid Id, string Situacao, DateTimeOff
     int? Revisao, DateTimeOffset? ValidaAteUtc);
 public sealed record DetalheCotacaoCorreios(ResumoCotacaoCorreios Resumo, int Versao,
     IReadOnlyList<ItemCongeladoCorreios> Itens, Xaquiamuni.Dominio.Entidades.EnderecoEntregaPedido Endereco,
-    IReadOnlyList<PropostaCorreiosDto> Propostas, int? RevisaoAceita);
+    IReadOnlyList<PropostaCorreiosDto> Propostas, int? RevisaoAceita, Guid? PedidoConvertidoId);
 public sealed record PaginaCotacoesCorreios(IReadOnlyList<ResumoCotacaoCorreios> Itens, int TotalItens, int Pagina, int ItensPorPagina);
 public sealed record FiltroCotacoesCorreios(int Pagina, int ItensPorPagina, SituacaoCotacaoCorreios? Situacao,
     DateTimeOffset? CriadaDeUtc, DateTimeOffset? CriadaAteUtc);

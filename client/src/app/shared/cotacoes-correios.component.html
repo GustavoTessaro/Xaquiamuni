@@ -143,8 +143,8 @@
         }
       }
       @if (!admin && situacao === 'ConvertidaEmPedido') {
-        @if (pedidoConvertido(dados.resumo.id); as pedidoId) {
-          <a [routerLink]="['/pedidos', pedidoId]">Abrir pedido convertido</a>
+        @if (dados.pedidoConvertidoId; as pedidoId) {
+          <a [routerLink]="['/pedidos', pedidoId]">Ver meu pedido</a>
         } @else {
           <a routerLink="/pedidos">Consultar pedido em Meus pedidos</a>
         }

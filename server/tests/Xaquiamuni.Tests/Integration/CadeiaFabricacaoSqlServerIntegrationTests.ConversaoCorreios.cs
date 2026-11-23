@@ -228,6 +228,18 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         relogio.Agora = snapshot.GetProperty("validaAteUtc").GetDateTimeOffset();
         var replay = await cliente.PostAsync<JsonElement>("/api/pedidos", payload, HttpStatusCode.OK, chaveOriginal);
         Assert.True(JsonElement.DeepEquals(pedido, replay));
+        var rotaCotacao = $"/api/cotacoes-correios/{id:D}";
+        using var leitura = await cliente.Http.GetAsync(rotaCotacao);
+        Assert.Equal(HttpStatusCode.OK, leitura.StatusCode);
+        Assert.True(leitura.Headers.CacheControl?.NoStore);
+        var convertida = await leitura.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("ConvertidaEmPedido", convertida.GetProperty("resumo").GetProperty("situacao").GetString());
+        Assert.Equal(replay.GetProperty("id").GetGuid(), convertida.GetProperty("pedidoConvertidoId").GetGuid());
+        using var alheio = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
+        using var cotacaoAlheia = await alheio.Http.GetAsync(rotaCotacao);
+        using var pedidoAlheio = await alheio.Http.GetAsync($"/api/pedidos/{pedidoId:D}");
+        Assert.Equal(HttpStatusCode.NotFound, cotacaoAlheia.StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, pedidoAlheio.StatusCode);
         using (var divergente = await EscreverPostalAsync(cliente, "/api/pedidos",
             new { conversaoCorreiosId = anterior }, chave: chaveOriginal))
             await ConferirErroPostalAsync(divergente, 409, "chave_em_uso");
