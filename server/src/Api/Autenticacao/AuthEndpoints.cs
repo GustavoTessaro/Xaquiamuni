@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.RateLimiting;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
 using Xaquiamuni.Api.Autorizacao;
+using Xaquiamuni.Api.Pedidos;
 
 namespace Xaquiamuni.Api.Autenticacao;
 
@@ -95,6 +96,14 @@ public static class AuthEndpoints
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
 
+        endpoints.MapPut("/api/clientes/me/perfil", AtualizarPerfilAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .RequireXaquiamuniAntiforgery();
+
+        endpoints.MapPut("/api/clientes/me/endereco-padrao", AtualizarEnderecoAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .RequireXaquiamuniAntiforgery();
+
         endpoints.MapGet(MeEndpoint, GetCurrentClient)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .WithName("GetCurrentClient")
@@ -137,7 +146,7 @@ public static class AuthEndpoints
     }
 
     private static async Task<IResult> GetPerfilClienteAsync(HttpContext context,
-        IConsultarPerfilCliente consulta, CancellationToken cancellationToken)
+        IContaCliente consulta, CancellationToken cancellationToken)
     {
         context.Response.Headers.CacheControl = "private, no-store";
         if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var clienteId)
@@ -145,8 +154,60 @@ public static class AuthEndpoints
             return Results.Unauthorized();
 
         var perfil = await consulta.BuscarPerfilAsync(clienteId, cancellationToken);
-        return perfil is null ? Results.Unauthorized() : Results.Ok(perfil);
+        return perfil is null ? Results.Unauthorized() : ResponderPerfil(context, perfil);
     }
+
+    private static Task<IResult> AtualizarPerfilAsync(HttpContext context, IContaCliente conta,
+        CadastroClienteInputValidator validator, CancellationToken ct) =>
+        AtualizarContaAsync<DadosPessoaisCliente>(context,
+            dados => validator.ValidarDadosPessoais(dados.NomeCompleto, dados.Telefone),
+            (id, versao, dados) => conta.AtualizarPerfilAsync(id, versao, dados, ct), ct);
+
+    private static Task<IResult> AtualizarEnderecoAsync(HttpContext context, IContaCliente conta,
+        CadastroClienteInputValidator validator, CancellationToken ct) =>
+        AtualizarContaAsync<EnderecoInicialInput>(context, validator.ValidarEndereco,
+            (id, versao, dados) => conta.AtualizarEnderecoAsync(id, versao, dados, ct), ct);
+
+    private static async Task<IResult> AtualizarContaAsync<T>(HttpContext context,
+        Func<T, CadastroClienteInputValidationResult> validar,
+        Func<Guid, string, T, Task<AtualizacaoContaCliente>> atualizar, CancellationToken ct) where T : class
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var id) || id == Guid.Empty)
+            return Results.Unauthorized();
+
+        var versao = context.Request.Headers.IfMatch.ToString();
+        if (versao.Length != 66 || versao[0] != '"' || versao[^1] != '"' ||
+            !versao[1..^1].All(Uri.IsHexDigit))
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+                { ["If-Match"] = ["Informe a versão atual dos dados."] });
+
+        var (dados, erro) = await AdminPedidosEndpoints.LerComandoAsync<T>(context.Request, ct);
+        if (erro is not null) return erro;
+
+        var validacao = validar(dados!);
+        if (validacao.Erros.Count > 0)
+        {
+            return Results.ValidationProblem(validacao.Erros.ToDictionary(
+                x => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(x.Campo.Split('.')[^1]),
+                x => new[] { x.Mensagem }));
+        }
+
+        var resultado = await atualizar(id, versao, dados!);
+        if (resultado.Conflito)
+            return Results.Problem(statusCode: 409, title: "Os dados mudaram. Recarregue antes de salvar.");
+        if (resultado.PerfilIncompleto)
+            return Results.Problem(statusCode: 422, title: "Os dados pessoais do cadastro estão indisponíveis.");
+        return resultado.Perfil is { } perfil ? ResponderPerfil(context, perfil) : Results.Unauthorized();
+    }
+
+    private static IResult ResponderPerfil(HttpContext context, PerfilClienteVersionado perfil)
+    {
+        context.Response.Headers["X-Perfil-Versao"] = perfil.VersaoPerfil;
+        context.Response.Headers["X-Endereco-Versao"] = perfil.VersaoEndereco;
+        return Results.Ok(perfil.Dados);
+    }
+
 
     private static IResult GetCurrentClient(HttpContext context)
     {

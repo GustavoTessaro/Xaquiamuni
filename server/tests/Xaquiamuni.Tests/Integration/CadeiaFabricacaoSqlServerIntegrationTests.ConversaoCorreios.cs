@@ -225,6 +225,22 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Single(await db.Pedidos.AsNoTracking().Where(x => x.CotacaoCorreiosId == id).ToListAsync());
         Assert.Equal(2, await db.ReservasProdutoAcabado.Where(x => x.PedidoId == pedidoId).SumAsync(x => x.Quantidade));
 
+        using var resumoConta = await cliente.Http.GetAsync("/api/clientes/me/perfil");
+        var csrfConta = await cliente.Http.GetFromJsonAsync<JsonElement>("/api/auth/csrf");
+        using var atualizarEndereco = new HttpRequestMessage(HttpMethod.Put, "/api/clientes/me/endereco-padrao")
+        {
+            Content = JsonContent.Create(DestinoPostalTeste with { Logradouro = "Rua atualizada" })
+        };
+        atualizarEndereco.Headers.TryAddWithoutValidation("If-Match",
+            Assert.Single(resumoConta.Headers.GetValues("X-Endereco-Versao")));
+        atualizarEndereco.Headers.Add("X-XSRF-TOKEN", csrfConta.GetProperty("requestToken").GetString());
+        using var enderecoAtualizado = await cliente.Http.SendAsync(atualizarEndereco);
+        Assert.Equal(HttpStatusCode.OK, enderecoAtualizado.StatusCode);
+        var cadastro = await cliente.Http.GetFromJsonAsync<JsonElement>("/api/clientes/me/endereco-padrao");
+        Assert.Equal("Rua atualizada", cadastro.GetProperty("endereco").GetProperty("logradouro").GetString());
+        var pedidoAposEdicao = await cliente.Http.GetFromJsonAsync<JsonElement>($"/api/pedidos/{pedidoId:D}");
+        Assert.True(JsonElement.DeepEquals(pedido.GetProperty("entrega"), pedidoAposEdicao.GetProperty("entrega")));
+
         relogio.Agora = snapshot.GetProperty("validaAteUtc").GetDateTimeOffset();
         var replay = await cliente.PostAsync<JsonElement>("/api/pedidos", payload, HttpStatusCode.OK, chaveOriginal);
         Assert.True(JsonElement.DeepEquals(pedido, replay));
@@ -235,6 +251,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var convertida = await leitura.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("ConvertidaEmPedido", convertida.GetProperty("resumo").GetProperty("situacao").GetString());
         Assert.Equal(replay.GetProperty("id").GetGuid(), convertida.GetProperty("pedidoConvertidoId").GetGuid());
+        Assert.Equal("Rua de teste", convertida.GetProperty("endereco").GetProperty("logradouro").GetString());
+        Assert.Equal(1, convertida.GetProperty("revisaoAceita").GetInt32());
+        Assert.Equal("PAC", Assert.Single(convertida.GetProperty("propostas").EnumerateArray()).GetProperty("servico").GetString());
         using var alheio = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
         using var cotacaoAlheia = await alheio.Http.GetAsync(rotaCotacao);
         using var pedidoAlheio = await alheio.Http.GetAsync($"/api/pedidos/{pedidoId:D}");

@@ -10,6 +10,91 @@ namespace Xaquiamuni.Tests.Integration;
 public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 {
     [SqlServerIntegrationFact]
+    public async Task PerfilCliente_AtualizaSomenteCamposPermitidosComCsrfEVersoesIndependentes()
+    {
+        const string perfil = "/api/clientes/me/perfil";
+        const string endereco = "/api/clientes/me/endereco-padrao";
+        await using var database = await SqlServerTestDatabase.CreateAsync();
+        await using var db = database.CreateVerificationContext();
+        var id = await CriarClienteCompraAsync(db);
+        var outroId = await CriarClienteCompraAsync(db);
+        var usuario = await db.Users.SingleAsync(x => x.Id == id);
+        usuario.Email = "cliente@example.test";
+        usuario.PasswordHash = "fixture";
+        await db.SaveChangesAsync();
+        var cpf = (await db.ClientePerfis.AsNoTracking().SingleAsync(x => x.UserId == id)).CpfProtegido;
+
+        using var factory = CriarApiPedidos(database);
+        using var cliente = ClienteHttpPedidos(factory, id);
+        using var outraAba = ClienteHttpPedidos(factory, id);
+        using var outro = ClienteHttpPedidos(factory, outroId);
+        using var admin = ClienteHttpPedidos(factory, Guid.NewGuid(), XaquiamuniRoles.Administrador);
+        using var anonimo = ClienteHttpPedidos(factory);
+        using var leitura = await cliente.GetAsync(perfil);
+        var vp = Assert.Single(leitura.Headers.GetValues("X-Perfil-Versao"));
+        var ve = Assert.Single(leitura.Headers.GetValues("X-Endereco-Versao"));
+        var dados = new { nomeCompleto = "  Cliente  Atualizado ", telefone = " (54) 99900-0000 " };
+        var destino = new { cep = "90000-000", uf = "rs", cidade = "Porto Alegre", bairro = "Centro",
+            logradouro = "Rua de teste", numero = "14", complemento = " Apto 1 " };
+
+        async Task<HttpStatusCode> Enviar(HttpClient http, string rota, object corpo, string versao, string? csrf)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Put, rota) { Content = JsonContent.Create(corpo) };
+            req.Headers.TryAddWithoutValidation("If-Match", versao);
+            if (csrf is not null) req.Headers.Add("X-XSRF-TOKEN", csrf);
+            using var resp = await http.SendAsync(req);
+            if (resp.StatusCode == HttpStatusCode.OK)
+            {
+                Assert.True(resp.Headers.CacheControl?.Private);
+                Assert.True(resp.Headers.CacheControl?.NoStore);
+            }
+            return resp.StatusCode;
+        }
+
+        var token = await CsrfPedidosAsync(cliente);
+        var tokenAba = await CsrfPedidosAsync(outraAba);
+        Assert.Equal(HttpStatusCode.Unauthorized, await Enviar(anonimo, perfil, dados, vp, null));
+        Assert.Equal(HttpStatusCode.Forbidden, await Enviar(admin, perfil, dados, vp, null));
+        Assert.Equal(HttpStatusCode.BadRequest, await Enviar(cliente, perfil, dados, vp, null));
+        Assert.Equal(HttpStatusCode.BadRequest, await Enviar(cliente, perfil, dados, vp, "invalido"));
+        Assert.Equal(HttpStatusCode.BadRequest, await Enviar(cliente, perfil, new
+        {
+            dados.nomeCompleto, dados.telefone, email = "outro@example.test", cpf = "indevido",
+        }, vp, token));
+        Assert.Equal(HttpStatusCode.BadRequest, await Enviar(cliente, perfil, new { nomeCompleto = "", telefone = "123" }, vp, token));
+        Assert.Equal(HttpStatusCode.BadRequest, await Enviar(cliente, endereco, destino with { uf = "XX" }, ve, token));
+        Assert.Equal(HttpStatusCode.Conflict, await Enviar(outro, $"{perfil}?clienteId={id:D}", dados, vp, await CsrfPedidosAsync(outro)));
+
+        var paralelas = await Task.WhenAll(
+            Enviar(cliente, perfil, dados, vp, token),
+            Enviar(outraAba, endereco, destino, ve, tokenAba));
+        Assert.All(paralelas, status => Assert.Equal(HttpStatusCode.OK, status));
+        Assert.Equal(HttpStatusCode.Conflict, await Enviar(outraAba, perfil, dados, vp, tokenAba));
+        Assert.Equal(HttpStatusCode.Conflict, await Enviar(cliente, endereco, destino, ve, token));
+
+        using var atual = await cliente.GetAsync(perfil);
+        var veAtual = Assert.Single(atual.Headers.GetValues("X-Endereco-Versao"));
+        var resumo = await atual.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("Cliente Atualizado", resumo.GetProperty("nomeCompleto").GetString());
+        Assert.Equal("(54) 99900-0000", resumo.GetProperty("telefone").GetString());
+        Assert.Equal("cliente@example.test", resumo.GetProperty("email").GetString());
+        Assert.Equal("90000000", resumo.GetProperty("endereco").GetProperty("cep").GetString());
+
+        var disputa = await Task.WhenAll(
+            Enviar(cliente, endereco, destino with { numero = "21" }, veAtual, token),
+            Enviar(outraAba, endereco, destino with { numero = "22" }, veAtual, tokenAba));
+        Assert.Contains(HttpStatusCode.OK, disputa);
+        Assert.Contains(HttpStatusCode.Conflict, disputa);
+        Assert.Single(await db.ClienteEnderecos.AsNoTracking().Where(x => x.ClienteUserId == id && x.IsDefault).ToListAsync());
+        var salvo = await db.Users.AsNoTracking().SingleAsync(x => x.Id == id);
+        Assert.Equal("cliente@example.test", salvo.Email);
+        Assert.Equal("fixture", salvo.PasswordHash);
+        var cpfAtual = (await db.ClientePerfis.AsNoTracking().SingleAsync(x => x.UserId == id)).CpfProtegido;
+        Assert.Equal(cpf.Ciphertext, cpfAtual.Ciphertext);
+        Assert.Equal(cpf.Fingerprint, cpfAtual.Fingerprint);
+    }
+
+    [SqlServerIntegrationFact]
     public async Task PerfilCliente_ProjetaSomenteTitularESuportaCadastroIncompleto()
     {
         const string rota = "/api/clientes/me/perfil";

@@ -42,7 +42,35 @@ a, button {
   text-underline-offset: 0.2em;
 }
 
-a:focus-visible, button:focus-visible {
+fieldset {
+  display: grid;
+  gap: 0.25rem;
+  min-inline-size: 0;
+  border: 0;
+  padding: 0;
+}
+
+legend { margin-block: 0.75rem; }
+label { margin-block-start: 0.4rem; font-weight: 600; }
+small { color: var(--brand-error); }
+small:empty { display: none; }
+
+input {
+  min-inline-size: 0;
+  min-block-size: 2.75rem;
+  max-inline-size: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--brand-control-line);
+  border-radius: 0.5rem;
+  background: var(--brand-surface);
+  color: var(--brand-ink);
+}
+
+input[aria-invalid='true'] { border-color: var(--brand-error); }
+button:disabled { color: var(--brand-disabled); cursor: not-allowed; }
+.conta-acoes { display: flex; gap: 1rem; flex-wrap: wrap; }
+
+a:focus-visible, button:focus-visible, input:focus-visible {
   outline: 2px solid var(--brand-focus);
   outline-offset: 3px;
 }

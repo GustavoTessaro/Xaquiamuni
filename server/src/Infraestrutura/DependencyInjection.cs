@@ -58,7 +58,7 @@ public static class DependencyInjection
         services.AddSingleton<ICalendarioOperacionalEstoque, CalendarioOperacionalEstoque>();
         services.AddScoped<IClienteRepository, ClienteRepository>();
         services.AddScoped<IConsultarEnderecoPadrao, ClienteRepository>();
-        services.AddScoped<IConsultarPerfilCliente, ClienteRepository>();
+        services.AddScoped<IContaCliente, ClienteRepository>();
         services.AddScoped<IGerenciarComprasMateriaPrima, EfCompraMateriaPrimaRepository>();
         services.AddScoped<IConcluirOrdemProducao, EfEstoqueInsumoRepository>();
         services.AddScoped<IGerenciarOrdensProducao, EfEstoqueInsumoRepository>();

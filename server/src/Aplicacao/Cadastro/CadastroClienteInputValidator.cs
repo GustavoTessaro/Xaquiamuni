@@ -38,6 +38,21 @@ public sealed class CadastroClienteInputValidator
         return Result(erros);
     }
 
+    public CadastroClienteInputValidationResult ValidarDadosPessoais(string? nome, string? telefone)
+    {
+        var erros = new List<CadastroClienteInputValidationError>();
+        ValidateNome(nome, erros);
+        ValidateTelefone(telefone, erros);
+        return Result(erros);
+    }
+
+    public CadastroClienteInputValidationResult ValidarEndereco(EnderecoInicialInput endereco)
+    {
+        var erros = new List<CadastroClienteInputValidationError>();
+        ValidateEndereco(endereco, erros);
+        return Result(erros);
+    }
+
     public CadastroClienteInputValidationResult ValidateEmail(string? email)
     {
         var erros = new List<CadastroClienteInputValidationError>();

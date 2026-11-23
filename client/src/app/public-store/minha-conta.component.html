@@ -15,12 +15,37 @@
     }
     @case ('erro') {
       <p role="alert">Não foi possível carregar os dados da sua conta.</p>
-      <button type="button" (click)="recarregar.next()">Tentar novamente</button>
+      <button type="button" (click)="recarregar()">Tentar novamente</button>
     }
     @case ('pronto') {
+      @if (aviso()) { <p role="status">{{ aviso() }}</p> }
       <div class="conta-dados">
         <section>
           <h2>Dados pessoais</h2>
+          @if (editando() === 'perfil') {
+            @if (atual.perfil.email; as email) { <p>E-mail: {{ email }}</p> }
+            <form [formGroup]="dados" (ngSubmit)="salvar(atual.perfil)">
+              <fieldset [disabled]="salvando()">
+                <legend>Editar dados pessoais</legend>
+                <label for="conta-nome">Nome completo</label>
+                <input id="conta-nome" formControlName="nomeCompleto" autocomplete="name" required
+                  aria-describedby="conta-nome-erro"
+                  [attr.aria-invalid]="!!erros()['nomeCompleto'] || (dados.controls.nomeCompleto.touched && dados.controls.nomeCompleto.invalid)">
+                <small id="conta-nome-erro">{{ erros()['nomeCompleto']?.[0] ||
+                  (dados.controls.nomeCompleto.touched && dados.controls.nomeCompleto.invalid ? 'Informe o nome completo.' : '') }}</small>
+                <label for="conta-telefone">Telefone</label>
+                <input id="conta-telefone" formControlName="telefone" type="tel" autocomplete="tel" required
+                  aria-describedby="conta-telefone-erro"
+                  [attr.aria-invalid]="!!erros()['telefone'] || (dados.controls.telefone.touched && dados.controls.telefone.invalid)">
+                <small id="conta-telefone-erro">{{ erros()['telefone']?.[0] ||
+                  (dados.controls.telefone.touched && dados.controls.telefone.invalid ? 'Informe o telefone.' : '') }}</small>
+                <div class="conta-acoes">
+                  <button type="submit" [disabled]="conflito()">Salvar</button>
+                  <button type="button" (click)="cancelar()">Cancelar</button>
+                </div>
+              </fieldset>
+            </form>
+          } @else {
           @if (atual.perfil.nomeCompleto || atual.perfil.email || atual.perfil.telefone) {
             <dl>
               @if (atual.perfil.nomeCompleto; as nome) {
@@ -36,9 +61,35 @@
           } @else {
             <p>Seus dados pessoais ainda não estão disponíveis.</p>
           }
+          @if (atual.perfil.versaoPerfil) {
+            <button type="button" aria-label="Editar dados pessoais" [disabled]="salvando()" (click)="editar('perfil', atual.perfil)">Editar</button>
+          }
+          }
         </section>
         <section>
           <h2>Endereço padrão</h2>
+          @if (editando() === 'endereco') {
+            <form [formGroup]="endereco" (ngSubmit)="salvar(atual.perfil)">
+              <fieldset [disabled]="salvando()">
+                <legend>Editar endereço padrão</legend>
+                @for (campo of camposEndereco; track campo.chave) {
+                  @let controle = endereco.controls[campo.chave];
+                  @let invalido = controle.touched && controle.invalid;
+                  <label [for]="'conta-' + campo.chave">{{ campo.rotulo }}</label>
+                  <input [id]="'conta-' + campo.chave" [formControlName]="campo.chave" [autocomplete]="campo.autocomplete"
+                    [required]="campo.chave !== 'complemento'" [attr.inputmode]="campo.chave === 'cep' ? 'numeric' : null"
+                    [attr.aria-describedby]="'conta-erro-' + campo.chave"
+                    [attr.aria-invalid]="invalido || !!erros()[campo.chave]">
+                  <small [id]="'conta-erro-' + campo.chave">{{ erros()[campo.chave]?.[0] ||
+                    (invalido ? 'Preencha este campo.' : '') }}</small>
+                }
+                <div class="conta-acoes">
+                  <button type="submit" [disabled]="conflito()">Salvar</button>
+                  <button type="button" (click)="cancelar()">Cancelar</button>
+                </div>
+              </fieldset>
+            </form>
+          } @else {
           @if (atual.perfil.endereco; as endereco) {
             <p>{{ endereco.logradouro }}, {{ endereco.numero }}
               @if (endereco.complemento) { <span> — {{ endereco.complemento }}</span> }
@@ -48,8 +99,17 @@
           } @else {
             <p>Você ainda não tem um endereço padrão disponível.</p>
           }
+          @if (atual.perfil.versaoEndereco) {
+            <button type="button" aria-label="Editar endereço padrão" [disabled]="salvando()" (click)="editar('endereco', atual.perfil)">Editar</button>
+          }
+          }
         </section>
       </div>
+      @if (salvando()) { <p role="status">Salvando alterações…</p> }
+      @if (erro()) { <p role="alert">{{ erro() }}</p> }
+      @if (conflito() || (erro() && !salvando())) {
+        <button type="button" (click)="recarregar()">Recarregar dados</button>
+      }
     }
   }
 

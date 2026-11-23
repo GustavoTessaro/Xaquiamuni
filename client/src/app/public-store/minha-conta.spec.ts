@@ -12,6 +12,7 @@ import { StoreHeaderComponent } from './store-header.component';
 import { MinhaContaComponent } from './minha-conta.component';
 
 const api = '/api/clientes/me/perfil';
+const versoes = { 'X-Perfil-Versao': '"perfil"', 'X-Endereco-Versao': '"endereco"' };
 const perfil = {
   nomeCompleto: 'Cliente Teste', email: 'cliente@example.test', telefone: '+5554990000000',
   endereco: { cep: '95200000', uf: 'RS', cidade: 'Vacaria', bairro: 'Centro', logradouro: 'Rua do titular',
@@ -86,6 +87,104 @@ describe('Minha conta', () => {
     expect(linksConta()).toHaveLength(0);
     expect(TestBed.inject(Router).url).toMatch(/^\/login\?destino=/);
     http.expectNone(api);
+  });
+
+  it('edita, cancela e salva somente os dados pessoais permitidos', async () => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    const elemento = tela.routeNativeElement!;
+    http.expectOne(api).flush(perfil, { headers: versoes });
+    tela.detectChanges();
+    const editar = () => {
+      elemento.querySelector<HTMLButtonElement>('[aria-label="Editar dados pessoais"]')!.click();
+      tela.detectChanges();
+    };
+    editar();
+    expect(elemento.querySelector<HTMLInputElement>('#conta-nome')?.value).toBe(perfil.nomeCompleto);
+    expect(elemento.querySelector('input[type="email"]')).toBeNull();
+    elemento.querySelector<HTMLButtonElement>('form button[type="button"]')!.click();
+    tela.detectChanges();
+    expect(elemento.querySelector('form')).toBeNull();
+
+    editar();
+    const nome = elemento.querySelector<HTMLInputElement>('#conta-nome')!;
+    const digitar = (valor: string) => { nome.value = valor; nome.dispatchEvent(new Event('input')); };
+    const salvar = () => elemento.querySelector('form')!.dispatchEvent(new Event('submit'));
+    digitar('');
+    salvar();
+    tela.detectChanges();
+    expect(elemento.querySelector('#conta-nome-erro')?.textContent).toContain('Informe o nome');
+    http.expectNone('/api/auth/csrf');
+    digitar('Nome Alterado');
+    salvar();
+    salvar();
+    tela.detectChanges();
+    expect(elemento.querySelector('[role="status"]')?.textContent).toContain('Salvando');
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+    const escrita = http.expectOne({ method: 'PUT', url: api });
+    expect(escrita.request.headers.get('If-Match')).toBe('"perfil"');
+    expect(escrita.request.headers.get('X-XSRF-TOKEN')).toBe('csrf');
+    expect(escrita.request.body).toEqual({ nomeCompleto: 'Nome Alterado', telefone: perfil.telefone });
+    escrita.flush({ ...perfil, nomeCompleto: 'Nome Alterado' }, { headers: versoes });
+    tela.detectChanges();
+    expect(elemento.textContent).toContain('Nome Alterado');
+    expect(elemento.textContent).toContain('Alterações salvas');
+    expect(elemento.querySelector('nav a[href="/pedidos"]')).not.toBeNull();
+  });
+
+  it('troca a edição, trata erro de rede e oferece recarregar após conflito de endereço', async () => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    const elemento = tela.routeNativeElement!;
+    http.expectOne(api).flush(perfil, { headers: versoes });
+    tela.detectChanges();
+    for (const rotulo of ['Editar dados pessoais', 'Editar endereço padrão']) {
+      elemento.querySelector<HTMLButtonElement>('[aria-label="' + rotulo + '"]')!.click();
+      tela.detectChanges();
+    }
+    expect(elemento.querySelector('#conta-nome')).toBeNull();
+    expect(elemento.querySelector<HTMLInputElement>('#conta-cep')?.value).toBe('95200000');
+    for (const status of [0, 409]) {
+      elemento.querySelector('form')!.dispatchEvent(new Event('submit'));
+      http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+      const escrita = http.expectOne({ method: 'PUT', url: '/api/clientes/me/endereco-padrao' });
+      expect(escrita.request.headers.get('If-Match')).toBe('"endereco"');
+      if (status === 0) escrita.error(new ProgressEvent('error'));
+      else escrita.flush(null, { status, statusText: 'Conflict' });
+      tela.detectChanges();
+      expect(elemento.querySelector('[role="alert"]')?.textContent)
+        .toContain(status === 0 ? 'Não foi possível confirmar' : 'Os dados mudaram');
+    }
+    expect(elemento.querySelector<HTMLButtonElement>('button[type="submit"]')?.disabled).toBe(true);
+    [...elemento.querySelectorAll('button')].find(x => x.textContent === 'Recarregar dados')!.click();
+    http.expectOne(api).flush({ ...perfil, endereco: null }, { headers: versoes });
+    tela.detectChanges();
+    expect(elemento.textContent).toContain('não tem um endereço padrão');
+    expect(elemento.querySelector('form')).toBeNull();
+  });
+
+  it('mostra validação do servidor e remove os dados se a sessão expirar durante a gravação', async () => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    const elemento = tela.routeNativeElement!;
+    http.expectOne(api).flush(perfil, { headers: versoes });
+    tela.detectChanges();
+    elemento.querySelector<HTMLButtonElement>('[aria-label="Editar dados pessoais"]')!.click();
+    tela.detectChanges();
+
+    const enviar = () => {
+      elemento.querySelector('form')!.dispatchEvent(new Event('submit'));
+      http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+      return http.expectOne({ method: 'PUT', url: api });
+    };
+    enviar().flush({ errors: { telefone: ['O telefone brasileiro informado é inválido.'] } },
+      { status: 400, statusText: 'Bad Request' });
+    tela.detectChanges();
+    expect(elemento.querySelector('#conta-telefone-erro')?.textContent).toContain('telefone brasileiro');
+    expect(elemento.querySelector('#conta-telefone')?.getAttribute('aria-invalid')).toBe('true');
+
+    enviar().flush(null, { status: 401, statusText: 'Unauthorized' });
+    tela.detectChanges();
+    expect(elemento.querySelector('[role="alert"]')?.textContent).toContain('sessão expirou');
+    expect(elemento.textContent).not.toContain(perfil.email);
+    expect(elemento.querySelector('form')).toBeNull();
   });
 
   it('cancela resposta pendente ao sair e consulta novamente ao voltar', async () => {

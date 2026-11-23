@@ -241,12 +241,32 @@ try {
           return document.documentElement.scrollWidth <= innerWidth
             && (cores[1] + .05) / (cores[0] + .05) >= 4.5;
         })()`), 'Contraste ou largura em ' + tema + ' a ' + width + ' px');
+        for (const rotulo of ['Editar dados pessoais', 'Editar endereço padrão']) {
+          await conta.ev(`document.querySelector('button[aria-label="' + ${JSON.stringify(rotulo)} + '"]').click()`);
+          await waitFor(() => conta.ev("!!document.querySelector('.conta form input')"), rotulo);
+          assert.ok(await conta.ev('document.documentElement.scrollWidth <= innerWidth'), rotulo + ' em ' + tema + ' a ' + width + ' px');
+          await conta.ev("document.querySelector('.conta form button[type=button]').click()");
+          await waitFor(() => conta.ev("!document.querySelector('.conta form')"), 'Cancelar edição');
+        }
         await conta.ev("document.querySelector('.conta nav a').focus()");
         await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, conta.sessionId);
         await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, conta.sessionId);
         assert.ok(await conta.ev("document.activeElement.matches('.conta nav a[href=\"/cotacoes-correios\"]:focus-visible')"));
       }
     }
+    await conta.ev("document.querySelector('button[aria-label=\"Editar dados pessoais\"]').click()");
+    await waitFor(() => conta.ev("!!document.querySelector('#conta-nome')"), 'Formulário dos dados pessoais');
+    await conta.ev(`(() => {
+      for (const [id, valor] of Object.entries({ 'conta-nome': 'Cliente Editado', 'conta-telefone': '(54) 99900-0000' })) {
+        const campo = document.getElementById(id);
+        campo.value = valor;
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.querySelector('.conta form').requestSubmit();
+    })()`);
+    await waitFor(() => conta.ev("document.querySelector('.conta [role=status]')?.textContent.includes('Alterações salvas')"), 'Edição salva');
+    await conta.ir('/minha-conta');
+    await waitFor(() => conta.ev("document.querySelector('.conta-dados')?.textContent.includes('Cliente Editado')"), 'Dados atualizados após recarregar');
     await conta.ev("document.querySelector('.store-account__logout').click()");
     await waitFor(() => conta.ev("location.pathname === '/' && !document.querySelector('.conta-dados')"), 'Saída de Minha conta');
     await conta.ir('/minha-conta');
