@@ -17,6 +17,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private readonly ICalendarioOperacionalEstoque _calendario;
     private readonly bool _promocoesHabilitadas;
     private readonly IDataProtector? _ofertasEntrega;
+    private readonly IDataProtector? _conversoesCorreios;
     private readonly IReadOnlyDictionary<string, string> _municipiosPorCep;
 
     public EfEstoqueProdutoAcabadoRepository(
@@ -34,6 +35,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
         _calendario = calendario;
         _promocoesHabilitadas = promocoes?.Value.Habilitadas == true;
         _ofertasEntrega = protecao?.CreateProtector("Xaquiamuni.Checkout.OfertaEntrega.v1");
+        _conversoesCorreios = protecao?.CreateProtector("Xaquiamuni.Checkout.ConversaoCorreios.v1");
         _municipiosPorCep = entrega?.Value.MunicipiosPorCep ?? new Dictionary<string, string>();
     }
 

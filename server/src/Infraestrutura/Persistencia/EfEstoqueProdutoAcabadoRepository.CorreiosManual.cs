@@ -81,7 +81,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
             }
             else
             {
-                await AdquirirLockAsync($"postal-request:{comando.Id:D}", ct);
+                await BloquearSolicitacaoPostalAsync(comando.Id!.Value, ct);
                 if (comando.Acao == AcaoCotacaoCorreios.Publicar) await BloquearConfiguracaoEntregaAsync(ct);
                 agora = _timeProvider.GetUtcNow();
                 resultado = await AlterarSolicitacaoPostalAsync(comando, agora, ct);
@@ -242,6 +242,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
 
     private IQueryable<SolicitacaoCorreios> ConsultarSolicitacoesPostais(Guid? titular) =>
         SolicitacoesPostais.AsNoTracking().Where(x => titular == null || x.ClienteId == titular);
+    private Task BloquearSolicitacaoPostalAsync(Guid id, CancellationToken ct) =>
+        AdquirirLockAsync($"postal-request:{id:D}", ct);
     private static ResumoCotacaoCorreios ResumoPostal(SolicitacaoCorreios x, DateTimeOffset agora) =>
         new(x.Id, x.SituacaoEm(agora).ToString(), x.CriadaEmUtc, x.Revisao, x.ValidaAteUtc);
     private static string SerializarPostal<T>(T valor) => JsonSerializer.Serialize(valor, JsonPostal);

@@ -5,6 +5,7 @@ using Xaquiamuni.Aplicacao.Estoque;
 using Xaquiamuni.Aplicacao.Pedidos;
 using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Dominio.Estoque;
+using Xaquiamuni.Dominio.Valores;
 using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
@@ -28,22 +29,44 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                     cancellationToken).ConfigureAwait(false);
             if (existente is not null)
             {
-                var mesmosItens = existente.Itens.OrderBy(item => item.ProdutoVarianteId)
+                var mesmosItens = input.ConversaoCorreiosId is not null || existente.Itens.OrderBy(item => item.ProdutoVarianteId)
                     .Select(item => new ItemCompraInput(item.ProdutoId, item.ProdutoVarianteId, item.Quantidade,
                         item.PrecoAceitoCentavos))
                     .SequenceEqual(input.Itens);
-                return mesmosItens && existente.HashOfertaEntrega == HashOferta(input.OfertaEntregaId)
+                var mesmaModalidade = existente.CotacaoCorreiosId.HasValue == (input.ConversaoCorreiosId is not null);
+                return mesmaModalidade && mesmosItens && existente.HashOfertaEntrega ==
+                    HashOferta(input.ConversaoCorreiosId ?? input.OfertaEntregaId)
                     ? new(CriarPedidoCompraStatus.Sucesso, existente, Repetida: true)
                     : new(CriarPedidoCompraStatus.ConflitoIdempotencia);
             }
 
-            await BloquearConfiguracaoEntregaAsync(cancellationToken);
+            var itens = input.Itens;
+            ConversaoPostal? postal = null;
+            CondicaoPostal? condicao = null;
+            if (input.ConversaoCorreiosId is { } token)
+            {
+                condicao = LerCondicaoPostal(token);
+                if (condicao is null) return new(CriarPedidoCompraStatus.ConversaoCorreiosInvalida);
+                if (condicao.ClienteId != input.ClienteId)
+                    return new(CriarPedidoCompraStatus.CotacaoCorreiosNaoEncontrada);
+                await BloquearSolicitacaoPostalAsync(condicao.CotacaoId, cancellationToken);
+                var (carregada, falha) = await CarregarConversaoPostalAsync(input.ClienteId, condicao.CotacaoId, cancellationToken);
+                if (carregada is null) return new(falha);
+                if (carregada.Proposta.Revisao != condicao.Revisao)
+                    return new(CriarPedidoCompraStatus.ConversaoCorreiosInvalida);
+                postal = carregada;
+                itens = postal.ItensCompra();
+            }
+            else
+            {
+                await BloquearConfiguracaoEntregaAsync(cancellationToken);
+            }
             if (_promocoesHabilitadas)
                 await PromocoesComerciaisSql.BloquearAsync(_dbContext, escrita: false, cancellationToken);
 
             var pedidoId = Guid.NewGuid();
             await AdquirirLockPedidoAsync(pedidoId, cancellationToken).ConfigureAwait(false);
-            foreach (var item in input.Itens)
+            foreach (var item in itens)
             {
                 await AdquirirLockVarianteAsync(item.ProdutoVarianteId, cancellationToken).ConfigureAwait(false);
             }
@@ -54,55 +77,78 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 return new(CriarPedidoCompraStatus.ClienteInapto);
             }
 
-            var (dados, precos) = await CarregarItensCompraAsync(input.Itens, agora, cancellationToken).ConfigureAwait(false);
+            if (postal?.Proposta.ValidaAteUtc <= _timeProvider.GetUtcNow())
+                return new(CriarPedidoCompraStatus.CotacaoCorreiosExpirada);
+            var indisponiveis = new List<Guid>();
+            var (dados, precos) = await CarregarItensCompraAsync(itens, agora, cancellationToken,
+                postal is null ? null : indisponiveis).ConfigureAwait(false);
             if (dados is null)
             {
-                return new(CriarPedidoCompraStatus.ItemNaoCompravel);
+                return new(CriarPedidoCompraStatus.ItemNaoCompravel, ItensIndisponiveis: postal is null ? null : indisponiveis);
             }
-            if (input.Itens.Where((item, i) =>
+            if (postal is null && itens.Where((item, i) =>
                 ((_promocoesHabilitadas && input.OfertaEntregaId is null) || item.PrecoAceitoCentavos.HasValue) &&
                 item.PrecoAceitoCentavos != dados[i].PrecoUnitarioCentavos).Any())
                 return new(CriarPedidoCompraStatus.PrecoAlterado, PrecosAtuais: precos);
 
-            var entrega = await ValidarEntregaAsync(input, dados, agora, cancellationToken);
+            var entrega = postal is null
+                ? await ValidarEntregaAsync(input, dados, agora, cancellationToken)
+                : (new DadosEntregaPedido(Destino: postal.Endereco, PropostaPostal: postal.Snapshot),
+                    postal.Proposta.FreteCentavos, ModalidadeEntregaPedido.Correios);
             if (entrega is null)
                 return new(CriarPedidoCompraStatus.OfertaEntregaInvalida);
+            if (!TentarCalcularTotalCompra(dados, entrega.Value.Frete, out var subtotal, out var total))
+                return new(CriarPedidoCompraStatus.LimiteMonetarioExcedido);
+
+            var reservas = await PlanejarReservasCompraAsync(pedidoId, dados, agora,
+                agora.Add(PrazoPagamentoCompra.Duracao), indisponiveis, cancellationToken);
+            if (postal?.Proposta.ValidaAteUtc <= _timeProvider.GetUtcNow())
+                return new(CriarPedidoCompraStatus.CotacaoCorreiosExpirada);
+            if (postal is not null && condicao!.Precos != IdentificarCarrinho(dados))
+            {
+                return new(CriarPedidoCompraStatus.PrecoAlterado, PrecosAtuais: precos, RevisaoPostal:
+                    MontarRevisaoPostal(postal, dados, precos!, subtotal, total, indisponiveis));
+            }
+            if (indisponiveis.Count != 0)
+                return new(CriarPedidoCompraStatus.SaldoInsuficiente, ItensIndisponiveis: postal is null ? null : indisponiveis);
+
+            if (postal is not null)
+                dados = dados.Select(x => x with { PrecoAceitoCentavos = x.PrecoUnitarioCentavos }).ToArray();
 
             Pedido pedido;
             try
             {
-                pedido = Pedido.Criar(input.ClienteId, agora, dados, pedidoId, entrega.Value.Dados, entrega.Value.Frete);
+                pedido = Pedido.Criar(input.ClienteId, agora, dados, pedidoId, entrega.Value.Dados,
+                    entrega.Value.Frete, entrega.Value.Modalidade);
             }
             catch (ArgumentOutOfRangeException exception) when (exception.ParamName == "itens")
             {
                 return new(CriarPedidoCompraStatus.LimiteMonetarioExcedido);
             }
 
-            var reservas = new List<ReservaProdutoAcabado>();
-            var dataOperacional = _calendario.ObterDataEm(agora);
-            foreach (var item in pedido.Itens)
-            {
-                var alocacoes = await PlanejarAlocacoesAsync(
-                    new(pedido.Id, item.ProdutoVarianteId, item.Quantidade),
-                    agora, pedido.PrazoPagamentoEmUtc, dataOperacional, cancellationToken).ConfigureAwait(false);
-                if (alocacoes.Count == 0)
-                {
-                    return new(CriarPedidoCompraStatus.SaldoInsuficiente);
-                }
-
-                reservas.AddRange(alocacoes);
-            }
-
             var registro = _dbContext.Pedidos.Add(pedido);
             registro.Property<Guid?>("ChaveIdempotencia").CurrentValue = input.ChaveIdempotencia;
-            registro.Property(entity => entity.HashOfertaEntrega).CurrentValue = HashOferta(input.OfertaEntregaId);
+            registro.Property(entity => entity.HashOfertaEntrega).CurrentValue =
+                HashOferta(input.ConversaoCorreiosId ?? input.OfertaEntregaId);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
             _dbContext.ReservasProdutoAcabado.AddRange(reservas);
             await _dbContext.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
+            if (postal is not null)
+            {
+                if (postal.Proposta.ValidaAteUtc <= _timeProvider.GetUtcNow())
+                    return new(CriarPedidoCompraStatus.CotacaoCorreiosExpirada);
+                postal.Solicitacao.Situacao = SituacaoCotacaoCorreios.ConvertidaEmPedido;
+                postal.Solicitacao.Versao = checked(postal.Solicitacao.Versao + 1);
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
             await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
             return new(CriarPedidoCompraStatus.Sucesso, pedido);
         }
         catch (SqlException exception) when (exception.Number is 1205 or 1222 or 51000)
+        {
+            return new(CriarPedidoCompraStatus.ConflitoConcorrencia);
+        }
+        catch (DbUpdateConcurrencyException)
         {
             return new(CriarPedidoCompraStatus.ConflitoConcorrencia);
         }
@@ -116,6 +162,22 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
         }
     }
 
+    private async Task<List<ReservaProdutoAcabado>> PlanejarReservasCompraAsync(Guid pedidoId,
+        IReadOnlyList<DadosItemPedido> dados, DateTimeOffset agora, DateTimeOffset? prazo,
+        ICollection<Guid> indisponiveis, CancellationToken ct)
+    {
+        var reservas = new List<ReservaProdutoAcabado>();
+        var data = _calendario.ObterDataEm(agora);
+        foreach (var item in dados)
+        {
+            var alocacoes = await PlanejarAlocacoesAsync(new(pedidoId, item.ProdutoVarianteId, item.Quantidade),
+                agora, prazo, data, ct);
+            if (alocacoes.Count == 0) indisponiveis.Add(item.ProdutoVarianteId);
+            else reservas.AddRange(alocacoes);
+        }
+        return reservas;
+    }
+
     private Task<bool> ClienteAptoAsync(Guid clienteId, DateTimeOffset agora, CancellationToken cancellationToken) =>
         (from perfil in _dbContext.ClientePerfis
          join usuario in _dbContext.Users on perfil.UserId equals usuario.Id
@@ -126,7 +188,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
          select perfil.UserId).AnyAsync(cancellationToken);
 
     private async Task<(DadosItemPedido[]? Dados, PrecoAtualPedido[]? Precos)> CarregarItensCompraAsync(
-        IReadOnlyList<ItemCompraInput> itens, DateTimeOffset agora, CancellationToken cancellationToken)
+        IReadOnlyList<ItemCompraInput> itens, DateTimeOffset agora, CancellationToken cancellationToken,
+        ICollection<Guid>? indisponiveis = null)
     {
         var variantes = itens.Select(item => item.ProdutoVarianteId).ToArray();
         var catalogo = await (
@@ -135,6 +198,14 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
             where variante.Ativa && EF.Parameter(variantes).Contains(variante.Id)
             select new { produto.Id, produto.Nome, VarianteId = variante.Id, variante.Identificacao, variante.PrecoVenda }
         ).ToDictionaryAsync(item => item.VarianteId, cancellationToken).ConfigureAwait(false);
+        var invalidos = itens.Where(item => !catalogo.TryGetValue(item.ProdutoVarianteId, out var encontrado)
+            || encontrado.Id != item.ProdutoId).Select(item => item.ProdutoVarianteId).ToArray();
+        if (invalidos.Length > 0)
+        {
+            if (indisponiveis is not null)
+                foreach (var id in invalidos) indisponiveis.Add(id);
+            return (null, null);
+        }
 
         var resultado = new DadosItemPedido[itens.Count];
         var precos = new PrecoAtualPedido[itens.Count];
@@ -144,10 +215,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
         for (var i = 0; i < itens.Count; i++)
         {
             var item = itens[i];
-            if (!catalogo.TryGetValue(item.ProdutoVarianteId, out var atual) || atual.Id != item.ProdutoId)
-            {
-                return (null, null);
-            }
+            var atual = catalogo[item.ProdutoVarianteId];
 
             var preco = PromocoesComerciaisSql.Resolver(promocoes?[atual.Id] ?? [], atual.VarianteId, atual.PrecoVenda, agora);
             precos[i] = new(atual.Id, atual.VarianteId, preco);

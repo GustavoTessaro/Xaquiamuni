@@ -4,7 +4,8 @@ using Xaquiamuni.Dominio.Entidades;
 namespace Xaquiamuni.Api.Pedidos;
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-public sealed record CriarPedidoClienteRequest(ItemPedidoClienteRequest?[]? Itens, string? OfertaEntregaId = null);
+public sealed record CriarPedidoClienteRequest(ItemPedidoClienteRequest?[]? Itens = null,
+    string? OfertaEntregaId = null, string? ConversaoCorreiosId = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record CotarEntregaRequest(ItemPedidoClienteRequest?[]? Itens,

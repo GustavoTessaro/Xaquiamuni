@@ -103,7 +103,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
         }
     }
 
-    private async Task<(DadosEntregaPedido? Dados, long Frete)?> ValidarEntregaAsync(
+    private async Task<(DadosEntregaPedido? Dados, long Frete, ModalidadeEntregaPedido Modalidade)?> ValidarEntregaAsync(
         CriarPedidoCompraInput input, DadosItemPedido[] itens, DateTimeOffset agora, CancellationToken ct)
     {
         var configuracao = await CarregarConfiguracaoAsync(ct);
@@ -111,7 +111,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
             return configuracao.RetiradaHabilitada
                 ? (configuracao.EnderecoRetirada is null && configuracao.InstrucoesRetirada is null
                     ? null : new DadosEntregaPedido(EnderecoRetirada: configuracao.EnderecoRetirada,
-                        InstrucoesRetirada: configuracao.InstrucoesRetirada), 0) : null;
+                        InstrucoesRetirada: configuracao.InstrucoesRetirada), 0, ModalidadeEntregaPedido.RetiradaLocal) : null;
 
         OfertaProtegida? oferta;
         try
@@ -129,7 +129,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
             return null;
 
         if (oferta.Dados.Destino is not { } destino)
-            return configuracao.RetiradaHabilitada ? (oferta.Dados, 0) : null;
+            return configuracao.RetiradaHabilitada ? (oferta.Dados, 0, ModalidadeEntregaPedido.RetiradaLocal) : null;
 
         if (!configuracao.EntregaPropriaHabilitada ||
             !_municipiosPorCep.TryGetValue(destino.Cep, out var ibge) || ibge != destino.CodigoIbge)
@@ -141,7 +141,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
 
         var cidade = await BuscarCidadeAsync(destino, ct);
         return cidade is not null && cidade.Id == oferta.Dados.CidadeId && cidade.Revisao == oferta.RevisaoCidade
-            && cidade.TarifaCentavos == oferta.Frete ? (oferta.Dados, oferta.Frete) : null;
+            && cidade.TarifaCentavos == oferta.Frete
+            ? (oferta.Dados, oferta.Frete, ModalidadeEntregaPedido.EntregaPropria) : null;
     }
 
     private async Task<ConfiguracaoAtendimento> CarregarConfiguracaoAsync(CancellationToken ct) =>

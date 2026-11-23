@@ -28,6 +28,9 @@ public static class PedidosClienteEndpoints
         endpoints.MapPost("/api/checkout/cotacoes-entrega", CotarEntregaAsync)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .RequireXaquiamuniAntiforgery().WithTags("Pedidos do cliente");
+        endpoints.MapPost("/api/checkout/cotacoes-correios/{id:guid}/revisar", RevisarCorreiosAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .RequireXaquiamuniAntiforgery().WithTags("Pedidos do cliente");
         var group = endpoints.MapGroup(BasePath)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .WithTags("Pedidos do cliente");
@@ -64,6 +67,15 @@ public static class PedidosClienteEndpoints
         var (request, erro) = await LerCompraAsync<CriarPedidoClienteRequest>(context.Request, cancellationToken);
         if (erro is not null)
             return erro;
+        if (request?.ConversaoCorreiosId is { } conversao)
+        {
+            if (request.Itens is not null || request.OfertaEntregaId is not null)
+                return Invalido("conversaoCorreiosId", "Envie apenas a condição postal confirmada.");
+            if (conversao.Length is 0 or > 16000)
+                return Conflito("conversao_correios_invalida", "Revise a cotação postal novamente.");
+            return ResponderCriacao(await criarPedido.ExecuteAsync(
+                new(clienteId, chave, [], ConversaoCorreiosId: conversao), cancellationToken));
+        }
         var itens = NormalizarItens(request?.Itens, out var precoInvalido);
         if (precoInvalido)
             return Invalido("precoAceitoCentavos", "Informe um preço positivo em centavos.");
@@ -75,6 +87,15 @@ public static class PedidosClienteEndpoints
         var input = new CriarPedidoCompraInput(clienteId, chave, itens, request.OfertaEntregaId);
         var resultado = await criarPedido.ExecuteAsync(input, cancellationToken).ConfigureAwait(false);
         return ResponderCriacao(resultado);
+    }
+
+    private static async Task<IResult> RevisarCorreiosAsync(HttpContext context, Guid id,
+        IRevisarConversaoCorreios revisar, CancellationToken ct)
+    {
+        if (!TentarObterCliente(context, out var clienteId)) return Results.Unauthorized();
+        context.Response.Headers.CacheControl = "private, no-store";
+        var resultado = await revisar.RevisarAsync(clienteId, id, ct);
+        return resultado.RevisaoPostal is { } revisao ? Results.Ok(revisao) : ResponderCriacao(resultado);
     }
 
     private static async Task<IResult> CotarEntregaAsync(
@@ -181,23 +202,46 @@ public static class PedidosClienteEndpoints
             CriarPedidoCompraStatus.LimiteMonetarioExcedido => Invalido("itens", "O valor do pedido excede o limite suportado."),
             CriarPedidoCompraStatus.ClienteInapto =>
                 Results.Problem(statusCode: 403, title: "Cadastro inapto para realizar pedidos."),
+            CriarPedidoCompraStatus.ItemNaoCompravel or CriarPedidoCompraStatus.SaldoInsuficiente
+                when resultado.ItensIndisponiveis is { } indisponiveis =>
+                Results.Problem(statusCode: 409, title: "Um ou mais itens do pedido estão indisponíveis.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["codigo"] = "itens_indisponiveis",
+                        ["variantesIndisponiveis"] = indisponiveis,
+                    }),
             CriarPedidoCompraStatus.ItemNaoCompravel or CriarPedidoCompraStatus.SaldoInsuficiente =>
                 Conflito("itens_indisponiveis", "Um ou mais itens do pedido estão indisponíveis."),
             CriarPedidoCompraStatus.ConflitoIdempotencia =>
                 Conflito("chave_em_uso", "Esta chave já foi usada para outro conteúdo."),
-            CriarPedidoCompraStatus.PrecoAlterado =>
-                Results.Problem(statusCode: 409, title: "Revise os preços atuais antes de confirmar a compra.",
-                    extensions: new Dictionary<string, object?>
-                    {
-                        ["codigo"] = "preco_alterado",
-                        ["precosAtuais"] = resultado.PrecosAtuais
-                    }),
+            CriarPedidoCompraStatus.PrecoAlterado => ResponderPrecoAlterado(resultado),
             CriarPedidoCompraStatus.ConflitoConcorrencia =>
                 Conflito("conflito_concorrencia", "Tente novamente com a mesma chave."),
             CriarPedidoCompraStatus.OfertaEntregaInvalida =>
                 Conflito("oferta_entrega_invalida", "Solicite uma nova cotação e confirme o frete antes de continuar."),
+            CriarPedidoCompraStatus.CotacaoCorreiosNaoEncontrada => Results.NotFound(),
+            CriarPedidoCompraStatus.ConversaoCorreiosInvalida =>
+                Conflito("conversao_correios_invalida", "Revise a cotação postal novamente."),
+            CriarPedidoCompraStatus.CotacaoCorreiosExpirada =>
+                Conflito("cotacao_correios_expirada", "A proposta postal expirou."),
+            CriarPedidoCompraStatus.CotacaoCorreiosNaoAceita =>
+                Conflito("cotacao_correios_nao_aceita", "A cotação não está disponível para compra."),
+            CriarPedidoCompraStatus.CotacaoCorreiosConvertida =>
+                Conflito("cotacao_correios_convertida", "A cotação já foi convertida em pedido."),
             _ => Results.Problem(statusCode: 500, title: "Não foi possível concluir a solicitação."),
         };
+
+    private static IResult ResponderPrecoAlterado(CriarPedidoCompraResult resultado)
+    {
+        var extensoes = new Dictionary<string, object?>
+        {
+            ["codigo"] = "preco_alterado",
+            ["precosAtuais"] = resultado.PrecosAtuais,
+        };
+        if (resultado.RevisaoPostal is not null) extensoes["revisaoPostal"] = resultado.RevisaoPostal;
+        return Results.Problem(statusCode: 409, title: "Revise os preços atuais antes de confirmar a compra.",
+            extensions: extensoes);
+    }
 
     private static async Task<IResult> ListarAsync(
         HttpContext context, int? pagina, int? itensPorPagina,

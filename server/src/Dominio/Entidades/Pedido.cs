@@ -1,4 +1,5 @@
 using Xaquiamuni.Dominio.Valores;
+using System.Text.Json.Serialization;
 
 namespace Xaquiamuni.Dominio.Entidades;
 
@@ -18,6 +19,7 @@ public enum ModalidadeEntregaPedido : short
 {
     RetiradaLocal = 1,
     EntregaPropria = 2,
+    Correios = 3,
 }
 
 public sealed record EnderecoEntregaPedido(
@@ -26,7 +28,11 @@ public sealed record EnderecoEntregaPedido(
 
 public sealed record DadosEntregaPedido(
     EnderecoEntregaPedido? Destino = null, Guid? CidadeId = null,
-    string? EnderecoRetirada = null, string? InstrucoesRetirada = null);
+    string? EnderecoRetirada = null, string? InstrucoesRetirada = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DadosPropostaPostal? PropostaPostal = null);
+
+public sealed record DadosPropostaPostal(Guid SolicitacaoId, int Revisao, string Servico, int PrazoDias,
+    DateTimeOffset PublicadaEmUtc, DateTimeOffset ValidaAteUtc);
 
 public sealed class Pedido
 {
@@ -49,6 +55,8 @@ public sealed class Pedido
     public long SubtotalProdutosCentavos { get; private set; }
     public DadosEntregaPedido? Entrega { get; private set; }
     public string? HashOfertaEntrega { get; private set; }
+    public Guid? CotacaoCorreiosId { get; private set; }
+    public int? RevisaoCotacaoCorreios { get; private set; }
     public IReadOnlyList<ItemPedido> Itens => _itens.AsReadOnly();
     public DateTimeOffset? PagamentoConfirmadoEmUtc { get; private set; }
     public Guid? PagamentoConfirmadoPorId { get; private set; }
@@ -64,14 +72,25 @@ public sealed class Pedido
     public string? MotivoCancelamento { get; private set; }
 
     public static Pedido Criar(Guid clienteId, DateTimeOffset criadoEmUtc, IEnumerable<DadosItemPedido> itens,
-        Guid? pedidoId = null, DadosEntregaPedido? entrega = null, long freteCentavos = 0)
+        Guid? pedidoId = null, DadosEntregaPedido? entrega = null, long freteCentavos = 0,
+        ModalidadeEntregaPedido modalidade = ModalidadeEntregaPedido.RetiradaLocal)
     {
         ArgumentOutOfRangeException.ThrowIfEqual(clienteId, Guid.Empty);
         ArgumentNullException.ThrowIfNull(itens);
         ArgumentOutOfRangeException.ThrowIfEqual(pedidoId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfNegative(freteCentavos);
-        if ((entrega?.Destino is null) != (entrega?.CidadeId is null)
-            || (entrega?.Destino is null && freteCentavos != 0))
+        var dadosValidos = modalidade switch
+        {
+            ModalidadeEntregaPedido.RetiradaLocal => entrega?.Destino is null &&
+                entrega?.CidadeId is null && entrega?.PropostaPostal is null && freteCentavos == 0,
+            ModalidadeEntregaPedido.EntregaPropria => entrega is
+                { Destino: not null, CidadeId: not null, PropostaPostal: null },
+            ModalidadeEntregaPedido.Correios => entrega is
+                { Destino: not null, CidadeId: null, PropostaPostal: { Revisao: > 0 } proposta }
+                && proposta.SolicitacaoId != Guid.Empty,
+            _ => false,
+        };
+        if (!dadosValidos)
             throw new ArgumentException("Dados de entrega inconsistentes.", nameof(entrega));
         ValidarUtc(criadoEmUtc, nameof(criadoEmUtc));
         if (criadoEmUtc > DateTimeOffset.MaxValue.Subtract(PrazoPagamentoCompra.Duracao))
@@ -86,10 +105,11 @@ public sealed class Pedido
             CriadoEmUtc = criadoEmUtc,
             PrazoPagamentoEmUtc = criadoEmUtc.Add(PrazoPagamentoCompra.Duracao),
             Situacao = SituacaoPedido.AguardandoPagamento,
-            ModalidadeEntrega = entrega?.Destino is null
-                ? ModalidadeEntregaPedido.RetiradaLocal : ModalidadeEntregaPedido.EntregaPropria,
+            ModalidadeEntrega = modalidade,
             Entrega = entrega,
             FreteCentavos = freteCentavos,
+            CotacaoCorreiosId = entrega?.PropostaPostal?.SolicitacaoId,
+            RevisaoCotacaoCorreios = entrega?.PropostaPostal?.Revisao,
         };
         pedido._itens.AddRange(itens.Select(item => ItemPedido.Criar(pedido.Id, item)));
         if (pedido._itens.Count == 0)

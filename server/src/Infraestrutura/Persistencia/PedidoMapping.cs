@@ -16,8 +16,12 @@ internal static class PedidoMapping
                 tabela.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty",
                     $"[Id] <> {GuidVazio} AND [ClienteId] <> {GuidVazio}");
                 tabela.HasCheckConstraint("CK_Pedidos_Modalidade_Valid",
-                    "([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR "
-                    + "([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)");
+                    "((([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR "
+                    + "([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)) "
+                    + "AND [CotacaoCorreiosId] IS NULL AND [RevisaoCotacaoCorreios] IS NULL) OR "
+                    + "([ModalidadeEntrega] = 3 AND [Entrega] IS NOT NULL AND [CotacaoCorreiosId] IS NOT NULL "
+                    + "AND [RevisaoCotacaoCorreios] IS NOT NULL AND [RevisaoCotacaoCorreios] > 0 "
+                    + "AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 5, 8))");
                 tabela.HasCheckConstraint("CK_Pedidos_Frete_Valid",
                     "[FreteCentavos] >= 0 AND [FreteCentavos] <= [TotalCentavos]");
                 tabela.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
@@ -89,6 +93,9 @@ internal static class PedidoMapping
                 .HasFilter("[ChaveIdempotencia] IS NOT NULL");
             pedido.HasIndex(entity => new { entity.ClienteId, entity.CriadoEmUtc });
             pedido.HasIndex(entity => new { entity.Situacao, entity.PrazoPagamentoEmUtc });
+            pedido.HasIndex(entity => entity.CotacaoCorreiosId).IsUnique().HasFilter("[CotacaoCorreiosId] IS NOT NULL");
+            pedido.HasOne<PropostaCorreios>().WithMany().HasForeignKey(entity =>
+                new { entity.CotacaoCorreiosId, entity.RevisaoCotacaoCorreios }).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<OperacaoEntregaPropria>(operacao =>

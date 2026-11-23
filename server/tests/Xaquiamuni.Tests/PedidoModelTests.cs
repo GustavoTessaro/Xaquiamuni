@@ -23,11 +23,19 @@ public sealed class PedidoModelTests
 
         Assert.Equal("Pedidos", pedido.GetTableName());
         Assert.Equal("ItensPedido", item.GetTableName());
-        var cliente = Assert.Single(pedido.GetForeignKeys());
+        var cliente = Assert.Single(pedido.GetForeignKeys(), fk => fk.PrincipalEntityType.ClrType == typeof(ClientePerfil));
         Assert.Equal(typeof(ClientePerfil), cliente.PrincipalEntityType.ClrType);
         Assert.Equal(nameof(ClientePerfil.UserId), Assert.Single(cliente.PrincipalKey.Properties).Name);
         Assert.Equal(DeleteBehavior.Restrict, cliente.DeleteBehavior);
         Assert.True(cliente.IsRequired);
+        var proposta = Assert.Single(pedido.GetForeignKeys(), fk => fk.PrincipalEntityType.GetTableName() == "PropostasCorreios");
+        Assert.Equal(["CotacaoCorreiosId", "RevisaoCotacaoCorreios"], proposta.Properties.Select(p => p.Name));
+        Assert.Equal(["SolicitacaoId", "Revisao"], proposta.PrincipalKey.Properties.Select(p => p.Name));
+        Assert.Equal(DeleteBehavior.Restrict, proposta.DeleteBehavior);
+        Assert.False(proposta.IsRequired);
+        var conversao = Assert.Single(pedido.GetIndexes(), i => i.Properties.Select(p => p.Name).SequenceEqual(["CotacaoCorreiosId"]));
+        Assert.True(conversao.IsUnique);
+        Assert.Equal("[CotacaoCorreiosId] IS NOT NULL", conversao.GetFilter());
         var vinculoVariante = Assert.Single(item.GetForeignKeys(), fk => fk.PrincipalEntityType.ClrType == typeof(ProdutoVariante));
         Assert.Equal(["ProdutoId", "ProdutoVarianteId"], vinculoVariante.Properties.Select(p => p.Name));
         Assert.Equal(["ProdutoId", "Id"], vinculoVariante.PrincipalKey.Properties.Select(p => p.Name));

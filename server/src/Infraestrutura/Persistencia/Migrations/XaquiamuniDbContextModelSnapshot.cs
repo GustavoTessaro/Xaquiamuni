@@ -631,6 +631,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid>("ClienteId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<Guid?>("CotacaoCorreiosId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<DateTimeOffset>("CriadoEmUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -679,6 +682,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("RetiradaAutorizadaPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<int?>("RevisaoCotacaoCorreios")
+                        .HasColumnType("int");
+
                     b.Property<DateTimeOffset?>("SaidaEntregaEmUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -704,11 +710,17 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("CotacaoCorreiosId")
+                        .IsUnique()
+                        .HasFilter("[CotacaoCorreiosId] IS NOT NULL");
+
                     b.HasIndex("ClienteId", "ChaveIdempotencia")
                         .IsUnique()
                         .HasFilter("[ChaveIdempotencia] IS NOT NULL");
 
                     b.HasIndex("ClienteId", "CriadoEmUtc");
+
+                    b.HasIndex("CotacaoCorreiosId", "RevisaoCotacaoCorreios");
 
                     b.HasIndex("Situacao", "PrazoPagamentoEmUtc");
 
@@ -724,7 +736,7 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_Pedidos_Identificadores_NotEmpty", "[Id] <> '00000000-0000-0000-0000-000000000000' AND [ClienteId] <> '00000000-0000-0000-0000-000000000000'");
 
-                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR ([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)");
+                            t.HasCheckConstraint("CK_Pedidos_Modalidade_Valid", "((([ModalidadeEntrega] = 1 AND [FreteCentavos] = 0) OR ([ModalidadeEntrega] = 2 AND [Entrega] IS NOT NULL)) AND [CotacaoCorreiosId] IS NULL AND [RevisaoCotacaoCorreios] IS NULL) OR ([ModalidadeEntrega] = 3 AND [Entrega] IS NOT NULL AND [CotacaoCorreiosId] IS NOT NULL AND [RevisaoCotacaoCorreios] IS NOT NULL AND [RevisaoCotacaoCorreios] > 0 AND [RetiradaAutorizadaEmUtc] IS NULL AND [Situacao] NOT IN (4, 5, 8))");
 
                             t.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas", "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 AND DATEDIFF_BIG(hour, [CriadoEmUtc], [PrazoPagamentoEmUtc]) = 24 AND CAST([CriadoEmUtc] AS time(7)) = CAST([PrazoPagamentoEmUtc] AS time(7))");
 
@@ -3249,6 +3261,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasForeignKey("ClienteId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.PropostaCorreios", null)
+                        .WithMany()
+                        .HasForeignKey("CotacaoCorreiosId", "RevisaoCotacaoCorreios")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Entidades.Produto", b =>

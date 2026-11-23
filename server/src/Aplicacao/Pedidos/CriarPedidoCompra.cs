@@ -8,7 +8,8 @@ public sealed record ItemCompraInput(Guid ProdutoId, Guid ProdutoVarianteId, int
 public sealed record PrecoAtualPedido(Guid ProdutoId, Guid ProdutoVarianteId, PrecoComercial Preco);
 
 public sealed record CriarPedidoCompraInput(
-    Guid ClienteId, Guid ChaveIdempotencia, IReadOnlyList<ItemCompraInput> Itens, string? OfertaEntregaId = null);
+    Guid ClienteId, Guid ChaveIdempotencia, IReadOnlyList<ItemCompraInput> Itens, string? OfertaEntregaId = null,
+    string? ConversaoCorreiosId = null);
 
 public enum CriarPedidoCompraStatus
 {
@@ -22,11 +23,17 @@ public enum CriarPedidoCompraStatus
     ConflitoConcorrencia,
     PrecoAlterado,
     OfertaEntregaInvalida,
+    CotacaoCorreiosNaoEncontrada,
+    ConversaoCorreiosInvalida,
+    CotacaoCorreiosExpirada,
+    CotacaoCorreiosNaoAceita,
+    CotacaoCorreiosConvertida,
 }
 
 public sealed record CriarPedidoCompraResult(
     CriarPedidoCompraStatus Status, Pedido? Pedido = null, bool Repetida = false,
-    IReadOnlyList<PrecoAtualPedido>? PrecosAtuais = null);
+    IReadOnlyList<PrecoAtualPedido>? PrecosAtuais = null, RevisaoConversaoCorreios? RevisaoPostal = null,
+    IReadOnlyList<Guid>? ItensIndisponiveis = null);
 
 public interface ICriarPedidoCompraRepository
 {
@@ -41,11 +48,15 @@ public sealed class CriarPedidoCompra(ICriarPedidoCompraRepository repository)
     {
         ArgumentNullException.ThrowIfNull(input);
         cancellationToken.ThrowIfCancellationRequested();
-        if (input.ClienteId == Guid.Empty || input.ChaveIdempotencia == Guid.Empty
-            || input.Itens is not { Count: > 0 })
+        if (input.ClienteId == Guid.Empty || input.ChaveIdempotencia == Guid.Empty)
         {
             return DadosInvalidos();
         }
+        if (input.ConversaoCorreiosId is not null)
+            return input.Itens is { Count: 0 } && input.OfertaEntregaId is null
+                && input.ConversaoCorreiosId.Length is > 0 and <= 16000
+                ? repository.CriarAsync(input, cancellationToken) : DadosInvalidos();
+        if (input.Itens is not { Count: > 0 }) return DadosInvalidos();
 
         var itens = NormalizarItens(input.Itens);
         return itens is null ? DadosInvalidos()
