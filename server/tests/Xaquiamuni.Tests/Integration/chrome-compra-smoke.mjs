@@ -133,7 +133,7 @@ try {
     }
   });
 
-  async function abrir(path) {
+  async function abrir(path, seletorPronto = "app-root main h1") {
     const { browserContextId } = await call('Target.createBrowserContext');
     const { targetId } = await call('Target.createTarget', { url: 'about:blank', browserContextId });
     const { sessionId } = await call('Target.attachToTarget', { targetId, flatten: true });
@@ -150,7 +150,7 @@ try {
       return r.result.value;
     };
     try {
-      await waitFor(() => ev('!!document.querySelector("app-root main h1")'), 'Angular');
+      await waitFor(() => ev(`!!document.querySelector(${JSON.stringify(seletorPronto)})`), 'Angular');
     } catch {
       throw new Error('Angular não carregou em ' + path + '. HTTP local: ' + JSON.stringify([...respostas]));
     }
@@ -209,6 +209,45 @@ try {
   assert.equal(await a.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 200);
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
+
+  if (process.env.XAQUIAMUNI_CHROME_LOGIN === '1') {
+    const origem = '/produtos?busca=lavanda#catalogo';
+    for (const width of [375, 1280]) {
+      const navegador = await abrir(origem, "app-root .store-account__link");
+      await call('Emulation.setDeviceMetricsOverride', {
+        width, height: 900, mobile: false, deviceScaleFactor: 1,
+      }, navegador.sessionId);
+      const seletor = width === 375 ? '.store-mobile-nav a' : '.store-account__link';
+      if (width === 375) await navegador.ev("document.querySelector('details.store-mobile-nav').open = true");
+      await waitFor(() => navegador.ev(`(() => {
+        const link = [...document.querySelectorAll(${JSON.stringify(seletor)})]
+          .find(a => a.textContent.trim() === 'Entrar' && a.getClientRects().length);
+        if (!link) return false;
+        link.click();
+        return true;
+      })()`), 'Entrar pelo cabeçalho em ' + width);
+      await waitFor(() => navegador.ev("location.pathname === '/login' && !!document.querySelector('#senha')"), 'Login público');
+      assert.equal(await navegador.ev("new URLSearchParams(location.search).get('destino')"), origem);
+      assert.ok(await navegador.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await navegador.ev(`(() => {
+        for (const [id, valor] of Object.entries(${JSON.stringify({ email: cliente.Email, senha: cliente.Senha })})) {
+          const input = document.getElementById(id);
+          input.value = valor;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        document.querySelector('main form').requestSubmit();
+      })()`);
+      const voltou = () => navegador.ev(`location.pathname + location.search + location.hash === ${JSON.stringify(origem)}`);
+      await waitFor(voltou, 'Retorno após autenticação');
+      await navegador.ir('/login?destino=' + encodeURIComponent(origem));
+      await waitFor(voltou, 'Retorno com sessão ativa');
+      await navegador.ir('/login?destino=' + encodeURIComponent('//externo.example/'));
+      await waitFor(() => navegador.ev("location.pathname === '/'"), 'Destino inválido encaminhado à loja');
+      await navegador.ir('/login');
+      await waitFor(() => navegador.ev("!!document.querySelector('main nav[aria-label=\"Atalhos da sessão\"]')"), 'Atalhos da sessão ativa');
+      console.log('Retorno de login verificado no Chrome em ' + width + ' px.');
+    }
+  }
 
   if (dados.promocoes)
     await validarPromocoes({ dados, cliente: c, admin: a, call, waitFor, checkpoint, abrir, login });

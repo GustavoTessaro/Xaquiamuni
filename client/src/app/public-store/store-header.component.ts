@@ -20,6 +20,7 @@ import {
 } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { catchError, filter, finalize, of } from 'rxjs';
+import { validarDestinoLoja } from '../core/auth/destino-login-cliente';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
 import { CarrinhoService } from './carrinho.service';
 import { CategoriaCatalogoPublico, CatalogoPublicoService } from './catalogo-publico.service';
@@ -50,6 +51,8 @@ export class StoreHeaderComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly destroyRef = inject(DestroyRef);
 
+  protected readonly destinoLogin = signal(this.router.serializeUrl(validarDestinoLoja(this.router.url)));
+
   @ViewChild('categoryMenu') private categoryMenuElement?: ElementRef<HTMLDetailsElement>;
   @ViewChild('mobileNav') private mobileNav?: ElementRef<HTMLDetailsElement>;
   @ViewChild('mobileCategories') private mobileCategories?: ElementRef<HTMLDetailsElement>;
@@ -60,7 +63,10 @@ export class StoreHeaderComponent implements OnInit {
         filter((event): event is NavigationEnd => event instanceof NavigationEnd),
         takeUntilDestroyed(this.destroyRef),
       )
-      .subscribe(() => this.closeNavigation());
+      .subscribe(event => {
+        this.destinoLogin.set(this.router.serializeUrl(validarDestinoLoja(event.urlAfterRedirects)));
+        this.closeNavigation();
+      });
 
     this.route.queryParamMap
       .pipe(takeUntilDestroyed(this.destroyRef))

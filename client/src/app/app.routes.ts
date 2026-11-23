@@ -1,6 +1,7 @@
 import { inject } from '@angular/core';
 import { CanActivateFn, Router, Routes } from '@angular/router';
 import { catchError, map, of } from 'rxjs';
+import { validarDestinoLoja } from './core/auth/destino-login-cliente';
 import { AuthService } from './core/auth/auth.service';
 import { adminAuthGuard } from './admin/admin-auth.guard';
 import { AdminCategoriasComponent } from './admin/categorias/admin-categorias.component';
@@ -39,9 +40,10 @@ const paginasVitrine: Routes = [
 const carregarCotacoesCorreios = () =>
   import('./shared/cotacoes-correios.component').then(m => m.CotacoesCorreiosComponent);
 
-const clienteCotacoesGuard: CanActivateFn = route => {
-  const login = inject(Router).createUrlTree(['/login'], {
-    queryParams: { retorno: 'cotacoes-correios', cotacao: route.params['id'] },
+const clienteCotacoesGuard: CanActivateFn = (_, estado) => {
+  const router = inject(Router);
+  const login = router.createUrlTree(['/login'], {
+    queryParams: { destino: router.serializeUrl(validarDestinoLoja(estado.url)) },
   });
   return inject(AuthService).obterSessao().pipe(map(sessao => sessao ? true : login), catchError(() => of(login)));
 };

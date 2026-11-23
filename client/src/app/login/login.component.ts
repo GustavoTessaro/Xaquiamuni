@@ -12,7 +12,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { Subscription, TimeoutError, finalize, interval } from 'rxjs';
 import { AuthService, AuthSession } from '../core/auth/auth.service';
-import { uuidValido } from '../public-store/pedidos.service';
+import { destinoLoginCliente } from '../core/auth/destino-login-cliente';
 
 type LoginControls = {
   email: FormControl<string>;
@@ -50,18 +50,10 @@ export class LoginComponent implements OnDestroy {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   protected get retornoCheckout() {
-    return this.route.snapshot.queryParamMap.get('retorno') === 'checkout';
+    const destino = this.retornoEncerrado ? null : destinoLoginCliente(this.route.snapshot.queryParamMap);
+    return destino !== null && this.router.serializeUrl(destino).split('#', 1)[0] === '/checkout';
   }
-  protected get destinoCompra(): string[] | null {
-    const pedido = this.route.snapshot.queryParamMap.get('pedido');
-    if (this.retornoCheckout) return ['/checkout'];
-    if (this.route.snapshot.queryParamMap.get('retorno') === 'cotacoes-correios') {
-      const cotacao = this.route.snapshot.queryParamMap.get('cotacao');
-      return uuidValido(cotacao) ? ['/cotacoes-correios', cotacao] : ['/cotacoes-correios'];
-    }
-    if (uuidValido(pedido)) return ['/pedidos', pedido];
-    return this.route.snapshot.queryParamMap.get('retorno') === 'pedidos' ? ['/pedidos'] : null;
-  }
+  private retornoEncerrado = false;
 
   private pendingConfirmationEmail: string | null = null;
   private retryUntil: number | null = null;
@@ -183,7 +175,13 @@ export class LoginComponent implements OnDestroy {
       .logout()
       .pipe(finalize(() => this.signingOut.set(false)))
       .subscribe({
-        next: () => this.checkSession('logout'),
+        next: () => {
+          this.retornoEncerrado = true;
+          if (destinoLoginCliente(this.route.snapshot.queryParamMap)) {
+            void this.router.navigateByUrl('/login', { replaceUrl: true });
+          }
+          this.checkSession('logout');
+        },
         error: () => this.errorMessage.set('Não foi possível encerrar a sessão. Tente novamente.'),
       });
   }
@@ -335,12 +333,16 @@ export class LoginComponent implements OnDestroy {
     this.successMessage.set('');
     this.authService
       .obterSessao()
-      .pipe(finalize(() => this.checkingSession.set(false)))
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.checkingSession.set(false)))
       .subscribe({
         next: (session) => {
           this.session.set(session);
-          if (purpose === 'login' && session && this.destinoCompra) {
-            void this.router.navigate(this.destinoCompra);
+          if (session && purpose !== 'logout' && !this.retornoEncerrado) {
+            const destino = destinoLoginCliente(this.route.snapshot.queryParamMap);
+            if (destino) {
+              this.retornoEncerrado = true;
+              void this.router.navigateByUrl(destino, { replaceUrl: true });
+            }
           }
           if (purpose === 'login' && session) {
             this.successMessage.set('Login realizado com sucesso.');

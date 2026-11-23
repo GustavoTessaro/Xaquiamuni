@@ -50,7 +50,7 @@
             {{ signingOut() ? 'Saindo...' : 'Sair' }}
           </button>
         } @else {
-          <a class="store-account__link" routerLink="/login">Entrar</a>
+          <a class="store-account__link" routerLink="/login" [queryParams]="{ destino: destinoLogin() }">Entrar</a>
           <a class="store-account__register" routerLink="/cadastro">Criar conta</a>
         }
       </div>
@@ -130,7 +130,7 @@
           <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
           <a routerLink="/cotacoes-correios" (click)="closeNavigation()">Minhas cotações</a>
         } @else {
-          <a routerLink="/login" (click)="closeNavigation()">Entrar</a>
+          <a routerLink="/login" [queryParams]="{ destino: destinoLogin() }" (click)="closeNavigation()">Entrar</a>
           <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
         }
       }
