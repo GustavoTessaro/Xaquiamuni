@@ -176,6 +176,11 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/promocoes-frete',
+    loadComponent: () => import('./admin/promocoes/admin-promocoes-frete.component').then(m => m.AdminPromocoesFreteComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/producao',
     loadComponent: () => import('./admin/producao/admin-producao.component').then(m => m.AdminProducaoComponent),
     canActivate: [adminAuthGuard],

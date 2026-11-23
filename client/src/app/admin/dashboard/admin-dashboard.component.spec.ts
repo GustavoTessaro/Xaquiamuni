@@ -92,7 +92,8 @@ describe('AdminDashboardComponent', () => {
 
   it('groups modules and marks the overview as the current page', () => {
     const nav = fixture.nativeElement.querySelector('.admin-sidebar nav') as HTMLElement;
-    expect(nav.querySelectorAll('a')).toHaveLength(17);
+    expect(nav.querySelectorAll('a')).toHaveLength(18);
+    expect(nav.querySelector('a[href="/admin/promocoes-frete"]')?.textContent).toContain('Promoções de frete');
     expect(nav.querySelector('a[href="/admin/configuracoes/atendimento"]')).not.toBeNull();
     expect(nav.querySelector('a[href="/admin/promocoes"]')?.textContent).toContain('Promoções');
     expect(nav.querySelectorAll('[aria-current="page"]')).toHaveLength(1);

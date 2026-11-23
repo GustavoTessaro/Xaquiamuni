@@ -210,6 +210,66 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
+  if (process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
+    await a.ir('/admin/promocoes-frete');
+    const botao = texto => waitFor(() => a.ev(`(() => {
+      const alvo = [...document.querySelectorAll('main button')]
+        .find(b => b.textContent.trim() === ${JSON.stringify(texto)} && !b.disabled);
+      if (!alvo) return false;
+      alvo.click();
+      return true;
+    })()`), texto);
+    const preencher = (nome, valor) => a.ev(`(() => {
+      const campo = document.querySelector('main [name="' + ${JSON.stringify(nome)} + '"]');
+      campo.value = ${JSON.stringify(valor)};
+      campo.dispatchEvent(new Event(campo.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true }));
+    })()`);
+    const aparece = texto => waitFor(() => a.ev(
+      `document.querySelector('main')?.textContent.includes(${JSON.stringify(texto)})`), texto);
+    const largura = width => call('Emulation.setDeviceMetricsOverride', {
+      width, height: 900, mobile: false, deviceScaleFactor: 1,
+    }, a.sessionId);
+    await largura(375);
+    await botao('Nova campanha');
+    await preencher('nome', 'Campanha de frete descartável');
+    await preencher('valor', '12,50');
+    await a.ev("document.querySelector('main form input[type=checkbox]').click()");
+    await botao('Salvar campanha');
+    await aparece('Campanha salva.');
+    await aparece('12,50%');
+    await botao('Ativar');
+    await aparece('Campanha ativada.');
+    await botao('Editar');
+    await waitFor(() => a.ev("!!document.querySelector('main input[name=nome]')"), 'Formulário de edição');
+    await preencher('tipo', 'FreteGratis');
+    await botao('Salvar campanha');
+    await aparece('Integral');
+    await botao('Inativar');
+    await aparece('Campanha inativada.');
+
+    for (const width of [375, 1280]) {
+      await largura(width);
+      for (const tema of ['light', 'dark']) {
+        const temaAtual = () => a.ev("document.querySelector('.admin-shell')?.dataset.adminTheme");
+        if (await temaAtual() !== tema) {
+          await a.ev(`[...document.querySelectorAll('header button')].find(b =>
+            b.getAttribute('aria-label')?.includes('Ativar modo')).click()`);
+          await waitFor(async () => await temaAtual() === tema, 'Modo ' + tema);
+        }
+        assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'), 'Lista em ' + tema + ' / ' + width);
+        await botao('Editar');
+        await waitFor(() => a.ev("!!document.querySelector('main input[name=nome]')"), 'Formulário');
+        assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'), 'Formulário em ' + tema + ' / ' + width);
+        await a.ev("document.querySelector('main input[name=nome]').focus()");
+        await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+        await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+        assert.ok(await a.ev("document.activeElement.matches('main select[name=tipo]:focus-visible')"));
+        await botao('Cancelar');
+      }
+    }
+    console.log('Campanha de frete criada, editada, ativada e inativada no Chrome, em 375/1280 px e nos dois modos ADMIN.');
+  }
+
   if (process.env.XAQUIAMUNI_CHROME_CONTA === '1') {
     const conta = await abrir('/login');
     await login(conta, cliente, '/api/auth');

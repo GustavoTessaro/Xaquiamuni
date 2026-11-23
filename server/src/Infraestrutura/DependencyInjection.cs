@@ -46,6 +46,7 @@ public static class DependencyInjection
         });
         services.AddSingleton<TimeProvider>(TimeProvider.System);
         services.AddScoped<EfPromocoes>();
+        services.AddScoped<EfPromocoesFrete>();
         services.Configure<PromocoesComerciaisOptions>(configuration.GetSection("PromocoesComerciais"));
         services.Configure<EntregaCheckoutOptions>(configuration.GetSection("EntregaCheckout"));
         services.Configure<CorreiosManualOptions>(configuration.GetSection("CorreiosManual"));

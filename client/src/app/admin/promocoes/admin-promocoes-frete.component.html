@@ -1,0 +1,102 @@
+<app-admin-workspace activePage="shipping-promotions">
+  <section class="pagina" aria-labelledby="titulo-frete">
+    <header class="painel">
+      <h1 id="titulo-frete">Promoções de frete</h1>
+      <p>Prepare campanhas para entrega própria e Correios manual. Nesta etapa, as campanhas ainda não alteram o frete cobrado.</p>
+      <button class="principal" type="button" (click)="criar()" [disabled]="ocupado() || !!formulario() || conflito()">Nova campanha</button>
+    </header>
+
+    @if (aviso()) { <p role="status">{{ aviso() }}</p> }
+    @if (ocupado()) { <p role="status">Processando campanha…</p> }
+    @if (erro()) { <p class="alerta" role="alert">{{ erro() }}</p> }
+    @if (conflito()) {
+      <button type="button" (click)="recarregarAposConflito()" [disabled]="ocupado()">Recarregar dados</button>
+    }
+    @if (formulario(); as f) {
+      <form class="painel" (ngSubmit)="salvar(f)">
+        <h2>{{ atual() ? 'Editar campanha' : 'Nova campanha' }}</h2>
+        <fieldset class="campos" [disabled]="ocupado()">
+          <legend>Condições do desconto</legend>
+          <label>Nome <input name="nome" [ngModel]="f.nome" (ngModelChange)="atualizar('nome', $event)" maxlength="120" required></label>
+          <label>Tipo de desconto
+            <select name="tipo" [ngModel]="f.tipo" (ngModelChange)="atualizar('tipo', $event)">
+              <option value="Percentual">Percentual</option>
+              <option value="ValorFixo">Valor fixo</option>
+              <option value="FreteGratis">Frete grátis</option>
+            </select>
+          </label>
+          @if (f.tipo !== 'FreteGratis') {
+            <label>{{ f.tipo === 'Percentual' ? 'Desconto (%)' : 'Desconto (R$)' }}
+              <input name="valor" inputmode="decimal" [ngModel]="f.valor" (ngModelChange)="atualizar('valor', $event)" required>
+            </label>
+          }
+          <label>Subtotal mínimo (R$)
+            <input name="subtotal" inputmode="decimal" [ngModel]="f.subtotal" (ngModelChange)="atualizar('subtotal', $event)" required>
+          </label>
+          <label>Início (opcional)
+            <input name="inicio" type="datetime-local" [ngModel]="f.inicio" (ngModelChange)="atualizar('inicio', $event)">
+          </label>
+          <label>Término (opcional)
+            <input name="fim" type="datetime-local" [ngModel]="f.fim" (ngModelChange)="atualizar('fim', $event)">
+          </label>
+        </fieldset>
+        <fieldset [disabled]="ocupado()">
+          <legend>Modalidades elegíveis</legend>
+          @for (modalidade of escolhas; track modalidade) {
+            <label class="selecao">
+              <input type="checkbox" [checked]="f.modalidades.includes(modalidade)"
+                (change)="marcarModalidade(f, modalidade, $any($event.target).checked)">
+              {{ modalidades[modalidade] }}
+            </label>
+          }
+        </fieldset>
+        <div class="acoes">
+          <button class="principal" type="submit" [disabled]="ocupado() || conflito()">Salvar campanha</button>
+          <button type="button" (click)="cancelar()" [disabled]="ocupado()">Cancelar</button>
+        </div>
+      </form>
+    }
+
+    <section class="painel" aria-labelledby="campanhas-frete">
+      <h2 id="campanhas-frete">Campanhas cadastradas</h2>
+      @let resultado = lista();
+      @if (resultado.estado === 'carregando') { <p role="status">Carregando campanhas…</p> }
+      @if (resultado.estado === 'erro') {
+        <p class="alerta" role="alert">{{ resultado.mensagem }}</p>
+        <button type="button" (click)="recarregar()">Tentar novamente</button>
+      }
+      @if (resultado.estado === 'pronto') {
+        @if (!resultado.dados.itens.length) { <p>Nenhuma campanha nesta página.</p> }
+        <div class="cards">
+          @for (c of resultado.dados.itens; track c.id) {
+            <article class="cartao">
+              <h3>{{ c.nome }}</h3>
+              <dl>
+                <dt>Tipo</dt><dd>{{ tipos[c.tipo] }}</dd>
+                <dt>Desconto</dt><dd>{{ desconto(c) }}</dd>
+                <dt>Modalidades</dt><dd>
+                  @for (m of c.modalidades; track m; let ultima = $last) { {{ modalidades[m] }}@if (!ultima) {, } }
+                </dd>
+                <dt>Subtotal mínimo</dt><dd>{{ moeda(c.subtotalMinimoCentavos) }}</dd>
+                <dt>Início</dt><dd>{{ (c.inicioUtc | date:'dd/MM/yyyy HH:mm') ?? 'Sem data inicial' }}</dd>
+                <dt>Término</dt><dd>{{ (c.fimUtc | date:'dd/MM/yyyy HH:mm') ?? 'Sem data final' }}</dd>
+                <dt>Status</dt><dd>{{ c.ativa ? 'Ativa' : 'Inativa' }}</dd>
+              </dl>
+              <div class="acoes">
+                <button type="button" (click)="abrir(c.id)" [disabled]="ocupado() || !!formulario() || conflito()">Editar</button>
+                <button type="button" (click)="alterarStatus(c)" [disabled]="ocupado() || !!formulario() || conflito()">
+                  {{ c.ativa ? 'Inativar' : 'Ativar' }}
+                </button>
+              </div>
+            </article>
+          }
+        </div>
+        <nav class="acoes" aria-label="Paginação das campanhas">
+          <button type="button" (click)="pagina.set(pagina() - 1)" [disabled]="pagina() === 1">Anterior</button>
+          <span>Página {{ pagina() }}</span>
+          <button type="button" (click)="pagina.set(pagina() + 1)" [disabled]="!resultado.dados.temProxima">Próxima</button>
+        </nav>
+      }
+    </section>
+  </section>
+</app-admin-workspace>
