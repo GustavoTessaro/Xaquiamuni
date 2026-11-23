@@ -78,6 +78,22 @@ describe('atalho para o pedido convertido em Minhas cotações', () => {
     expect(harness.routeNativeElement!.textContent).toContain('Continuar para pagamento');
   });
 
+  it('exibe os valores congelados da revisão e conserva a ação de aceite', async () => {
+    const harness = await RouterTestingHarness.create(caminho);
+    await responder(harness, {
+      ...detalhe, resumo: { ...detalhe.resumo, situacao: 'PropostaDisponivel' }, revisaoAceita: null,
+      propostas: [{ revisao: 1, servico: 'PAC', prazoDias: 3, pesoTotalGramas: 300, volumes: [],
+        publicadaEmUtc: '2026-11-23T10:00:00Z', validaAteUtc: '2026-11-24T10:00:00Z', freteCentavos: '0',
+        valores: { freteCentavos: '0', subtotalProdutosCentavos: '1199', totalCentavos: '1199',
+          descontoFrete: { campanhaId: 'campanha', nomeCampanha: 'Oferta postal', originalCentavos: '1290', descontoCentavos: '1290' } },
+      }],
+    });
+    const tela = harness.routeNativeElement!;
+    for (const texto of ['Frete grátis', '12,90', 'Oferta postal', 'Total publicado', '11,99', 'Aceitar proposta']) {
+      expect(tela.textContent).toContain(texto);
+    }
+  });
+
   it('encaminha a Meus pedidos se a cotação convertida estiver sem vínculo', async () => {
     const harness = await RouterTestingHarness.create(caminho);
     await responder(harness, { ...detalhe, pedidoConvertidoId: null });

@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
 import { firstValueFrom, of, switchMap, timeout } from 'rxjs';
 import type { ItemCompra, PrecoAtualPedido } from '../public-store/pedidos.service';
-import type { EnderecoEntrega } from './atendimento.service';
+import type { DescontoFrete, EnderecoEntrega } from './atendimento.service';
 import { AuthService } from './auth/auth.service';
 import { CsrfService } from './security/csrf.service';
 
@@ -17,7 +17,14 @@ export const estadosCotacao = {
   ConvertidaEmPedido: 'Convertida em pedido',
 };
 type Estado = keyof typeof estadosCotacao;
+export interface ValoresPropostaPostal {
+  freteCentavos: string;
+  subtotalProdutosCentavos: string | null;
+  totalCentavos: string | null;
+  descontoFrete: DescontoFrete | null;
+}
 export interface ResumoCotacao {
+  valores?: ValoresPropostaPostal | null;
   id: string;
   situacao: Estado;
   criadaEmUtc: string;
@@ -40,6 +47,7 @@ export interface ReferenciaPostal {
   validaAteUtc: string;
 }
 export interface PropostaPostal extends Omit<ReferenciaPostal, 'solicitacaoId'> {
+  valores?: ValoresPropostaPostal | null;
   freteCentavos: string;
   pesoTotalGramas: number | null;
   volumes: VolumePostal[];
@@ -53,6 +61,7 @@ export interface DetalheCotacao {
   pedidoConvertidoId: string | null;
 }
 export interface RevisaoPostal {
+  descontoFrete?: DescontoFrete | null;
   proposta: ReferenciaPostal;
   endereco: EnderecoEntrega;
   itens: (ItemCotacao & { disponivel: boolean; preco: PrecoAtualPedido | null })[];
@@ -124,6 +133,11 @@ export class CotacoesCorreiosService {
 
   solicitar(corpo: SolicitacaoPostal, chave: string, requestToken?: string) {
     return this.post<ResumoCotacao>(this.rota(false), corpo, { 'Idempotency-Key': chave }, requestToken);
+  }
+
+  preverProposta(id: string, corpo: object, versao: string) {
+    return this.post<ResumoCotacao>(this.rota(true) + '/' + encodeURIComponent(id) + '/propostas/previa',
+      corpo, { 'If-Match': versao });
   }
 
   operar(admin: boolean, id: string, acao: string, corpo: object, versao: string, chave: string) {

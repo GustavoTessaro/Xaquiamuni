@@ -100,7 +100,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IRevisarConversa
         var condicao = new CondicaoPostal(postal.Solicitacao.ClienteId, postal.Solicitacao.Id, postal.Proposta.Revisao,
             IdentificarCarrinho(dados));
         return new(postal.Snapshot, postal.Endereco, itens, postal.Proposta.FreteCentavos, subtotal, total,
-            indisponiveis.Count == 0 ? _conversoesCorreios?.Protect(SerializarPostal(condicao)) : null);
+            indisponiveis.Count == 0 ? _conversoesCorreios?.Protect(SerializarPostal(condicao)) : null, postal.Proposta.DescontoFrete);
     }
 
     private static bool TentarCalcularTotalCompra(IEnumerable<DadosItemPedido> dados, long frete, out long subtotal, out long total)

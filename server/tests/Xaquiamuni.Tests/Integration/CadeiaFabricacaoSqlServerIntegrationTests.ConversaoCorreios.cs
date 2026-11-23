@@ -112,21 +112,26 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/correios-manual",
             new SalvarCorreiosManual(true, 1, 0), HttpStatusCode.OK);
 
+        var campanhaPostal = PromocaoFrete.Criar(new("Economia postal", TipoDescontoFrete.Percentual, 5000,
+            ModalidadesPromocaoFrete.CorreiosManual, 2398, null, null), Guid.NewGuid(), relogio.Agora);
+        campanhaPostal.AlterarStatus(true, campanhaPostal.CriadaPorId, relogio.Agora);
+        db.Add(campanhaPostal);
+        await db.SaveChangesAsync();
         var id = await PrepararCotacaoConversaoAsync(admin, cliente, produto.Id, variante.Id);
+        var publicada = await cliente.Http.GetFromJsonAsync<JsonElement>($"/api/cotacoes-correios/{id:D}");
+        var valoresPublicados = Assert.Single(publicada.GetProperty("propostas").EnumerateArray()).GetProperty("valores");
+        Assert.Equal("3048", valoresPublicados.GetProperty("totalCentavos").GetString());
+        campanhaPostal.AlterarStatus(false, campanhaPostal.CriadaPorId, relogio.Agora);
+        await db.SaveChangesAsync();
         var rota = RevisarPostal(id);
         using (var alheia = await EscreverPostalAsync(outro, rota, new { }))
             Assert.Equal(HttpStatusCode.NotFound, alheia.StatusCode);
         using (var semCsrf = await EscreverPostalAsync(cliente, rota, new { }, csrf: false))
             Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
-        var campanhaPostal = PromocaoFrete.Criar(new("Frete postal fora da etapa", TipoDescontoFrete.FreteGratis, 0,
-            ModalidadesPromocaoFrete.CorreiosManual, 0, null, null), Guid.NewGuid(), relogio.Agora);
-        campanhaPostal.AlterarStatus(true, campanhaPostal.CriadaPorId, relogio.Agora);
-        db.Add(campanhaPostal);
-        await db.SaveChangesAsync();
         var primeira = await cliente.PostAsync<JsonElement>(rota, new { }, HttpStatusCode.OK);
         Assert.Equal("2398", primeira.GetProperty("subtotalProdutosCentavos").GetString());
-        Assert.Equal("1300", primeira.GetProperty("freteCentavos").GetString());
-        Assert.Equal("3698", primeira.GetProperty("totalCentavos").GetString());
+        Assert.Equal("650", primeira.GetProperty("freteCentavos").GetString());
+        Assert.Equal("3048", primeira.GetProperty("totalCentavos").GetString());
         var anterior = primeira.GetProperty("conversaoCorreiosId").GetString()!;
         using (var alheia = await EscreverPostalAsync(outro, "/api/pedidos", new { conversaoCorreiosId = anterior }))
             Assert.Equal(HttpStatusCode.NotFound, alheia.StatusCode);
@@ -144,18 +149,18 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal("preco_alterado", conflito.GetProperty("codigo").GetString());
             var revisao = conflito.GetProperty("revisaoPostal");
             Assert.Equal(total, revisao.GetProperty("totalCentavos").GetString());
-            Assert.Equal("1300", revisao.GetProperty("freteCentavos").GetString());
+            Assert.Equal("650", revisao.GetProperty("freteCentavos").GetString());
             Assert.False(await db.Pedidos.AnyAsync());
             Assert.False(await db.ReservasProdutoAcabado.AnyAsync());
             return revisao.GetProperty("conversaoCorreiosId").GetString()!;
         }
-        var regular = await ReconfirmarAsync(anterior, "3798");
+        var regular = await ReconfirmarAsync(anterior, "3148");
         await admin.PostAsync<JsonElement>("/api/admin/promocoes", new
         {
             configuracao = new { produtoId = produto.Id, tipo = "PrecoFixo", escopo = "TodasVariantes", valor = "900" },
             ativa = true,
         }, HttpStatusCode.Created, Guid.NewGuid());
-        var token = await ReconfirmarAsync(regular, "3100");
+        var token = await ReconfirmarAsync(regular, "2450");
 
         var carrinhoDiferente = new[] { new { produtoId = produto.Id, produtoVarianteId = variante.Id,
             quantidade = 1, precoAceitoCentavos = "900" } };
@@ -219,9 +224,12 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var pedido = await criada.Content.ReadFromJsonAsync<JsonElement>();
         var pedidoId = pedido.GetProperty("id").GetGuid();
         Assert.Equal("Correios", pedido.GetProperty("modalidadeEntrega").GetString());
-        Assert.False(pedido.GetProperty("entrega").TryGetProperty("descontoFrete", out _));
+        var descontoPostal = pedido.GetProperty("entrega").GetProperty("descontoFrete");
+        Assert.Equal(campanhaPostal.Id, descontoPostal.GetProperty("campanhaId").GetGuid());
+        Assert.Equal("1300", descontoPostal.GetProperty("originalCentavos").GetString());
+        Assert.Equal("650", descontoPostal.GetProperty("descontoCentavos").GetString());
         Assert.Matches("^XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}$", pedido.GetProperty("numeroPublico").GetString()!);
-        Assert.Equal("3100", pedido.GetProperty("totalCentavos").GetString());
+        Assert.Equal("2450", pedido.GetProperty("totalCentavos").GetString());
         Assert.Equal("1800", pedido.GetProperty("subtotalProdutosCentavos").GetString());
         Assert.Equal(2, Assert.Single(pedido.GetProperty("itens").EnumerateArray()).GetProperty("quantidade").GetInt32());
         Assert.Equal("Rua de teste", pedido.GetProperty("entrega").GetProperty("destino").GetProperty("logradouro").GetString());
@@ -278,7 +286,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         configPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
         using var pixSalvo = await admin.Http.SendAsync(configPix);
         Assert.Equal(HttpStatusCode.OK, pixSalvo.StatusCode);
-        Assert.Equal("3100", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento")).GetProperty("valorCentavos").GetString());
+        Assert.Equal("2450", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento")).GetProperty("valorCentavos").GetString());
         using var comprovante = await EnviarComprovanteAsync(cliente, caminho + "/comprovante-pix",
             PdfComprovante(), "teste.pdf", "application/pdf", await TokenComprovanteAsync(cliente));
         Assert.Equal(HttpStatusCode.Created, comprovante.StatusCode);
@@ -289,7 +297,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             await admin.PostAsync<JsonElement>(adminPedido + "/confirmar-pagamento", new { recebimentoConferido = true },
                 HttpStatusCode.OK, Guid.NewGuid());
         var evento = Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes)).GetProperty("itens").EnumerateArray());
-        Assert.Equal("3100", evento.GetProperty("valorCentavos").GetString());
+        Assert.Equal("2450", evento.GetProperty("valorCentavos").GetString());
         await admin.PostAsync<JsonElement>(adminPedido + "/iniciar-preparacao", new { }, HttpStatusCode.OK, Guid.NewGuid());
         await admin.PostAsync<JsonElement>(adminPedido + "/liberar-retirada", new { }, HttpStatusCode.Conflict, Guid.NewGuid());
         await admin.PostAsync<JsonElement>(adminPedido + "/confirmar-entrega", new { entregaPresencialConfirmada = true },

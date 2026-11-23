@@ -33,7 +33,14 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         var total = await consulta.CountAsync(ct);
         var itens = await consulta.OrderByDescending(x => x.CriadaEmUtc).ThenBy(x => x.Id)
             .Skip((filtro.Pagina - 1) * filtro.ItensPorPagina).Take(filtro.ItensPorPagina).ToListAsync(ct);
-        return new(itens.Select(x => ResumoPostal(x, agora)).ToArray(), total, filtro.Pagina, filtro.ItensPorPagina);
+        var ids = itens.Select(x => x.Id).ToArray();
+        var vigentes = await (from proposta in _dbContext.Set<PropostaCorreios>().AsNoTracking()
+            join solicitacao in SolicitacoesPostais.AsNoTracking() on proposta.SolicitacaoId equals solicitacao.Id
+            where ids.Contains(proposta.SolicitacaoId) && proposta.Revisao == solicitacao.Revisao
+            select proposta).ToDictionaryAsync(x => (x.SolicitacaoId, x.Revisao), ct);
+        return new(itens.Select(x => ResumoPostal(x, agora,
+            x.Revisao is { } revisao && vigentes.TryGetValue((x.Id, revisao), out var proposta) ? ValoresPostal(proposta) : null))
+            .ToArray(), total, filtro.Pagina, filtro.ItensPorPagina);
     }
 
     async Task<DetalheCotacaoCorreios?> ICotacoesCorreios.BuscarAsync(Guid? titular, Guid id, CancellationToken ct)
@@ -55,7 +62,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         return new(ResumoPostal(cotacao, agora), cotacao.Versao, LerPostal<ItemCongeladoCorreios[]>(cotacao.ItensJson),
             LerPostal<EnderecoEntregaPedido>(cotacao.EnderecoJson), propostas.Select(x =>
                 new PropostaCorreiosDto(x.Revisao, x.Servico, x.FreteCentavos, x.PrazoDias, x.ValidaAteUtc,
-                    x.PesoTotalGramas, LerPostal<VolumeCorreios[]>(x.VolumesJson), x.PublicadaEmUtc)).ToArray(),
+                    x.PesoTotalGramas, LerPostal<VolumeCorreios[]>(x.VolumesJson), x.PublicadaEmUtc, ValoresPostal(x))).ToArray(),
             cotacao.RevisaoAceita, pedidoConvertidoId);
     }
 
@@ -68,14 +75,19 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         try
         {
             await using var transacao = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
-            await AdquirirLockAsync($"postal-key:{comando.Admin}:{comando.Autor:D}:{comando.Chave:D}", ct);
+            if (!comando.Previa) await AdquirirLockAsync($"postal-key:{comando.Admin}:{comando.Autor:D}:{comando.Chave:D}", ct);
             var agora = _timeProvider.GetUtcNow();
             if (!(comando.Admin ? await AdministradorAptoAsync(comando.Autor, agora, ct) :
                 await ClienteAptoAsync(comando.Autor, agora, ct)))
                 return new(403);
             var operacoes = _dbContext.Set<OperacaoCotacaoCorreios>();
-            var impressao = ImpressaoPostal(comando);
-            var anterior = await operacoes.AsNoTracking().SingleOrDefaultAsync(x =>
+            // O fingerprint exclui o novo indicador de prévia para manter replays de operações antigas.
+            var impressao = ImpressaoPostal(new
+            {
+                comando.Autor, comando.Admin, comando.Chave, comando.Id, comando.Acao, comando.Versao,
+                comando.Solicitacao, comando.Proposta, comando.Decisao
+            });
+            var anterior = comando.Previa ? null : await operacoes.AsNoTracking().SingleOrDefaultAsync(x =>
                 x.Autor == comando.Autor && x.Admin == comando.Admin && x.Chave == comando.Chave, ct);
             if (anterior is not null)
                 return anterior.Impressao == impressao ? LerPostal<ResultadoCotacaoCorreios>(anterior.ResultadoJson)
@@ -97,7 +109,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
                 resultado = await AlterarSolicitacaoPostalAsync(comando, agora, ct);
             }
 
-            if (resultado.Cotacao is not { } cotacao) return resultado;
+            if (comando.Previa || resultado.Cotacao is not { } cotacao) return resultado;
             operacoes.Add(new(comando.Autor, comando.Admin, comando.Chave, cotacao.Id, impressao, comando.Acao,
                 agora, comando.Decisao?.Motivo?.Trim(), SerializarPostal(resultado)));
             await _dbContext.SaveChangesAsync(ct);
@@ -194,11 +206,28 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         if ((comando.Acao is AcaoCotacaoCorreios.Aceitar or AcaoCotacaoCorreios.Recusar) && disponivel
             && (!comando.Admin || comando.Decisao?.Revisao is not null) && comando.Decisao?.Revisao != cotacao.Revisao)
             return new(409, "revisao_desatualizada");
+        ValoresPropostaCorreios? valores = null;
         if (comando.Acao == AcaoCotacaoCorreios.Publicar)
         {
             var configuracao = await CarregarConfiguracaoAsync(ct);
             var proposta = CriarPropostaPostal(comando, cotacao, agora, configuracao.ValidadePropostaCorreiosHoras);
             if (proposta is null) return new(400, "proposta_invalida");
+            if (_promocoesHabilitadas)
+                await PromocoesComerciaisSql.BloquearAsync(_dbContext, escrita: false, ct);
+            var itens = LerPostal<ItemCongeladoCorreios[]>(cotacao.ItensJson).OrderBy(x => x.ProdutoVarianteId)
+                .Select(x => new ItemCompraInput(x.ProdutoId, x.ProdutoVarianteId, x.Quantidade)).ToArray();
+            foreach (var item in itens)
+                await AdquirirLockVarianteAsync(item.ProdutoVarianteId, ct);
+            var (dados, _) = await CarregarItensCompraAsync(itens, agora, ct);
+            if (dados is null) return new(409, "itens_indisponiveis");
+            if (!TentarCalcularTotalCompra(dados, 0, out var subtotal, out _))
+                return new(400, "proposta_invalida");
+            var (frete, desconto, _) = await EfPromocoesFrete.CalcularCorreiosAsync(
+                _dbContext, proposta.FreteCentavos, subtotal, agora, ct);
+            if (frete > long.MaxValue - subtotal) return new(400, "proposta_invalida");
+            proposta = proposta with { FreteCentavos = frete, DescontoFrete = desconto, SubtotalProdutosCentavos = subtotal };
+            valores = ValoresPostal(proposta);
+            if (comando.Previa) return new(200, Cotacao: ResumoPostal(cotacao, agora, valores), Versao: cotacao.Versao);
             cotacao.Revisao = proposta.Revisao;
             cotacao.ValidaAteUtc = proposta.ValidaAteUtc;
             _dbContext.Set<PropostaCorreios>().Add(proposta);
@@ -206,7 +235,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         if (destino == SituacaoCotacaoCorreios.Aceita) cotacao.RevisaoAceita = cotacao.Revisao;
         cotacao.Situacao = destino;
         cotacao.Versao = checked(cotacao.Versao + 1);
-        return new(200, Cotacao: ResumoPostal(cotacao, agora), Versao: cotacao.Versao);
+        return new(200, Cotacao: ResumoPostal(cotacao, agora, valores), Versao: cotacao.Versao);
     }
 
     private static PropostaCorreios? CriarPropostaPostal(ComandoCotacaoCorreios comando,
@@ -254,8 +283,13 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         SolicitacoesPostais.AsNoTracking().Where(x => titular == null || x.ClienteId == titular);
     private Task BloquearSolicitacaoPostalAsync(Guid id, CancellationToken ct) =>
         AdquirirLockAsync($"postal-request:{id:D}", ct);
-    private static ResumoCotacaoCorreios ResumoPostal(SolicitacaoCorreios x, DateTimeOffset agora) =>
-        new(x.Id, x.SituacaoEm(agora).ToString(), x.CriadaEmUtc, x.Revisao, x.ValidaAteUtc);
+    private static ValoresPropostaCorreios ValoresPostal(PropostaCorreios proposta) =>
+        new(proposta.FreteCentavos, proposta.SubtotalProdutosCentavos,
+            proposta.SubtotalProdutosCentavos + proposta.FreteCentavos, proposta.DescontoFrete);
+
+    private static ResumoCotacaoCorreios ResumoPostal(SolicitacaoCorreios x, DateTimeOffset agora,
+        ValoresPropostaCorreios? valores = null) =>
+        new(x.Id, x.SituacaoEm(agora).ToString(), x.CriadaEmUtc, x.Revisao, x.ValidaAteUtc, valores);
     private static string SerializarPostal<T>(T valor) => JsonSerializer.Serialize(valor, JsonPostal);
     private static T LerPostal<T>(string json) => JsonSerializer.Deserialize<T>(json, JsonPostal)!;
     private static string ImpressaoPostal<T>(T valor) =>

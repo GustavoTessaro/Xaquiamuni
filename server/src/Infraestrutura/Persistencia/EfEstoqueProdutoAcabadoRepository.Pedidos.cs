@@ -93,7 +93,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
 
             var entrega = postal is null
                 ? await ValidarEntregaAsync(input, dados, agora, cancellationToken)
-                : (new DadosEntregaPedido(Destino: postal.Endereco, PropostaPostal: postal.Snapshot),
+                : (new DadosEntregaPedido(Destino: postal.Endereco, PropostaPostal: postal.Snapshot, DescontoFrete: postal.Proposta.DescontoFrete),
                     postal.Proposta.FreteCentavos, ModalidadeEntregaPedido.Correios);
             if (entrega is null)
                 return new(CriarPedidoCompraStatus.OfertaEntregaInvalida);

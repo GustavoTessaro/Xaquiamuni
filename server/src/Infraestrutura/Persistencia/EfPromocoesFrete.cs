@@ -21,17 +21,26 @@ public sealed class EfPromocoesFrete(XaquiamuniDbContext db, TimeProvider relogi
     }
 
     // O lock compartilhado impede alterações e ativações entre a leitura e o commit comercial.
-    internal static async Task<(long Frete, DadosDescontoFrete? Desconto, int? Revisao)> CalcularEntregaPropriaAsync(
-        XaquiamuniDbContext db, long original, long subtotal, DateTimeOffset agora, CancellationToken ct)
+    internal static Task<(long Frete, DadosDescontoFrete? Desconto, int? Revisao)> CalcularEntregaPropriaAsync(
+        XaquiamuniDbContext db, long original, long subtotal, DateTimeOffset agora, CancellationToken ct) =>
+        CalcularAsync(db, ModalidadeEntregaPedido.EntregaPropria, ModalidadesPromocaoFrete.EntregaPropria, original, subtotal, agora, ct);
+
+    internal static Task<(long Frete, DadosDescontoFrete? Desconto, int? Revisao)> CalcularCorreiosAsync(
+        XaquiamuniDbContext db, long original, long subtotal, DateTimeOffset agora, CancellationToken ct) =>
+        CalcularAsync(db, ModalidadeEntregaPedido.Correios, ModalidadesPromocaoFrete.CorreiosManual, original, subtotal, agora, ct);
+
+    private static async Task<(long Frete, DadosDescontoFrete? Desconto, int? Revisao)> CalcularAsync(
+        XaquiamuniDbContext db, ModalidadeEntregaPedido modalidade, ModalidadesPromocaoFrete mascara,
+        long original, long subtotal, DateTimeOffset agora, CancellationToken ct)
     {
         if (original == 0) return (0, null, null);
         await BloquearAsync(db, escrita: false, ct);
         var candidatas = await db.Set<PromocaoFrete>().AsNoTracking()
-            .Where(c => c.Ativa && (c.Modalidades & ModalidadesPromocaoFrete.EntregaPropria) != 0 &&
+            .Where(c => c.Ativa && (c.Modalidades & mascara) != 0 &&
                 c.SubtotalMinimoCentavos <= subtotal &&
                 (c.InicioUtc == null || c.InicioUtc <= agora) && (c.FimUtc == null || c.FimUtc > agora))
             .ToListAsync(ct);
-        var resultado = DescontosFrete.Resolver(ModalidadeEntregaPedido.EntregaPropria, original, subtotal, agora, candidatas);
+        var resultado = DescontosFrete.Resolver(modalidade, original, subtotal, agora, candidatas);
         if (resultado.CampanhaId is not { } id) return (original, null, null);
         var campanha = candidatas.Single(c => c.Id == id);
         return (resultado.LiquidoCentavos,

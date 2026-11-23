@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Aplicacao.Pedidos;
 
@@ -25,10 +26,18 @@ public sealed record DecidirCotacaoCorreios(int? Revisao = null, string? Motivo 
 public sealed record PropostaCorreiosDto(int Revisao, string Servico,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long FreteCentavos,
     int PrazoDias, DateTimeOffset ValidaAteUtc, int? PesoTotalGramas, IReadOnlyList<VolumeCorreios> Volumes,
-    DateTimeOffset PublicadaEmUtc);
+    DateTimeOffset PublicadaEmUtc,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValoresPropostaCorreios? Valores = null);
+
+public sealed record ValoresPropostaCorreios(
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long FreteCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long? SubtotalProdutosCentavos,
+    [property: JsonNumberHandling(JsonNumberHandling.WriteAsString | JsonNumberHandling.AllowReadingFromString)] long? TotalCentavos,
+    DadosDescontoFrete? DescontoFrete);
 
 public sealed record ResumoCotacaoCorreios(Guid Id, string Situacao, DateTimeOffset CriadaEmUtc,
-    int? Revisao, DateTimeOffset? ValidaAteUtc);
+    int? Revisao, DateTimeOffset? ValidaAteUtc,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ValoresPropostaCorreios? Valores = null);
 public sealed record DetalheCotacaoCorreios(ResumoCotacaoCorreios Resumo, int Versao,
     IReadOnlyList<ItemCongeladoCorreios> Itens, Xaquiamuni.Dominio.Entidades.EnderecoEntregaPedido Endereco,
     IReadOnlyList<PropostaCorreiosDto> Propostas, int? RevisaoAceita, Guid? PedidoConvertidoId);
@@ -38,7 +47,7 @@ public sealed record FiltroCotacoesCorreios(int Pagina, int ItensPorPagina, Situ
 
 public sealed record ComandoCotacaoCorreios(Guid Autor, bool Admin, Guid Chave, Guid? Id,
     AcaoCotacaoCorreios Acao, int? Versao = null, SolicitarCotacaoCorreios? Solicitacao = null,
-    PublicarPropostaCorreios? Proposta = null, DecidirCotacaoCorreios? Decisao = null);
+    PublicarPropostaCorreios? Proposta = null, DecidirCotacaoCorreios? Decisao = null, bool Previa = false);
 public sealed record ResultadoCotacaoCorreios(int Status, string? Codigo = null, ResumoCotacaoCorreios? Cotacao = null,
     int? Versao = null);
 

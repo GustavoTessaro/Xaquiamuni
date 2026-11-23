@@ -3155,6 +3155,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<int>("Revisao")
                         .HasColumnType("int");
 
+                    b.Property<string>("DescontoFrete")
+                        .HasColumnType("nvarchar(max)");
+
                     b.Property<long>("FreteCentavos")
                         .HasColumnType("bigint");
 
@@ -3175,6 +3178,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasMaxLength(60)
                         .HasColumnType("nvarchar(60)");
 
+                    b.Property<long?>("SubtotalProdutosCentavos")
+                        .HasColumnType("bigint");
+
                     b.Property<DateTimeOffset>("ValidaAteUtc")
                         .HasColumnType("datetimeoffset");
 
@@ -3186,6 +3192,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.ToTable("PropostasCorreios", null, t =>
                         {
+                            t.HasCheckConstraint("CK_PropostasCorreios_Subtotal", "([SubtotalProdutosCentavos] IS NULL AND [DescontoFrete] IS NULL) OR ([SubtotalProdutosCentavos] IS NOT NULL AND [SubtotalProdutosCentavos] >= 0 AND [SubtotalProdutosCentavos] <= 9223372036854775807 - [FreteCentavos])");
+
                             t.HasCheckConstraint("CK_PropostasCorreios_Valores", "[Revisao] > 0 AND [FreteCentavos] >= 0 AND [PrazoDias] > 0 AND [ValidaAteUtc] > [PublicadaEmUtc]");
                         });
                 });

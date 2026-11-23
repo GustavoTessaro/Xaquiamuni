@@ -241,7 +241,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         {
                             Assert.Equal(ModalidadeEntregaPedido.Correios, pedido.ModalidadeEntrega);
                             Assert.Equal(SituacaoPedido.Entregue, pedido.Situacao);
-                            Assert.Equal((1199L, 1290L, 2489L),
+                            Assert.Equal((1199L, 0L, 1199L),
                                 (pedido.SubtotalProdutosCentavos, pedido.FreteCentavos, pedido.TotalCentavos));
                             Assert.Equal("AB123456789BR", pedido.CodigoRastreamento);
                         });

@@ -1,4 +1,6 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Aplicacao.Pedidos;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
@@ -24,7 +26,11 @@ internal sealed class SolicitacaoCorreios
 
 internal sealed record PropostaCorreios(Guid SolicitacaoId, int Revisao, string Servico, long FreteCentavos,
     int PrazoDias, DateTimeOffset ValidaAteUtc, int? PesoTotalGramas, string VolumesJson,
-    DateTimeOffset PublicadaEmUtc, Guid PublicadaPor);
+    DateTimeOffset PublicadaEmUtc, Guid PublicadaPor)
+{
+    public long? SubtotalProdutosCentavos { get; init; }
+    public DadosDescontoFrete? DescontoFrete { get; init; }
+}
 
 internal sealed record OperacaoCotacaoCorreios(Guid Autor, bool Admin, Guid Chave, Guid SolicitacaoId, string Impressao,
     AcaoCotacaoCorreios Acao, DateTimeOffset ExecutadaEmUtc, string? Motivo, string ResultadoJson);
@@ -60,10 +66,19 @@ internal static class CorreiosManualMapping
         });
         builder.Entity<PropostaCorreios>(e =>
         {
-            e.ToTable("PropostasCorreios", t => t.HasCheckConstraint("CK_PropostasCorreios_Valores",
-                "[Revisao] > 0 AND [FreteCentavos] >= 0 AND [PrazoDias] > 0 AND [ValidaAteUtc] > [PublicadaEmUtc]"));
+            e.ToTable("PropostasCorreios", t =>
+            {
+                t.HasCheckConstraint("CK_PropostasCorreios_Valores",
+                    "[Revisao] > 0 AND [FreteCentavos] >= 0 AND [PrazoDias] > 0 AND [ValidaAteUtc] > [PublicadaEmUtc]");
+                t.HasCheckConstraint("CK_PropostasCorreios_Subtotal",
+                    "([SubtotalProdutosCentavos] IS NULL AND [DescontoFrete] IS NULL) OR " +
+                    "([SubtotalProdutosCentavos] IS NOT NULL AND [SubtotalProdutosCentavos] >= 0 AND [SubtotalProdutosCentavos] <= 9223372036854775807 - [FreteCentavos])");
+            });
             e.HasKey(x => new { x.SolicitacaoId, x.Revisao });
             e.Property(x => x.Servico).HasMaxLength(60);
+            e.Property(x => x.DescontoFrete).HasConversion(
+                desconto => JsonSerializer.Serialize(desconto, (JsonSerializerOptions?)null),
+                json => JsonSerializer.Deserialize<DadosDescontoFrete>(json, (JsonSerializerOptions?)null));
             e.HasOne<SolicitacaoCorreios>().WithMany().HasForeignKey(x => x.SolicitacaoId).OnDelete(DeleteBehavior.Restrict);
         });
         builder.Entity<OperacaoCotacaoCorreios>(e =>

@@ -32,6 +32,12 @@
             <li class="cartao flex flex-wrap items-center justify-between gap-2">
               <a [routerLink]="[base, cotacao.id]">Cotação de {{ cotacao.criadaEmUtc | date:'dd/MM/yyyy HH:mm' }}</a>
               <strong>{{ estados[cotacao.situacao] }}</strong>
+              @if (!admin && cotacao.valores; as valores) {
+                <div class="basis-full">
+                  <app-frete-pedido [frete]="valores.freteCentavos" [desconto]="valores.descontoFrete" />
+                  @if (valores.totalCentavos !== null) { <p>Total publicado: <strong>{{ reais(valores.totalCentavos) }}</strong></p> }
+                </div>
+              }
             </li>
           } @empty { <li>Nenhuma cotação encontrada.</li> }
         </ul>
@@ -63,7 +69,12 @@
         @for (proposta of dados.propostas; track proposta.revisao) {
           <article class="grid gap-1">
             <h3 class="font-semibold">{{ proposta.servico }} · {{ proposta.revisao === dados.revisaoAceita ? 'Aceita' : 'Revisão ' + proposta.revisao }}</h3>
-            <p>{{ reais(proposta.freteCentavos) }} de frete · {{ proposta.prazoDias }} dia(s) de transporte</p>
+            <app-frete-pedido [frete]="proposta.freteCentavos" [desconto]="proposta.valores?.descontoFrete" />
+            @if (proposta.valores?.totalCentavos; as totalPublicado) {
+              <p>Subtotal dos produtos: {{ reais(proposta.valores!.subtotalProdutosCentavos!) }}</p>
+              <p>Total publicado: <strong>{{ reais(totalPublicado) }}</strong></p>
+            }
+            <p>{{ proposta.prazoDias }} dia(s) de transporte</p>
             <p>Válida até {{ proposta.validaAteUtc | date:'dd/MM/yyyy HH:mm' }}</p>
             @if (admin) {
               @if (proposta.pesoTotalGramas) { <p>Peso total: {{ proposta.pesoTotalGramas }} g</p> }
@@ -100,7 +111,7 @@
           <fieldset class="grid gap-3" [disabled]="ocupado() || carregando() || incerta()">
             <legend>{{ situacao === 'PropostaDisponivel' ? 'Publicar nova revisão' : 'Nova proposta' }}</legend>
             <label>Serviço postal <input name="servico" [(ngModel)]="proposta.servico" required maxlength="60" /></label>
-            <label>Frete (R$) <input name="frete" [(ngModel)]="proposta.frete" required inputmode="decimal" /></label>
+            <label>Frete original (R$) <input name="frete" [(ngModel)]="proposta.frete" required inputmode="decimal" /></label>
             <label>Prazo estimado (dias) <input type="number" name="prazo" [(ngModel)]="proposta.prazoDias" required min="1" /></label>
             <label>Válida até (opcional) <input type="datetime-local" name="validade" [(ngModel)]="proposta.validade" /></label>
             <p>Se estiver em branco, a API aplica a validade padrão definida em Entregas e contato.</p>
@@ -136,7 +147,8 @@
               }
             </ul>
             @if (compra.subtotalProdutosCentavos !== null) { <p>Subtotal: {{ reais(compra.subtotalProdutosCentavos) }}</p> }
-            <p>Frete {{ compra.proposta.servico }}: {{ reais(compra.freteCentavos) }}</p>
+            <p>Serviço postal: {{ compra.proposta.servico }}</p>
+            <app-frete-pedido [frete]="compra.freteCentavos" [desconto]="compra.descontoFrete" />
             @if (compra.totalCentavos !== null) { <p><strong>Total: {{ reais(compra.totalCentavos) }}</strong></p> }
             <button type="button" [disabled]="!compra.conversaoCorreiosId || checkout.enviando()" (click)="finalizar(false)">Confirmar total e criar pedido</button>
           </section>

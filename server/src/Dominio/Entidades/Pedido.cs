@@ -100,7 +100,7 @@ public sealed class Pedido
             _ => false,
         };
         if (entrega?.DescontoFrete is { } desconto &&
-            (modalidade != ModalidadeEntregaPedido.EntregaPropria || desconto.CampanhaId == Guid.Empty ||
+            (modalidade == ModalidadeEntregaPedido.RetiradaLocal || desconto.CampanhaId == Guid.Empty ||
              string.IsNullOrWhiteSpace(desconto.NomeCampanha) ||
              desconto.DescontoCentavos <= 0 || desconto.OriginalCentavos < desconto.DescontoCentavos ||
              desconto.OriginalCentavos - desconto.DescontoCentavos != freteCentavos))

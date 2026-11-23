@@ -23,6 +23,9 @@ public static class CotacoesCorreiosEndpoints
         cliente.MapPost("/{id:guid}/aceitar", (HttpContext ctx, Guid id, ICotacoesCorreios api, CancellationToken ct) =>
             EscreverAsync<DecidirCotacaoCorreios>(ctx, api, false, id, AcaoCotacaoCorreios.Aceitar, ct))
             .RequireXaquiamuniAntiforgery();
+        admin.MapPost("/{id:guid}/propostas/previa", (HttpContext ctx, Guid id, ICotacoesCorreios api, CancellationToken ct) =>
+            EscreverAsync<PublicarPropostaCorreios>(ctx, api, true, id, AcaoCotacaoCorreios.Publicar, ct, previa: true))
+            .RequireXaquiamuniAntiforgery();
         admin.MapPost("/{id:guid}/propostas", (HttpContext ctx, Guid id, ICotacoesCorreios api, CancellationToken ct) =>
             EscreverAsync<PublicarPropostaCorreios>(ctx, api, true, id, AcaoCotacaoCorreios.Publicar, ct))
             .RequireXaquiamuniAntiforgery();
@@ -75,11 +78,12 @@ public static class CotacoesCorreiosEndpoints
     }
 
     private static async Task<IResult> EscreverAsync<T>(HttpContext ctx, ICotacoesCorreios api,
-        bool admin, Guid? id, AcaoCotacaoCorreios acao, CancellationToken ct) where T : class
+        bool admin, Guid? id, AcaoCotacaoCorreios acao, CancellationToken ct, bool previa = false) where T : class
     {
         if (!ObterAutor(ctx, out var autor)) return Results.Unauthorized();
         var chaves = ctx.Request.Headers["Idempotency-Key"];
-        if (chaves.Count != 1 || !Guid.TryParseExact(chaves[0], "D", out var chave) || chave == Guid.Empty)
+        var chave = Guid.Empty;
+        if (!previa && (chaves.Count != 1 || !Guid.TryParseExact(chaves[0], "D", out chave) || chave == Guid.Empty))
             return Erro(400, "chave_invalida");
         int? versao = null;
         if (id.HasValue)
@@ -102,7 +106,7 @@ public static class CotacoesCorreiosEndpoints
             solicitacao.Itens?.Select(x => x is null ? null! : new ItemSolicitadoCorreios(x.ProdutoId, x.ProdutoVarianteId,
                 x.Quantidade)).ToArray(), solicitacao.Endereco) : null;
         var resultado = await api.ExecutarAsync(new(autor, admin, chave, id, acao, versao, pedido,
-            corpo as PublicarPropostaCorreios, corpo as DecidirCotacaoCorreios), ct);
+            corpo as PublicarPropostaCorreios, corpo as DecidirCotacaoCorreios, previa), ct);
         if (resultado.Cotacao is { } cotacao && resultado.Versao is { } atual)
         {
             DefinirVersao(ctx, atual);

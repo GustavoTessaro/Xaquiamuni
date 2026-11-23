@@ -56,6 +56,20 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
   assert.equal(publicada.retiradaLocal, inicial.retiradaLocal);
   assert.equal(publicada.entregaPropria, inicial.entregaPropria);
   console.log('Correios manual: padrão desabilitado, validade de 48 h, conflito 409 e reabilitação conferidos.');
+  assert.equal(await a.ev(`(async () => {
+    const rota = '/api/admin/promocoes-frete';
+    const csrf = async () => (await fetch('/api/auth/csrf').then(r => r.json())).requestToken;
+    const resposta = await fetch(rota, { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': await csrf() },
+      body: JSON.stringify({ nome: 'Postal grátis E2E', tipo: 'FreteGratis', valor: '0',
+        modalidades: ['CorreiosManual'], subtotalMinimoCentavos: '0' }) });
+    if (resposta.status !== 201) return resposta.status;
+    const etag = resposta.headers.get('ETag');
+    const { id } = await resposta.json();
+    return (await fetch(rota + '/' + id + '/status', { method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': await csrf(), 'If-Match': etag },
+      body: JSON.stringify({ ativa: true }) })).status;
+  })()`), 200);
 
   for (const width of [375, 1280]) {
     for (const contexto of [a, c]) {
@@ -178,13 +192,17 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
         assert.ok(await campo(a, grupo + ' label:nth-of-type(' + (indice + 1) + ') input', valor));
       }
     }
-    await a.ev('window.confirm = () => true');
+    await a.ev('window.confirm = mensagem => { window.previaPublicacao = mensagem; return true; }');
     await clicar(a, 'Revisar e publicar proposta');
     await texto(a, 'Proposta disponível');
     await texto(a, 'Volume 2');
     const primeira = await a.ev(`fetch('${'/api/admin' + rota}').then(r=>r.json()).then(x=>x.propostas[0])`);
     assert.equal(Date.parse(primeira.validaAteUtc) - Date.parse(primeira.publicadaEmUtc), 48 * 3600000);
     assert.equal(primeira.volumes.length, 2);
+    assert.equal(primeira.freteCentavos, '0');
+    assert.equal(primeira.valores.totalCentavos, '1199');
+    assert.equal(primeira.valores.descontoFrete.originalCentavos, '1290');
+    assert.match(await a.ev('window.previaPublicacao'), /Frete grátis/);
     for (const [nome, valor] of Object.entries({ servico: 'PAC', frete: '12,90', prazo: '6', pesoTotal: '200' })) {
       assert.ok(await campo(a, 'input[name=' + nome + ']', valor));
     }
@@ -202,7 +220,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     await clicar(c, 'Aceitar proposta');
     await clicar(c, 'Continuar para pagamento');
     assert.equal(await c.ev(`fetch('${'/api' + rota}').then(r=>r.json()).then(x=>x.revisaoAceita)`), 2);
-    await texto(c, '24,89');
+    await texto(c, 'Frete grátis');
     const perdaPedido = width === 375 ? c.perderResposta('/api/pedidos') : null;
     await clicar(c, 'Confirmar total e criar pedido');
     if (perdaPedido) {
@@ -217,12 +235,12 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       assert.deepEqual(perdaPedido.envios[0], perdaPedido.envios[1]);
       assert.match(perdaPedido.envios[0].chave, /^[a-f0-9-]{36}$/i);
     }
-    await texto(c, '24,89');
+    await texto(c, 'Frete grátis');
     const pedido = await c.ev('location.pathname');
     const numeroPublico = await waitFor(() => c.ev("document.querySelector('#pedido-title')?.textContent.match(/XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}/)?.[0]"),
       'Número público do pedido postal');
     const pix = await c.ev(`fetch(${JSON.stringify('/api' + pedido + '/pagamento')}).then(r=>r.json())`);
-    assert.equal(pix.valorCentavos, '2489');
+    assert.equal(pix.valorCentavos, '1199');
 
     if (width === 375) {
       const outroContexto = await abrir('/login');
@@ -269,7 +287,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     await texto(a, 'Pagamento confirmado');
     const entradas = await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json()).then(x =>
       x.itens.filter(m => m.recursoId === ${JSON.stringify(pedido.split('/').at(-1))}))`);
-    assert.deepEqual(entradas.map(m => m.valorCentavos), ['2489']);
+    assert.deepEqual(entradas.map(m => m.valorCentavos), ['1199']);
     await clicar(a, 'Iniciar preparação');
     await clicar(a, 'Confirmar início');
     await texto(a, 'Em preparação');
@@ -335,14 +353,16 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       await waitFor(() => c.ev("document.querySelector('app-store-layout')?.dataset.theme === " + JSON.stringify(chave)),
         'Cotação com tema ' + chave);
       await texto(c, 'Convertida em pedido');
+      await texto(c, 'Frete grátis');
       assert.ok(await largura(c));
       await c.ir(pedido);
       await waitFor(() => c.ev("document.querySelector('app-store-layout')?.dataset.theme === " + JSON.stringify(chave)),
         'Pedido com tema ' + chave);
       await texto(c, 'AB123456789BR');
+      await texto(c, 'Frete grátis');
       assert.ok(await largura(c));
     }
-    console.log('Correios em ' + width + ' px: 11,99 + 12,90 = 24,89; pedido, postagem, rastreamento e entrega.');
+    console.log('Correios em ' + width + ' px: 11,99 + frete grátis = 11,99; pedido, postagem, rastreamento e entrega.');
   }
 }
 

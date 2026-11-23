@@ -11,7 +11,7 @@ public sealed record RevisaoConversaoCorreios(DadosPropostaPostal Proposta, Ende
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long FreteCentavos,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long? SubtotalProdutosCentavos,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long? TotalCentavos,
-    string? ConversaoCorreiosId);
+    string? ConversaoCorreiosId, DadosDescontoFrete? DescontoFrete = null);
 
 public interface IRevisarConversaoCorreios
 {

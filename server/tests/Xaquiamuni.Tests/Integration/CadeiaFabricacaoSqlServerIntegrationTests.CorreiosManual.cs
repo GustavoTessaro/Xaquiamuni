@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Pedidos;
+using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Infraestrutura.Identidade;
 using Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -82,8 +83,33 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             await ConferirErroPostalAsync(inconsistente, 400, "proposta_invalida");
         using var primeira = await EscreverPostalAsync(admin, rotaAdmin + "/propostas", proposta, "\"1\"");
         Assert.Equal(HttpStatusCode.OK, primeira.StatusCode);
-        using var segunda = await EscreverPostalAsync(admin, rotaAdmin + "/propostas", proposta with { FreteCentavos = 2100 }, "\"2\"");
+        // As colunas novas aceitam uma revisão no formato persistido antes da migration.
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"UPDATE [PropostasCorreios] SET [SubtotalProdutosCentavos] = NULL WHERE [SolicitacaoId] = {id} AND [Revisao] = 1");
+        var legado = (await cliente.Http.GetFromJsonAsync<DetalheCotacaoCorreios>(rota))!.Propostas.Single();
+        Assert.Equal(1900, legado.FreteCentavos);
+        Assert.Null(legado.Valores!.TotalCentavos);
+        var campanha = PromocaoFrete.Criar(new("Desconto fixo", TipoDescontoFrete.ValorFixo, 500,
+            ModalidadesPromocaoFrete.CorreiosManual, 0, null, null), Guid.NewGuid(), DateTimeOffset.UtcNow);
+        campanha.AlterarStatus(true, campanha.CriadaPorId, DateTimeOffset.UtcNow);
+        db.Add(campanha);
+        await db.SaveChangesAsync();
+        var dadosSegunda = proposta with { FreteCentavos = 2100 };
+        using var previaSemCsrf = await EscreverPostalAsync(admin, rotaAdmin + "/propostas/previa", dadosSegunda, "\"2\"", csrf: false);
+        Assert.Equal(HttpStatusCode.BadRequest, previaSemCsrf.StatusCode);
+        using var previa = await EscreverPostalAsync(admin, rotaAdmin + "/propostas/previa", dadosSegunda, "\"2\"");
+        Assert.Equal(HttpStatusCode.OK, previa.StatusCode);
+        Assert.Equal("1600", (await previa.Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("valores").GetProperty("freteCentavos").GetString());
+        Assert.Equal("\"2\"", previa.Headers.ETag?.Tag);
+        var chavePublicacao = Guid.NewGuid();
+        using var segunda = await EscreverPostalAsync(admin, rotaAdmin + "/propostas", dadosSegunda, "\"2\"", chavePublicacao);
         Assert.Equal(HttpStatusCode.OK, segunda.StatusCode);
+        campanha.AlterarStatus(false, campanha.CriadaPorId, DateTimeOffset.UtcNow);
+        await db.SaveChangesAsync();
+        using var replayPublicacao = await EscreverPostalAsync(admin, rotaAdmin + "/propostas", dadosSegunda, "\"2\"", chavePublicacao);
+        Assert.True(JsonElement.DeepEquals(await segunda.Content.ReadFromJsonAsync<JsonElement>(),
+            await replayPublicacao.Content.ReadFromJsonAsync<JsonElement>()));
         using (var antiga = await EscreverPostalAsync(cliente, rota + "/aceitar", new { revisao = 1 }, "\"3\""))
             await ConferirErroPostalAsync(antiga, 409, "revisao_desatualizada");
         await ConferirCotacaoSemPedidoAsync(cliente, rota, "PropostaDisponivel");
@@ -101,7 +127,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(original.GetRawText(), (await replayCriacao.Content.ReadFromJsonAsync<JsonElement>()).GetRawText());
         var atual = (await admin.Http.GetFromJsonAsync<DetalheCotacaoCorreios>(rotaAdmin))!;
         Assert.Equal(2, atual.RevisaoAceita);
-        Assert.Equal(new long[] { 2100, 1900 }, atual.Propostas.Select(x => x.FreteCentavos));
+        Assert.Equal(new long[] { 1600, 1900 }, atual.Propostas.Select(x => x.FreteCentavos));
         Assert.All(atual.Propostas, x => Assert.Equal(TimeSpan.FromHours(48), x.ValidaAteUtc - x.PublicadaEmUtc));
         Assert.Equal(2, atual.Propostas[1].Volumes.Count);
         Assert.Equal(5, await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS [Value] FROM OperacoesCotacoesCorreios").SingleAsync());
@@ -112,6 +138,21 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             .GetProperty("itens").EnumerateArray());
         using var pix = await cliente.Http.GetAsync($"/api/pedidos/{id:D}/pagamento");
         Assert.Equal(HttpStatusCode.NotFound, pix.StatusCode);
+        using var outraSolicitacao = await EscreverPostalAsync(cliente, Postal, pedidoCotacao);
+        Assert.Equal(HttpStatusCode.Created, outraSolicitacao.StatusCode);
+        var outroId = (await outraSolicitacao.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var publicacaoConcorrente = EscreverPostalAsync(admin, $"{PostalAdmin}/{outroId:D}/propostas", proposta, "\"1\"");
+        var alteracao = await new EfPromocoesFrete(db, TimeProvider.System)
+            .AlterarAsync(campanha.Id, campanha.Versao, null, true, campanha.CriadaPorId, default);
+        Assert.False(alteracao.Conflito);
+        using var resultadoPublicacao = await publicacaoConcorrente;
+        Assert.Equal(HttpStatusCode.OK, resultadoPublicacao.StatusCode);
+        var valores = (await resultadoPublicacao.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("valores");
+        var freteFinal = long.Parse(valores.GetProperty("freteCentavos").GetString()!);
+        Assert.Contains(freteFinal, new long[] { 1400, 1900 });
+        Assert.Equal(2398 + freteFinal, long.Parse(valores.GetProperty("totalCentavos").GetString()!));
+        Assert.False(await db.Pedidos.AnyAsync());
+        Assert.False(await db.ReservasProdutoAcabado.AnyAsync());
         using var sair = await outro.EnviarAsync("/api/auth/logout", new { });
         using var anonimo = await outro.Http.GetAsync(rota);
         Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);

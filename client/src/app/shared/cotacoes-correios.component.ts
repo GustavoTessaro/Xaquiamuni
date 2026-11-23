@@ -8,6 +8,7 @@ import { AdminWorkspaceComponent } from '../admin/admin-workspace.component';
 import { tarifaEmCentavos } from '../admin/admin-atendimento.component';
 import { CotacoesCorreiosService, DetalheCotacao, erroPostal, estadosCotacao, PaginaCotacoes, RevisaoPostal, VolumePostal } from '../core/cotacoes-correios.service';
 import { formatarCentavos } from '../public-store/carrinho.service';
+import { FretePedidoComponent } from './frete-pedido.component';
 import { CheckoutService } from '../public-store/checkout.service';
 
 const novaProposta = () => ({
@@ -16,7 +17,7 @@ const novaProposta = () => ({
 });
 
 @Component({
-  imports: [DatePipe, NgTemplateOutlet, FormsModule, RouterLink, AdminWorkspaceComponent],
+  imports: [DatePipe, NgTemplateOutlet, FormsModule, RouterLink, AdminWorkspaceComponent, FretePedidoComponent],
   templateUrl: './cotacoes-correios.component.html',
   styles: `
     :host { display: block; }
@@ -106,7 +107,7 @@ export class CotacoesCorreiosComponent {
     this.proposta.volumes.push({ pesoGramas: null, comprimentoCm: null, larguraCm: null, alturaCm: null });
   }
 
-  protected publicar() {
+  protected async publicar() {
     const { servico, frete, prazoDias, validade, pesoTotalGramas, volumes } = this.proposta;
     const freteCentavos = tarifaEmCentavos(frete);
     const validaAte = validade ? new Date(validade) : null;
@@ -123,10 +124,38 @@ export class CotacoesCorreiosComponent {
       this.erro.set('Informe serviço, frete, prazo e peso total ou por volume. Se informar ambos, os pesos devem coincidir. Informe as três dimensões de cada volume ou deixe as três em branco.');
       return;
     }
-    void this.operar('propostas', {
+    const corpo = {
       servico: servico.trim(), freteCentavos, prazoDias, validaAteUtc: validaAte?.toISOString() ?? null,
       pesoTotalGramas, volumes: volumes.map(v => ({ ...v })),
-    }, `Publicar ${servico.trim()}, frete de ${formatarCentavos(freteCentavos)} e prazo de ${prazoDias} dia(s)?`);
+    };
+    const id = this.id();
+    const etag = this.etag;
+    if (!id || !etag || this.ocupado() || this.tentativa) return;
+    this.ocupado.set(true);
+    this.erro.set('');
+    let confirmacao: string;
+    try {
+      const previa = await firstValueFrom(this.api.preverProposta(id, corpo, etag).pipe(takeUntilDestroyed(this.destroy)));
+      if (this.id() !== id || this.etag !== etag) return;
+      const valores = previa.valores;
+      if (!valores || valores.totalCentavos === null) return;
+      const desconto = valores.descontoFrete;
+      const linhas = [
+        `Publicar ${servico.trim()} com prazo de ${prazoDias} dia(s)?`,
+        `Frete original: ${formatarCentavos(freteCentavos)}`,
+        ...(desconto ? [`Desconto: ${formatarCentavos(desconto.descontoCentavos)} · ${desconto.nomeCampanha}`] : []),
+        `Frete líquido: ${desconto && valores.freteCentavos === '0' ? 'Frete grátis' : formatarCentavos(valores.freteCentavos)}`,
+        `Total da prévia: ${formatarCentavos(valores.totalCentavos)}`,
+        'O servidor confirma os valores no momento da publicação.',
+      ];
+      confirmacao = linhas.join('\n');
+    } catch (erro) {
+      if (this.id() === id) this.erro.set(erroPostal(erro));
+      return;
+    } finally {
+      this.ocupado.set(false);
+    }
+    await this.operar('propostas', corpo, confirmacao);
   }
 
   protected decidir(acao: 'aceitar' | 'recusar' | 'cancelar', revisao: number | null) {
