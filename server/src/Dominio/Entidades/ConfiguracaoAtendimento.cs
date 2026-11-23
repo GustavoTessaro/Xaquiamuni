@@ -5,6 +5,8 @@ public sealed class ConfiguracaoAtendimento
     public int Id { get; init; } = 1;
     public bool RetiradaHabilitada { get; set; } = true;
     public bool EntregaPropriaHabilitada { get; set; }
+    public bool CotacaoManualCorreiosHabilitada { get; set; }
+    public int ValidadePropostaCorreiosHoras { get; set; } = 48;
     public string? EnderecoRetirada { get; set; }
     public string? InstrucoesRetirada { get; set; }
     public string? WhatsApp { get; set; }

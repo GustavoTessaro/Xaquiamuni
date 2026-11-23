@@ -25,10 +25,12 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
         ICalendarioOperacionalEstoque calendario,
         IOptions<PromocoesComerciaisOptions>? promocoes = null,
         IDataProtectionProvider? protecao = null,
-        IOptions<EntregaCheckoutOptions>? entrega = null)
+        IOptions<EntregaCheckoutOptions>? entrega = null,
+        IOptions<CorreiosManualOptions>? correiosManual = null)
     {
         _dbContext = dbContext;
         _timeProvider = timeProvider;
+        _municipiosPostais = correiosManual?.Value.MunicipiosPorCep ?? [];
         _calendario = calendario;
         _promocoesHabilitadas = promocoes?.Value.Habilitadas == true;
         _ofertasEntrega = protecao?.CreateProtector("Xaquiamuni.Checkout.OfertaEntrega.v1");

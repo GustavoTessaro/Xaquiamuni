@@ -100,6 +100,7 @@ public sealed class XaquiamuniDbContext
         });
         PedidoMapping.Configurar(builder);
         AtendimentoMapping.Configurar(builder);
+        CorreiosManualMapping.Configurar(builder);
         builder.Entity<EnvioComprovantePix>(e =>
         {
             e.ToTable("EnviosComprovantePix");

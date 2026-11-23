@@ -27,7 +27,8 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
 
     public async Task<ModalidadesPublicas> ModalidadesAsync(CancellationToken ct) =>
         await Configuracoes.AsNoTracking().Select(c => new ModalidadesPublicas(c.RetiradaHabilitada,
-            c.EntregaPropriaHabilitada && Cidades.Any(x => x.Ativa), false)).SingleOrDefaultAsync(ct)
+            c.EntregaPropriaHabilitada && Cidades.Any(x => x.Ativa), false,
+            c.CotacaoManualCorreiosHabilitada)).SingleOrDefaultAsync(ct)
         ?? new(true, false, false);
 
     public Task<string?> ContatoAsync(CancellationToken ct) =>
@@ -83,6 +84,20 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
             config.WhatsApp = numero;
             config.WhatsAppConfirmado = confirmado;
             config.WhatsAppHabilitado = habilitado;
+            AtualizarAuditoria(config, autor, agora);
+            return Sucesso(Mapear(config));
+        }, ct);
+
+    public Task<ResultadoAtendimento> AtualizarCorreiosManualAsync(SalvarCorreiosManual input, Guid autor, Guid chave, CancellationToken ct) =>
+        ExecutarAsync("correios-manual", null, input, autor, chave, async agora =>
+        {
+            if (!RevisaoValida(input.Revisao) || input.Habilitada is not bool habilitada ||
+                input.ValidadeHoras is not (>= 1 and <= 168))
+                return Invalido("Informe a habilitação, a revisão e uma validade entre 1 e 168 horas.");
+            var config = await CarregarConfiguracaoAsync(ct);
+            if (config.Revisao != input.Revisao) return RevisaoDivergente();
+            config.CotacaoManualCorreiosHabilitada = habilitada;
+            config.ValidadePropostaCorreiosHoras = input.ValidadeHoras.Value;
             AtualizarAuditoria(config, autor, agora);
             return Sucesso(Mapear(config));
         }, ct);
@@ -191,7 +206,8 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
     private static AtendimentoAdmin Mapear(ConfiguracaoAtendimento config) => new(config.RetiradaHabilitada,
         config.EntregaPropriaHabilitada, false, config.EnderecoRetirada, config.InstrucoesRetirada, config.WhatsApp,
         config.WhatsAppConfirmado, config.WhatsAppHabilitado, config.Revisao,
-        config.Revisao == 0 ? null : config.AdministradorId, config.Revisao == 0 ? null : config.AlteradoEmUtc);
+        config.Revisao == 0 ? null : config.AdministradorId, config.Revisao == 0 ? null : config.AlteradoEmUtc,
+        config.CotacaoManualCorreiosHabilitada, config.ValidadePropostaCorreiosHoras);
 
     private static string? NormalizarTelefone(string valor)
     {

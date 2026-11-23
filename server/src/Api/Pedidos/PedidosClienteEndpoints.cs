@@ -101,7 +101,7 @@ public static class PedidosClienteEndpoints
             request.Endereco, request.UsarEnderecoPadrao, cancellationToken));
     }
 
-    private static async Task<(T? Request, IResult? Erro)> LerCompraAsync<T>(
+    internal static async Task<(T? Request, IResult? Erro)> LerCompraAsync<T>(
         HttpRequest request, CancellationToken cancellationToken)
     {
         if (!request.HasJsonContentType())

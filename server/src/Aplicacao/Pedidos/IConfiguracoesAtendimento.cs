@@ -10,6 +10,8 @@ public sealed record SalvarModalidades(bool? RetiradaHabilitada, bool? EntregaPr
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SalvarWhatsApp(string? Numero, bool? Confirmado, bool? Habilitado, int? Revisao);
 
+public sealed record SalvarCorreiosManual(bool? Habilitada, int? ValidadeHoras, int? Revisao);
+
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SalvarCidade(string? CodigoIbge, string? Nome, string? Uf,
     [property: JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)] long? TarifaCentavos,
@@ -18,7 +20,8 @@ public sealed record SalvarCidade(string? CodigoIbge, string? Nome, string? Uf,
 public sealed record AtendimentoAdmin(bool RetiradaHabilitada, bool EntregaPropriaHabilitada,
     bool CorreiosHabilitados, string? EnderecoRetirada, string? InstrucoesRetirada,
     string? WhatsApp, bool WhatsAppConfirmado, bool WhatsAppHabilitado, int Revisao,
-    Guid? AdministradorId, DateTimeOffset? AlteradoEmUtc);
+    Guid? AdministradorId, DateTimeOffset? AlteradoEmUtc, bool CotacaoManualCorreiosHabilitada = false,
+    int ValidadePropostaCorreiosHoras = 48);
 
 public sealed record CidadeEntregaDto(Guid Id, string CodigoIbge, string Nome, string Uf,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TarifaCentavos,
@@ -29,7 +32,8 @@ public sealed record CidadeEntregaDto(Guid Id, string CodigoIbge, string Nome, s
         cidade.CriadoEmUtc, cidade.AlteradoPor, cidade.AlteradoEmUtc);
 }
 
-public sealed record ModalidadesPublicas(bool RetiradaLocal, bool EntregaPropria, bool Correios)
+public sealed record ModalidadesPublicas(bool RetiradaLocal, bool EntregaPropria, bool Correios,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool CorreiosCotacaoManual = false)
 {
     public string? FreteRetiradaCentavos => RetiradaLocal ? "0" : null;
 }
@@ -47,6 +51,7 @@ public interface IConfiguracoesAtendimento
     Task<CidadeEntregaDto?> CidadeAsync(Guid id, CancellationToken ct);
     Task<ResultadoAtendimento> AtualizarModalidadesAsync(SalvarModalidades input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> AtualizarWhatsAppAsync(SalvarWhatsApp input, Guid autor, Guid chave, CancellationToken ct);
+    Task<ResultadoAtendimento> AtualizarCorreiosManualAsync(SalvarCorreiosManual input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> SalvarCidadeAsync(Guid? id, SalvarCidade input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> ExcluirCidadeAsync(Guid id, int? revisao, Guid autor, Guid chave, CancellationToken ct);
 }

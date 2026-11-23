@@ -403,7 +403,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
 
         public static async Task<Ambiente> CriarAsync(string? migration = null, TimeProvider? relogio = null,
             RelogioJornadaCompra? relogioSql = null, IReadOnlyDictionary<string, string>? municipiosPorCep = null,
-            bool promocoesComerciais = false)
+            bool promocoesComerciais = false, IReadOnlyDictionary<string, MunicipioPostal>? municipiosPostais = null)
         {
             var banco = await SqlServerTestDatabase.CreateAsync(targetMigration: migration);
             DirectoryInfo? diretorio = null;
@@ -411,7 +411,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             {
                 diretorio = Directory.CreateTempSubdirectory("xaquiamuni-cadeia-");
                 return new(banco, new HostE2ECompra(banco, diretorio.FullName, diretorio.FullName, relogioSql,
-                    promocoesComerciais, relogio, municipiosPorCep), diretorio);
+                    promocoesComerciais, relogio, municipiosPorCep, municipiosPostais), diretorio);
             }
             catch
             {

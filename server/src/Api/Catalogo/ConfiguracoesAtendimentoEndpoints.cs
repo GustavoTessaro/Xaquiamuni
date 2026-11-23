@@ -31,6 +31,9 @@ public static class ConfiguracoesAtendimentoEndpoints
         admin.MapPut("/whatsapp", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
             ComandoAsync<SalvarWhatsApp>(ctx, (input, autor, chave) => api.AtualizarWhatsAppAsync(input, autor, chave, ct), ct))
             .RequireXaquiamuniAntiforgery();
+        admin.MapPut("/correios-manual", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
+            ComandoAsync<SalvarCorreiosManual>(ctx, (input, autor, chave) => api.AtualizarCorreiosManualAsync(input, autor, chave, ct), ct))
+            .RequireXaquiamuniAntiforgery();
         admin.MapPost("/cidades", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
             ComandoAsync<SalvarCidade>(ctx, (input, autor, chave) => api.SalvarCidadeAsync(null, input, autor, chave, ct), ct, 201))
             .RequireXaquiamuniAntiforgery();

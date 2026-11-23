@@ -48,6 +48,7 @@ public static class DependencyInjection
         services.AddScoped<EfPromocoes>();
         services.Configure<PromocoesComerciaisOptions>(configuration.GetSection("PromocoesComerciais"));
         services.Configure<EntregaCheckoutOptions>(configuration.GetSection("EntregaCheckout"));
+        services.Configure<CorreiosManualOptions>(configuration.GetSection("CorreiosManual"));
         services.AddOptions<CalendarioOperacionalEstoqueOptions>()
             .Bind(configuration.GetSection(CalendarioOperacionalEstoque.SectionName))
             .Validate(
@@ -90,6 +91,7 @@ public static class DependencyInjection
         services.AddScoped<IConsultarPedidosCliente, EfConsultaPedidosCliente>();
         services.AddScoped<IPublicacaoTemaLoja, EfPublicacaoTemaLoja>();
         services.AddScoped<IConfiguracoesAtendimento, EfConfiguracoesAtendimento>();
+        services.AddScoped<ICotacoesCorreios, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IPagamentoPixManual, EfPagamentoPixManual>();
         services.AddScoped<IComprovantesPix, EfEstoqueProdutoAcabadoRepository>();
         services.AddScoped<IConsultarPedidosAdmin, EfConsultaPedidosAdmin>();

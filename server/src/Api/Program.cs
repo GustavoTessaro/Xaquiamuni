@@ -123,6 +123,7 @@ app.MapCatalogoPublicoEndpoints();
 app.MapTemaLojaEndpoints();
 app.MapConfiguracoesAtendimentoEndpoints();
 app.MapPedidosClienteEndpoints();
+app.MapCotacoesCorreiosEndpoints();
 app.MapAdminPedidosEndpoints();
 app.MapPagamentoPixManualEndpoints();
 app.MapComprovantesPixEndpoints();

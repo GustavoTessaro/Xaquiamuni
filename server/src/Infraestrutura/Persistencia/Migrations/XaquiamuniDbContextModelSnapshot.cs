@@ -403,6 +403,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<DateTimeOffset>("AlteradoEmUtc")
                         .HasColumnType("datetimeoffset");
 
+                    b.Property<bool>("CotacaoManualCorreiosHabilitada")
+                        .HasColumnType("bit");
+
                     b.Property<string>("EnderecoRetirada")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
@@ -421,6 +424,11 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsConcurrencyToken()
                         .HasColumnType("int");
 
+                    b.Property<int>("ValidadePropostaCorreiosHoras")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasDefaultValue(48);
+
                     b.Property<string>("WhatsApp")
                         .HasMaxLength(16)
                         .HasColumnType("nvarchar(16)");
@@ -438,6 +446,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                             t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Modalidade", "[RetiradaHabilitada] = 1 OR [EntregaPropriaHabilitada] = 1");
 
                             t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Unica", "[Id] = 1");
+
+                            t.HasCheckConstraint("CK_ConfiguracoesAtendimento_ValidadePostal", "[ValidadePropostaCorreiosHoras] BETWEEN 1 AND 168");
 
                             t.HasCheckConstraint("CK_ConfiguracoesAtendimento_WhatsApp", "([WhatsAppConfirmado] = 0 OR [WhatsApp] IS NOT NULL) AND ([WhatsAppHabilitado] = 0 OR [WhatsAppConfirmado] = 1)");
                         });
@@ -2767,6 +2777,47 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("OperacoesAtendimento", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoCotacaoCorreios", b =>
+                {
+                    b.Property<Guid>("Autor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<bool>("Admin")
+                        .HasColumnType("bit");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("Acao")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset>("ExecutadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("Motivo")
+                        .HasMaxLength(300)
+                        .HasColumnType("nvarchar(300)");
+
+                    b.Property<string>("ResultadoJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("SolicitacaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Autor", "Admin", "Chave");
+
+                    b.HasIndex("SolicitacaoId");
+
+                    b.ToTable("OperacoesCotacoesCorreios", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPropria", b =>
                 {
                     b.Property<Guid>("AdministradorId")
@@ -2949,6 +3000,104 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                             t.HasCheckConstraint("CK_EmailOutbox_Status_Valid", "[Status] IN (1, 2, 3, 4, 5)");
 
                             t.HasCheckConstraint("CK_EmailOutbox_Timestamps_Utc", "DATEPART(TZOFFSET, [CreatedAtUtc]) = 0 AND DATEPART(TZOFFSET, [NextAttemptAtUtc]) = 0 AND ([CompletedAtUtc] IS NULL OR DATEPART(TZOFFSET, [CompletedAtUtc]) = 0) AND ([LeaseExpiresAtUtc] IS NULL OR DATEPART(TZOFFSET, [LeaseExpiresAtUtc]) = 0)");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.PropostaCorreios", b =>
+                {
+                    b.Property<Guid>("SolicitacaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<int>("Revisao")
+                        .HasColumnType("int");
+
+                    b.Property<long>("FreteCentavos")
+                        .HasColumnType("bigint");
+
+                    b.Property<int?>("PesoTotalGramas")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PrazoDias")
+                        .HasColumnType("int");
+
+                    b.Property<DateTimeOffset>("PublicadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("PublicadaPor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Servico")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("nvarchar(60)");
+
+                    b.Property<DateTimeOffset>("ValidaAteUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("VolumesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("SolicitacaoId", "Revisao");
+
+                    b.ToTable("PropostasCorreios", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PropostasCorreios_Valores", "[Revisao] > 0 AND [FreteCentavos] >= 0 AND [PrazoDias] > 0 AND [ValidaAteUtc] > [PublicadaEmUtc]");
+                        });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("ClienteId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("CriadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("EnderecoJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Impressao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<string>("ItensJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<int?>("Revisao")
+                        .HasColumnType("int");
+
+                    b.Property<int?>("RevisaoAceita")
+                        .HasColumnType("int");
+
+                    b.Property<short>("Situacao")
+                        .HasColumnType("smallint");
+
+                    b.Property<DateTimeOffset?>("ValidaAteUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<int>("Versao")
+                        .IsConcurrencyToken()
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ClienteId", "CriadaEmUtc");
+
+                    b.HasIndex("Situacao", "CriadaEmUtc");
+
+                    b.ToTable("SolicitacoesCorreios", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_SolicitacoesCorreios_Revisao", "([Revisao] IS NULL AND [ValidaAteUtc] IS NULL OR [Revisao] > 0 AND [ValidaAteUtc] IS NOT NULL) AND ([RevisaoAceita] IS NULL OR [RevisaoAceita] = [Revisao])");
+
+                            t.HasCheckConstraint("CK_SolicitacoesCorreios_Situacao", "[Situacao] BETWEEN 1 AND 7 AND [Versao] > 0");
                         });
                 });
 
@@ -3903,6 +4052,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoCotacaoCorreios", b =>
+                {
+                    b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPropria", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
@@ -3927,6 +4085,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.PropostaCorreios", b =>
+                {
+                    b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", null)
+                        .WithMany()
+                        .HasForeignKey("SolicitacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 

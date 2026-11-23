@@ -12,6 +12,8 @@ internal static class AtendimentoMapping
             e.ToTable("ConfiguracoesAtendimento", t =>
             {
                 t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Unica", "[Id] = 1");
+                t.HasCheckConstraint("CK_ConfiguracoesAtendimento_ValidadePostal",
+                    "[ValidadePropostaCorreiosHoras] BETWEEN 1 AND 168");
                 t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Modalidade", "[RetiradaHabilitada] = 1 OR [EntregaPropriaHabilitada] = 1");
                 t.HasCheckConstraint("CK_ConfiguracoesAtendimento_WhatsApp",
                     "([WhatsAppConfirmado] = 0 OR [WhatsApp] IS NOT NULL) AND ([WhatsAppHabilitado] = 0 OR [WhatsAppConfirmado] = 1)");
@@ -19,6 +21,7 @@ internal static class AtendimentoMapping
             e.HasKey(c => c.Id);
             e.Property(c => c.Id).ValueGeneratedNever();
             e.Property(c => c.Revisao).IsConcurrencyToken();
+            e.Property(c => c.ValidadePropostaCorreiosHoras).HasDefaultValue(48);
             e.Property(c => c.EnderecoRetirada).HasMaxLength(300);
             e.Property(c => c.InstrucoesRetirada).HasMaxLength(600);
             e.Property(c => c.WhatsApp).HasMaxLength(16);
