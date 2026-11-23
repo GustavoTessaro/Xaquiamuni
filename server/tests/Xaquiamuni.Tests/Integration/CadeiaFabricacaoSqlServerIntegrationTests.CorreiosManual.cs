@@ -94,6 +94,10 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         campanha.AlterarStatus(true, campanha.CriadaPorId, DateTimeOffset.UtcNow);
         db.Add(campanha);
         await db.SaveChangesAsync();
+        using var adulterada = await EscreverPostalAsync(admin, rotaAdmin + "/propostas",
+            new { servico = "PAC", freteCentavos = "2100", freteLiquidoCentavos = "0", descontoFrete = "2100",
+                prazoDias = 5, pesoTotalGramas = 600 }, "\"2\"");
+        Assert.Equal(HttpStatusCode.BadRequest, adulterada.StatusCode);
         var dadosSegunda = proposta with { FreteCentavos = 2100 };
         using var previaSemCsrf = await EscreverPostalAsync(admin, rotaAdmin + "/propostas/previa", dadosSegunda, "\"2\"", csrf: false);
         Assert.Equal(HttpStatusCode.BadRequest, previaSemCsrf.StatusCode);

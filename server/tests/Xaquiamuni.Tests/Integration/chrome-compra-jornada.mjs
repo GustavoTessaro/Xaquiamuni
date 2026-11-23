@@ -258,6 +258,21 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       enderecoRetirada: 'Rua da retirada de ensaio', instrucoesRetirada: 'Retire no balcão de ensaio.',
       revisao: retirada.revisao,
     }), crypto.randomUUID())).status, 200);
+    if (!pixManual && !pixCnpj) {
+      const campanhasFrete = '/api/admin/promocoes-frete';
+      const criada = await api(a, campanhasFrete, 'POST', JSON.stringify({
+        nome: 'Frete grátis da homologação', tipo: 'FreteGratis', valor: '0',
+        modalidades: ['EntregaPropria', 'CorreiosManual'], subtotalMinimoCentavos: '0',
+      }));
+      assert.equal(criada.status, 201);
+      assert.equal(await a.ev(`(async () => {
+        const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+        return (await fetch(${JSON.stringify(campanhasFrete + '/' + criada.body.id + '/status')}, {
+          method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'If-Match': '"1"' },
+          body: JSON.stringify({ ativa: true }),
+        })).status;
+      })()`), 200);
+    }
     await clicar(c, 'Revisar compra');
     await clicar(c, 'Consultar valores de entrega');
     await tem(c, 'Total final');
@@ -275,6 +290,9 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     const replay = await api(c, '/api/pedidos', 'POST', compra.corpo, compra.chave);
     assert.equal(replay.status, 200);
     assert.equal(replay.body.id === id, true);
+    assert.equal(replay.body.freteCentavos, '0');
+    assert.equal(replay.body.subtotalProdutosCentavos, replay.body.totalCentavos);
+    assert.equal(replay.body.entrega?.descontoFrete, undefined);
     assert.match(replay.body.numeroPublico, /^XQ-[23456789ACDEFHJKMNPQRTUVWXY]{10}$/);
     await tem(c, replay.body.numeroPublico);
     assert.ok(await c.ev("!document.querySelector('main h1')?.textContent.includes(location.pathname.split('/').at(-1))"));
