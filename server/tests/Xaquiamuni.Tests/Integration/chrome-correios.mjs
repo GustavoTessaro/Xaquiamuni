@@ -34,10 +34,28 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
 
   await a.ir('/admin/configuracoes/atendimento');
   await texto(a, 'Cotação manual dos Correios');
+  const modalidades = async () => c.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json())");
+  const atendimento = async () => a.ev("fetch('/api/admin/loja/atendimento').then(r=>r.json())");
+  const inicial = await modalidades();
+  assert.equal(inicial.correiosCotacaoManual ?? false, false);
+  assert.equal(inicial.retiradaLocal, true);
+  assert.equal(await a.ev("document.querySelector('[name=validadeCorreios]').value"), '48');
+  const revisaoInicial = (await atendimento()).revisao;
   await a.ev("window.confirm = () => true; document.querySelector('[name=correiosManual]').click()");
   await clicar(a, 'Salvar cotação manual');
   await waitFor(() => c.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json()).then(x=>x.correiosCotacaoManual === true)"),
     'Modalidade publicada');
+  const configurar = (habilitada, revisao) => escrever('/api/admin/loja/atendimento/correios-manual',
+    'PUT', { habilitada, validadeHoras: 48, revisao });
+  assert.equal(await configurar(false, revisaoInicial), 409);
+  assert.equal(await configurar(false, (await atendimento()).revisao), 200);
+  assert.equal((await modalidades()).correiosCotacaoManual ?? false, false);
+  assert.equal(await configurar(true, (await atendimento()).revisao), 200);
+  const publicada = await modalidades();
+  assert.equal(publicada.correiosCotacaoManual, true);
+  assert.equal(publicada.retiradaLocal, inicial.retiradaLocal);
+  assert.equal(publicada.entregaPropria, inicial.entregaPropria);
+  console.log('Correios manual: padrão desabilitado, validade de 48 h, conflito 409 e reabilitação conferidos.');
 
   for (const width of [375, 1280]) {
     for (const contexto of [a, c]) {
@@ -70,6 +88,10 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
     const rota = await c.ev("document.querySelector('a[href^=\"/cotacoes-correios/\"]').getAttribute('href')");
     assert.equal(await c.ev("fetch('/api/pedidos').then(r=>r.json()).then(x=>x.totalItens)"), width === 375 ? 0 : 1);
 
+    await a.ir('/admin/cotacoes-correios');
+    await texto(a, 'Aguardando análise');
+    assert.ok(await campo(a, 'main select', 'AguardandoAnalise'));
+    await waitFor(() => a.ev(`!!document.querySelector('a[href="${'/admin' + rota}"]')`), 'Cotação na lista filtrada');
     await a.ir('/admin' + rota);
     await texto(a, 'Rua de teste');
     if (width === 1280) {
@@ -79,9 +101,29 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
     for (const [nome, valor] of Object.entries({ servico: 'PAC', frete: '12,90', prazo: '5', pesoTotal: '200' })) {
       assert.ok(await campo(a, 'input[name=' + nome + ']', valor));
     }
+    for (let volume = 0; volume < 2; volume++) {
+      await clicar(a, 'Adicionar volume');
+      const grupo = 'main form fieldset fieldset:nth-of-type(' + (volume + 1) + ')';
+      await waitFor(() => a.ev('!!document.querySelector(' + JSON.stringify(grupo) + ')'), 'Campos do volume');
+      for (const [indice, valor] of ['100', '18', '12', '8'].entries()) {
+        assert.ok(await campo(a, grupo + ' label:nth-of-type(' + (indice + 1) + ') input', valor));
+      }
+    }
     await a.ev('window.confirm = () => true');
     await clicar(a, 'Revisar e publicar proposta');
     await texto(a, 'Proposta disponível');
+    await texto(a, 'Volume 2');
+    const primeira = await a.ev(`fetch('${'/api/admin' + rota}').then(r=>r.json()).then(x=>x.propostas[0])`);
+    assert.equal(Date.parse(primeira.validaAteUtc) - Date.parse(primeira.publicadaEmUtc), 48 * 3600000);
+    assert.equal(primeira.volumes.length, 2);
+    for (const [nome, valor] of Object.entries({ servico: 'PAC', frete: '12,90', prazo: '6', pesoTotal: '200' })) {
+      assert.ok(await campo(a, 'input[name=' + nome + ']', valor));
+    }
+    await clicar(a, 'Revisar e publicar proposta');
+    await texto(a, 'Revisão 2');
+    const historico = await a.ev(`fetch('${'/api/admin' + rota}').then(r=>r.json()).then(x=>x.propostas)`);
+    assert.deepEqual(historico.find(p => p.revisao === primeira.revisao), primeira);
+    assert.equal(historico.find(p => p.revisao === 2).prazoDias, 6);
     assert.ok(await largura(a));
 
     await c.ir(rota);
@@ -89,6 +131,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
     await c.ev('window.confirm = () => true');
     await clicar(c, 'Aceitar proposta');
     await clicar(c, 'Continuar para pagamento');
+    assert.equal(await c.ev(`fetch('${'/api' + rota}').then(r=>r.json()).then(x=>x.revisaoAceita)`), 2);
     await texto(c, '24,89');
     const perdaPedido = width === 375 ? c.perderResposta('/api/pedidos') : null;
     await clicar(c, 'Confirmar total e criar pedido');
@@ -138,6 +181,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados }) {
     await texto(a, 'Entrega confirmada em');
     await c.ir(pedido);
     await texto(c, 'AB123456789BR');
+    assert.equal(await c.ev("document.querySelector('main a[href^=\"https://rastreamento.correios.com.br\"]').href"),
+      'https://rastreamento.correios.com.br/app/index.php');
     await texto(c, 'Entrega confirmada em');
     assert.ok(await largura(a));
     assert.ok(await largura(c));

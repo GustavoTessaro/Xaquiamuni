@@ -238,6 +238,7 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   assert.equal((await api(admin, promocoes + '/' + geral.id)).body.ativa, false);
 
   await clicar(outro, 'Confirmar valor e finalizar compra');
+  await waitFor(() => outro.compra()?.total === expirada.total + 1, 'POST com a oferta anterior após desativar a promoção');
   await tem(outro, '13,90');
   await waitFor(() => outro.ev(`!!${botao('Confirmar valor e finalizar compra')} && !document.querySelector('main app-preco-exibido del')`),
     'Preço regular exibido antes da nova confirmação');

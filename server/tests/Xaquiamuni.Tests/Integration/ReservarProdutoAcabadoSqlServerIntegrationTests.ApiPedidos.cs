@@ -156,7 +156,14 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         var criado = pedido.GetProperty("criadoEmUtc").GetDateTimeOffset();
         Assert.Equal(TimeSpan.Zero, criado.Offset);
         Assert.Equal(criado.AddHours(24), pedido.GetProperty("prazoPagamentoEmUtc").GetDateTimeOffset());
-        Assert.Equal(new[] { "criadoEmUtc", "id", "itens", "modalidadeEntrega", "prazoPagamentoEmUtc", "situacao", "totalCentavos" },
+        Assert.Equal("1199", pedido.GetProperty("subtotalProdutosCentavos").GetString());
+        Assert.Equal("0", pedido.GetProperty("freteCentavos").GetString());
+        Assert.Equal(JsonValueKind.Null, pedido.GetProperty("entrega").ValueKind);
+        Assert.Equal(new[]
+        {
+            "criadoEmUtc", "entrega", "freteCentavos", "id", "itens", "modalidadeEntrega", "prazoPagamentoEmUtc",
+            "situacao", "subtotalProdutosCentavos", "totalCentavos",
+        },
             pedido.EnumerateObject().Select(prop => prop.Name).Order(StringComparer.Ordinal));
         var linha = Assert.Single(pedido.GetProperty("itens").EnumerateArray());
         Assert.Equal(new[] { "nomeProduto", "nomeVariante", "precoUnitarioCentavos", "produtoId", "produtoVarianteId", "quantidade", "subtotalCentavos" },
