@@ -125,8 +125,12 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
         output.WriteLine("Demonstração encerrada: HTTPS indisponível, banco e diretório removidos.");
     }
 
+    [ChromeCompraFact]
+    [Trait("Categoria", "ChromeE2E")]
+    public Task ChromeCorreiosManualConverteERegistraPostagem() => ExecutarChromeAsync(jornada: false, postal: true);
+
     private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false, bool auditoriaAdmin = false,
-        bool financeiro = false, bool agenda = false, bool modoAdmin = false)
+        bool financeiro = false, bool agenda = false, bool modoAdmin = false, bool postal = false)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -149,7 +153,8 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                 conexaoMaster = new SqlConnectionStringBuilder(db.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
                 var relogio = jornada ? new RelogioJornadaCompra() : null;
                 await using (var host = new HostE2ECompra(db, dist, temporario, relogio,
-                    municipiosPorCep: modoAdmin ? new Dictionary<string, string> { ["95200000"] = "4322509" } : null))
+                    municipiosPorCep: modoAdmin ? new Dictionary<string, string> { ["95200000"] = "4322509" } : null,
+                    municipiosPostais: postal ? new Dictionary<string, MunicipioPostal> { ["95200000"] = new("4322509", "Vacaria", "RS") } : null))
                 {
                     endereco = new Uri(host.Origin);
                     Assert.Equal("https", endereco.Scheme);
@@ -167,7 +172,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                     Guid? insumoFinanceiro = null;
                     Guid? produtoFinanceiro = null;
                     Guid? varianteFinanceiro = null;
-                    if (auditoriaAdmin || financeiro)
+                    if (auditoriaAdmin || financeiro || postal)
                     {
                         await using var verificacao = db.CreateVerificationContext();
                         var (produto, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
@@ -175,7 +180,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                             verificacao.ClienteEnderecos.Add(ClienteEndereco.Criar(Guid.NewGuid(), cliente.Id,
                                 "95200000", "RS", "Vacaria", "Centro", "Rua cadastrada do ensaio", "12", null, true));
                         if (auditoriaAdmin) varianteAuditoria = variante.Id;
-                        if (financeiro)
+                        if (financeiro || postal)
                         {
                             produtoFinanceiro = produto.Id;
                             varianteFinanceiro = variante.Id;
@@ -191,7 +196,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         origin = endereco.GetLeftPart(UriPartial.Authority), pinSpki = host.PinSpki,
                         chromePath = chrome, profile = Path.Combine(temporario, "chrome"), cliente, admin,
                         outroCliente, seed, pixManual, varianteAuditoria, insumoFinanceiro, produtoFinanceiro,
-                        varianteFinanceiro, financeiro, agenda, modoAdmin,
+                        varianteFinanceiro, financeiro, agenda, modoAdmin, postal,
                     }, fluxo);
                     if (modoAdmin)
                     {
@@ -217,6 +222,26 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         Assert.Equal(2, await verificacao.MovimentosProdutoAcabado.CountAsync(m =>
                             reservaIds.Contains(m.ReservaProdutoAcabadoId)));
                         output.WriteLine("SQL: dois snapshots de 1199 + 1300 = 2499 centavos e uma baixa por entrega.");
+                    }
+                    if (postal)
+                    {
+                        await using var verificacao = db.CreateVerificationContext();
+                        var pedidos = await verificacao.Pedidos.AsNoTracking().ToListAsync();
+                        Assert.Equal(2, pedidos.Count);
+                        Assert.All(pedidos, pedido =>
+                        {
+                            Assert.Equal(ModalidadeEntregaPedido.Correios, pedido.ModalidadeEntrega);
+                            Assert.Equal(SituacaoPedido.Entregue, pedido.Situacao);
+                            Assert.Equal((1199L, 1290L, 2489L),
+                                (pedido.SubtotalProdutosCentavos, pedido.FreteCentavos, pedido.TotalCentavos));
+                            Assert.Equal("AB123456789BR", pedido.CodigoRastreamento);
+                        });
+                        var reservas = await verificacao.ReservasProdutoAcabado.AsNoTracking().ToListAsync();
+                        Assert.Equal(2, reservas.Count);
+                        Assert.All(reservas, r => Assert.Equal(EstadoReservaProdutoAcabado.Consumida, r.Estado));
+                        var reservaIds = reservas.Select(r => (Guid?)r.Id).ToArray();
+                        Assert.Equal(2, await verificacao.MovimentosProdutoAcabado.CountAsync(m =>
+                            reservaIds.Contains(m.ReservaProdutoAcabadoId)));
                     }
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }

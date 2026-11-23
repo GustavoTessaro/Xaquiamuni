@@ -2,6 +2,7 @@ import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom, timeout } from 'rxjs';
+import { erroPostal } from '../core/cotacoes-correios.service';
 import { AuthService } from '../core/auth/auth.service';
 import { CarrinhoService } from './carrinho.service';
 import {
@@ -21,6 +22,7 @@ interface TentativaCompra {
   vinculo: string;
   itens: ItemCompra[];
   ofertaEntregaId?: string;
+  postal?: { token: string; cotacaoId: string };
 }
 
 export type ResultadoCheckout =
@@ -45,14 +47,14 @@ export class CheckoutService {
     this.pendenteInterna.set(lerTentativaCompra(this.janela));
   }
 
-  async enviar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string): Promise<ResultadoCheckout | null> {
+  async enviar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string, postal?: TentativaCompra['postal']): Promise<ResultadoCheckout | null> {
     if (this.enviando()) {
       return null;
     }
 
     this.enviandoInterno.set(true);
     try {
-      const executar = () => this.processar(itens, recuperar, ofertaEntregaId);
+      const executar = () => this.processar(itens, recuperar, ofertaEntregaId, postal);
       const locks = this.janela?.navigator.locks;
       return await (locks
         ? locks.request(chaveLocal, { ifAvailable: true }, (lock) =>
@@ -76,7 +78,7 @@ export class CheckoutService {
     }
   }
 
-  private async processar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string): Promise<ResultadoCheckout> {
+  private async processar(itens: ItemCompra[], recuperar: boolean, ofertaEntregaId?: string, postal?: TentativaCompra['postal']): Promise<ResultadoCheckout> {
     const armazenamento = this.janela?.localStorage;
     if (!armazenamento)
       return erro('Permita o armazenamento local para registrar a tentativa de compra.');
@@ -93,11 +95,11 @@ export class CheckoutService {
     if (!anterior && recuperar) {
       return erro('A tentativa já foi resolvida nesta sessão do navegador.');
     }
-    if (!anterior && !itensCompraValidos(itens)) {
+    if (!anterior && !postal && !itensCompraValidos(itens)) {
       return erro('Revise os itens e as quantidades no carrinho.');
     }
 
-    if (!anterior) {
+    if (!anterior && !postal) {
       const carrinho = this.carrinho.sincronizarItens();
       if (carrinho.some((item) => item.disponivel === false)) {
         return erro('Remova os itens indisponíveis antes de enviar o carrinho.');
@@ -136,7 +138,7 @@ export class CheckoutService {
       return erro('Entre com a conta usada na tentativa original para recuperar a compra.');
     }
 
-    const tentativa = anterior ?? { chave: this.janela.crypto.randomUUID(), vinculo, itens, ofertaEntregaId };
+    const tentativa = anterior ?? { chave: this.janela.crypto.randomUUID(), vinculo, itens, ofertaEntregaId, postal };
     if (!anterior) {
       armazenamento.setItem(chaveLocal, JSON.stringify(tentativa));
       this.pendenteInterna.set(tentativa);
@@ -145,13 +147,13 @@ export class CheckoutService {
     let pedido: PedidoCliente;
     try {
       pedido = await firstValueFrom(
-        this.pedidos.criar(tentativa.itens, tentativa.chave, requestToken, tentativa.ofertaEntregaId),
+        this.pedidos.criar(tentativa.itens, tentativa.chave, requestToken, tentativa.ofertaEntregaId, tentativa.postal?.token),
       );
     } catch (falha) {
-      return this.tratarFalha(falha, !!anterior, armazenamento);
+      return this.tratarFalha(falha, !!anterior, armazenamento, !!tentativa.postal);
     }
 
-    if (this.carrinho.confirmarCompra(tentativa.chave, pedido.itens)) {
+    if (tentativa.postal || this.carrinho.confirmarCompra(tentativa.chave, pedido.itens)) {
       try {
         armazenamento.removeItem(chaveLocal);
       } catch {
@@ -165,6 +167,7 @@ export class CheckoutService {
     falha: unknown,
     repeticao: boolean,
     armazenamento: Storage,
+    postal: boolean,
   ): ResultadoCheckout {
     if (falha instanceof HttpErrorResponse) {
       const dados = falha.error as { codigo?: string; precosAtuais?: PrecoAtualPedido[] } | null;
@@ -174,15 +177,18 @@ export class CheckoutService {
       }
       if (falha.status === 409 && codigo === 'itens_indisponiveis') {
         armazenamento.removeItem(chaveLocal);
-        return erro(
-          'Não há estoque para todos os itens solicitados. Revise as opções e quantidades no carrinho.',
-        );
+        return erro(postal ? erroPostal(falha) :
+          'Não há estoque para todos os itens solicitados. Revise as opções e quantidades no carrinho.');
       }
       if (falha.status === 409 && codigo === 'preco_alterado') {
         armazenamento.removeItem(chaveLocal);
-        if (Array.isArray(dados?.precosAtuais))
+        if (!postal && Array.isArray(dados?.precosAtuais))
           this.carrinho.atualizarPrecos(dados.precosAtuais.filter(p => p && typeof p === 'object'));
         return { estado: 'preco_alterado' };
+      }
+      if (postal && falha.status === 409 && codigo?.startsWith('cotacao_correios_')) {
+        armazenamento.removeItem(chaveLocal);
+        return erro(erroPostal(falha));
       }
       if (falha.status === 409 && codigo === 'oferta_entrega_invalida') {
         armazenamento.removeItem(chaveLocal);
@@ -220,7 +226,10 @@ export function lerTentativaCompra(janela: Window | null): TentativaCompra | nul
       !uuidValido(tentativa.chave) ||
       typeof tentativa.vinculo !== 'string' ||
       !/^[a-f0-9]{64}$/.test(tentativa.vinculo) ||
-      !itensCompraValidos(tentativa.itens) ||
+      (tentativa.postal === undefined ? !itensCompraValidos(tentativa.itens) :
+        !uuidValido(tentativa.postal?.cotacaoId) || typeof tentativa.postal?.token !== 'string' ||
+        !tentativa.postal.token || tentativa.ofertaEntregaId !== undefined ||
+        !Array.isArray(tentativa.itens) || tentativa.itens.length !== 0) ||
       (tentativa.ofertaEntregaId !== undefined &&
         (typeof tentativa.ofertaEntregaId !== 'string' || !tentativa.ofertaEntregaId || tentativa.ofertaEntregaId.length > 16000))
     ) {
@@ -230,6 +239,7 @@ export function lerTentativaCompra(janela: Window | null): TentativaCompra | nul
       chave: tentativa.chave,
       vinculo: tentativa.vinculo,
       ofertaEntregaId: tentativa.ofertaEntregaId,
+      postal: tentativa.postal,
       itens: tentativa.itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }: ItemCompra) => ({
         produtoId,
         produtoVarianteId,

@@ -8,6 +8,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router, RouterLink } from '@angular/router';
+import { CotacoesCorreiosService, erroPostal, type SolicitacaoPostal } from '../core/cotacoes-correios.service';
 import { FormsModule } from '@angular/forms';
 import { DatePipe } from '@angular/common';
 import { finalize, firstValueFrom } from 'rxjs';
@@ -29,6 +30,62 @@ import { PrecoExibidoComponent } from './preco-exibido.component';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckoutComponent {
+  private readonly correios = inject(CotacoesCorreiosService);
+  protected readonly cotacaoCriada = signal<string | null>(null);
+  protected readonly solicitacaoIncerta = signal(false);
+  private tentativaPostal?: { corpo: SolicitacaoPostal; chave: string; registro: string; conta: string };
+
+  protected async solicitarCorreios(): Promise<void> {
+    if (this.cotando() || this.checkout.enviando() || !this.modalidades()?.correiosCotacaoManual) return;
+    const endereco = this.endereco();
+    if (!this.tentativaPostal) {
+      if (!/^\d{5}-?\d{3}$/.test(endereco.cep.trim()) ||
+          this.camposEndereco.some(({ campo }) => campo !== 'complemento' && !endereco[campo]?.trim())) {
+        this.erro.set('Preencha o endereço completo e informe um CEP válido.');
+        return;
+      }
+      if (!window.confirm('Solicitar uma cotação para os itens e o endereço informados?')) return;
+    }
+    const corpo = this.tentativaPostal?.corpo ?? {
+      endereco: { ...endereco },
+      itens: this.itensCompra().map(({ produtoId, produtoVarianteId, quantidade }) =>
+        ({ produtoId, produtoVarianteId, quantidade })),
+    };
+    this.cotando.set(true);
+    this.erro.set('');
+    try {
+      const preparada = await this.correios.prepararSolicitacao(corpo);
+      if (!preparada) {
+        await this.router.navigate(['/login'], { queryParams: { retorno: 'checkout' } });
+        return;
+      }
+      if (this.tentativaPostal && this.tentativaPostal.conta !== preparada.conta) {
+        this.correios.concluirSolicitacao(preparada.registro);
+        this.erro.set('Entre com a conta original para recuperar esta solicitação.');
+        return;
+      }
+      const { requestToken, ...registro } = preparada;
+      const tentativa = this.tentativaPostal ?? { corpo, ...registro };
+      this.tentativaPostal = tentativa;
+      const cotacao = await firstValueFrom(this.correios.solicitar(tentativa.corpo, tentativa.chave, requestToken));
+      this.correios.concluirSolicitacao(tentativa.registro);
+      this.cotacaoCriada.set(cotacao.id);
+      this.tentativaPostal = undefined;
+      this.solicitacaoIncerta.set(false);
+    } catch (falha) {
+      const status = (falha as { status?: number }).status;
+      const incerta = !!this.tentativaPostal && (!status || status >= 500 || status === 408 || status === 401);
+      if (!incerta && this.tentativaPostal) {
+        this.correios.concluirSolicitacao(this.tentativaPostal.registro);
+        this.tentativaPostal = undefined;
+      }
+      this.solicitacaoIncerta.set(incerta);
+      this.erro.set(incerta ? 'Resultado incerto. Recupere a solicitação para conferir se ela foi registrada.' : erroPostal(falha));
+      if (status === 401) await this.router.navigate(['/login'], { queryParams: { retorno: 'checkout' } });
+    } finally {
+      this.cotando.set(false);
+    }
+  }
   protected readonly carrinho = inject(CarrinhoService);
   protected readonly checkout = inject(CheckoutService);
   protected readonly formatarPreco = formatarCentavos;
@@ -106,6 +163,7 @@ export class CheckoutComponent {
       if (this.destroy.destroyed) return;
       this.modalidades.set(modalidades);
       if (!modalidades.retiradaLocal && modalidades.entregaPropria) this.modalidade.set('EntregaPropria');
+      if (!modalidades.retiradaLocal && !modalidades.entregaPropria && modalidades.correiosCotacaoManual) this.modalidade.set('Correios');
       if (modalidades.retiradaLocal && !modalidades.entregaPropria) this.modalidade.set('RetiradaLocal');
     } catch {
       if (this.destroy.destroyed) return;

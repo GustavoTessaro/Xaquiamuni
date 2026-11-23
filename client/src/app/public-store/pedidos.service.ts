@@ -14,6 +14,7 @@ export const situacoesPedido = {
   PagamentoConfirmado: 'Pagamento confirmado',
   EmPreparacao: 'Em preparação',
   ProntoParaRetirada: 'Pronto para retirada',
+  Postado: 'Postado',
   EmEntrega: 'Em entrega',
   Entregue: 'Entregue',
   Cancelado: 'Cancelado',
@@ -42,7 +43,16 @@ export interface ItemPedido extends ItemCompra {
   promocaoId?: string;
 }
 
+export interface PostagemPostal {
+  postadaEmUtc: string;
+  servicoPostalUtilizado: string;
+  codigoRastreamento: string | null;
+  entregueEmUtc: string | null;
+  urlConsultaRastreamento: string | null;
+}
+
 export interface PedidoCliente {
+  postagem?: PostagemPostal | null;
   id: string;
   situacao: keyof typeof situacoesPedido;
   modalidadeEntrega: ModalidadeEntrega;
@@ -117,11 +127,11 @@ export class PedidosService {
     return this.csrf.getRequestToken().pipe(timeout(30_000));
   }
 
-  criar(itens: readonly ItemCompra[], chave: string, requestToken: string, ofertaEntregaId?: string) {
+  criar(itens: readonly ItemCompra[], chave: string, requestToken: string, ofertaEntregaId?: string, conversaoCorreiosId?: string) {
     return this.http
       .post<PedidoCliente>(
         url,
-        {
+        conversaoCorreiosId ? { conversaoCorreiosId } : {
           ...(ofertaEntregaId === undefined ? {} : { ofertaEntregaId }),
           itens: itens.map(({ produtoId, produtoVarianteId, quantidade, precoAceitoCentavos }) => ({
             produtoId,
@@ -139,6 +149,10 @@ export class PedidosService {
         timeout(30_000),
         map((response) => {
           const pedido = lerPedido(response, [200, 201]);
+          if (conversaoCorreiosId) {
+            if (pedido.modalidadeEntrega !== 'Correios') throw new Error('Modalidade do pedido inesperada.');
+            return pedido;
+          }
           if (!mesmosItensCompra(itens, pedido.itens)) {
             throw new Error('Itens do pedido diferentes da tentativa registrada.');
           }
@@ -181,7 +195,7 @@ function lerPedido(
     !body ||
     !uuidValido(body.id) ||
     !Object.hasOwn(situacoesPedido, body.situacao) ||
-    (body.modalidadeEntrega !== 'RetiradaLocal' && body.modalidadeEntrega !== 'EntregaPropria') ||
+    (body.modalidadeEntrega !== 'RetiradaLocal' && body.modalidadeEntrega !== 'EntregaPropria' && body.modalidadeEntrega !== 'Correios') ||
     !dataUtcValida(body.criadoEmUtc) ||
     !dataUtcValida(body.prazoPagamentoEmUtc) ||
     !centavosValidos(body.totalCentavos) ||

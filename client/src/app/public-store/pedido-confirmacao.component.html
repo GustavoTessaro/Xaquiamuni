@@ -29,6 +29,7 @@
           Número do pedido: <strong class="identificador">{{ confirmado.id }}</strong>
         </p>
         <app-dados-entrega [modalidade]="confirmado.modalidadeEntrega" [dados]="confirmado.entrega" />
+        @if (confirmado.modalidadeEntrega === 'Correios') { <app-postagem-pedido [postagem]="confirmado.postagem" /> }
         @if (confirmado.situacao === 'EmEntrega') {
           <p>O pedido saiu da loja e está a caminho do endereço informado.</p>
         } @else if (confirmado.situacao === 'ProntoParaRetirada') {

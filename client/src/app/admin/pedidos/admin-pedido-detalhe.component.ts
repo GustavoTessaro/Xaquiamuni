@@ -36,6 +36,7 @@ import {
 import { formatarCentavos } from '../../public-store/carrinho.service';
 import { situacoesPedido, uuidValido } from '../../public-store/pedidos.service';
 import { AdminWorkspaceComponent } from '../admin-workspace.component';
+import { PostagemPedidoComponent } from '../../shared/postagem-pedido.component';
 import { DadosEntregaComponent } from '../../shared/dados-entrega.component';
 
 const acoes = {
@@ -99,6 +100,22 @@ const acoes = {
     sucesso: 'Recebimento registrado.',
     repetida: 'O recebimento já estava registrado.',
   },
+  postagem: {
+    rotulo: 'Registrar postagem', titulo: 'Registrar saída para os Correios', enviar: 'Registrar postagem e baixar estoque',
+    declaracao: 'Confirmo que o pacote foi fisicamente entregue aos Correios.',
+    orientacao: 'A postagem consome a reserva e registra a baixa definitiva do estoque.',
+    sucesso: 'Postagem registrada.', repetida: 'A postagem já estava registrada.',
+  },
+  rastreamento: {
+    rotulo: 'Corrigir rastreamento', titulo: 'Informar ou corrigir rastreamento', enviar: 'Salvar código',
+    declaracao: 'Conferi o código de rastreamento informado.',
+    sucesso: 'Rastreamento atualizado.', repetida: 'O rastreamento já estava atualizado.',
+  },
+  entregaPostal: {
+    rotulo: 'Confirmar entrega postal', titulo: 'Confirmar recebimento', enviar: 'Registrar entrega postal',
+    declaracao: 'Confirmo que o cliente recebeu o pedido.',
+    sucesso: 'Entrega postal registrada.', repetida: 'A entrega postal já estava registrada.',
+  },
 };
 
 type Acao = keyof typeof acoes;
@@ -109,7 +126,7 @@ type EstadoDetalhe =
 
 @Component({
   selector: 'app-admin-pedido-detalhe',
-  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent, DadosEntregaComponent],
+  imports: [AdminWorkspaceComponent, DatePipe, RouterLink, ComprovantePixComponent, DadosEntregaComponent, PostagemPedidoComponent],
   templateUrl: './admin-pedido-detalhe.component.html',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -126,10 +143,13 @@ export class AdminPedidoDetalheComponent {
   private readonly titulo = viewChild<ElementRef<HTMLElement>>('titulo');
   private readonly agora = signal(Date.now());
   private readonly prazoEncerradoServidor = signal(false);
-  private tentativaEntrega?: { id: string; acao: Acao; etag: string; chave: string };
+  private tentativaEntrega?: { id: string; acao: Acao; etag: string; chave: string; assinatura?: string };
 
   protected readonly estado = signal<EstadoDetalhe>({ tipo: 'carregando' });
   protected readonly acao = signal<Acao | null>(null);
+  protected readonly operacaoPostalIncerta = signal(false);
+  protected readonly servicoPostal = signal('');
+  protected readonly codigoPostal = signal('');
   protected readonly conferido = signal(false);
   protected readonly motivo = signal('');
   protected readonly motivoInvalido = signal(false);
@@ -159,11 +179,16 @@ export class AdminPedidoDetalheComponent {
       case 'PagamentoConfirmado':
         return ['preparacao'];
       case 'EmPreparacao':
+        if (this.pedido()?.modalidadeEntrega === 'Correios') return ['postagem'];
         return this.pedido()?.modalidadeEntrega === 'EntregaPropria' ? ['saidaPropria'] : ['retirada'];
       case 'EmEntrega':
         return this.pedido()?.modalidadeEntrega === 'EntregaPropria' ? ['recebimento'] : [];
+      case 'Postado':
+        return this.pedido()?.modalidadeEntrega === 'Correios' ? ['rastreamento', 'entregaPostal'] : [];
+      case 'Entregue':
+        return this.pedido()?.modalidadeEntrega === 'Correios' ? ['rastreamento'] : [];
       case 'ProntoParaRetirada':
-        return ['entrega'];
+        return this.pedido()?.modalidadeEntrega === 'RetiradaLocal' ? ['entrega'] : [];
       default:
         return [];
     }
@@ -287,7 +312,18 @@ export class AdminPedidoDetalheComponent {
 
     const estadoAntes = this.estado();
     const etag = estadoAntes.tipo === 'pronto' ? estadoAntes.dados.etag : null;
-    const entregaPropria = acao === 'saidaPropria' || acao === 'recebimento';
+    const entregaPropria = acao === 'saidaPropria' || acao === 'recebimento' ||
+      acao === 'postagem' || acao === 'rastreamento' || acao === 'entregaPostal';
+    const servico = this.servicoPostal().trim();
+    const codigo = this.codigoPostal().trim();
+    if (acao === 'postagem' && (!servico || servico.length > 60)) {
+      this.erro.set('Informe o serviço postal utilizado, com até 60 caracteres.');
+      return;
+    }
+    if ((acao === 'rastreamento' || (acao === 'postagem' && codigo)) && !/^[a-z]{2}\d{9}[a-z]{2}$/i.test(codigo.replaceAll(' ', ''))) {
+      this.erro.set('Informe um código com duas letras, nove dígitos e duas letras finais.');
+      return;
+    }
     if (entregaPropria && !etag) {
       this.tratarConflito('versao_desatualizada');
       return;
@@ -303,6 +339,11 @@ export class AdminPedidoDetalheComponent {
       entrega: () => this.pedidos.confirmarEntrega(id),
       saidaPropria: () => executarEntrega('iniciar-entrega-propria'),
       recebimento: () => executarEntrega('confirmar-recebimento'),
+      postagem: () => executarPostal('registrar-postagem', {
+        confirmado: true, servicoPostalUtilizado: servico, codigoRastreamento: codigo || null,
+      }),
+      rastreamento: () => executarPostal('rastreamento-postal', { codigoRastreamento: codigo }),
+      entregaPostal: () => executarPostal('confirmar-entrega-postal', { confirmado: true }),
     };
     const executarEntrega = (rota: 'iniciar-entrega-propria' | 'confirmar-recebimento') => {
       const anterior = this.tentativaEntrega;
@@ -310,6 +351,14 @@ export class AdminPedidoDetalheComponent {
         ? anterior : { id, acao, etag: etag!, chave: crypto.randomUUID() };
       this.tentativaEntrega = tentativa;
       return this.pedidos.entregaPropria(id, rota, tentativa.etag, tentativa.chave);
+    };
+    const executarPostal = (rota: 'registrar-postagem' | 'rastreamento-postal' | 'confirmar-entrega-postal', corpo: object) => {
+      const assinatura = JSON.stringify(corpo);
+      const anterior = this.tentativaEntrega;
+      const tentativa = anterior?.id === id && anterior.acao === acao && anterior.etag === etag && anterior.assinatura === assinatura
+        ? anterior : { id, acao, etag: etag!, chave: crypto.randomUUID(), assinatura };
+      this.tentativaEntrega = tentativa;
+      return this.pedidos.entregaPostal(id, rota, tentativa.etag, tentativa.chave, corpo);
     };
     const operacao = operacoes[acao]();
     operacao
@@ -352,7 +401,13 @@ export class AdminPedidoDetalheComponent {
       this.tentativaEntrega = undefined;
       this.tratarConflito(falha.error?.codigo);
     } else if (status === 400) {
-      this.erro.set('A solicitação foi recusada. Revise os dados e tente novamente.');
+      this.operacaoPostalIncerta.set(false);
+      this.erro.set(falha instanceof HttpErrorResponse && falha.error?.codigo === 'codigo_rastreamento_invalido'
+        ? 'Informe um código de rastreamento válido.'
+        : 'A solicitação foi recusada. Revise os dados e tente novamente.');
+    } else if (this.tentativaEntrega?.assinatura !== undefined && (!status || status >= 500 || status === 408)) {
+      this.operacaoPostalIncerta.set(true);
+      this.erro.set('Resultado incerto. Use Recuperar operação para consultar a tentativa original.');
     } else {
       this.erro.set(
         'Não foi possível verificar o resultado da operação. Consulte a situação atual antes de tentar novamente.',
@@ -367,6 +422,7 @@ export class AdminPedidoDetalheComponent {
     const mensagens = new Map([
       ['prazo_encerrado', 'O prazo de pagamento terminou.'],
       ['estado_incompativel', 'A situação atual do pedido não permite essa operação.'],
+      ['codigo_inalterado', 'Este código de rastreamento já está registrado.'],
       ['motivo_divergente', 'O pedido já foi cancelado com outro motivo.'],
       [
         'reservas_inconsistentes',
@@ -391,6 +447,9 @@ export class AdminPedidoDetalheComponent {
   }
 
   private limparAcao(): void {
+    this.operacaoPostalIncerta.set(false);
+    this.servicoPostal.set('');
+    this.codigoPostal.set('');
     this.acao.set(null);
     this.conferido.set(false);
     this.motivo.set('');

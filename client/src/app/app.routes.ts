@@ -1,5 +1,7 @@
 import { inject } from '@angular/core';
-import { Router, Routes } from '@angular/router';
+import { CanActivateFn, Router, Routes } from '@angular/router';
+import { catchError, map, of } from 'rxjs';
+import { AuthService } from './core/auth/auth.service';
 import { adminAuthGuard } from './admin/admin-auth.guard';
 import { AdminCategoriasComponent } from './admin/categorias/admin-categorias.component';
 import { AdminLoginComponent } from './admin/login/admin-login.component';
@@ -34,7 +36,19 @@ const paginasVitrine: Routes = [
   },
 ];
 
+const carregarCotacoesCorreios = () =>
+  import('./shared/cotacoes-correios.component').then(m => m.CotacoesCorreiosComponent);
+
+const clienteCotacoesGuard: CanActivateFn = route => {
+  const login = inject(Router).createUrlTree(['/login'], {
+    queryParams: { retorno: 'cotacoes-correios', cotacao: route.params['id'] },
+  });
+  return inject(AuthService).obterSessao().pipe(map(sessao => sessao ? true : login), catchError(() => of(login)));
+};
+
 export const routes: Routes = [
+  { path: 'admin/cotacoes-correios', canActivate: [adminAuthGuard], data: { admin: true }, loadComponent: carregarCotacoesCorreios },
+  { path: 'admin/cotacoes-correios/:id', canActivate: [adminAuthGuard], data: { admin: true }, loadComponent: carregarCotacoesCorreios },
   { path: 'admin/login', component: AdminLoginComponent },
   {
     path: 'admin/configuracoes/pix-manual',
@@ -252,6 +266,8 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./public-store/store-layout.component').then((module) => module.StoreLayoutComponent),
     children: [
+      { path: 'cotacoes-correios', canActivate: [clienteCotacoesGuard], loadComponent: carregarCotacoesCorreios },
+      { path: 'cotacoes-correios/:id', canActivate: [clienteCotacoesGuard], loadComponent: carregarCotacoesCorreios },
       {
         path: 'checkout',
         loadComponent: () =>

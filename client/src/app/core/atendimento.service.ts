@@ -4,12 +4,13 @@ import { switchMap, timeout } from 'rxjs';
 import { CsrfService } from './security/csrf.service';
 import type { ItemCompra, PrecoAtualPedido } from '../public-store/pedidos.service';
 
-export type ModalidadeEntrega = 'RetiradaLocal' | 'EntregaPropria';
+export type ModalidadeEntrega = 'RetiradaLocal' | 'EntregaPropria' | 'Correios';
 export interface EnderecoEntrega {
   cep: string; uf: string; cidade: string; bairro: string; logradouro: string; numero: string;
   complemento: string | null;
 }
 export interface DadosEntrega {
+  propostaPostal?: import('./cotacoes-correios.service').ReferenciaPostal | null;
   destino: (EnderecoEntrega & { codigoIbge: string }) | null;
   cidadeId: string | null;
   enderecoRetirada: string | null;
@@ -28,8 +29,10 @@ export interface CotacaoEntrega {
   precosAtuais: PrecoAtualPedido[];
   motivoEntregaPropriaIndisponivel: string | null;
 }
-export interface ModalidadesPublicas { retiradaLocal: boolean; entregaPropria: boolean }
+export interface ModalidadesPublicas { retiradaLocal: boolean; entregaPropria: boolean; correiosCotacaoManual?: boolean }
 export interface ConfiguracaoAtendimento {
+  cotacaoManualCorreiosHabilitada?: boolean;
+  validadePropostaCorreiosHoras?: number;
   retiradaHabilitada: boolean;
   entregaPropriaHabilitada: boolean;
   enderecoRetirada: string | null;

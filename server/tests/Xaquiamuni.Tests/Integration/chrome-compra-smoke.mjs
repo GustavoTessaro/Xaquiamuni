@@ -1,3 +1,4 @@
+import { validarCorreios } from './chrome-correios.mjs';
 import { validarModoAdmin } from './chrome-modo-admin.mjs';
 import { createInterface } from 'node:readline';
 import { validarJornada } from './chrome-compra-jornada.mjs';
@@ -57,7 +58,7 @@ try {
   const compras = new Map();
   const falhasPix = new Map();
   const quitacoesSemResposta = new Map();
-  const comprovantesEmRecuperacao = new Map();
+  const respostasEmRecuperacao = new Map();
   call = (method, params = {}, sessionId) => new Promise((resolve, reject) => {
     const id = ++seq;
     const timer = setTimeout(() => {
@@ -76,17 +77,17 @@ try {
     if (data.method === 'Fetch.requestPaused') {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
-      const comprovante = comprovantesEmRecuperacao.get(data.sessionId);
+      const comprovante = respostasEmRecuperacao.get(data.sessionId);
       if (local && comprovante && request.method === 'POST' && new URL(request.url).pathname === comprovante.rota) {
         if (data.params.responseStatusCode === undefined) {
           const headers = Object.fromEntries(Object.entries(request.headers).map(([nome, valor]) => [nome.toLowerCase(), valor]));
-          comprovante.envios.push({ chave: headers['idempotency-key'], versao: headers['x-comprovante-versao'] });
+          comprovante.envios.push({ chave: headers['idempotency-key'], versao: headers['x-comprovante-versao'], ...(comprovante.capturarCorpo && { corpo: request.postData }) });
           void call('Fetch.continueRequest', { requestId, interceptResponse: true }, data.sessionId)
             .catch(erro => { comprovante.erro = erro.message; });
         } else {
           comprovante.status.push(data.params.responseStatusCode);
           const primeira = comprovante.status.length === 1;
-          if (!primeira) comprovantesEmRecuperacao.delete(data.sessionId);
+          if (!primeira) respostasEmRecuperacao.delete(data.sessionId);
           void call(primeira ? 'Fetch.failRequest' : 'Fetch.continueResponse',
             primeira ? { requestId, errorReason: 'ConnectionClosed' } : { requestId }, data.sessionId)
             .catch(erro => { comprovante.erro = erro.message; });
@@ -163,9 +164,14 @@ try {
     })()`), true);
     assert.equal(await ev('fetch("/health").then(r => r.status)'), 200);
     return { ev, sessionId, browserContextId,
+      perderResposta: rota => {
+        const observacao = { rota, envios: [], status: [], capturarCorpo: true };
+        respostasEmRecuperacao.set(sessionId, observacao);
+        return observacao;
+      },
       perderRespostaComprovante: rota => {
         const observacao = { rota, envios: [], status: [] };
-        comprovantesEmRecuperacao.set(sessionId, observacao);
+        respostasEmRecuperacao.set(sessionId, observacao);
         return observacao;
       },
       falharProximaConsultaPix: path => falhasPix.set(sessionId, path), compra: () => compras.get(sessionId), ir: async destino => {
@@ -917,6 +923,8 @@ try {
       'Confirmação pelo e-mail capturado localmente');
     console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');
   }
+
+  if (dados.postal) await validarCorreios({ a, c, call, waitFor, dados });
 
   if (dados.modoAdmin)
     await validarModoAdmin({ a, c, call, waitFor, login, dados, admin });

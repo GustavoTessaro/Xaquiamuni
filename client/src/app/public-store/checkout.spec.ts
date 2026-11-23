@@ -170,6 +170,47 @@ describe('checkout integrado aos contratos HTTP', () => {
     harness.detectChanges();
   }
 
+  it('oculta Correios enquanto a solicitação manual não estiver habilitada', async () => {
+    carrinho.adicionar(produto, varianteId);
+    const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness);
+    expect(harness.routeNativeElement?.querySelector('option[value="Correios"]')).toBeNull();
+  });
+
+  it('recupera conversão postal com o token original e preserva o carrinho independente', async () => {
+    carrinho.adicionar(produto, varianteId);
+    const postal = { token: 'condicao-opaca', cotacaoId: pedidoId };
+    const envio = checkout.enviar([], false, undefined, postal);
+    const tentativa = await postAposCsrf();
+    const chave = tentativa.request.headers.get('Idempotency-Key');
+    expect(tentativa.request.body).toEqual({ conversaoCorreiosId: postal.token });
+    tentativa.error(new ProgressEvent('error'));
+    expect((await envio)?.estado).toBe('erro');
+    const replay = checkout.enviar([], true);
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-de-teste' });
+    const repeticao = await vi.waitFor(() => http.expectOne({ method: 'POST', url: '/api/pedidos' }));
+    expect(repeticao.request.headers.get('Idempotency-Key')).toBe(chave);
+    expect(repeticao.request.body).toEqual(tentativa.request.body);
+    repeticao.flush({ ...pedidoComPrecoAceito, modalidadeEntrega: 'Correios' });
+    expect((await replay)?.estado).toBe('sucesso');
+    expect(checkout.pendente()).toBeNull();
+    expect(carrinho.itens()).toHaveLength(1);
+  });
+
+  it.each(['preco_alterado', 'itens_indisponiveis', 'cotacao_correios_expirada'])(
+    'encerra a tentativa postal recusada por %s sem reenviar ou alterar o carrinho',
+    async codigo => {
+      carrinho.adicionar(produto, varianteId);
+      const envio = checkout.enviar([], false, undefined, { token: 'condicao-opaca', cotacaoId: pedidoId });
+      const tentativa = await postAposCsrf();
+      tentativa.flush({ codigo }, { status: 409, statusText: 'Conflict' });
+      expect((await envio)?.estado).toBe(codigo === 'preco_alterado' ? 'preco_alterado' : 'erro');
+      expect(checkout.pendente()).toBeNull();
+      expect(carrinho.itens()).toHaveLength(1);
+      http.expectNone('/api/pedidos');
+    },
+  );
+
   it('cria uma vez com a condição aceita e mostra o valor congelado', async () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');

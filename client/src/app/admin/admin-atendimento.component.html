@@ -15,7 +15,7 @@
           <label>Endereço de retirada <input class="block w-full" name="endereco" [(ngModel)]="dados.enderecoRetirada" /></label>
           <label>Instruções de retirada <textarea class="block w-full" name="instrucoes" [(ngModel)]="dados.instrucoesRetirada"></textarea></label>
           <label><input type="checkbox" name="entrega" [(ngModel)]="dados.entregaPropriaHabilitada" /> Entrega própria</label>
-          <p>Correios indisponíveis.</p>
+          <p>Cotação automática dos Correios indisponível.</p>
           <button class="admin-button justify-self-start">Salvar modalidades</button>
         </fieldset>
       </form>
@@ -50,6 +50,19 @@
               <button class="admin-button">Salvar cidade</button>
               @if (cidade().id) { <button type="button" class="admin-button" (click)="editarCidade()">Cancelar edição</button> }
             </div>
+          </fieldset>
+        </form>
+      </section>
+      <section class="admin-card grid gap-3">
+        <h2>Cotação manual dos Correios</h2>
+        <p>A loja consulta o preço e o prazo e publica uma proposta para cada solicitação. Cotação automática indisponível.</p>
+        <form (ngSubmit)="salvarCorreios(dados)">
+          <fieldset class="grid gap-3" [disabled]="ocupado() || revisar()">
+            <label><input type="checkbox" name="correiosManual" [ngModel]="dados.cotacaoManualCorreiosHabilitada ?? false"
+              (ngModelChange)="dados.cotacaoManualCorreiosHabilitada = $event" /> Habilitar solicitações</label>
+            <label>Validade padrão (horas) <input type="number" name="validadeCorreios" min="1" max="168" required
+              [ngModel]="dados.validadePropostaCorreiosHoras ?? 48" (ngModelChange)="dados.validadePropostaCorreiosHoras = $event" /></label>
+            <button class="admin-button">Salvar cotação manual</button>
           </fieldset>
         </form>
       </section>

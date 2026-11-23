@@ -87,6 +87,15 @@ export class AdminAtendimentoComponent {
     });
   }
 
+  protected salvarCorreios(config: ConfiguracaoAtendimento): void {
+    const validadeHoras = config.validadePropostaCorreiosHoras ?? 48;
+    if (!Number.isInteger(validadeHoras) || validadeHoras < 1 || validadeHoras > 168) return;
+    if (!window.confirm('Salvar as configurações de cotação manual dos Correios?')) return;
+    void this.gravar('PUT', '/correios-manual', {
+      habilitada: config.cotacaoManualCorreiosHabilitada ?? false, validadeHoras, revisao: config.revisao,
+    });
+  }
+
   protected salvarCidade(): void {
     const { id, codigoIbge, nome, uf, tarifa, ativa, revisao } = this.cidade();
     const tarifaCentavos = tarifaEmCentavos(tarifa);

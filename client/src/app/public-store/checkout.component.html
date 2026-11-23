@@ -7,10 +7,10 @@
         A confirmação do pedido está pendente. Repita a tentativa original para verificar o
         resultado.
       </p>
-      @if (carrinhoMudou()) {
+      @if (carrinhoMudou() && !checkout.pendente()?.postal) {
         <p>Seu carrinho mudou. A recuperação usará somente as quantidades da tentativa original.</p>
       }
-      @if (carrinhoMudou()) {
+      @if (carrinhoMudou() && !checkout.pendente()?.postal) {
         <ul aria-label="Itens da tentativa original">
           @for (item of itensOriginais(); track item.produtoVarianteId) {
             <li>
@@ -24,14 +24,13 @@
           }
         </ul>
       }
-      <button
-        class="principal"
-        type="button"
-        (click)="enviar(true)"
-        [disabled]="checkout.enviando()"
-      >
-        Recuperar tentativa original
-      </button>
+      @if (checkout.pendente()?.postal; as postal) {
+        <a [routerLink]="['/cotacoes-correios', postal.cotacaoId]">Recuperar compra dos Correios</a>
+      } @else {
+        <button class="principal" type="button" (click)="enviar(true)" [disabled]="checkout.enviando()">
+          Recuperar tentativa original
+        </button>
+      }
     </section>
   }
   @if (carrinho.itens().length) {
@@ -62,17 +61,20 @@
         @if (!checkout.pendente()) {
           @if (modalidades(); as opcoes) {
             <label for="modalidade-entrega">Modalidade de recebimento</label>
-            <select id="modalidade-entrega" [ngModel]="modalidade()" (ngModelChange)="modalidade.set($event)" [disabled]="checkout.enviando()">
+            <select id="modalidade-entrega" [ngModel]="modalidade()" (ngModelChange)="modalidade.set($event)" [disabled]="checkout.enviando() || cotando() || solicitacaoIncerta()">
               @if (opcoes.retiradaLocal) { <option value="RetiradaLocal">Retirada na loja</option> }
               @if (opcoes.entregaPropria) { <option value="EntregaPropria">Entrega própria</option> }
+              @if (opcoes.correiosCotacaoManual) { <option value="Correios">Correios · cotação manual</option> }
             </select>
-            @if (modalidade() === 'EntregaPropria') {
-              <label>
-                <input type="checkbox" [ngModel]="usarPadrao()" (ngModelChange)="usarPadrao.set($event)" />
-                Usar meu endereço cadastrado
-              </label>
-              @if (!usarPadrao()) {
-                <fieldset class="min-w-0 grid gap-2">
+            @if (modalidade() === 'EntregaPropria' || modalidade() === 'Correios') {
+              @if (modalidade() === 'EntregaPropria') {
+                <label>
+                  <input type="checkbox" [ngModel]="usarPadrao()" (ngModelChange)="usarPadrao.set($event)" />
+                  Usar meu endereço cadastrado
+                </label>
+              }
+              @if (!usarPadrao() || modalidade() === 'Correios') {
+                <fieldset class="min-w-0 grid gap-2" [disabled]="cotando() || solicitacaoIncerta()">
                   <legend>Endereço para este pedido</legend>
                   @for (campo of camposEndereco; track campo.campo) {
                     <label>
@@ -85,10 +87,23 @@
                 </fieldset>
               }
             }
-            <button class="consulta-entrega" type="button" (click)="cotar()" [disabled]="cotando() || consultando() || indisponivel() || !valido() || checkout.enviando()">
-              Consultar valores de entrega
-            </button>
-            @if (cotando()) { <p role="status">Consultando valores…</p> }
+            @if (modalidade() === 'Correios') {
+              <p>A loja calculará o frete para os itens do carrinho e enviará uma proposta em Minhas cotações.</p>
+              @if (cotacaoCriada(); as id) {
+                <p role="status">Solicitação registrada. <a [routerLink]="['/cotacoes-correios', id]">Abrir cotação</a></p>
+              } @else {
+                <button class="consulta-entrega" type="button" (click)="solicitarCorreios()" [disabled]="cotando() || (!solicitacaoIncerta() && !valido())">
+                  {{ solicitacaoIncerta() ? 'Recuperar solicitação' : 'Solicitar cotação' }}
+                </button>
+              }
+            } @else {
+              <button class="consulta-entrega" type="button" (click)="cotar()" [disabled]="cotando() || consultando() || indisponivel() || !valido() || checkout.enviando()">
+                Consultar valores de entrega
+              </button>
+            }
+            @if (cotando()) {
+              <p role="status">{{ modalidade() === 'Correios' ? 'Enviando solicitação…' : 'Consultando valores…' }}</p>
+            }
           } @else {
             <button type="button" (click)="carregarModalidades()">Atualizar opções de recebimento</button>
           }
@@ -112,7 +127,7 @@
             Revise os itens e as quantidades. O pedido aceita até 100 opções de produto.
           </p>
         }
-        @if (!checkout.pendente()) {
+        @if (!checkout.pendente() && modalidade() !== 'Correios') {
           @if (oferta(); as selecionada) {
             <app-dados-entrega [modalidade]="selecionada.modalidade" [dados]="selecionada.dadosEntrega" />
             <p>Subtotal dos produtos: <strong>{{ formatarPreco(subtotalOferta()) }}</strong></p>

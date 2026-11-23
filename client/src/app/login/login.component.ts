@@ -55,6 +55,10 @@ export class LoginComponent implements OnDestroy {
   protected get destinoCompra(): string[] | null {
     const pedido = this.route.snapshot.queryParamMap.get('pedido');
     if (this.retornoCheckout) return ['/checkout'];
+    if (this.route.snapshot.queryParamMap.get('retorno') === 'cotacoes-correios') {
+      const cotacao = this.route.snapshot.queryParamMap.get('cotacao');
+      return uuidValido(cotacao) ? ['/cotacoes-correios', cotacao] : ['/cotacoes-correios'];
+    }
     if (uuidValido(pedido)) return ['/pedidos', pedido];
     return this.route.snapshot.queryParamMap.get('retorno') === 'pedidos' ? ['/pedidos'] : null;
   }

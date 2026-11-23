@@ -73,6 +73,17 @@ export class AdminPedidosService {
     );
   }
 
+  entregaPostal(id: string, acao: 'registrar-postagem' | 'rastreamento-postal' | 'confirmar-entrega-postal',
+    etag: string, chave: string, body: object) {
+    return this.csrf.getRequestToken().pipe(
+      switchMap(({ requestToken }) => this.http.request<ResultadoPedidoAdmin>(
+        acao === 'rastreamento-postal' ? 'PUT' : 'POST', this.urlPedido(id) + '/' + acao, {
+          body, headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave, 'If-Match': etag },
+        })),
+      timeout(30_000),
+    );
+  }
+
   confirmarPagamento(id: string): Observable<ResultadoPedidoAdmin> {
     return this.executar(id, 'confirmar-pagamento', { recebimentoConferido: true });
   }
