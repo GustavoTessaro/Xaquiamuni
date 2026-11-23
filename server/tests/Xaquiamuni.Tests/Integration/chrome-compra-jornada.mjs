@@ -251,9 +251,19 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     await tem(c, '27,80');
     assert.equal(await c.ev('document.querySelector("#cart-quantity-" + ' + JSON.stringify(seed.variante) + ')?.value'), '2');
     etapa = 'checkout e repetição de compra';
+    const atendimento = '/api/admin/loja/atendimento';
+    const retirada = (await api(a, atendimento)).body;
+    assert.equal((await api(a, atendimento + '/modalidades', 'PUT', JSON.stringify({
+      retiradaHabilitada: true, entregaPropriaHabilitada: false, correiosHabilitados: false,
+      enderecoRetirada: 'Rua da retirada de ensaio', instrucoesRetirada: 'Retire no balcão de ensaio.',
+      revisao: retirada.revisao,
+    }), crypto.randomUUID())).status, 200);
     await clicar(c, 'Revisar compra');
     await clicar(c, 'Consultar valores de entrega');
     await tem(c, 'Total final');
+    await tem(c, 'Rua da retirada de ensaio');
+    await tem(c, 'Retire no balcão de ensaio.');
+    await tem(c, '0,00');
     await clicar(c, 'Confirmar valor e finalizar compra');
     const caminho = await pronto(c, 'location.pathname.startsWith("/pedidos/") && location.pathname', 'Detalhe após checkout');
     const id = caminho.split('/').at(-1);

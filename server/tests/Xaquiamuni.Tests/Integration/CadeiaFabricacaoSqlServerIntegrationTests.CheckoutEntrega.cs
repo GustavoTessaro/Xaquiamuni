@@ -133,7 +133,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var agora = DateTimeOffset.UtcNow;
         relogio.Definir(agora);
         await using var ambiente = await Ambiente.CriarAsync(relogioSql: relogio,
-            municipiosPorCep: new Dictionary<string, string> { ["95200000"] = "4322509" });
+            municipiosPorCep: new Dictionary<string, string> { ["95200000"] = "4322509", ["90000000"] = "4314902" });
         using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
         using var cliente = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
         using var outro = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
@@ -174,15 +174,24 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Single(await CotarAsync(destino with { Cidade = "Outro município" }));
         Assert.Single(await CotarAsync(destino with { Cep = "inválido" }));
         Assert.Single(await CotarAsync(destino with { Cep = "12345678" }));
+        Assert.Single(await CotarAsync(destino with { Cep = "90000000", Cidade = "Porto Alegre" }));
         Assert.Single(await CotarAsync(destino with { Numero = "" }));
         var antiga = Assert.Single(await CotarAsync(destino), item => item.GetProperty("modalidade").GetString() == "EntregaPropria");
         var tokenAntigo = antiga.GetProperty("id").GetString()!;
         await RecusarAsync(outro, tokenAntigo);
         await RecusarAsync(cliente, "Correios");
         await RecusarAsync(cliente, "x" + tokenAntigo);
-        cidade = cidade with { TarifaCentavos = 1300, Revisao = 2 };
+        cidade = cidade with { Ativa = false, Revisao = 2 };
         await EscreverAtendimentoAsync(admin, HttpMethod.Put, rotaCidade, cidade, HttpStatusCode.OK);
         await RecusarAsync(cliente, tokenAntigo);
+        Assert.Single(await CotarAsync(destino));
+        cidade = cidade with { Ativa = true, Revisao = 3 };
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rotaCidade, cidade, HttpStatusCode.OK);
+        var novaOferta = Assert.Single(await CotarAsync(destino), item =>
+            item.GetProperty("modalidade").GetString() == "EntregaPropria").GetProperty("id").GetString()!;
+        cidade = cidade with { TarifaCentavos = 1300, Revisao = 4 };
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rotaCidade, cidade, HttpStatusCode.OK);
+        await RecusarAsync(cliente, novaOferta);
         await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/modalidades",
             config with { RetiradaHabilitada = false, Revisao = 1 }, HttpStatusCode.OK);
         await cliente.PostAsync<JsonElement>("/api/pedidos", new { itens }, HttpStatusCode.Conflict, Guid.NewGuid());
@@ -312,9 +321,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(1, await db.MovimentosProdutoAcabado.CountAsync());
 
         var csrfAdmin = await TokenComprovanteAsync(admin);
-        async Task<HttpResponseMessage> ConcorrerAsync(Guid chaveOperacao)
+        async Task<HttpResponseMessage> ConcorrerAsync(string etapa, Guid chaveOperacao)
         {
-            using var request = new HttpRequestMessage(HttpMethod.Post, rotaAdmin + "/" + iniciar)
+            using var request = new HttpRequestMessage(HttpMethod.Post, rotaAdmin + "/" + etapa)
             {
                 Content = JsonContent.Create(new { confirmado = true }),
             };
@@ -324,11 +333,14 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             return await admin.Http.SendAsync(request);
         }
         var concorrente = Guid.NewGuid();
-        var respostas = await Task.WhenAll(ConcorrerAsync(chaveSaida), ConcorrerAsync(concorrente));
+        var respostas = await Task.WhenAll(ConcorrerAsync(iniciar, chaveSaida), ConcorrerAsync(iniciar, concorrente),
+            ConcorrerAsync(receber, Guid.NewGuid()));
         using var primeira = respostas[0];
         using var segunda = respostas[1];
-        Assert.Single(respostas, resposta => resposta.StatusCode == HttpStatusCode.OK);
-        Assert.Single(respostas, resposta => resposta.StatusCode == HttpStatusCode.Conflict);
+        using var recebimentoConcorrente = respostas[2];
+        Assert.Single(respostas.Take(2), resposta => resposta.StatusCode == HttpStatusCode.OK);
+        Assert.Single(respostas.Take(2), resposta => resposta.StatusCode == HttpStatusCode.Conflict);
+        Assert.Equal(HttpStatusCode.Conflict, recebimentoConcorrente.StatusCode);
         var vencedora = primeira.IsSuccessStatusCode ? chaveSaida : concorrente;
         Assert.Equal(SituacaoPedido.EmEntrega, await db.Pedidos.Select(x => x.Situacao).SingleAsync());
         Assert.Equal(10, await db.SaldosProdutoAcabado.AsNoTracking().Select(x => x.QuantidadeFisica).SingleAsync());

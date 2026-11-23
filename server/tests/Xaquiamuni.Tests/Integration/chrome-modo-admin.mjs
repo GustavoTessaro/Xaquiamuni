@@ -142,7 +142,7 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   let itemAdicionado = false;
   const atendimento = '/api/admin/loja/atendimento';
   assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
-    numero: '+5554999990000', confirmado: true, habilitado: true, revisao: 0,
+    numero: '+55 (54) 99999-0000', confirmado: true, habilitado: true, revisao: 0,
   }), 200);
   const temas = ['original','natal','black-friday','pascoa','ano-novo','dia-das-maes'];
   for (const width of [375, 1280]) {
@@ -202,6 +202,8 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   console.log('Entrega própria: cadastro de cidade pelo formulário ADMIN.');
   await abrirAdmin('/admin/configuracoes/atendimento');
   await waitFor(() => a.ev("!!document.querySelector('input[name=tarifa]')"), 'Formulário de cidades');
+  const modalidades = () => a.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json())");
+  assert.deepEqual(await modalidades(), { retiradaLocal: true, entregaPropria: false, correios: false, freteRetiradaCentavos: '0' });
   for (const [seletor, valor] of Object.entries({ cidade: 'Vacaria', uf: 'RS', ibge: '4322509', tarifa: '12,50' }))
     await campo(a, `input[name=${seletor}]`, valor);
   await a.ev("document.querySelector('input[name=ativa]').click()");
@@ -211,6 +213,36 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   await botaoTexto('Salvar modalidades', a);
   await waitFor(() => a.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json()).then(x=>x.entregaPropria)"), 'Entrega própria habilitada');
   console.log('Entrega própria: modalidade habilitada e cidade ativa.');
+  const lerAtendimento = sufixo => a.ev(`fetch(${JSON.stringify(atendimento + sufixo)}).then(r=>r.json())`);
+  const [cidade] = await lerAtendimento('/cidades');
+  const rotaCidade = '/cidades/' + cidade.id;
+  const alterar = async (ativa, tarifaCentavos) => {
+    const atual = await lerAtendimento(rotaCidade);
+    return escrever(atendimento + rotaCidade, 'PUT', {
+      codigoIbge: atual.codigoIbge, nome: atual.nome, uf: atual.uf, ativa, tarifaCentavos, revisao: atual.revisao,
+    });
+  };
+  assert.equal(await alterar(false, '1300'), 200);
+  assert.equal((await modalidades()).entregaPropria, false);
+  assert.equal(await escrever(atendimento + rotaCidade, 'PUT', {
+    codigoIbge: cidade.codigoIbge, nome: cidade.nome, uf: cidade.uf, ativa: true, tarifaCentavos: '1250', revisao: cidade.revisao,
+  }), 409);
+  const config = await lerAtendimento('');
+  const salvarModalidades = (retiradaHabilitada, correiosHabilitados) => escrever(atendimento + '/modalidades', 'PUT', {
+    retiradaHabilitada, correiosHabilitados, entregaPropriaHabilitada: true, revisao: config.revisao,
+  });
+  assert.equal(await salvarModalidades(false, false), 409);
+  assert.equal(await salvarModalidades(true, true), 400);
+  assert.equal((await lerAtendimento(rotaCidade)).tarifaCentavos, '1300');
+  assert.equal(await alterar(true, '1250'), 200);
+  assert.equal((await modalidades()).entregaPropria, true);
+  console.log('Atendimento: tarifa editada, cidade desativada e reativada, revisão antiga e última modalidade rejeitadas.');
+
+  const conferirWhatsApp = contexto => contexto.ev(`(() => {
+    const links = [...document.querySelectorAll('a[href^="https://wa.me/"]')];
+    return [links.length, links[0]?.pathname, links[0] && new URL(links[0].href).searchParams.get('text')];
+  })()`);
+  const whatsapp = [1, '/5554999990000', 'Olá! Gostaria de falar com a Xaquiamuni.'];
 
   for (const width of [375, 1280]) {
     await viewport(c, width);
@@ -219,20 +251,53 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       await abrir(c, '/produtos/' + dados.produtoFinanceiro, '!!document.querySelector("#product-name")');
       await botaoTexto('Adicionar ao carrinho', c);
     }
+    await abrir(c, '/carrinho', "!!document.querySelector('a[href^=\"https://wa.me/\"]')");
+    assert.deepEqual(await conferirWhatsApp(c), whatsapp);
     await abrir(c, '/checkout', "!!document.querySelector('#modalidade-entrega option[value=EntregaPropria]')");
+    await waitFor(() => c.ev("!!document.querySelector('a[href^=\"https://wa.me/\"]')"), 'Contato no checkout');
+    assert.deepEqual(await conferirWhatsApp(c), whatsapp);
     await campo(c, '#modalidade-entrega', 'EntregaPropria');
-    await c.ev("document.querySelector('main input[type=checkbox]').click()");
-    const campos = ['95200-000', 'RS', 'Vacaria', 'Centro', 'Rua do ensaio', '12'];
-    for (let i = 0; i < campos.length; i++)
-      await campo(c, `main fieldset label:nth-of-type(${i + 1}) input`, campos[i]);
+    if (width === 1280) {
+      await c.ev("document.querySelector('main input[type=checkbox]').click()");
+      const campos = ['95200-000', 'RS', 'Vacaria', 'Centro', 'Rua do ensaio', '12'];
+      for (let i = 0; i < campos.length; i++)
+        await campo(c, `main fieldset label:nth-of-type(${i + 1}) input`, campos[i]);
+    }
     await botaoTexto('Consultar valores de entrega', c);
-    await waitFor(() => c.ev("document.querySelector('main').textContent.includes('24,49')"), 'Total com frete');
+    const totalCotado = width === 375 ? '24,49' : '24,99';
+    await waitFor(() => c.ev(`document.querySelector('main').textContent.includes('${totalCotado}')`), 'Total com frete');
     console.log(`Entrega própria em ${width} px: cotação real confirmada.`);
     assert.ok(await semEstouro(c));
+    if (width === 375) {
+      assert.equal(await alterar(true, '1300'), 200);
+      await botaoTexto('Confirmar valor e finalizar compra', c);
+      await waitFor(() => c.ev("location.pathname === '/checkout' && document.querySelector('main').textContent.includes('Confira a nova cotação') && document.querySelector('main').textContent.includes('24,99')"), 'Reconfirmação após mudar a tarifa');
+    }
     await botaoTexto('Confirmar valor e finalizar compra', c);
     const id = await waitFor(() => c.ev("location.pathname.startsWith('/pedidos/') && location.pathname.split('/').at(-1)"), 'Pedido entregue pela loja');
     const rota = '/admin/pedidos/' + id;
-    await waitFor(() => c.ev("document.querySelector('main')?.textContent.includes('Rua do ensaio')"), 'Destino congelado');
+    const endereco = width === 375 ? 'Rua cadastrada do ensaio' : 'Rua do ensaio';
+    await waitFor(() => c.ev(`document.querySelector('main')?.textContent.includes(${JSON.stringify(endereco)})`), 'Destino congelado');
+    assert.deepEqual(await conferirWhatsApp(c), whatsapp);
+    const pix = await c.ev(`fetch('/api/pedidos/${id}/pagamento').then(r=>r.json())`);
+    assert.equal(pix.valorCentavos, '2499');
+    if (width === 375) {
+      await waitFor(() => c.ev("!!document.querySelector('app-comprovante-pix input[type=file]')"), 'Campo de comprovante');
+      await c.ev(`(async () => {
+        const desenho = document.createElement('canvas');
+        desenho.width = desenho.height = 2;
+        const blob = await new Promise(resolve => desenho.toBlob(resolve, 'image/png'));
+        const transferencia = new DataTransfer();
+        transferencia.items.add(new File([blob], 'entrega-teste.png', { type: 'image/png' }));
+        const campo = document.querySelector('app-comprovante-pix input[type=file]');
+        campo.files = transferencia.files;
+        campo.dispatchEvent(new Event('change', { bubbles: true }));
+      })()`);
+      await botaoTexto('Enviar comprovante', c);
+      await waitFor(() => c.ev("document.querySelector('app-comprovante-pix')?.textContent.includes('Baixar comprovante')"), 'Comprovante registrado');
+      assert.equal(await c.ev(`fetch('/api/pedidos/${id}').then(r=>r.json()).then(p=>p.situacao)`), 'AguardandoPagamento');
+      assert.ok(await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json()).then(p=>p.itens.every(m=>m.recursoId!=='${id}'))`));
+    }
     await abrirAdmin(rota);
     await botaoTexto('Confirmar pagamento', a);
     await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
@@ -246,7 +311,18 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     await a.ev("document.querySelector('main [aria-labelledby=pedido-acoes] input[type=checkbox]').click()");
     await botaoTexto('Registrar recebimento', a);
     await waitFor(() => a.ev("document.querySelector('main dl')?.textContent.includes('Entregue')"), 'Recebimento registrado');
+    const eventos = await a.ev(`fetch('/api/admin/financeiro/movimentacoes').then(r=>r.json())
+      .then(p=>p.itens.filter(m=>m.recursoId === '${id}').map(m=>m.valorCentavos))`);
+    assert.deepEqual(eventos, ['2499']);
     assert.ok(await semEstouro(a));
     console.log(`Entrega própria em ${width} px: endereço, frete, total e ações administrativas confirmados.`);
   }
+  const atual = await lerAtendimento('');
+  assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
+    numero: atual.whatsApp, confirmado: true, habilitado: false, revisao: atual.revisao,
+  }), 200);
+  await abrir(c, '/', '!!document.querySelector("app-contato-whatsapp")');
+  assert.deepEqual(await c.ev("fetch('/api/loja/contato').then(r=>r.json())"), { whatsApp: null });
+  assert.equal((await conferirWhatsApp(c))[0], 0);
+  console.log('WhatsApp: publicação, destino normalizado, mensagem genérica e remoção após desativar.');
 }

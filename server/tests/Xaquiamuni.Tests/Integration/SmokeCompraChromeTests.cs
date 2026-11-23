@@ -12,6 +12,7 @@ using Xaquiamuni.Infraestrutura.Persistencia;
 using Microsoft.Extensions.Options;
 using Xaquiamuni.Dominio.Estoque;
 using Xunit.Abstractions;
+using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Tests.Integration;
 
@@ -170,6 +171,9 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                     {
                         await using var verificacao = db.CreateVerificationContext();
                         var (produto, variante, _) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(verificacao);
+                        if (modoAdmin)
+                            verificacao.ClienteEnderecos.Add(ClienteEndereco.Criar(Guid.NewGuid(), cliente.Id,
+                                "95200000", "RS", "Vacaria", "Centro", "Rua cadastrada do ensaio", "12", null, true));
                         if (auditoriaAdmin) varianteAuditoria = variante.Id;
                         if (financeiro)
                         {
@@ -189,6 +193,31 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         outroCliente, seed, pixManual, varianteAuditoria, insumoFinanceiro, produtoFinanceiro,
                         varianteFinanceiro, financeiro, agenda, modoAdmin,
                     }, fluxo);
+                    if (modoAdmin)
+                    {
+                        await using var verificacao = db.CreateVerificationContext();
+                        var entregas = await verificacao.Pedidos.AsNoTracking()
+                            .Where(p => p.ModalidadeEntrega == ModalidadeEntregaPedido.EntregaPropria).ToListAsync();
+                        Assert.Equal(2, entregas.Count);
+                        Assert.All(entregas, p =>
+                        {
+                            Assert.Equal(SituacaoPedido.Entregue, p.Situacao);
+                            Assert.Equal((1199L, 1300L, 2499L), (p.SubtotalProdutosCentavos, p.FreteCentavos, p.TotalCentavos));
+                            Assert.Equal("4322509", p.Entrega!.Destino!.CodigoIbge);
+                            Assert.NotNull(p.SaidaEntregaEmUtc);
+                        });
+                        Assert.Contains(entregas, p => p.Entrega!.Destino!.Logradouro == "Rua cadastrada do ensaio");
+                        Assert.Contains(entregas, p => p.Entrega!.Destino!.Logradouro == "Rua do ensaio");
+                        var ids = entregas.Select(p => p.Id).ToArray();
+                        var reservas = await verificacao.ReservasProdutoAcabado.AsNoTracking()
+                            .Where(r => ids.Contains(r.PedidoId)).ToListAsync();
+                        Assert.Equal(2, reservas.Count);
+                        Assert.All(reservas, r => Assert.Equal(EstadoReservaProdutoAcabado.Consumida, r.Estado));
+                        var reservaIds = reservas.Select(r => (Guid?)r.Id).ToArray();
+                        Assert.Equal(2, await verificacao.MovimentosProdutoAcabado.CountAsync(m =>
+                            reservaIds.Contains(m.ReservaProdutoAcabadoId)));
+                        output.WriteLine("SQL: dois snapshots de 1199 + 1300 = 2499 centavos e uma baixa por entrega.");
+                    }
                     Assert.Equal(jornada ? 1 : 0, host.Services.GetRequiredService<CaixaEmailE2E>().Mensagens.Count);
                 }
 
