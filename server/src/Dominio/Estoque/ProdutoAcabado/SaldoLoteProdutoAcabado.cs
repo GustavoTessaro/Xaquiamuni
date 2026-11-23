@@ -119,7 +119,7 @@ public sealed class SaldoLoteProdutoAcabado
         LoteProdutoAcabado lote,
         DateOnly dataReferencia,
         Guid responsavelId,
-        DateTimeOffset registradoEmUtc)
+        DateTimeOffset registradoEmUtc, bool entregaPropria = false)
     {
         ArgumentNullException.ThrowIfNull(reserva);
         if (reserva.Estado != EstadoReservaProdutoAcabado.Confirmada)
@@ -132,7 +132,8 @@ public sealed class SaldoLoteProdutoAcabado
             lote, TipoMovimentoProdutoAcabado.SaidaManual, reserva.Quantidade,
             CondicaoEstoqueProdutoAcabado.Vendavel, condicaoDestino: null,
             quantidadeContada: null, movimentoOriginalId: null,
-            responsavelId, "Retirada de pedido", observacao: null, registradoEmUtc,
+            responsavelId, entregaPropria ? "Saída para entrega própria" : "Retirada de pedido",
+            observacao: null, registradoEmUtc,
             chaveIdempotencia: $"retirada:{Guid.NewGuid():N}",
             fingerprintRequisicao: System.Security.Cryptography.SHA256.HashData(reserva.Id.ToByteArray()),
             reservaProdutoAcabadoId: reserva.Id, aplicar: false);

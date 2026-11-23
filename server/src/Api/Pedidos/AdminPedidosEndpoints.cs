@@ -45,6 +45,12 @@ public static class AdminPedidosEndpoints
             .WithName("LiberarRetiradaAdmin"));
         ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/confirmar-entrega", ConfirmarEntregaAsync)
             .WithName("ConfirmarEntregaAdmin"));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/iniciar-entrega-propria",
+            (HttpContext ctx, Guid pedidoId, IEntregaPropriaPedido entrega, CancellationToken ct) =>
+                EntregaPropriaAsync(ctx, pedidoId, entrega, EtapaEntregaPropria.Iniciar, ct)));
+        ConfigurarComandoOperacional(group.MapPost("/{pedidoId:guid}/confirmar-recebimento",
+            (HttpContext ctx, Guid pedidoId, IEntregaPropriaPedido entrega, CancellationToken ct) =>
+                EntregaPropriaAsync(ctx, pedidoId, entrega, EtapaEntregaPropria.ConfirmarRecebimento, ct)));
 
         return endpoints;
     }
@@ -101,8 +107,48 @@ public static class AdminPedidosEndpoints
         }
 
         var detalhe = await consulta.BuscarAsync(pedidoId, cancellationToken).ConfigureAwait(false);
+        if (detalhe?.Pedido.Versao is { Length: 8 } versao)
+            context.Response.Headers.ETag = $"\"{Convert.ToBase64String(versao)}\"";
         return detalhe is null ? Results.NotFound() : Results.Ok(new PedidoAdminResponse(
             PedidoClienteResponse.From(detalhe.Pedido), new(detalhe.NomeCliente, detalhe.EmailCliente)));
+    }
+
+    private static async Task<IResult> EntregaPropriaAsync(HttpContext ctx, Guid pedidoId,
+        IEntregaPropriaPedido entrega, EtapaEntregaPropria etapa, CancellationToken ct)
+    {
+        if (!TentarObterAdministrador(ctx, out var administrador))
+            return Results.Unauthorized();
+        var chaves = ctx.Request.Headers["Idempotency-Key"];
+        if (chaves.Count != 1 || chaves[0] is not { Length: 36 } chaveTexto ||
+            !Guid.TryParseExact(chaveTexto, "D", out var chave) || chave == Guid.Empty)
+            return Invalido("Idempotency-Key", "Informe uma chave UUID válida.");
+        var cabecalho = ctx.Request.Headers.IfMatch;
+        var versao = new byte[8];
+        if (cabecalho.Count != 1 || cabecalho[0] is not { Length: 14 } etag ||
+            etag[0] != '"' || etag[^1] != '"' ||
+            !Convert.TryFromBase64Chars(etag.AsSpan(1, 12), versao, out var bytes) || bytes != versao.Length)
+            return Invalido("If-Match", "Informe a versão retornada no detalhe do pedido.");
+        var (comando, erro) = await LerComandoAsync<TransicaoEntregaPropriaRequest>(ctx.Request, ct);
+        if (erro is not null)
+            return erro;
+        if (comando?.Confirmado != true)
+            return Invalido("confirmado", etapa == EtapaEntregaPropria.Iniciar
+                ? "Confirme que a preparação foi concluída e os produtos saíram da loja."
+                : "Confirme que o cliente recebeu os produtos.");
+        var resultado = await entrega.ExecutarAsync(new(pedidoId, administrador, chave, versao, etapa), ct);
+        return resultado.Status switch
+        {
+            StatusEntregaPropria.Sucesso => Atualizado(pedidoId, resultado.Situacao!.Value, resultado.Repetida),
+            StatusEntregaPropria.AdministradorNaoAutorizado => Results.Forbid(),
+            StatusEntregaPropria.PedidoNaoEncontrado => Results.NotFound(),
+            StatusEntregaPropria.ConflitoConcorrencia => ConflitoConcorrencia(),
+            StatusEntregaPropria.VersaoDivergente => Conflito("versao_desatualizada", "Recarregue os dados do pedido."),
+            StatusEntregaPropria.ChaveEmUso => Conflito("chave_em_uso", "A chave já identifica outra operação."),
+            StatusEntregaPropria.ReservasInconsistentes => ReservasInconsistentes(),
+            StatusEntregaPropria.LoteInelegivel => Conflito("lote_inelegivel", "Há lotes reservados inelegíveis para saída."),
+            StatusEntregaPropria.SaldoInsuficiente => Conflito("saldo_insuficiente", "O saldo dos lotes é insuficiente."),
+            _ => Conflito("estado_incompativel", "O estado ou a modalidade do pedido não permite esta transição."),
+        };
     }
 
     private static async Task<IResult> ConfirmarAsync(

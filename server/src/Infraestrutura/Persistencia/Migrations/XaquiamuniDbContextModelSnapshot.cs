@@ -669,6 +669,12 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<Guid?>("RetiradaAutorizadaPorId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<DateTimeOffset?>("SaidaEntregaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid?>("SaidaEntregaPorId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<short>("Situacao")
                         .HasColumnType("smallint");
 
@@ -698,9 +704,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.ToTable("Pedidos", null, t =>
                         {
-                            t.HasCheckConstraint("CK_Pedidos_Auditoria_Valid", "([PagamentoConfirmadoEmUtc] IS NULL AND [PagamentoConfirmadoPorId] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PagamentoConfirmadoPorId] IS NOT NULL AND [PagamentoConfirmadoPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PagamentoConfirmadoEmUtc]) = 0)) AND ([PreparacaoIniciadaEmUtc] IS NULL AND [PreparacaoIniciadaPorId] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [PreparacaoIniciadaPorId] IS NOT NULL AND [PreparacaoIniciadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PreparacaoIniciadaEmUtc]) = 0)) AND ([RetiradaAutorizadaEmUtc] IS NULL AND [RetiradaAutorizadaPorId] IS NULL OR ([RetiradaAutorizadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaPorId] IS NOT NULL AND [RetiradaAutorizadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [RetiradaAutorizadaEmUtc]) = 0))");
+                            t.HasCheckConstraint("CK_Pedidos_Auditoria_Valid", "([PagamentoConfirmadoEmUtc] IS NULL AND [PagamentoConfirmadoPorId] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PagamentoConfirmadoPorId] IS NOT NULL AND [PagamentoConfirmadoPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PagamentoConfirmadoEmUtc]) = 0)) AND ([PreparacaoIniciadaEmUtc] IS NULL AND [PreparacaoIniciadaPorId] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [PreparacaoIniciadaPorId] IS NOT NULL AND [PreparacaoIniciadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [PreparacaoIniciadaEmUtc]) = 0)) AND ([RetiradaAutorizadaEmUtc] IS NULL AND [RetiradaAutorizadaPorId] IS NULL OR ([RetiradaAutorizadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaPorId] IS NOT NULL AND [RetiradaAutorizadaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [RetiradaAutorizadaEmUtc]) = 0)) AND ([SaidaEntregaEmUtc] IS NULL AND [SaidaEntregaPorId] IS NULL OR ([SaidaEntregaEmUtc] IS NOT NULL AND [SaidaEntregaPorId] IS NOT NULL AND [SaidaEntregaPorId] <> '00000000-0000-0000-0000-000000000000' AND DATEPART(TZOFFSET, [SaidaEntregaEmUtc]) = 0))");
 
-                            t.HasCheckConstraint("CK_Pedidos_Cronologia_Valid", "([PagamentoConfirmadoEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] >= [CriadoEmUtc] AND [PagamentoConfirmadoEmUtc] < [PrazoPagamentoEmUtc])) AND ([PreparacaoIniciadaEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] >= [PagamentoConfirmadoEmUtc])) AND ([RetiradaAutorizadaEmUtc] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] >= [PreparacaoIniciadaEmUtc])) AND ([EncerradoEmUtc] IS NULL OR (DATEPART(TZOFFSET, [EncerradoEmUtc]) = 0 AND [EncerradoEmUtc] >= COALESCE([RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], [PagamentoConfirmadoEmUtc], [CriadoEmUtc])))");
+                            t.HasCheckConstraint("CK_Pedidos_Cronologia_Valid", "([PagamentoConfirmadoEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] >= [CriadoEmUtc] AND [PagamentoConfirmadoEmUtc] < [PrazoPagamentoEmUtc])) AND ([PreparacaoIniciadaEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] >= [PagamentoConfirmadoEmUtc])) AND ([RetiradaAutorizadaEmUtc] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] >= [PreparacaoIniciadaEmUtc])) AND ([EncerradoEmUtc] IS NULL OR (DATEPART(TZOFFSET, [EncerradoEmUtc]) = 0 AND [EncerradoEmUtc] >= COALESCE([SaidaEntregaEmUtc], [RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], [PagamentoConfirmadoEmUtc], [CriadoEmUtc])))");
 
                             t.HasCheckConstraint("CK_Pedidos_Encerramento_Valid", "(([Situacao] IN (5, 6) AND [EncerradoPorId] IS NOT NULL AND [EncerradoPorId] <> '00000000-0000-0000-0000-000000000000') OR ([Situacao] NOT IN (5, 6) AND [EncerradoPorId] IS NULL)) AND (([Situacao] = 6 AND [MotivoCancelamento] IS NOT NULL AND LEN(LTRIM(RTRIM([MotivoCancelamento]))) > 0) OR ([Situacao] <> 6 AND [MotivoCancelamento] IS NULL))");
 
@@ -712,7 +718,9 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_Pedidos_Prazo_Utc24Horas", "DATEPART(TZOFFSET, [CriadoEmUtc]) = 0 AND DATEPART(TZOFFSET, [PrazoPagamentoEmUtc]) = 0 AND DATEDIFF_BIG(hour, [CriadoEmUtc], [PrazoPagamentoEmUtc]) = 24 AND CAST([CriadoEmUtc] AS time(7)) = CAST([PrazoPagamentoEmUtc] AS time(7))");
 
-                            t.HasCheckConstraint("CK_Pedidos_Situacao_Valid", "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 5 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NOT NULL AND [EncerradoEmUtc] >= [PrazoPagamentoEmUtc])");
+                            t.HasCheckConstraint("CK_Pedidos_SaidaEntrega_Valid", "([SaidaEntregaEmUtc] IS NULL AND [Situacao] <> 8 AND ([Situacao] <> 5 OR [ModalidadeEntrega] = 1)) OR ([SaidaEntregaEmUtc] IS NOT NULL AND [ModalidadeEntrega] = 2 AND [Situacao] IN (5, 8) AND [RetiradaAutorizadaEmUtc] IS NULL AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [SaidaEntregaEmUtc] >= [PreparacaoIniciadaEmUtc])");
+
+                            t.HasCheckConstraint("CK_Pedidos_Situacao_Valid", "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL AND [PreparacaoIniciadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 5 AND COALESCE([RetiradaAutorizadaEmUtc], [SaidaEntregaEmUtc]) IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) OR ([Situacao] = 8 AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NOT NULL AND [EncerradoEmUtc] >= [PrazoPagamentoEmUtc])");
 
                             t.HasCheckConstraint("CK_Pedidos_Total_NonNegative", "[TotalCentavos] >= 0");
                         });
@@ -2759,6 +2767,36 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("OperacoesAtendimento", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPropria", b =>
+                {
+                    b.Property<Guid>("AdministradorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<short>("Etapa")
+                        .HasColumnType("smallint");
+
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("RealizadaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<byte[]>("VersaoEsperada")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("binary(8)")
+                        .IsFixedLength();
+
+                    b.HasKey("AdministradorId", "Chave");
+
+                    b.HasIndex("PedidoId");
+
+                    b.ToTable("OperacoesEntregaPropria", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoFinanceira", b =>
                 {
                     b.Property<Guid>("ResponsavelId")
@@ -3857,6 +3895,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.EnvioComprovantePix", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithMany()
+                        .HasForeignKey("PedidoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoEntregaPropria", b =>
                 {
                     b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
                         .WithMany()

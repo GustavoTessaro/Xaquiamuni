@@ -96,7 +96,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IConsumirReserva
     // O chamador detem os locks e coordena a gravacao e o commit.
     private async Task<ConsumirReservasResult> PrepararBaixasRetiradaAsync(
         IReadOnlyList<ReservaProdutoAcabado> reservas, IReadOnlyList<Guid> variantes,
-        Guid responsavelId, CancellationToken cancellationToken)
+        Guid responsavelId, CancellationToken cancellationToken, bool entregaPropria = false)
     {
         var variantesAtivas = new Dictionary<Guid, ProdutoVariante>();
         foreach (var varianteId in variantes)
@@ -143,7 +143,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IConsumirReserva
 
         var movimentos = reservas.Select(reserva => saldos[reserva.LoteId].RegistrarRetirada(
             reserva, variantesAtivas[reserva.ProdutoVarianteId], lotes[reserva.LoteId],
-            dataOperacional, responsavelId, agoraUtc)).ToArray();
+            dataOperacional, responsavelId, agoraUtc, entregaPropria)).ToArray();
         _dbContext.MovimentosProdutoAcabado.AddRange(movimentos);
         return new(ConsumirReservasStatus.Sucesso, movimentos);
     }

@@ -28,7 +28,8 @@ internal static class PedidoMapping
                 tabela.HasCheckConstraint("CK_Pedidos_Auditoria_Valid",
                     ParAuditoria("PagamentoConfirmadoEmUtc", "PagamentoConfirmadoPorId") + " AND "
                     + ParAuditoria("PreparacaoIniciadaEmUtc", "PreparacaoIniciadaPorId") + " AND "
-                    + ParAuditoria("RetiradaAutorizadaEmUtc", "RetiradaAutorizadaPorId"));
+                    + ParAuditoria("RetiradaAutorizadaEmUtc", "RetiradaAutorizadaPorId") + " AND "
+                    + ParAuditoria("SaidaEntregaEmUtc", "SaidaEntregaPorId"));
                 tabela.HasCheckConstraint("CK_Pedidos_Cronologia_Valid",
                     "([PagamentoConfirmadoEmUtc] IS NULL OR ([PagamentoConfirmadoEmUtc] >= [CriadoEmUtc] "
                     + "AND [PagamentoConfirmadoEmUtc] < [PrazoPagamentoEmUtc])) "
@@ -37,8 +38,14 @@ internal static class PedidoMapping
                     + "AND ([RetiradaAutorizadaEmUtc] IS NULL OR ([PreparacaoIniciadaEmUtc] IS NOT NULL "
                     + "AND [RetiradaAutorizadaEmUtc] >= [PreparacaoIniciadaEmUtc])) "
                     + "AND ([EncerradoEmUtc] IS NULL OR (DATEPART(TZOFFSET, [EncerradoEmUtc]) = 0 "
-                    + "AND [EncerradoEmUtc] >= COALESCE([RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], "
+                    + "AND [EncerradoEmUtc] >= COALESCE([SaidaEntregaEmUtc], [RetiradaAutorizadaEmUtc], [PreparacaoIniciadaEmUtc], "
                     + "[PagamentoConfirmadoEmUtc], [CriadoEmUtc])))");
+                tabela.HasCheckConstraint("CK_Pedidos_SaidaEntrega_Valid",
+                    "([SaidaEntregaEmUtc] IS NULL AND [Situacao] <> 8 "
+                    + "AND ([Situacao] <> 5 OR [ModalidadeEntrega] = 1)) "
+                    + "OR ([SaidaEntregaEmUtc] IS NOT NULL AND [ModalidadeEntrega] = 2 "
+                    + "AND [Situacao] IN (5, 8) AND [RetiradaAutorizadaEmUtc] IS NULL "
+                    + "AND [PreparacaoIniciadaEmUtc] IS NOT NULL AND [SaidaEntregaEmUtc] >= [PreparacaoIniciadaEmUtc])");
                 tabela.HasCheckConstraint("CK_Pedidos_Situacao_Valid",
                     "([Situacao] = 1 AND [PagamentoConfirmadoEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 2 AND [PagamentoConfirmadoEmUtc] IS NOT NULL "
@@ -46,7 +53,9 @@ internal static class PedidoMapping
                     + "OR ([Situacao] = 3 AND [PreparacaoIniciadaEmUtc] IS NOT NULL "
                     + "AND [RetiradaAutorizadaEmUtc] IS NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 4 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) "
-                    + "OR ([Situacao] = 5 AND [RetiradaAutorizadaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NOT NULL) "
+                    + "OR ([Situacao] = 5 AND COALESCE([RetiradaAutorizadaEmUtc], [SaidaEntregaEmUtc]) IS NOT NULL "
+                    + "AND [EncerradoEmUtc] IS NOT NULL) "
+                    + "OR ([Situacao] = 8 AND [SaidaEntregaEmUtc] IS NOT NULL AND [EncerradoEmUtc] IS NULL) "
                     + "OR ([Situacao] = 6 AND [EncerradoEmUtc] IS NOT NULL "
                     + "AND ([PagamentoConfirmadoEmUtc] IS NOT NULL OR [EncerradoEmUtc] < [PrazoPagamentoEmUtc])) "
                     + "OR ([Situacao] = 7 AND [PagamentoConfirmadoEmUtc] IS NULL "
@@ -69,7 +78,7 @@ internal static class PedidoMapping
             pedido.Property(entity => entity.SubtotalProdutosCentavos)
                 .HasComputedColumnSql("[TotalCentavos] - [FreteCentavos]", stored: true);
             pedido.Property(entity => entity.MotivoCancelamento).HasMaxLength(Pedido.MotivoCancelamentoMaxLength);
-            pedido.Property<byte[]>("Versao").IsRowVersion().IsRequired();
+            pedido.Property(entity => entity.Versao).IsRowVersion().IsRequired();
             pedido.HasOne<ClientePerfil>().WithMany().HasForeignKey(entity => entity.ClienteId)
                 .OnDelete(DeleteBehavior.Restrict);
             pedido.HasMany(entity => entity.Itens).WithOne().HasForeignKey(item => item.PedidoId)
@@ -80,6 +89,14 @@ internal static class PedidoMapping
                 .HasFilter("[ChaveIdempotencia] IS NOT NULL");
             pedido.HasIndex(entity => new { entity.ClienteId, entity.CriadoEmUtc });
             pedido.HasIndex(entity => new { entity.Situacao, entity.PrazoPagamentoEmUtc });
+        });
+
+        builder.Entity<OperacaoEntregaPropria>(operacao =>
+        {
+            operacao.ToTable("OperacoesEntregaPropria");
+            operacao.HasKey(x => new { x.AdministradorId, x.Chave });
+            operacao.Property(x => x.VersaoEsperada).HasMaxLength(8).IsFixedLength();
+            operacao.HasOne<Pedido>().WithMany().HasForeignKey(x => x.PedidoId).OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ItemPedido>(item =>

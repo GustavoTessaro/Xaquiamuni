@@ -85,6 +85,18 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
             Assert.Equal(3, await context.MovimentosProdutoAcabado.CountAsync());
         }
 
+        using var detalhe = await admin.GetAsync(url);
+        detalhe.EnsureSuccessStatusCode();
+        using var entregaPropria = new HttpRequestMessage(HttpMethod.Post, $"{url}/iniciar-entrega-propria")
+        {
+            Content = System.Net.Http.Json.JsonContent.Create(new { confirmado = true }),
+        };
+        entregaPropria.Headers.Add("X-XSRF-TOKEN", token);
+        entregaPropria.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
+        entregaPropria.Headers.IfMatch.Add(detalhe.Headers.ETag!);
+        using var modalidadeInvalida = await admin.SendAsync(entregaPropria);
+        await VerificarConflitoAsync(modalidadeInvalida, "estado_incompativel");
+
         var corpo = new { entregaPresencialConfirmada = true };
         var (a, b) = await DisputarAsync(
             () => EnviarComandoAdminPedidoAsync(admin, $"{url}/confirmar-entrega", corpo, token),

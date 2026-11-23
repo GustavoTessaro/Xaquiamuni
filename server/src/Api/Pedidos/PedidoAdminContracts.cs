@@ -10,6 +10,8 @@ public sealed record AvancarPreparacaoAdminRequest;
 
 public sealed record ConfirmarEntregaAdminRequest(bool EntregaPresencialConfirmada);
 
+public sealed record TransicaoEntregaPropriaRequest(bool Confirmado);
+
 public sealed record PedidoAdminResumoResponse(
     Guid Id, string Situacao, DateTimeOffset CriadoEmUtc, DateTimeOffset PrazoPagamentoEmUtc,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long TotalCentavos, string NomeCliente);

@@ -11,6 +11,7 @@ public enum SituacaoPedido : short
     Entregue = 5,
     Cancelado = 6,
     Expirado = 7,
+    EmEntrega = 8,
 }
 
 public enum ModalidadeEntregaPedido : short
@@ -55,6 +56,9 @@ public sealed class Pedido
     public Guid? PreparacaoIniciadaPorId { get; private set; }
     public DateTimeOffset? RetiradaAutorizadaEmUtc { get; private set; }
     public Guid? RetiradaAutorizadaPorId { get; private set; }
+    public DateTimeOffset? SaidaEntregaEmUtc { get; private set; }
+    public Guid? SaidaEntregaPorId { get; private set; }
+    public byte[] Versao { get; private set; } = [];
     public DateTimeOffset? EncerradoEmUtc { get; private set; }
     public Guid? EncerradoPorId { get; private set; }
     public string? MotivoCancelamento { get; private set; }
@@ -147,9 +151,32 @@ public sealed class Pedido
         Encerrar(SituacaoPedido.Entregue, instanteUtc, responsavelId);
     }
 
+    public void IniciarEntregaPropria(Guid responsavelId, DateTimeOffset instanteUtc)
+    {
+        ExigirEntregaPropria(SituacaoPedido.EmPreparacao);
+        ValidarAcao(responsavelId, instanteUtc);
+        SaidaEntregaEmUtc = instanteUtc;
+        SaidaEntregaPorId = responsavelId;
+        Situacao = SituacaoPedido.EmEntrega;
+    }
+
+    public void ConfirmarRecebimentoEntregaPropria(Guid responsavelId, DateTimeOffset instanteUtc)
+    {
+        ExigirEntregaPropria(SituacaoPedido.EmEntrega);
+        ValidarAcao(responsavelId, instanteUtc);
+        Encerrar(SituacaoPedido.Entregue, instanteUtc, responsavelId);
+    }
+
+    private void ExigirEntregaPropria(SituacaoPedido situacao)
+    {
+        if (ModalidadeEntrega != ModalidadeEntregaPedido.EntregaPropria)
+            throw new InvalidOperationException("O pedido não é de entrega própria.");
+        ExigirSituacao(situacao);
+    }
+
     public void Cancelar(Guid responsavelId, DateTimeOffset instanteUtc, string? motivo)
     {
-        if (EncerradoEmUtc is not null)
+        if (EncerradoEmUtc is not null || SaidaEntregaEmUtc is not null)
         {
             throw new InvalidOperationException("Um pedido encerrado não pode ser cancelado.");
         }
@@ -204,7 +231,8 @@ public sealed class Pedido
     private void ValidarInstante(DateTimeOffset instanteUtc)
     {
         ValidarUtc(instanteUtc, nameof(instanteUtc));
-        var anterior = RetiradaAutorizadaEmUtc ?? PreparacaoIniciadaEmUtc ?? PagamentoConfirmadoEmUtc ?? CriadoEmUtc;
+        var anterior = SaidaEntregaEmUtc ?? RetiradaAutorizadaEmUtc ?? PreparacaoIniciadaEmUtc
+            ?? PagamentoConfirmadoEmUtc ?? CriadoEmUtc;
         if (instanteUtc < anterior)
         {
             throw new ArgumentOutOfRangeException(nameof(instanteUtc), "O instante não pode ser anterior à última transição.");

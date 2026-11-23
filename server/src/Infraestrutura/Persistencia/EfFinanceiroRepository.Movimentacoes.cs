@@ -29,7 +29,8 @@ public sealed partial class EfFinanceiroRepository
         var pedidos = db.Pedidos.AsNoTracking()
             .Where(p => p.PagamentoConfirmadoEmUtc.HasValue &&
                 (p.Situacao == SituacaoPedido.PagamentoConfirmado || p.Situacao == SituacaoPedido.EmPreparacao ||
-                 p.Situacao == SituacaoPedido.ProntoParaRetirada || p.Situacao == SituacaoPedido.Entregue))
+                 p.Situacao == SituacaoPedido.ProntoParaRetirada || p.Situacao == SituacaoPedido.EmEntrega ||
+                 p.Situacao == SituacaoPedido.Entregue))
             .Select(p => new LinhaCaixa
             {
                 EventoId = p.Id, RecursoId = p.Id, Origem = Origem.PedidoSite, Tipo = Tipo.Entrada,
