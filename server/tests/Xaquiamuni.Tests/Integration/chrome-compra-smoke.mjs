@@ -210,6 +210,51 @@ try {
   assert.equal(await c.ev('fetch("/api/admin/pedidos").then(r => r.status)'), 403);
   assert.equal(await a.ev('fetch("/api/pedidos").then(r => r.status)'), 403);
 
+  if (process.env.XAQUIAMUNI_CHROME_CONTA === '1') {
+    const conta = await abrir('/login');
+    await login(conta, cliente, '/api/auth');
+    const publicar = chave => a.ev(`(async () => {
+      const rota = '/api/admin/loja/tema';
+      const { publicacao } = await fetch(rota).then(r => r.json());
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      return (await fetch(rota, { method: 'PUT', headers: {
+        'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+      }, body: JSON.stringify({ chave: ${JSON.stringify(chave)}, revisaoEsperada: publicacao.revisao }) })).status;
+    })()`);
+    for (const tema of ['natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes', 'original']) {
+      assert.equal(await publicar(tema), 200);
+      for (const width of [375, 1280]) {
+        await call('Emulation.setDeviceMetricsOverride', {
+          width, height: 900, mobile: false, deviceScaleFactor: 1,
+        }, conta.sessionId);
+        await conta.ir('/minha-conta');
+        const temaAtual = JSON.stringify(tema);
+        await waitFor(() => conta.ev(`document.querySelector('app-store-layout')?.dataset.theme === ${temaAtual}
+          && !!document.querySelector('.conta-dados')`), 'Tema e perfil em Minha conta');
+        assert.ok(await conta.ev(`(() => {
+          const painel = document.querySelector('.conta-dados section');
+          const estilo = getComputedStyle(painel);
+          const luminancia = cor => (cor.match(/[\\d.]+/g) ?? []).slice(0, 3)
+            .map(x => Number(x) / 255).map(x => x <= .04045 ? x / 12.92 : ((x + .055) / 1.055) ** 2.4)
+            .reduce((s, x, i) => s + x * [.2126, .7152, .0722][i], 0);
+          const cores = [luminancia(estilo.color), luminancia(estilo.backgroundColor)].sort((a, b) => a - b);
+          return document.documentElement.scrollWidth <= innerWidth
+            && (cores[1] + .05) / (cores[0] + .05) >= 4.5;
+        })()`), 'Contraste ou largura em ' + tema + ' a ' + width + ' px');
+        await conta.ev("document.querySelector('.conta nav a').focus()");
+        await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, conta.sessionId);
+        await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, conta.sessionId);
+        assert.ok(await conta.ev("document.activeElement.matches('.conta nav a[href=\"/cotacoes-correios\"]:focus-visible')"));
+      }
+    }
+    await conta.ev("document.querySelector('.store-account__logout').click()");
+    await waitFor(() => conta.ev("location.pathname === '/' && !document.querySelector('.conta-dados')"), 'Saída de Minha conta');
+    await conta.ir('/minha-conta');
+    await waitFor(() => conta.ev("location.pathname === '/login' && new URLSearchParams(location.search).get('destino') === '/minha-conta'"),
+      'Proteção de Minha conta após sair');
+    console.log('Minha conta conferida nos seis temas em 375 e 1280 px.');
+  }
+
   if (process.env.XAQUIAMUNI_CHROME_LOGIN === '1') {
     const origem = '/produtos?busca=lavanda#catalogo';
     for (const width of [375, 1280]) {

@@ -1,4 +1,4 @@
-﻿import { Component } from '@angular/core';
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { convertToParamMap, DefaultUrlSerializer, provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
@@ -15,7 +15,7 @@ class LojaTeste {}
 
 const id = '20000000-0000-4000-8000-000000000001';
 const busca = '/produtos?busca=vela%20arom%C3%A1tica&categoriaId=' + id + '#catalogo';
-const destinos = ['/produtos/' + id, '/carrinho', busca, '/pedidos/' + id + '?pagina=2', '/cotacoes-correios/' + id];
+const destinos = ['/produtos/' + id, '/carrinho', '/minha-conta', busca, '/pedidos/' + id + '?pagina=2', '/cotacoes-correios/' + id];
 
 describe('retorno do login do cliente', () => {
   let ativa: boolean;
@@ -27,7 +27,7 @@ describe('retorno do login do cliente', () => {
     TestBed.configureTestingModule({ providers: [
       provideRouter([
         { path: 'login', component: LoginComponent },
-        ...['', 'produtos', 'produtos/:id', 'carrinho', 'checkout', 'pedidos', 'pedidos/:id', 'cotacoes-correios/:id']
+        ...['', 'produtos', 'produtos/:id', 'carrinho', 'checkout', 'minha-conta', 'pedidos', 'pedidos/:id', 'cotacoes-correios/:id']
           .map(path => ({ path, component: LojaTeste })),
       ]),
       { provide: AuthService, useValue: {

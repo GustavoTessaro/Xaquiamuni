@@ -4,13 +4,31 @@ using Xaquiamuni.Dominio.Entidades;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
-public sealed class ClienteRepository : IClienteRepository, IConsultarEnderecoPadrao
+public sealed class ClienteRepository : IClienteRepository, IConsultarEnderecoPadrao, IConsultarPerfilCliente
 {
     private readonly XaquiamuniDbContext _dbContext;
 
     public ClienteRepository(XaquiamuniDbContext dbContext)
     {
         _dbContext = dbContext;
+    }
+
+    public async Task<ResumoPerfilCliente?> BuscarPerfilAsync(Guid clienteId, CancellationToken cancellationToken)
+    {
+        var conta = await _dbContext.Users.AsNoTracking()
+            .Where(usuario => usuario.Id == clienteId)
+            .Select(usuario => new
+            {
+                usuario.Email,
+                usuario.PhoneNumber,
+                NomeCompleto = _dbContext.ClientePerfis.Where(perfil => perfil.UserId == usuario.Id)
+                    .Select(perfil => perfil.NomeCompleto).FirstOrDefault()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (conta is null) return null;
+
+        var endereco = await BuscarAsync(clienteId, cancellationToken);
+        return new(conta.NomeCompleto, conta.Email, conta.PhoneNumber, endereco);
     }
 
     public async Task<EnderecoPadraoCliente?> BuscarAsync(Guid clienteId, CancellationToken cancellationToken)

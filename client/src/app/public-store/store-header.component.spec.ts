@@ -41,8 +41,9 @@ describe('StoreHeaderComponent', () => {
     expect(brand?.querySelector('img[alt="Xaquiamuni Produtos Naturais"]')?.getAttribute('src'))
       .toBe('/logo-xaquiamuni.jpeg');
     expect(element.textContent).toContain('Meus pedidos');
-    const accountLink = element.querySelector('.store-account__link') as HTMLAnchorElement;
-    expect(accountLink.getAttribute('href')).toBe('/pedidos');
+    expect(element.querySelector('.store-account__link[href="/minha-conta"]')?.textContent).toContain('Minha conta');
+    expect(element.querySelector('.store-mobile-nav a[href="/minha-conta"]')).not.toBeNull();
+    expect(element.querySelector('.store-account__link[href="/pedidos"]')).not.toBeNull();
     expect(element.querySelector('.store-mobile-nav a[href="/pedidos"]')).not.toBeNull();
     expect(element.querySelector('.store-account__logout')?.textContent).toContain('Sair');
     expect(element.querySelector('.store-account__register')).toBeNull();

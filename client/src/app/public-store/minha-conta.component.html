@@ -1,0 +1,61 @@
+<section class="conta" aria-labelledby="conta-titulo">
+  <h1 id="conta-titulo">Minha conta</h1>
+
+  @let atual = estado();
+  @switch (atual.tipo) {
+    @case ('carregando') {
+      <p role="status">Carregando dados da conta…</p>
+    }
+    @case ('sessao') {
+      <p role="alert">Sua sessão expirou. Entre novamente para consultar sua conta.</p>
+      <a routerLink="/login" [queryParams]="{ destino: '/minha-conta' }">Entrar</a>
+    }
+    @case ('negado') {
+      <p role="alert">Esta sessão não tem acesso à conta de cliente.</p>
+    }
+    @case ('erro') {
+      <p role="alert">Não foi possível carregar os dados da sua conta.</p>
+      <button type="button" (click)="recarregar.next()">Tentar novamente</button>
+    }
+    @case ('pronto') {
+      <div class="conta-dados">
+        <section>
+          <h2>Dados pessoais</h2>
+          @if (atual.perfil.nomeCompleto || atual.perfil.email || atual.perfil.telefone) {
+            <dl>
+              @if (atual.perfil.nomeCompleto; as nome) {
+                <dt>Nome completo</dt><dd>{{ nome }}</dd>
+              }
+              @if (atual.perfil.email; as email) {
+                <dt>E-mail</dt><dd>{{ email }}</dd>
+              }
+              @if (atual.perfil.telefone; as telefone) {
+                <dt>Telefone</dt><dd>{{ telefone }}</dd>
+              }
+            </dl>
+          } @else {
+            <p>Seus dados pessoais ainda não estão disponíveis.</p>
+          }
+        </section>
+        <section>
+          <h2>Endereço padrão</h2>
+          @if (atual.perfil.endereco; as endereco) {
+            <p>{{ endereco.logradouro }}, {{ endereco.numero }}
+              @if (endereco.complemento) { <span> — {{ endereco.complemento }}</span> }
+              <br>{{ endereco.bairro }}<br>{{ endereco.cidade }} — {{ endereco.uf }}<br>
+              CEP {{ endereco.cep.slice(0, 5) }}-{{ endereco.cep.slice(5) }}
+            </p>
+          } @else {
+            <p>Você ainda não tem um endereço padrão disponível.</p>
+          }
+        </section>
+      </div>
+    }
+  }
+
+  <nav aria-label="Atalhos da conta">
+    <a routerLink="/pedidos">Meus pedidos</a>
+    <a routerLink="/cotacoes-correios">Minhas cotações</a>
+    <a routerLink="/produtos">Continuar comprando</a>
+  </nav>
+</section>

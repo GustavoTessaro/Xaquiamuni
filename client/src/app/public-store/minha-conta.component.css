@@ -1,0 +1,48 @@
+.conta {
+  margin-inline: auto;
+  max-inline-size: 70rem;
+  padding: clamp(1rem, 4vw, 2rem);
+  overflow-wrap: anywhere;
+}
+
+h1, h2 {
+  font-family: var(--brand-display);
+}
+
+h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); }
+h2 { font-size: 1.25rem; }
+p, dl { margin-block: 0.75rem 0; }
+dt { font-weight: 700; }
+dd { margin: 0 0 0.65rem; }
+
+.conta-dados {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: 1rem;
+  margin-block-start: 1rem;
+}
+
+.conta-dados section {
+  border: 1px solid var(--brand-line);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  background: var(--brand-surface);
+  color: var(--brand-ink);
+}
+
+nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-block-start: 1rem; }
+
+a, button {
+  display: inline-flex;
+  min-block-size: 2.75rem;
+  align-items: center;
+  color: var(--brand-link);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--brand-focus);
+  outline-offset: 3px;
+}

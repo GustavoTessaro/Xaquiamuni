@@ -39,6 +39,7 @@
         @if (sessionLoading()) {
           <span class="store-account__status" role="status">Verificando conta...</span>
         } @else if (session()) {
+          <a class="store-account__link" routerLink="/minha-conta">Minha conta</a>
           <a class="store-account__link" routerLink="/pedidos">Meus pedidos</a>
           <a class="store-account__link" routerLink="/cotacoes-correios">Minhas cotações</a>
           <button
@@ -127,6 +128,7 @@
       <a [routerLink]="contexto.link()" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
       @if (!contexto.preview) {
         @if (session()) {
+          <a routerLink="/minha-conta" (click)="closeNavigation()">Minha conta</a>
           <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
           <a routerLink="/cotacoes-correios" (click)="closeNavigation()">Minhas cotações</a>
         } @else {

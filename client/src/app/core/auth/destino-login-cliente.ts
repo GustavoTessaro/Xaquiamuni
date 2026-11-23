@@ -1,8 +1,8 @@
-﻿import { DefaultUrlSerializer, ParamMap, UrlTree } from '@angular/router';
+import { DefaultUrlSerializer, ParamMap, UrlTree } from '@angular/router';
 import { uuidValido } from '../../public-store/pedidos.service';
 
 const urls = new DefaultUrlSerializer();
-const rotasSimples = new Set(['/', '/produtos', '/carrinho', '/checkout', '/pedidos', '/cotacoes-correios']);
+const rotasSimples = new Set(['/', '/produtos', '/carrinho', '/checkout', '/minha-conta', '/pedidos', '/cotacoes-correios']);
 const rotasComId = new Set(['produtos', 'pedidos', 'cotacoes-correios']);
 
 export function validarDestinoLoja(destino: string): UrlTree {

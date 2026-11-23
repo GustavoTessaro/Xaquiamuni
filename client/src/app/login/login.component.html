@@ -100,6 +100,7 @@
               }
               <nav aria-label="Atalhos da sessão" class="mt-5 flex flex-wrap gap-3">
                 <a routerLink="/" class="inline-flex min-h-11 items-center rounded font-semibold text-emerald-800 underline focus-visible:outline-2 focus-visible:outline-offset-2">Voltar à loja</a>
+                <a routerLink="/minha-conta" class="inline-flex min-h-11 items-center rounded font-semibold text-emerald-800 underline focus-visible:outline-2 focus-visible:outline-offset-2">Minha conta</a>
                 <a routerLink="/pedidos" class="inline-flex min-h-11 items-center rounded font-semibold text-emerald-800 underline focus-visible:outline-2 focus-visible:outline-offset-2">Meus pedidos</a>
               </nav>
               <button type="button" (click)="logout()" [disabled]="signingOut() || checkingSession()"

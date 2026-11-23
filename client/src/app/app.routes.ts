@@ -40,7 +40,7 @@ const paginasVitrine: Routes = [
 const carregarCotacoesCorreios = () =>
   import('./shared/cotacoes-correios.component').then(m => m.CotacoesCorreiosComponent);
 
-const clienteCotacoesGuard: CanActivateFn = (_, estado) => {
+const clienteAutenticadoGuard: CanActivateFn = (_, estado) => {
   const router = inject(Router);
   const login = router.createUrlTree(['/login'], {
     queryParams: { destino: router.serializeUrl(validarDestinoLoja(estado.url)) },
@@ -268,8 +268,13 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./public-store/store-layout.component').then((module) => module.StoreLayoutComponent),
     children: [
-      { path: 'cotacoes-correios', canActivate: [clienteCotacoesGuard], loadComponent: carregarCotacoesCorreios },
-      { path: 'cotacoes-correios/:id', canActivate: [clienteCotacoesGuard], loadComponent: carregarCotacoesCorreios },
+      {
+        path: 'minha-conta',
+        canActivate: [clienteAutenticadoGuard],
+        loadComponent: () => import('./public-store/minha-conta.component').then(m => m.MinhaContaComponent),
+      },
+      { path: 'cotacoes-correios', canActivate: [clienteAutenticadoGuard], loadComponent: carregarCotacoesCorreios },
+      { path: 'cotacoes-correios/:id', canActivate: [clienteAutenticadoGuard], loadComponent: carregarCotacoesCorreios },
       {
         path: 'checkout',
         loadComponent: () =>

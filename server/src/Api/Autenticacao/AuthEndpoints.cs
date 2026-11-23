@@ -89,6 +89,12 @@ public static class AuthEndpoints
         endpoints.MapGet("/api/clientes/me/endereco-padrao", GetEnderecoPadraoAsync)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado);
 
+        endpoints.MapGet("/api/clientes/me/perfil", GetPerfilClienteAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .Produces<ResumoPerfilCliente>()
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden);
+
         endpoints.MapGet(MeEndpoint, GetCurrentClient)
             .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
             .WithName("GetCurrentClient")
@@ -128,6 +134,18 @@ public static class AuthEndpoints
 
         var endereco = await consulta.BuscarAsync(clienteId, cancellationToken);
         return Results.Ok(new { endereco });
+    }
+
+    private static async Task<IResult> GetPerfilClienteAsync(HttpContext context,
+        IConsultarPerfilCliente consulta, CancellationToken cancellationToken)
+    {
+        context.Response.Headers.CacheControl = "private, no-store";
+        if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var clienteId)
+            || clienteId == Guid.Empty)
+            return Results.Unauthorized();
+
+        var perfil = await consulta.BuscarPerfilAsync(clienteId, cancellationToken);
+        return perfil is null ? Results.Unauthorized() : Results.Ok(perfil);
     }
 
     private static IResult GetCurrentClient(HttpContext context)
