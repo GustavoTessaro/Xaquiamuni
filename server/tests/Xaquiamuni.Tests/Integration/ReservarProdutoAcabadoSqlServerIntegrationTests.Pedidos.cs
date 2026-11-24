@@ -224,9 +224,17 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     }
 
     internal static async Task<(Produto Produto, ProdutoVariante Padrao, ProdutoVariante Alternativa)> CriarProdutoCompravelAsync(
-        XaquiamuniDbContext context, decimal preco = 11.99m)
+        XaquiamuniDbContext context, decimal preco = 11.99m, bool categoriaAnteriorAVersao = false)
     {
         var categoria = Categoria.Criar("Artesanais", null, 0);
+        if (categoriaAnteriorAVersao)
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO [Categorias] ([Id], [Nome], [NomeNormalizado], [Ativa], [OrdemExibicao])
+                VALUES ({categoria.Id}, {categoria.Nome}, {categoria.NomeNormalizado}, {categoria.Ativa}, {categoria.OrdemExibicao})
+                """);
+            context.Attach(categoria);
+        }
         var padrao = ProdutoVariante.Criar("Padrao", "UN", preco, padrao: true);
         var alternativa = ProdutoVariante.Criar("Lavanda", "UN", 10.01m);
         var produto = Produto.Criar("Sabonete", null, categoria, [padrao, alternativa]);

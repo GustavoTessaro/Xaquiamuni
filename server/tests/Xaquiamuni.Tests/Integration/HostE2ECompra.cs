@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -38,7 +39,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null,
         bool promocoesComerciais = false, TimeProvider? relogioAplicacao = null,
         IReadOnlyDictionary<string, string>? municipiosPorCep = null,
-        IReadOnlyDictionary<string, MunicipioPostal>? municipiosPostais = null)
+        IReadOnlyDictionary<string, MunicipioPostal>? municipiosPostais = null, IInterceptor? interceptor = null)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -109,6 +110,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
                 {
                     options.UseSqlServer(banco.ConexaoIsolada).AddInterceptors(alvo);
                     if (relogio is not null) options.AddInterceptors(relogio);
+                    if (interceptor is not null) options.AddInterceptors(interceptor);
                 });
                 services.AddScoped<EmailConfirmationOutboxProcessor>();
                 for (var i = services.Count - 1; i >= 0; i--)

@@ -129,7 +129,10 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Empty(await admin.Http.GetFromJsonAsync<CidadeEntregaDto[]>(Atendimento + "/cidades") ?? throw new InvalidOperationException());
 
         var replay = await cliente.PostAsync<JsonElement>("/api/pedidos", carrinho, HttpStatusCode.OK, chaveCheckout);
-        Assert.True(JsonElement.DeepEquals(pedido, replay));
+        // O downgrade do cenário remove o número público; a reaplicação da migration faz novo backfill.
+        Assert.Matches("^XQ-[A-Z0-9]{10}$", replay.GetProperty("numeroPublico").GetString()!);
+        foreach (var campo in pedido.EnumerateObject().Where(x => x.Name != "numeroPublico"))
+            Assert.True(JsonElement.DeepEquals(campo.Value, replay.GetProperty(campo.Name)), campo.Name);
         Assert.Equal("RetiradaLocal", replay.GetProperty("modalidadeEntrega").GetString());
         var depois = await db.ReservasProdutoAcabado.AsNoTracking().SingleAsync();
         Assert.Equal((reserva.Id, reserva.Estado, reserva.Quantidade, reserva.ExpiraEmUtc),

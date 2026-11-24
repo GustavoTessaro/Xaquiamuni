@@ -379,6 +379,88 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     }
   }
   console.log('Desconto congelado conferido nos seis temas em 375 e 1280 px.');
+  const rotaAtendimento = '/admin/configuracoes/atendimento';
+  const acaoCidade = nome => a.ev(`(() => {
+    const linha = [...document.querySelectorAll('main section span')].find(s => s.textContent.startsWith(${JSON.stringify(nome + '/RS')}));
+    const botao = [...linha.parentElement.querySelectorAll('button')].find(b => b.textContent.trim() === 'Excluir');
+    botao.focus();
+    botao.click();
+  })()`);
+  const cotacaoAntesDaInativacao = await c.ev(`(async () => {
+    const pedido = await fetch('/api/pedidos/${pedidoTema.id}').then(r => r.json());
+    const itens = pedido.itens.map(({ produtoId, produtoVarianteId }) => ({ produtoId, produtoVarianteId, quantidade: 1 }));
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    const { codigoIbge, ...endereco } = pedido.entrega.destino;
+    const resposta = await fetch('/api/checkout/cotacoes-entrega', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken },
+      body: JSON.stringify({ itens, endereco }),
+    });
+    const { ofertas } = await resposta.json();
+    return { itens, ofertaEntregaId: ofertas.find(o => o.modalidade === 'EntregaPropria')?.id };
+  })()`);
+  assert.ok(cotacaoAntesDaInativacao.ofertaEntregaId);
+  for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
+    await viewport(a, width);
+    const nome = 'Município descartável ' + width;
+    assert.equal(await escrever(atendimento + '/cidades', 'POST', {
+      codigoIbge: '4314902', nome, uf: 'RS', ativa: false, tarifaCentavos: '0',
+    }), 201);
+    await abrirAdmin(rotaAtendimento);
+    await waitFor(() => a.ev(`document.querySelector('main').textContent.includes(${JSON.stringify(nome)})`), 'cidade descartável');
+    if (await a.ev(tema) !== modo) await alternar(modo);
+    assert.ok(await semEstouro(a));
+    await a.ev(`[...document.querySelectorAll('main section span')].find(s => s.textContent.startsWith(${JSON.stringify(nome + '/RS')}))
+      .parentElement.querySelector('button').focus()`);
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    assert.ok(await a.ev("document.activeElement.textContent.trim() === 'Excluir' && document.activeElement.matches(':focus-visible')"));
+    await a.ev("window.confirm = texto => { window.confirmacaoCidade = texto; return false; }");
+    await acaoCidade(nome);
+    assert.ok(await a.ev(`window.confirmacaoCidade.includes(${JSON.stringify(nome)}) && window.confirmacaoCidade.includes('permanente')`));
+    assert.ok((await lerAtendimento('/cidades')).some(x => x.nome === nome));
+    await a.ev("window.confirm = () => true");
+    await acaoCidade(nome);
+    await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Cidade excluída.')"), 'exclusão concluída');
+    await abrirAdmin(rotaAtendimento);
+    assert.ok(!(await lerAtendimento('/cidades')).some(x => x.nome === nome));
+  }
+  await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Vacaria/RS')"), 'histórico disponível');
+  await a.ev("window.confirm = () => true");
+  await acaoCidade('Vacaria');
+  await waitFor(() => a.ev("document.querySelector('[role=alert]')?.textContent.includes('Há pedidos vinculados')"), 'histórico bloqueia exclusão');
+  await a.ev("window.confirm = () => false");
+  await botaoTexto('Desabilitar atendimento em Vacaria', a);
+  assert.equal((await lerAtendimento(rotaCidade)).ativa, true);
+  await a.ev("window.confirm = () => true");
+  await botaoTexto('Desabilitar atendimento em Vacaria', a);
+  await waitFor(async () => !(await modalidades()).entregaPropria, 'cidade desabilitada');
+  assert.equal((await lerAtendimento(rotaCidade)).ativa, false);
+  assert.equal(await c.ev(`fetch('/api/pedidos/${pedidoTema.id}').then(r=>r.json()).then(p=>p.situacao)`), 'Entregue');
+  const usoOfertaAntiga = await c.ev(`(async () => {
+    const totalPedidos = async () => (await fetch('/api/pedidos').then(r => r.json())).itens.length;
+    const antes = await totalPedidos();
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    const resposta = await fetch('/api/pedidos', { method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID() },
+      body: JSON.stringify(${JSON.stringify(cotacaoAntesDaInativacao)}),
+    });
+    return [resposta.status, (await resposta.json()).codigo, antes === await totalPedidos()];
+  })()`);
+  assert.deepEqual(usoOfertaAntiga, [409, 'oferta_entrega_invalida', true]);
+  assert.equal(await escrever(atendimento + '/cidades', 'POST', {
+    codigoIbge: '4314902', nome: 'Porto Alegre', uf: 'RS', ativa: true, tarifaCentavos: '2000',
+  }), 201);
+  const outrasModalidades = await c.ev(`(async () => {
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    const resposta = await fetch('/api/checkout/cotacoes-entrega', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken },
+      body: JSON.stringify({ itens: ${JSON.stringify(cotacaoAntesDaInativacao.itens)},
+        endereco: { cep: '90000000', uf: 'RS', cidade: 'Porto Alegre', bairro: 'Centro', logradouro: 'Rua Teste', numero: '1' } }),
+    });
+    return (await resposta.json()).ofertas.map(o => [o.modalidade, o.freteCentavos]);
+  })()`);
+  assert.deepEqual(outrasModalidades, [['RetiradaLocal', '0'], ['EntregaPropria', '0']]);
+  console.log('Exclusão, bloqueio por histórico e desabilitação conferidos no ADMIN.');
   const atual = await lerAtendimento('');
   assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
     numero: atual.whatsApp, confirmado: true, habilitado: false, revisao: atual.revisao,

@@ -146,14 +146,44 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
     public Task<ResultadoAtendimento> ExcluirCidadeAsync(Guid id, int? revisao, Guid autor, Guid chave, CancellationToken ct) =>
         ExecutarAsync("excluir-cidade", id, revisao, autor, chave, async _ =>
         {
+            if (id == Guid.Empty) return Invalido("Informe uma cidade válida.");
             if (!RevisaoValida(revisao)) return Invalido("Informe a revisão da cidade.");
             var cidade = await Cidades.SingleOrDefaultAsync(c => c.Id == id, ct);
             if (cidade is null) return Ausente();
             if (cidade.Revisao != revisao) return RevisaoDivergente();
+            var dependencia = await ConsultarDependenciaCidadeAsync(id, ct);
+            if (dependencia == 2)
+                return Conflito("Há pedidos vinculados a esta cidade. O histórico impede a exclusão permanente. Você pode desabilitar o atendimento.", "cidade_com_pedidos");
+            if (dependencia == 1)
+                return Conflito("Não foi possível verificar o histórico de entrega com segurança. O cadastro foi preservado.", "historico_entrega_invalido");
             if (cidade.Ativa && !await PermiteRemoverCidadeAtivaAsync(id, ct)) return UltimaModalidade();
             Cidades.Remove(cidade);
             return Sucesso(CidadeEntregaDto.De(cidade));
         }, ct);
+
+    // O checkout mantém o lock compartilhado de atendimento até gravar pedido e reserva.
+    // O mapping usa CidadeId em PascalCase. Aceitamos também a variante camelCase.
+    private Task<int> ConsultarDependenciaCidadeAsync(Guid id, CancellationToken ct) =>
+        db.Database.SqlQuery<int>($$"""
+            SELECT COALESCE(MAX(CASE
+                WHEN cidade.Correspondencia = 1 THEN 2
+                WHEN formato.Valido = 0 OR cidade.Total > 1 OR cidade.Invalido = 1 THEN 1
+                ELSE 0 END), 0) AS [Value]
+            FROM [Pedidos] AS p
+            CROSS APPLY (VALUES (CASE WHEN ISJSON(p.[Entrega]) = 1 AND
+                LEFT(LTRIM(REPLACE(REPLACE(REPLACE(p.[Entrega], CHAR(9), ' '), CHAR(10), ' '), CHAR(13), ' ')), 1) = '{'
+                THEN 1 ELSE 0 END)) AS formato(Valido)
+            CROSS APPLY (
+                SELECT COUNT(*) AS Total,
+                    MAX(CASE WHEN j.[type] = 1 AND DATALENGTH(j.[value]) = 72
+                        AND TRY_CONVERT(uniqueidentifier, j.[value]) = {{id}} THEN 1 ELSE 0 END) AS Correspondencia,
+                    MAX(CASE WHEN j.[type] = 0 OR (j.[type] = 1 AND DATALENGTH(j.[value]) = 72
+                        AND TRY_CONVERT(uniqueidentifier, j.[value]) IS NOT NULL) THEN 0 ELSE 1 END) AS Invalido
+                FROM OPENJSON(CASE WHEN formato.Valido = 1 THEN p.[Entrega] ELSE N'{}' END) AS j
+                WHERE j.[key] IN (N'CidadeId', N'cidadeId')
+            ) AS cidade
+            WHERE p.[Entrega] IS NOT NULL
+            """).SingleAsync(ct);
 
     private async Task<bool> PermiteRemoverCidadeAtivaAsync(Guid id, CancellationToken ct) =>
         !await Configuracoes.AnyAsync(c => !c.RetiradaHabilitada, ct) ||
@@ -226,7 +256,8 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
     private static string? Texto(string? texto) => string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
     private static ResultadoAtendimento Sucesso(object dados) => new(StatusAtendimento.Sucesso, Dados: dados);
     private static ResultadoAtendimento Invalido(string erro) => new(StatusAtendimento.Invalido, erro);
-    private static ResultadoAtendimento Conflito(string erro) => new(StatusAtendimento.Conflito, erro);
+    private static ResultadoAtendimento Conflito(string erro, string? codigo = null) =>
+        new(StatusAtendimento.Conflito, erro, Codigo: codigo);
     private static ResultadoAtendimento Ausente() => new(StatusAtendimento.Ausente);
     private static ResultadoAtendimento RevisaoDivergente() => Conflito("A revisão mudou. Consulte o estado atual.");
     private static ResultadoAtendimento UltimaModalidade() => Conflito("Mantenha ao menos uma modalidade operacional.");

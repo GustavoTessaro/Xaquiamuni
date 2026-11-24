@@ -76,7 +76,8 @@ public static class ConfiguracoesAtendimentoEndpoints
     {
         StatusAtendimento.Sucesso => Results.Json(resultado.Dados, statusCode: sucesso),
         StatusAtendimento.Ausente => Results.NotFound(),
-        StatusAtendimento.Conflito => Results.Problem(statusCode: 409, detail: resultado.Erro),
+        StatusAtendimento.Conflito => Results.Problem(statusCode: 409, detail: resultado.Erro,
+            extensions: resultado.Codigo is null ? null : new Dictionary<string, object?> { ["codigo"] = resultado.Codigo }),
         _ => Results.ValidationProblem(new Dictionary<string, string[]>
         {
             ["atendimento"] = [resultado.Erro ?? "Confira os dados informados."]

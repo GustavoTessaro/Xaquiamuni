@@ -16,7 +16,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
             targetMigration: "20261123011231_RegistrarPostagemPostal");
         await using var db = banco.CreateVerificationContext();
         var cliente = await CriarClienteCompraAsync(db);
-        var (produto, variante, _) = await CriarProdutoCompravelAsync(db);
+        var (produto, variante, _) = await CriarProdutoCompravelAsync(db, categoriaAnteriorAVersao: true);
         var lote = (await EntrarAsync(db, variante.Id, 3)).Lote!;
         var cotacaoId = Guid.NewGuid();
         var publicada = Agora.AddHours(-1);
@@ -50,7 +50,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await db.SaveChangesAsync();
 
         Assert.Equal(new[] { "20261123200209_AdicionarNumeroPublicoPedido", "20261123202620_CriarPromocoesFrete",
-            "20261123225109_CongelarDescontoFretePostal" }, await db.Database.GetPendingMigrationsAsync());
+            "20261123225109_CongelarDescontoFretePostal", "20261123234034_VersionarEExcluirCategorias" },
+            await db.Database.GetPendingMigrationsAsync());
         await db.Database.MigrateAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());
 

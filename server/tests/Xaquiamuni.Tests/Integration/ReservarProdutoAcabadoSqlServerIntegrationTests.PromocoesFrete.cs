@@ -16,7 +16,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await using var banco = await SqlServerTestDatabase.CreateAsync(targetMigration: "20261123200209_AdicionarNumeroPublicoPedido");
         await using var db = banco.CreateVerificationContext();
         var clienteId = await CriarClienteCompraAsync(db);
-        var (produto, variante, _) = await CriarProdutoCompravelAsync(db);
+        var (produto, variante, _) = await CriarProdutoCompravelAsync(db, categoriaAnteriorAVersao: true);
         await EntrarAsync(db, variante.Id, 2);
         var pedido = (await Compra(db).ExecuteAsync(new(clienteId, Guid.NewGuid(), [new(produto.Id, variante.Id, 1)]))).Pedido!;
         await db.Database.MigrateAsync();

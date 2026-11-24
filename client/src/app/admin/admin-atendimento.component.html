@@ -6,6 +6,18 @@
     </header>
     @if (ocupado()) { <p role="status">Consultando atendimento…</p> }
     @if (erro()) { <p role="alert">{{ erro() }}</p> }
+    @if (exclusaoIncerta(); as pendente) {
+      <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="recuperarExclusao(pendente)">
+        Recuperar exclusão de {{ pendente.nome }}
+      </button>
+    }
+    @if (cidadeComPedidos(); as vinculada) {
+      @if (vinculada.ativa) {
+        <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="desabilitarAtendimento(vinculada)">
+          Desabilitar atendimento em {{ vinculada.nome }}
+        </button>
+      }
+    }
     @if (sucesso()) { <p role="status">{{ sucesso() }}</p> }
     @if (config(); as dados) {
       <form class="rounded-xl border border-slate-200 p-4" (ngSubmit)="salvarModalidades(dados)">
@@ -35,7 +47,7 @@
           <div class="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-2">
             <span class="grow wrap-anywhere">{{ item.nome }}/{{ item.uf }} · {{ reais(item.tarifaCentavos) }} · {{ item.ativa ? 'Ativa' : 'Inativa' }}</span>
             <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="editarCidade(item)">Editar</button>
-            <button type="button" class="admin-button" [disabled]="ocupado() || revisar()" (click)="excluir(item)">Excluir</button>
+            <button type="button" class="admin-button" [disabled]="ocupado() || revisar() || !!exclusaoIncerta()" (click)="excluir(item)">Excluir</button>
           </div>
         } @empty { <p>Nenhuma cidade cadastrada.</p> }
         <form (ngSubmit)="salvarCidade()">

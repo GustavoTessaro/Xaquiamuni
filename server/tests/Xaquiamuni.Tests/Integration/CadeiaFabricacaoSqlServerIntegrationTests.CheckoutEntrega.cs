@@ -135,6 +135,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             new { motivo = "Cancelamento de teste" }, HttpStatusCode.OK, Guid.NewGuid());
         var pedido = await cliente.PostAsync<JsonElement>("/api/pedidos", new { itens, ofertaEntregaId = nova },
             HttpStatusCode.Created, Guid.NewGuid());
+        await VerificarCidadeComPedidosAsync(admin, rotaCidade, 2);
         Assert.Equal("1400", pedido.GetProperty("freteCentavos").GetString());
         Assert.Equal("16", pedido.GetProperty("entrega").GetProperty("destino").GetProperty("numero").GetString());
         var prazo = pedido.GetProperty("prazoPagamentoEmUtc").GetDateTimeOffset();
@@ -145,6 +146,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(EncerrarPedidoStatus.Expirado, await expirar.ExpirarAsync(pedidoId));
         var estados = await db.Pedidos.AsNoTracking().Select(x => x.Situacao).ToListAsync();
         Assert.All(estados, estado => Assert.Contains(estado, new[] { SituacaoPedido.Expirado, SituacaoPedido.Cancelado }));
+        await VerificarCidadeComPedidosAsync(admin, rotaCidade, 2);
         Assert.All(await db.ReservasProdutoAcabado.AsNoTracking().ToListAsync(), reserva =>
             Assert.Contains(reserva.Estado, new[] { EstadoReservaProdutoAcabado.Expirada, EstadoReservaProdutoAcabado.Liberada }));
         Assert.Equal(8, (await db.SaldosProdutoAcabado.AsNoTracking().SingleAsync()).QuantidadeFisica);
@@ -203,6 +205,20 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Single(await CotarAsync(destino with { Numero = "" }));
         var antiga = Assert.Single(await CotarAsync(destino), item => item.GetProperty("modalidade").GetString() == "EntregaPropria");
         var tokenAntigo = antiga.GetProperty("id").GetString()!;
+        var chaveExclusao = Guid.NewGuid();
+        var remover = rotaCidade + "?revisao=2";
+        var excluida = await EscreverAtendimentoAsync(admin, HttpMethod.Delete, remover, null, HttpStatusCode.OK, chaveExclusao);
+        await RecusarAsync(cliente, tokenAntigo);
+        Assert.Single(await CotarAsync(destino));
+        Assert.Empty(await db.Pedidos.ToListAsync());
+        Assert.Empty(await db.ReservasProdutoAcabado.ToListAsync());
+        var recriada = await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades",
+            cidade with { Revisao = null }, HttpStatusCode.Created);
+        Assert.NotEqual(criada.GetProperty("id").GetGuid(), recriada.GetProperty("id").GetGuid());
+        Assert.True(JsonElement.DeepEquals(excluida,
+            await EscreverAtendimentoAsync(admin, HttpMethod.Delete, remover, null, HttpStatusCode.OK, chaveExclusao)));
+        rotaCidade = $"/cidades/{recriada.GetProperty("id").GetGuid():D}";
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rotaCidade, cidade with { Revisao = 1 }, HttpStatusCode.OK);
         await RecusarAsync(outro, tokenAntigo);
         await RecusarAsync(cliente, "Correios");
         await RecusarAsync(cliente, "x" + tokenAntigo);
@@ -443,6 +459,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         using (var duplicado = await TransicaoAsync(admin, receber, await VersaoAsync(), Guid.NewGuid()))
             Assert.Equal(HttpStatusCode.Conflict, duplicado.StatusCode);
         Assert.Equal(SituacaoPedido.Entregue, await db.Pedidos.Select(x => x.Situacao).SingleAsync());
+        await VerificarCidadeComPedidosAsync(admin, rotaCidade, cidade.Revisao!.Value + 1);
         Assert.Equal(10, await db.SaldosProdutoAcabado.AsNoTracking().Select(x => x.QuantidadeFisica).SingleAsync());
         Assert.Equal(2, await db.MovimentosProdutoAcabado.CountAsync());
         Assert.Equal(PdfComprovante(), await cliente.Http.GetByteArrayAsync(caminho + "/comprovante-pix/conteudo"));
@@ -482,6 +499,24 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var unicoRecebimento = Assert.Single((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes))
             .GetProperty("itens").EnumerateArray());
         Assert.Equal("3048", unicoRecebimento.GetProperty("valorCentavos").GetString());
+        var ofertaAntesDeDesabilitar = await CotarIdAsync();
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/modalidades",
+            config with { Revisao = 2 }, HttpStatusCode.OK);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rotaCidade,
+            cidade with { Revisao = 5, Ativa = false }, HttpStatusCode.OK);
+        await RecusarAsync(cliente, ofertaAntesDeDesabilitar);
+        Assert.Single(await CotarAsync(destino));
+        Assert.Equal(pedidosAntes, await db.Pedidos.CountAsync());
+        Assert.Equal(reservasAntes, await db.ReservasProdutoAcabado.CountAsync());
+    }
+
+    private static async Task VerificarCidadeComPedidosAsync(Sessao admin, string rota, int revisao)
+    {
+        using var resposta = await EnviarAtendimentoAsync(admin, HttpMethod.Delete,
+            $"{rota}?revisao={revisao}", null, Guid.NewGuid(), await TokenComprovanteAsync(admin));
+        Assert.Equal(HttpStatusCode.Conflict, resposta.StatusCode);
+        Assert.Equal("cidade_com_pedidos",
+            (await resposta.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codigo").GetString());
     }
 
     private sealed class FalharAoGravarSaida : SaveChangesInterceptor

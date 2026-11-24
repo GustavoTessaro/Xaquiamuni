@@ -40,7 +40,7 @@ public sealed record ModalidadesPublicas(bool RetiradaLocal, bool EntregaPropria
 
 public enum StatusAtendimento { Sucesso, Invalido, Ausente, Conflito }
 
-public sealed record ResultadoAtendimento(StatusAtendimento Status, string? Erro = null, object? Dados = null);
+public sealed record ResultadoAtendimento(StatusAtendimento Status, string? Erro = null, object? Dados = null, string? Codigo = null);
 
 public interface IConfiguracoesAtendimento
 {

@@ -28,6 +28,8 @@ export class AdminAtendimentoComponent {
   protected readonly cidade = signal({ ...cidadeNova });
   protected readonly ocupado = signal(false);
   protected readonly revisar = signal(false);
+  protected readonly cidadeComPedidos = signal<CidadeEntrega | null>(null);
+  protected readonly exclusaoIncerta = signal<CidadeEntrega | null>(null);
   protected readonly erro = signal('');
   protected readonly sucesso = signal('');
   protected readonly reais = formatarCentavos;
@@ -55,6 +57,8 @@ export class AdminAtendimentoComponent {
     this.config.set(config);
     this.cidades.set(cidades);
     this.cidade.set({ ...cidadeNova });
+    this.cidadeComPedidos.set(null);
+    this.exclusaoIncerta.set(null);
     this.revisar.set(false);
   }
 
@@ -106,11 +110,27 @@ export class AdminAtendimentoComponent {
   }
 
   protected excluir(cidade: CidadeEntrega): void {
-    if (window.confirm(`Excluir ${cidade.nome}/${cidade.uf} das cidades atendidas?`))
-      void this.gravar('DELETE', `/cidades/${cidade.id}?revisao=${cidade.revisao}`, null);
+    if (this.ocupado() || this.revisar() || this.exclusaoIncerta()) return;
+    if (window.confirm(`Excluir ${cidade.nome}/${cidade.uf}? A exclusão é permanente.`))
+      this.enviarExclusao(cidade);
   }
 
-  private async gravar(metodo: 'POST' | 'PUT' | 'DELETE', rota: string, corpo: object | null): Promise<void> {
+  protected recuperarExclusao(cidade: CidadeEntrega): void {
+    this.enviarExclusao(cidade);
+  }
+
+  protected desabilitarAtendimento(cidade: CidadeEntrega): void {
+    if (this.ocupado() || this.revisar() || this.exclusaoIncerta()) return;
+    if (!window.confirm(`Desabilitar o atendimento em ${cidade.nome}/${cidade.uf}? Os pedidos existentes serão preservados.`)) return;
+    const { codigoIbge, nome, uf, tarifaCentavos, revisao } = cidade;
+    void this.gravar('PUT', '/cidades/' + cidade.id, { codigoIbge, nome, uf, tarifaCentavos, revisao, ativa: false });
+  }
+
+  private enviarExclusao(cidade: CidadeEntrega): void {
+    void this.gravar('DELETE', `/cidades/${cidade.id}?revisao=${cidade.revisao}`, null, cidade);
+  }
+
+  private async gravar(metodo: 'POST' | 'PUT' | 'DELETE', rota: string, corpo: object | null, exclusao?: CidadeEntrega): Promise<void> {
     if (this.ocupado() || this.revisar()) return;
     const assinatura = JSON.stringify([metodo, rota, corpo]);
     if (this.tentativa && this.tentativa.assinatura !== assinatura) {
@@ -120,17 +140,27 @@ export class AdminAtendimentoComponent {
     this.ocupado.set(true);
     this.erro.set('');
     this.sucesso.set('');
+    this.cidadeComPedidos.set(null);
     this.tentativa ??= { assinatura, chave: crypto.randomUUID() };
     try {
       await firstValueFrom(this.api.escrever(metodo, rota, corpo, this.tentativa.chave));
       this.tentativa = undefined;
+      this.exclusaoIncerta.set(null);
       this.revisar.set(true);
-      this.sucesso.set('Alteração gravada.');
+      this.sucesso.set(exclusao ? 'Cidade excluída.' : 'Alteração gravada.');
       await this.carregar();
     } catch (falha) {
       const status = falha instanceof HttpErrorResponse ? falha.status : 0;
-      if (status >= 400 && status < 500) this.tentativa = undefined;
-      if (status === 409 || status === 404) this.revisar.set(true);
+      const bloqueio = exclusao && falha instanceof HttpErrorResponse && status === 409 &&
+        falha.error?.codigo === 'cidade_com_pedidos';
+      if (status >= 400 && status < 500) {
+        this.tentativa = undefined;
+        this.exclusaoIncerta.set(null);
+      } else if (exclusao && this.tentativa) {
+        this.exclusaoIncerta.set(exclusao);
+      }
+      if (bloqueio) this.cidadeComPedidos.set(exclusao);
+      else if (status === 409 || status === 404) this.revisar.set(true);
       this.erro.set((falha instanceof HttpErrorResponse && (falha.error?.detail || falha.error?.title)) ||
         (this.revisar() ? 'Recarregue os dados antes de continuar.' :
           'Não foi possível confirmar o resultado. Repita a mesma operação ou recarregue os dados.'));

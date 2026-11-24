@@ -153,7 +153,8 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                 conexaoMaster = new SqlConnectionStringBuilder(db.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
                 var relogio = jornada ? new RelogioJornadaCompra() : null;
                 await using (var host = new HostE2ECompra(db, dist, temporario, relogio,
-                    municipiosPorCep: modoAdmin ? new Dictionary<string, string> { ["95200000"] = "4322509" } : null,
+                    municipiosPorCep: modoAdmin ? new Dictionary<string, string>
+                        { ["95200000"] = "4322509", ["90000000"] = "4314902" } : null,
                     municipiosPostais: postal ? new Dictionary<string, MunicipioPostal> { ["95200000"] = new("4322509", "Vacaria", "RS") } : null))
                 {
                     endereco = new Uri(host.Origin);
