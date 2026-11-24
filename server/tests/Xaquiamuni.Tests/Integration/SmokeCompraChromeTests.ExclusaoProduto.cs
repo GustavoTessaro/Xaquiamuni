@@ -35,10 +35,16 @@ public sealed partial class SmokeCompraChromeTests
             while (await db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS [Value] FROM LimpezasImagensProdutos")
                        .SingleAsync(limite.Token) > 0)
                 await Task.Delay(TimeSpan.FromMilliseconds(250), limite.Token);
-            var imagem = await db.ProdutoImagens.AsNoTracking().SingleAsync();
+            var imagens = await db.ProdutoImagens.AsNoTracking().ToArrayAsync();
+            Assert.Equal(2, imagens.Length);
             var raiz = Path.Combine(temporario, "imagens");
-            Assert.Equal(Path.Combine(raiz, imagem.ChaveArmazenamento.Replace('/', Path.DirectorySeparatorChar)),
-                Assert.Single(Directory.GetFiles(Path.Combine(raiz, "product-images"))));
+            Assert.Equal(imagens.Select(i => Path.Combine(raiz,
+                    i.ChaveArmazenamento.Replace('/', Path.DirectorySeparatorChar))).Order(),
+                Directory.GetFiles(Path.Combine(raiz, "product-images")).Order());
+            Assert.Equal(1, await db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS [Value] FROM OperacoesExclusaoCategoria").SingleAsync());
+            Assert.True(await db.Database.SqlQueryRaw<int>(
+                "SELECT COUNT(*) AS [Value] FROM OperacoesExclusaoProduto").SingleAsync() > 0);
             Assert.True(await db.Categorias.AnyAsync(c => c.Id == categoria.Id));
             Assert.False(await db.Set<ProdutoCaracteristica>().AnyAsync());
             Assert.False(await db.Set<ProdutoCaracteristicaValor>().AnyAsync());

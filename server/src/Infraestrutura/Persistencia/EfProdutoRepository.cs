@@ -3,8 +3,10 @@ using System.Runtime.ExceptionServices;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
+using Microsoft.Extensions.Logging;
 using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Dominio.Entidades;
+using Xaquiamuni.Infraestrutura.Imagens;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
 
@@ -41,10 +43,12 @@ public sealed class EfProdutoRepository : IProdutoRepository
     ];
 
     private readonly XaquiamuniDbContext _dbContext;
+    private readonly ILogger<EfProdutoRepository>? _logger;
 
-    public EfProdutoRepository(XaquiamuniDbContext dbContext)
+    public EfProdutoRepository(XaquiamuniDbContext dbContext, ILogger<EfProdutoRepository>? logger = null)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     public async Task<IReadOnlyList<Produto>> ListarAsync(
@@ -138,6 +142,7 @@ public sealed class EfProdutoRepository : IProdutoRepository
         await using (transaction.ConfigureAwait(false))
         {
             var committed = false;
+            var limpezasRegistradas = 0;
             try
             {
                 ProdutoResult result;
@@ -147,6 +152,14 @@ public sealed class EfProdutoRepository : IProdutoRepository
                     result = await operacao(session, cancellationToken).ConfigureAwait(false);
                     if (result.Status == ProdutoStatus.Success)
                     {
+                        var imagensRemovidas = _dbContext.ChangeTracker.Entries<ProdutoImagem>()
+                            .Where(entry => entry.State == EntityState.Deleted)
+                            .Select(entry => entry.Entity.ChaveArmazenamento)
+                            .ToArray();
+                        foreach (var chave in imagensRemovidas)
+                            _dbContext.Add(new LimpezaImagemProduto(Guid.NewGuid(), chave, DateTimeOffset.UtcNow));
+                        limpezasRegistradas = imagensRemovidas.Length;
+
                         var variantesDesativadas = _dbContext.ChangeTracker.Entries<ProdutoVariante>()
                             .Where(entry => entry.State == EntityState.Modified
                                 && entry.Property(variante => variante.Ativa).OriginalValue && !entry.Entity.Ativa)
@@ -201,6 +214,9 @@ public sealed class EfProdutoRepository : IProdutoRepository
                 {
                     await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
                     committed = true;
+                    if (limpezasRegistradas > 0)
+                        _logger?.LogInformation("{Quantidade} intenções de limpeza de imagens registradas para o produto {ProdutoId}.",
+                            limpezasRegistradas, result.Produto?.Id);
                     return ProdutoMutationExecutionResult.Committed(result);
                 }
                 catch (Exception exception)

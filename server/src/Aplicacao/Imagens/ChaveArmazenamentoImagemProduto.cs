@@ -17,6 +17,6 @@ public static class ChaveArmazenamentoImagemProduto
         }
 
         var identificador = chave[prefixo.Length..^sufixo.Length];
-        return Guid.TryParseExact(identificador, "N", out _);
+        return identificador.Length == 32 && Guid.TryParseExact(identificador, "N", out _);
     }
 }

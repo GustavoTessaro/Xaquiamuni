@@ -36,18 +36,32 @@ public sealed class LimpezaImagensProduto(
         if (pendente is null) return;
 
         var chave = pendente.Chave;
-        if (ChaveArmazenamentoImagemProduto.EhValida(chave)
-            && !await db.ProdutoImagens.AnyAsync(i =>
-                EF.Functions.Collate(i.ChaveArmazenamento, "Latin1_General_100_CI_AS") == chave, ct))
+        logger.LogDebug("Processando intenção de limpeza de imagem {LimpezaId}.", id);
+        var resultado = "arquivo excluído";
+        if (!ChaveArmazenamentoImagemProduto.EhValida(chave))
+        {
+            logger.LogWarning("A intenção de limpeza {LimpezaId} contém chave inválida.", id);
+            resultado = "chave inválida";
+        }
+        else if (await db.ProdutoImagens.AnyAsync(i =>
+            EF.Functions.Collate(i.ChaveArmazenamento, "Latin1_General_100_CI_AS") == chave, ct))
+        {
+            resultado = "arquivo preservado por referência";
+        }
+        else
         {
             try
             {
-                // O SQL protege a consulta de referências até o armazenamento terminar.
-                await armazenamento.ExcluirAsync(chave, ct);
+                // A transação protege a consulta durante a operação local de filesystem.
+                if (await armazenamento.ExisteAsync(chave, ct))
+                    await armazenamento.ExcluirAsync(chave, ct);
+                else
+                    resultado = "arquivo já ausente";
             }
             catch (Exception erro) when (erro is IOException or UnauthorizedAccessException)
             {
-                logger.LogWarning(erro, "A limpeza da imagem {LimpezaId} será tentada novamente.", id);
+                logger.LogWarning("A limpeza {LimpezaId} falhou no armazenamento ({TipoErro}, código {Codigo}) e será tentada novamente.",
+                    id, erro.GetType().Name, erro.HResult);
                 db.Entry(pendente).Property(p => p.ProximaTentativaUtc).CurrentValue = relogio.GetUtcNow().AddMinutes(1);
                 await db.SaveChangesAsync(ct);
                 await transacao.CommitAsync(ct);
@@ -58,6 +72,7 @@ public sealed class LimpezaImagensProduto(
         db.Remove(pendente);
         await db.SaveChangesAsync(ct);
         await transacao.CommitAsync(ct);
+        logger.LogInformation("Limpeza de imagem {LimpezaId} concluída com resultado {Resultado}.", id, resultado);
     }
 }
 

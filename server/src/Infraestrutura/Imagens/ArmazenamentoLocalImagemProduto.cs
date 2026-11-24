@@ -52,6 +52,7 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
 
         cancellationToken.ThrowIfCancellationRequested();
         var destino = ObterCaminho(chave);
+        GarantirAncestraisSeguros(criacao: true);
         Directory.CreateDirectory(_diretorioRaiz);
         GarantirDiretorioSeguro(_diretorioRaiz);
         Directory.CreateDirectory(_diretorioImagens);
@@ -105,6 +106,7 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
         var caminho = ObterCaminho(chave);
         try
         {
+            GarantirAncestraisSeguros();
             GarantirArquivoSeguro(caminho);
             Stream stream = new FileStream(
                 caminho,
@@ -131,6 +133,7 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
         var caminho = ObterCaminho(chave);
         try
         {
+            GarantirAncestraisSeguros();
             GarantirArquivoSeguro(caminho);
             _ = File.GetAttributes(caminho);
             return Task.FromResult(true);
@@ -151,6 +154,7 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
         var caminho = ObterCaminho(chave);
         try
         {
+            GarantirAncestraisSeguros();
             GarantirArquivoSeguro(caminho);
             File.Delete(caminho);
         }
@@ -188,6 +192,23 @@ public sealed class ArmazenamentoLocalImagemProduto : IArmazenamentoImagemProdut
         if ((File.GetAttributes(caminho) & FileAttributes.ReparsePoint) != 0)
         {
             throw new IOException("O diretório de armazenamento não pode ser um link ou ponto de nova análise.");
+        }
+    }
+
+    private void GarantirAncestraisSeguros(bool criacao = false)
+    {
+        for (DirectoryInfo? pasta = new(_diretorioImagens); pasta is not null; pasta = pasta.Parent)
+        {
+            try
+            {
+                GarantirDiretorioSeguro(pasta.FullName);
+            }
+            catch (FileNotFoundException) when (criacao)
+            {
+            }
+            catch (DirectoryNotFoundException) when (criacao)
+            {
+            }
         }
     }
 

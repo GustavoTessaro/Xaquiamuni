@@ -262,16 +262,16 @@ public sealed class GerenciarImagensProdutoTests
         var removedMain = await fixture.Manager.RemoverAsync(fixture.Product.Id, main.Id);
         var blockedLast = await fixture.Manager.RemoverAsync(fixture.Product.Id, other.Id);
 
-        Assert.Equal(ProdutoImagemOperacaoStatus.Success, removedMain.Status);
-        Assert.Single(removedMain.Imagens, image => image.Id == other.Id && image.Principal);
-        Assert.False(fixture.Storage.Objects.ContainsKey(main.ChaveArmazenamento));
+        Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, removedMain.Status);
+        Assert.Single(fixture.Product.Imagens, image => image.Id == other.Id && image.Principal);
+        Assert.True(fixture.Storage.Objects.ContainsKey(main.ChaveArmazenamento));
         Assert.Equal(ProdutoImagemOperacaoStatus.Conflict, blockedLast.Status);
         Assert.Single(fixture.Product.Imagens);
         Assert.True(fixture.Storage.Objects.ContainsKey(other.ChaveArmazenamento));
     }
 
     [Fact]
-    public async Task Remover_NaoAfirmaExclusaoFisicaQuandoArmazenamentoFalha()
+    public async Task Remover_DeixaExclusaoFisicaComProcessador()
     {
         var fixture = new Fixture();
         var image = fixture.AddExistingImage("image.webp", order: 1, principal: true);
@@ -284,10 +284,7 @@ public sealed class GerenciarImagensProdutoTests
         Assert.Empty(fixture.Product.Imagens);
         Assert.True(fixture.Storage.Objects.ContainsKey(image.ChaveArmazenamento));
         Assert.Contains("metadados foram removidos", result.Mensagem);
-        Assert.Contains(
-            fixture.Logger.Events,
-            entry => entry.Stage == "delete-after-metadata-removal"
-                && entry.Key == image.ChaveArmazenamento);
+        Assert.Empty(fixture.Logger.Events);
     }
 
     [Fact]

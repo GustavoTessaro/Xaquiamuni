@@ -417,10 +417,12 @@ try {
       const r = await fetch(${JSON.stringify(path)}, { method: ${JSON.stringify(method)},
         headers: {'Content-Type':'application/json', 'X-XSRF-TOKEN':requestToken, ...${JSON.stringify(headers)}},
         body: ${body === undefined ? 'undefined' : JSON.stringify(JSON.stringify(body))} });
-      return {status:r.status, tag:r.headers.get('ETag'), body:r.status===204 ? null : await r.json()};
+      const texto = await r.text();
+      return {status:r.status, tag:r.headers.get('ETag'), body:texto &&
+        r.headers.get('Content-Type')?.includes('json') ? JSON.parse(texto) : null};
     })()`);
-    const criar = async nome => {
-      const r = await pedir(base, 'POST', { nome, categoriaId: dados.exclusaoProduto, simples: true,
+    const criar = async (nome, categoriaId = dados.exclusaoProduto) => {
+      const r = await pedir(base, 'POST', { nome, categoriaId, simples: true,
         variantePadrao: { unidadeVenda: 'UN', precoVenda: 19 } });
       assert.equal(r.status, 201, JSON.stringify(r));
       assert.equal(r.body.variantes.filter(v => v.padrao).length, 1);
@@ -479,14 +481,15 @@ try {
       assert.equal((await pedir('/api/admin/categorias/' + dados.exclusaoProduto, 'GET')).status, 200);
     }
 
-    const foto = produto => a.ev(`(async () => {
+    const foto = (produto, nome = 'foto.png', varianteId = null) => a.ev(`(async () => {
       const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
       const canvas = document.createElement('canvas');
       canvas.width = canvas.height = 96;
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = '#277c51'; ctx.fillRect(0, 0, 96, 96);
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-      const form = new FormData(); form.append('arquivo', blob, 'foto.png');
+      const form = new FormData(); form.append('arquivo', blob, ${JSON.stringify(nome)});
+      if (${JSON.stringify(varianteId)}) form.append('varianteIds', ${JSON.stringify(varianteId)});
       const r = await fetch(${JSON.stringify(base + '/' + produto.id + '/imagens')}, {
         method:'POST', headers:{'X-XSRF-TOKEN':requestToken}, body:form });
       return [r.status, await r.json()];
@@ -494,10 +497,49 @@ try {
     const vizinho = await criar('Produto preservado');
     const [vizinhoStatus] = await foto(vizinho);
     assert.equal(vizinhoStatus, 201);
+    const [segundaFoto] = await foto(vizinho, 'removivel.png');
+    assert.equal(segundaFoto, 201);
+    const galeria = '/admin/produtos/' + vizinho.id + '/fotos';
+    const rotaImagens = base + '/' + vizinho.id + '/imagens';
+    await a.ir(galeria);
+    const removerFoto = botao('Remover removivel.png');
+    await waitFor(() => a.ev('!!(' + removerFoto + ')'), 'ação de remoção individual');
+    for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), modo);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+    }
+    for (const aceitar of [false, true]) {
+      const decisao = { aceitar };
+      confirmacoes.set(a.sessionId, decisao);
+      try {
+        await a.ev("setTimeout(() => (" + removerFoto + ").click(), 0)");
+        await waitFor(() => decisao.processada, 'confirmação da foto');
+        assert.ok(decisao.mensagem.includes('removivel.png') && decisao.mensagem.includes('permanentemente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+      if (!aceitar) assert.equal((await pedir(rotaImagens, 'GET')).body.length, 2);
+    }
+    await texto('A foto foi removida da galeria.');
+    await a.ir(galeria);
+    assert.equal((await pedir(rotaImagens, 'GET')).body.length, 1);
+    assert.equal((await pedir(base + '/' + vizinho.id + '/publicacao', 'PATCH', { publicado: true })).status, 200);
     const publicado = await criar('Produto publicado descartável');
     const rotaPublicada = base + '/' + publicado.id;
+    const opcoesPublicadas = await pedir(rotaPublicada, 'PUT',
+      { caracteristicas: [{ nome: 'Aroma', valores: [{ nome: 'Lavanda' }, { nome: 'Alecrim' }] }] });
+    assert.equal(opcoesPublicadas.status, 200, JSON.stringify(opcoesPublicadas));
+    const aromaPublico = opcoesPublicadas.body.caracteristicas[0];
+    const novaOpcao = await pedir(rotaPublicada + '/variantes', 'POST',
+      { identificacao: 'Alecrim', unidadeVenda: 'UN', precoVenda: 22,
+        caracteristicas: [{ caracteristicaId: aromaPublico.id, valorId: aromaPublico.valores.find(v => v.nome === 'Alecrim').id }] });
+    assert.equal(novaOpcao.status, 200, JSON.stringify(novaOpcao));
     const [statusFoto, fotoCriada] = await foto(publicado);
     assert.equal(statusFoto, 201, JSON.stringify(fotoCriada));
+    assert.equal((await foto(publicado, 'detalhe.png', novaOpcao.body.variantes.find(v => !v.padrao).id))[0], 201);
     assert.equal((await pedir(rotaPublicada + '/publicacao', 'PATCH', { publicado: true })).status, 200);
     const consulta = '/api/catalogo/produtos/' + publicado.id;
     const noCatalogo = () => c.ev(`fetch('/api/catalogo/produtos').then(r=>r.json()).then(p=>p.itens.some(i=>i.id===${JSON.stringify(publicado.id)}))`);
@@ -524,6 +566,7 @@ try {
       { identificacao: 'Adicional', unidadeVenda: 'UN', precoVenda: 20 });
     assert.equal(adicao.status, 200, JSON.stringify(adicao));
     const extra = adicao.body.variantes.find(v => !v.padrao);
+    assert.equal((await foto(bloqueado, 'historico.png'))[0], 201);
     const entrada = await pedir('/api/admin/estoque/produtos-acabados/variantes/' + extra.id + '/entradas', 'POST',
       { tipo: 'EntradaManual', quantidade: 1, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Ensaio' },
       { 'Idempotency-Key': await a.ev('crypto.randomUUID()') });
@@ -532,6 +575,7 @@ try {
     await confirmar(bloqueado, true);
     await texto('A variante possui registros de estoque');
     assert.equal((await pedir(rotaBloqueada, 'GET')).body.variantes.length, 2);
+    assert.equal((await pedir(rotaBloqueada + '/imagens', 'GET')).body.length, 1);
 
     const antigo = await criar('Produto recadastrado');
     const anterior = base + '/' + antigo.id;
@@ -547,6 +591,33 @@ try {
     const novaTag = (await pedir(novaRota, 'GET')).tag;
     assert.equal((await pedir(novaRota, 'DELETE', undefined, { ...headers, 'If-Match': novaTag })).status, 409);
     assert.equal((await pedir(novaRota, 'GET')).status, 200);
+    const categorias = '/api/admin/categorias';
+    const categoria = await pedir(categorias, 'POST', { nome: 'Categoria da exclusão encadeada', ordemExibicao: 43 });
+    assert.equal(categoria.status, 201, JSON.stringify(categoria));
+    const ramo = await criar('Produto da exclusão encadeada', categoria.body.id);
+    const rotaRamo = base + '/' + ramo.id;
+    const rotaCategoria = categorias + '/' + categoria.body.id;
+    const chaveNova = () => a.ev('crypto.randomUUID()');
+    const apagar = async rota => pedir(rota, 'DELETE', undefined, {
+      'Idempotency-Key': await chaveNova(), 'If-Match': (await pedir(rota, 'GET')).tag,
+    });
+    assert.equal((await apagar(rotaCategoria)).status, 409);
+    assert.equal((await apagar(rotaRamo)).status, 204);
+    assert.equal((await apagar(rotaCategoria)).status, 204);
+    assert.equal((await pedir(rotaCategoria, 'GET')).status, 404);
+
+    const rotaTema = '/api/admin/loja/tema';
+    for (const tema of ['natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes', 'original']) {
+      const estadoTema = await pedir(rotaTema, 'GET');
+      assert.equal((await pedir(rotaTema, 'PUT', { chave: tema, revisaoEsperada: estadoTema.body.publicacao.revisao },
+        { 'Idempotency-Key': await chaveNova() })).status, 200);
+      await c.ir('/produtos/' + vizinho.id);
+      await waitFor(() => c.ev(`document.querySelector('app-store-layout')?.dataset.theme === ${JSON.stringify(tema)}
+        && [...document.querySelectorAll('main img')].some(img => img.complete && img.naturalWidth > 0)`), 'foto no tema ' + tema);
+      assert.ok(await c.ev('document.documentElement.scrollWidth <= innerWidth'));
+    }
+    await c.ev("document.querySelector('main img').dispatchEvent(new Event('error'))");
+    await texto('Imagem indisponível', c);
     console.log('Exclusão do produto, histórico, catálogo, imagens, carrinho obsoleto e recadastro verificados no Chrome.');
   }
 

@@ -138,13 +138,20 @@ public sealed class AdminProdutoImagemSqlServerIntegrationTests
         using var deleteRequest = new HttpRequestMessage(HttpMethod.Delete, $"{imagePath}/{imageDto.Id:D}");
         AddAntiforgery(deleteRequest, csrf);
         using var deleteResponse = await client.SendAsync(deleteRequest);
-        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
-        Assert.Empty(Directory.Exists(storage.ImagesPath)
-            ? Directory.GetFiles(storage.ImagesPath)
-            : []);
+        Assert.Equal(HttpStatusCode.OK, deleteResponse.StatusCode);
+        var remocao = await deleteResponse.Content.ReadFromJsonAsync<ProdutoImagemRemocaoResponse>();
+        Assert.True(remocao?.RemovidaDoCatalogo);
+        Assert.False(remocao?.LimpezaFisicaConcluida);
 
         await using var verification = database.CreateVerificationContext();
         Assert.False(await verification.ProdutoImagens.AnyAsync(item => item.Id == imageDto.Id));
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(25));
+        while (await verification.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS [Value] FROM LimpezasImagensProdutos")
+                   .SingleAsync(limite.Token) > 0)
+            await Task.Delay(100, limite.Token);
+        Assert.Empty(Directory.Exists(storage.ImagesPath)
+            ? Directory.GetFiles(storage.ImagesPath)
+            : []);
     }
 
     private static WebApplicationFactory<Program> CreateFactory(

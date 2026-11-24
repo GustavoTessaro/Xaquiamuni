@@ -388,6 +388,27 @@ describe('AdminProdutoImagensComponent', () => {
     });
   });
 
+  it('revalidates the same selected image after a lost response and preserves the remaining gallery', async () => {
+    const confirmar = vi.spyOn(globalThis, 'confirm').mockReturnValue(false);
+    listarImagens.mockReturnValueOnce(of([image, secondImage])).mockReturnValueOnce(of([secondImage]));
+    remover.mockReturnValue(throwError(() => new HttpErrorResponse({ status: 0 })));
+    fixture.destroy();
+    fixture = TestBed.createComponent(AdminProdutoImagensComponent);
+    fixture.detectChanges();
+    clickButton('Remover lavanda.png');
+    expect(remover).not.toHaveBeenCalled();
+    expect(imageNames()).toEqual(['lavanda.png', 'camomila.webp']);
+    confirmar.mockReturnValue(true);
+    clickButton('Remover lavanda.png');
+    expect(button('Remover lavanda.png')?.disabled).toBe(true);
+    await vi.waitFor(() => {
+      fixture.detectChanges();
+      expect(imageNames()).toEqual(['camomila.webp']);
+      expect(text()).toContain('A foto não está mais na galeria.');
+    });
+    expect(remover).toHaveBeenCalledOnce();
+  });
+
   it('releases preview object URLs when the component is destroyed', () => {
     selectFiles([new File(['preview'], 'preview.png', { type: 'image/png' })]);
     fixture.destroy();

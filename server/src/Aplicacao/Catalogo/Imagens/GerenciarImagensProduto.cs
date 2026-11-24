@@ -532,31 +532,9 @@ public sealed class GerenciarImagensProduto : IGerenciarImagensProduto
                 () => chave)
             .ConfigureAwait(false);
 
-        if (result.Status != ProdutoImagemOperacaoStatus.Success || chave is null)
-        {
-            return result;
-        }
-
-        try
-        {
-            await _armazenamento.ExcluirAsync(chave, cancellationToken).ConfigureAwait(false);
-            return result;
-        }
-        catch (OperationCanceledException exception)
-        {
-            RegistrarExclusaoPendente(produtoId, imagemId, chave, exception);
-            throw;
-        }
-        catch (IOException exception)
-        {
-            RegistrarExclusaoPendente(produtoId, imagemId, chave, exception);
-            return ProdutoImagemOperacaoResult.CleanupPending();
-        }
-        catch (UnauthorizedAccessException exception)
-        {
-            RegistrarExclusaoPendente(produtoId, imagemId, chave, exception);
-            return ProdutoImagemOperacaoResult.CleanupPending();
-        }
+        return result.Status == ProdutoImagemOperacaoStatus.Success
+            ? ProdutoImagemOperacaoResult.CleanupPending()
+            : result;
     }
 
     private async Task<ProdutoImagemOperacaoResult> ExecutarMutacaoAsync(
@@ -653,18 +631,6 @@ public sealed class GerenciarImagensProduto : IGerenciarImagensProduto
             return false;
         }
     }
-
-    private void RegistrarExclusaoPendente(
-        Guid produtoId,
-        Guid imagemId,
-        string chave,
-        Exception exception) =>
-        _operacaoLogger.RegistrarFalhaDeArmazenamento(
-            produtoId,
-            imagemId,
-            chave,
-            "delete-after-metadata-removal",
-            exception);
 
     private static ProdutoImagemOperacaoResult MapearResultado(ProdutoResult result) =>
         result.Status switch

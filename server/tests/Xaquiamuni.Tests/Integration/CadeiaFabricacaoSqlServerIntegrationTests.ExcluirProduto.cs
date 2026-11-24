@@ -187,7 +187,15 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public Task ExclusaoProduto_AntesDaAssociacaoImagem() => DisputarEdicaoCatalogoAsync(imagem: true, edicaoPrimeiro: false);
 
-    private static async Task DisputarEdicaoCatalogoAsync(bool imagem, bool edicaoPrimeiro)
+    [SqlServerIntegrationFact]
+    public Task ExclusaoProduto_RemocaoImagemPrimeiro() =>
+        DisputarEdicaoCatalogoAsync(imagem: true, edicaoPrimeiro: true, removerImagem: true);
+
+    [SqlServerIntegrationFact]
+    public Task ExclusaoProduto_AntesDaRemocaoImagem() =>
+        DisputarEdicaoCatalogoAsync(imagem: true, edicaoPrimeiro: false, removerImagem: true);
+
+    private static async Task DisputarEdicaoCatalogoAsync(bool imagem, bool edicaoPrimeiro, bool removerImagem = false)
     {
         var barreira = new BarreiraCommitCatalogo();
         await using var ambiente = await Ambiente.CriarAsync(interceptor: barreira);
@@ -196,6 +204,13 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await using var db = ambiente.Banco.CreateVerificationContext();
         var (produto, _, extra) = await ReservarProdutoAcabadoSqlServerIntegrationTests.CriarProdutoCompravelAsync(db);
         var foto = Assert.Single(produto.Imagens);
+        if (removerImagem)
+        {
+            var agregado = await db.Produtos.Include(p => p.Imagens).SingleAsync(p => p.Id == produto.Id);
+            db.ProdutoImagens.Add(agregado.AdicionarImagem(ChaveArmazenamentoImagemProduto.Gerar(),
+                "preservada.webp", "image/webp", 3, 32, 32));
+            await db.SaveChangesAsync();
+        }
         var rota = $"/api/admin/produtos/{produto.Id:D}";
         var versao = await VersaoProdutoAsync(admin, rota);
         // Obter os tokens antes de armar a barreira isola as transações dos comandos testados.
@@ -205,7 +220,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         excluir.Headers.IfMatch.ParseAdd(versao);
         excluir.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
         excluir.Headers.Add("X-XSRF-TOKEN", tokenAdmin);
-        using var editar = imagem
+        using var editar = removerImagem
+            ? new HttpRequestMessage(HttpMethod.Delete, $"{rota}/imagens/{foto.Id:D}")
+            : imagem
             ? new HttpRequestMessage(HttpMethod.Put, $"{rota}/imagens/{foto.Id:D}/variantes/{extra.Id:D}")
             : new HttpRequestMessage(HttpMethod.Post, $"{rota}/variantes")
             {
@@ -243,8 +260,13 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         }
         Assert.Equal(edicaoPrimeiro, await db.Produtos.AnyAsync(p => p.Id == produto.Id));
         Assert.Equal(edicaoPrimeiro ? imagem ? 2 : 3 : 0, await db.ProdutoVariantes.CountAsync(v => v.ProdutoId == produto.Id));
-        Assert.Equal(edicaoPrimeiro && imagem ? 1 : 0,
+        Assert.Equal(edicaoPrimeiro && imagem && !removerImagem ? 1 : 0,
             await db.Set<ProdutoImagemVariante>().CountAsync(a => a.ProdutoId == produto.Id));
+        if (removerImagem)
+        {
+            Assert.False(await db.ProdutoImagens.AnyAsync(i => i.Id == foto.Id));
+            Assert.Equal(edicaoPrimeiro ? 1 : 0, await db.ProdutoImagens.CountAsync(i => i.ProdutoId == produto.Id));
+        }
     }
 
     private sealed class BarreiraCommitCatalogo : DbTransactionInterceptor

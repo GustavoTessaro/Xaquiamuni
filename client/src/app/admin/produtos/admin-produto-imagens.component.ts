@@ -54,6 +54,7 @@ export class AdminProdutoImagensComponent {
   protected readonly imagemEmDestaqueId = signal('');
   protected readonly enviando = signal(false);
   protected readonly mutacaoEmAndamento = signal(false);
+  private readonly conferindoRemocao = signal(false);
   protected readonly imagemPrincipal = computed(
     () => this.imagens().find((imagem) => imagem.principal) ?? null,
   );
@@ -78,7 +79,7 @@ export class AdminProdutoImagensComponent {
     this.selecao().some((item) => item.status === 'pending'),
   );
   protected readonly ocupado = computed(
-    () => this.carregando() || this.enviando() || this.mutacaoEmAndamento(),
+    () => this.carregando() || this.enviando() || this.mutacaoEmAndamento() || this.conferindoRemocao(),
   );
 
   private readonly route = inject(ActivatedRoute);
@@ -305,7 +306,7 @@ export class AdminProdutoImagensComponent {
     if (this.ocupado() || this.naoPodeRemoverUltima()) {
       return;
     }
-    if (!globalThis.confirm(`Remover a foto "${imagem.nomeOriginal}" da galeria?`)) {
+    if (!globalThis.confirm(`Remover permanentemente a foto "${imagem.nomeOriginal}" da galeria?`)) {
       return;
     }
     this.mutacaoEmAndamento.set(true);
@@ -335,6 +336,11 @@ export class AdminProdutoImagensComponent {
           );
         },
         error: (error: unknown) => {
+          if (error instanceof HttpErrorResponse &&
+              (error.status === 0 || error.status === 404 || error.status >= 500)) {
+            void this.conferirRemocao(imagem.id);
+            return;
+          }
           this.erroOperacao.set(
             this.conflitoUltimaFotoPublicada(error)
               ? 'A última foto de um produto publicado não pode ser removida. Despublique o produto ou adicione outra foto.'
@@ -343,6 +349,19 @@ export class AdminProdutoImagensComponent {
           this.redirecionarSessaoExpirada(error);
         },
       });
+  }
+
+  private async conferirRemocao(imagemId: string): Promise<void> {
+    this.conferindoRemocao.set(true);
+    this.erroOperacao.set('A remoção não foi confirmada. Confira a galeria antes de repetir a operação.');
+    try {
+      if (await this.atualizarImagens(false) && !this.imagens().some(imagem => imagem.id === imagemId)) {
+        this.erroOperacao.set('');
+        this.mensagem.set('A foto não está mais na galeria.');
+      }
+    } finally {
+      this.conferindoRemocao.set(false);
+    }
   }
 
   protected imagemIndisponivel(imagemId: string): boolean {
@@ -488,7 +507,7 @@ export class AdminProdutoImagensComponent {
     };
   }
 
-  private async atualizarImagens(): Promise<boolean> {
+  private async atualizarImagens(operacaoConfirmada = true): Promise<boolean> {
     try {
       const imagens = await firstValueFrom(
         this.imagensService.listar(this.produtoId).pipe(takeUntilDestroyed(this.destroyRef)),
@@ -500,7 +519,7 @@ export class AdminProdutoImagensComponent {
       return true;
     } catch (error: unknown) {
       if (!this.destroyRef.destroyed) {
-        this.erroOperacao.set(
+        if (operacaoConfirmada) this.erroOperacao.set(
           'A operação foi concluída, mas não foi possível atualizar a galeria. Use "Atualizar galeria" para conferir o estado atual.',
         );
         this.redirecionarSessaoExpirada(error);

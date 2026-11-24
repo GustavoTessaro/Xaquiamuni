@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using SkiaSharp;
 using Xaquiamuni.Aplicacao.Catalogo;
@@ -15,6 +18,247 @@ namespace Xaquiamuni.Tests.Integration;
 [Trait("Category", "SqlServerIntegration")]
 public sealed class GerenciarImagensProdutoSqlServerIntegrationTests
 {
+    [SqlServerIntegrationFact]
+    public async Task LimpezaIndividual_RecuperaIntencoesAoReiniciarHost()
+    {
+        await using var banco = await SqlServerTestDatabase.CreateAsync();
+        var temporario = Directory.CreateTempSubdirectory("xaquiamuni-image-restart-");
+        try
+        {
+            await using var db = banco.CreateVerificationContext();
+            var categoria = Categoria.Criar("Reinício", null, 0);
+            var produto = Produto.CriarSimples("Produto com duas fotos", null, categoria, "UN", 19);
+            db.Produtos.Add(produto);
+            await db.SaveChangesAsync();
+            var chaves = new List<string>();
+            await using (var host = new HostE2ECompra(banco, temporario.FullName, temporario.FullName,
+                relogioAplicacao: new RelogioAnterior()))
+            {
+                await using var escopo = host.Services.CreateAsyncScope();
+                var manager = escopo.ServiceProvider.GetRequiredService<IGerenciarImagensProduto>();
+                var storage = escopo.ServiceProvider.GetRequiredService<IArmazenamentoImagemProduto>();
+                for (var contador = 0; contador < 2; contador++)
+                {
+                    using var origem = new MemoryStream(CreatePng());
+                    var imagem = Assert.IsType<ProdutoImagemDto>((await manager.AdicionarAsync(produto.Id,
+                        new AdicionarImagemProdutoInput(origem, $"foto-{contador}.png"))).Imagem);
+                    var chave = await db.ProdutoImagens.Where(i => i.Id == imagem.Id)
+                        .Select(i => i.ChaveArmazenamento).SingleAsync();
+                    chaves.Add(chave);
+                    Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, (await manager.RemoverAsync(produto.Id, imagem.Id)).Status);
+                    Assert.True(await storage.ExisteAsync(chave));
+                }
+                Assert.Equal(2, await ContarLimpezasAsync(db));
+                // Reproduz a interrupção entre a remoção física e o commit da fila.
+                await storage.ExcluirAsync(chaves[0]);
+            }
+
+            await using var novoHost = new HostE2ECompra(banco, temporario.FullName, temporario.FullName);
+            await using var novoEscopo = novoHost.Services.CreateAsyncScope();
+            var novoStorage = novoEscopo.ServiceProvider.GetRequiredService<IArmazenamentoImagemProduto>();
+            using var tempo = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            while (await ContarLimpezasAsync(db, tempo.Token) != 0)
+                await Task.Delay(100, tempo.Token);
+            foreach (var chave in chaves)
+                Assert.False(await novoStorage.ExisteAsync(chave));
+            Assert.False(await db.ProdutoImagens.AnyAsync());
+        }
+        finally
+        {
+            temporario.Delete(recursive: true);
+        }
+    }
+
+    private static Task<int> ContarLimpezasAsync(XaquiamuniDbContext db, CancellationToken ct = default) =>
+        db.Database.SqlQueryRaw<int>("SELECT COUNT(*) AS [Value] FROM LimpezasImagensProdutos").SingleAsync(ct);
+
+    private sealed class RelogioAnterior : TimeProvider
+    {
+        public override DateTimeOffset GetUtcNow() => DateTimeOffset.UnixEpoch;
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task LimpezaIndividual_RollbackPreservaMetadadosEArquivo()
+    {
+        await using var banco = await SqlServerTestDatabase.CreateAsync();
+        using var pasta = new TemporaryImageDirectory();
+        var storage = pasta.CreateStorage();
+        await using var db = banco.CreateVerificationContext();
+        var produto = Produto.CriarSimples("Rollback", null, Categoria.Criar("Rollback", null, 0), "UN", 10);
+        var chave = ChaveArmazenamentoImagemProduto.Gerar();
+        var imagem = produto.AdicionarImagem(chave, "foto.webp", "image/webp", 3, 32, 32);
+        db.Produtos.Add(produto);
+        await db.SaveChangesAsync();
+        using var arquivo = new MemoryStream([1, 2, 3]);
+        await storage.ArmazenarAsync(chave, arquivo);
+        var options = new DbContextOptionsBuilder<XaquiamuniDbContext>().UseSqlServer(banco.ConexaoIsolada)
+            .AddInterceptors(new FalhaDepoisDeSalvarImagem()).Options;
+        await using var falha = new XaquiamuniDbContext(options);
+        var manager = new GerenciarImagensProduto(new EfProdutoRepository(falha), new ProcessadorImagemProduto(),
+            storage, new NoOpImageLogger());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => manager.RemoverAsync(produto.Id, imagem.Id));
+        Assert.Equal(0, await ContarLimpezasAsync(db));
+        Assert.True(await db.ProdutoImagens.AnyAsync(i => i.Id == imagem.Id));
+        Assert.True(await storage.ExisteAsync(chave));
+    }
+
+    private sealed class FalhaDepoisDeSalvarImagem : SaveChangesInterceptor
+    {
+        public override ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result,
+            CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("Falha de teste antes do commit.");
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task LimpezaIndividual_DoisProcessadoresTratamUmaIntencao()
+    {
+        await using var banco = await SqlServerTestDatabase.CreateAsync();
+        using var pasta = new TemporaryImageDirectory();
+        var storage = pasta.CreateStorage();
+        await using var db = banco.CreateVerificationContext();
+        var chave = ChaveArmazenamentoImagemProduto.Gerar();
+        using var arquivo = new MemoryStream([1, 2, 3]);
+        await storage.ArmazenarAsync(chave, arquivo);
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO LimpezasImagensProdutos (Id, Chave, ProximaTentativaUtc)
+            VALUES ({Guid.NewGuid()}, {chave}, {DateTimeOffset.UtcNow.AddMinutes(-1)})
+            """);
+        using var limite = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+        var bloqueante = new ArmazenamentoComBarreira(storage);
+        await using var primeiro = banco.CreateVerificationContext();
+        var interceptador = new SinalDeLeituraDaFila();
+        var options = new DbContextOptionsBuilder<XaquiamuniDbContext>().UseSqlServer(banco.ConexaoIsolada)
+            .AddInterceptors(interceptador).Options;
+        await using var segundo = new XaquiamuniDbContext(options);
+        Task Processar(XaquiamuniDbContext contexto) =>
+            new LimpezaImagensProduto(contexto, bloqueante, TimeProvider.System,
+                NullLogger<LimpezaImagensProduto>.Instance).ProcessarAsync(limite.Token);
+        var tarefa1 = Processar(primeiro);
+        await bloqueante.Iniciou.Task.WaitAsync(limite.Token);
+        var tarefa2 = Processar(segundo);
+        try
+        {
+            await interceptador.Iniciou.Task.WaitAsync(limite.Token);
+            Assert.False(tarefa2.IsCompleted);
+        }
+        finally
+        {
+            bloqueante.Prosseguir.TrySetResult();
+        }
+        await Task.WhenAll(tarefa1, tarefa2);
+        Assert.Equal(1, bloqueante.Exclusoes);
+        Assert.Equal(0, await ContarLimpezasAsync(db));
+        Assert.False(await storage.ExisteAsync(chave));
+    }
+
+    private sealed class SinalDeLeituraDaFila : DbCommandInterceptor
+    {
+        public TaskCompletionSource Iniciou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public override ValueTask<InterceptionResult<System.Data.Common.DbDataReader>> ReaderExecutingAsync(
+            System.Data.Common.DbCommand command, CommandEventData eventData,
+            InterceptionResult<System.Data.Common.DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            if (command.CommandText.Contains("UPDLOCK", StringComparison.Ordinal))
+                Iniciou.TrySetResult();
+            return ValueTask.FromResult(result);
+        }
+    }
+
+    private sealed class ArmazenamentoComBarreira(IArmazenamentoImagemProduto interno) : IArmazenamentoImagemProduto
+    {
+        public int Exclusoes { get; private set; }
+        public TaskCompletionSource Iniciou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Prosseguir { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public async Task ExcluirAsync(string chave, CancellationToken ct = default)
+        {
+            Exclusoes++;
+            Iniciou.TrySetResult();
+            await Prosseguir.Task.WaitAsync(ct);
+            await interno.ExcluirAsync(chave, ct);
+        }
+
+        public Task<bool> ExisteAsync(string chave, CancellationToken ct = default) => interno.ExisteAsync(chave, ct);
+        public Task<Stream?> AbrirLeituraAsync(string chave, CancellationToken ct = default) => interno.AbrirLeituraAsync(chave, ct);
+        public Task ArmazenarAsync(string chave, Stream conteudo, CancellationToken ct = default) =>
+            interno.ArmazenarAsync(chave, conteudo, ct);
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task LimpezaIndividual_ValidaChavesEPreservaArquivoForaDaRaiz()
+    {
+        await using var banco = await SqlServerTestDatabase.CreateAsync();
+        using var pasta = new TemporaryImageDirectory();
+        Directory.CreateDirectory(pasta.ImagesDirectory);
+        var protegido = Path.GetFullPath(Path.Combine(pasta.ImagesDirectory, "..", "fallback.webp"));
+        await File.WriteAllBytesAsync(protegido, [1, 2, 3]);
+        var storage = pasta.CreateStorage();
+        await using var db = banco.CreateVerificationContext();
+        foreach (var chave in new[] { "product-images/../fallback.webp", protegido, "product-images\\fallback.webp" })
+        {
+            await Assert.ThrowsAsync<ArgumentException>(() => storage.ExcluirAsync(chave));
+            await db.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO LimpezasImagensProdutos (Id, Chave, ProximaTentativaUtc)
+                VALUES ({Guid.NewGuid()}, {chave}, {DateTimeOffset.UtcNow.AddMinutes(-1)})
+                """);
+        }
+        await new LimpezaImagensProduto(db, storage, TimeProvider.System,
+            NullLogger<LimpezaImagensProduto>.Instance).ProcessarAsync(default);
+        Assert.Equal(0, await ContarLimpezasAsync(db));
+        Assert.Equal(new byte[] { 1, 2, 3 }, await File.ReadAllBytesAsync(protegido));
+
+        using var pastaComLink = new TemporaryImageDirectory();
+        var chaveValida = ChaveArmazenamentoImagemProduto.Gerar();
+        var destinoDoLink = Path.Combine(pasta.ImagesDirectory, chaveValida[15..]);
+        await File.WriteAllBytesAsync(destinoDoLink, [4, 5, 6]);
+        Directory.CreateDirectory(Path.GetDirectoryName(pastaComLink.ImagesDirectory)!);
+        Directory.CreateSymbolicLink(pastaComLink.ImagesDirectory, pasta.ImagesDirectory);
+        try
+        {
+            await Assert.ThrowsAsync<IOException>(() => pastaComLink.CreateStorage().ExcluirAsync(chaveValida));
+            Assert.Equal(new byte[] { 4, 5, 6 }, await File.ReadAllBytesAsync(destinoDoLink));
+        }
+        finally
+        {
+            Directory.Delete(pastaComLink.ImagesDirectory);
+        }
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task LimpezaIndividual_NovaIntencaoAoRemoverUltimaReferenciaDaChave()
+    {
+        await using var banco = await SqlServerTestDatabase.CreateAsync();
+        using var pasta = new TemporaryImageDirectory();
+        var storage = pasta.CreateStorage();
+        await using var db = banco.CreateVerificationContext();
+        var categoria = Categoria.Criar("Compartilhamento", null, 0);
+        var primeiro = Produto.CriarSimples("Primeiro", null, categoria, "UN", 10);
+        var ultimo = Produto.CriarSimples("Último", null, categoria, "UN", 10);
+        var chave = ChaveArmazenamentoImagemProduto.Gerar();
+        var alias = "product-images/" + chave[15..^5].ToUpperInvariant() + ".webp";
+        var imagemPrimeira = primeiro.AdicionarImagem(alias, "primeira.webp", "image/webp", 3, 32, 32);
+        var imagemUltima = ultimo.AdicionarImagem(chave, "ultima.webp", "image/webp", 3, 32, 32);
+        db.Produtos.AddRange(primeiro, ultimo);
+        await db.SaveChangesAsync();
+        using var arquivo = new MemoryStream([1, 2, 3]);
+        await storage.ArmazenarAsync(chave, arquivo);
+        var manager = new GerenciarImagensProduto(new EfProdutoRepository(db), new ProcessadorImagemProduto(),
+            storage, new NoOpImageLogger());
+        await using var workerDb = banco.CreateVerificationContext();
+        var worker = new LimpezaImagensProduto(workerDb, storage, TimeProvider.System,
+            NullLogger<LimpezaImagensProduto>.Instance);
+        Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, (await manager.RemoverAsync(primeiro.Id, imagemPrimeira.Id)).Status);
+        await worker.ProcessarAsync(default);
+        Assert.True(await storage.ExisteAsync(chave));
+        Assert.Equal(0, await ContarLimpezasAsync(db));
+        Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, (await manager.RemoverAsync(ultimo.Id, imagemUltima.Id)).Status);
+        Assert.Equal(1, await ContarLimpezasAsync(db));
+        await worker.ProcessarAsync(default);
+        Assert.False(await storage.ExisteAsync(chave));
+        Assert.Equal(0, await ContarLimpezasAsync(db));
+    }
+
     [SqlServerIntegrationFact]
     public async Task GerenciarImagens_PersisteAbreRemoveEExcluiArquivoNoFilesystemTemporario()
     {
@@ -68,9 +312,17 @@ public sealed class GerenciarImagensProdutoSqlServerIntegrationTests
         Assert.Equal("WEBP", System.Text.Encoding.ASCII.GetString(webpBytes, 8, 4));
 
         var removed = await manager.RemoverAsync(product.Id, imageDto.Id);
-        Assert.Equal(ProdutoImagemOperacaoStatus.Success, removed.Status);
+        Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, removed.Status);
         Assert.Empty(removed.Imagens);
+        Assert.True(await storage.ExisteAsync(persisted.ChaveArmazenamento));
+        Assert.Equal(1, await verification.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS [Value] FROM LimpezasImagensProdutos").SingleAsync());
+        Assert.Equal(ProdutoImagemOperacaoStatus.ImageNotFound, (await manager.RemoverAsync(product.Id, imageDto.Id)).Status);
+        await new LimpezaImagensProduto(verification, storage, TimeProvider.System,
+            NullLogger<LimpezaImagensProduto>.Instance).ProcessarAsync(default);
         Assert.False(await storage.ExisteAsync(persisted.ChaveArmazenamento));
+        Assert.Equal(0, await verification.Database.SqlQueryRaw<int>(
+            "SELECT COUNT(*) AS [Value] FROM LimpezasImagensProdutos").SingleAsync());
         Assert.Empty(await verification.ProdutoImagens
             .Where(image => image.ProdutoId == product.Id)
             .ToListAsync());
@@ -188,7 +440,7 @@ public sealed class GerenciarImagensProdutoSqlServerIntegrationTests
             var imageToKeep = product.Imagens.Single(image => image.Principal);
             var imageToRemove = product.Imagens.Single(image => image.Id != imageToKeep.Id);
             var removal = await RunImageRemovalAsync(database, storage, productId, imageToRemove.Id);
-            Assert.Equal(ProdutoImagemOperacaoStatus.Success, removal.Status);
+            Assert.Equal(ProdutoImagemOperacaoStatus.CleanupPending, removal.Status);
             firstImageId = imageToKeep.Id;
         }
 

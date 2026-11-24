@@ -2,6 +2,7 @@
 using System.Text.Json;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Xaquiamuni.Aplicacao.Catalogo;
 using Xaquiamuni.Aplicacao.Imagens;
 using Xaquiamuni.Dominio.Entidades;
@@ -12,7 +13,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia;
 internal sealed record OperacaoExclusaoProduto(Guid Autor, Guid Chave, Guid ProdutoId, string Nome,
     string VariantesJson, string Versao, DateTimeOffset InstanteUtc, string Resultado);
 
-public sealed class EfExcluirProduto(XaquiamuniDbContext db, TimeProvider relogio) : IExcluirProduto
+public sealed class EfExcluirProduto(XaquiamuniDbContext db, TimeProvider relogio,
+    ILogger<EfExcluirProduto>? logger = null) : IExcluirProduto
 {
     public async Task<(int Status, string? Codigo)> ExecutarAsync(Guid produtoId, string versao, Guid autor, Guid chave,
         Func<Produto, string> calcularVersao, CancellationToken ct)
@@ -49,6 +51,7 @@ public sealed class EfExcluirProduto(XaquiamuniDbContext db, TimeProvider relogi
                 return (409, "produto_imagem_inconclusiva");
 
             var agora = relogio.GetUtcNow();
+            var quantidadeImagens = produto.Imagens.Count;
             foreach (var imagem in produto.Imagens)
                 db.Add(new LimpezaImagemProduto(Guid.NewGuid(), imagem.ChaveArmazenamento, agora));
 
@@ -63,6 +66,9 @@ public sealed class EfExcluirProduto(XaquiamuniDbContext db, TimeProvider relogi
 
             await db.SaveChangesAsync(ct);
             await transacao.CommitAsync(ct);
+            if (quantidadeImagens > 0)
+                logger?.LogInformation("{Quantidade} intenções de limpeza de imagens registradas para o produto {ProdutoId}.",
+                    quantidadeImagens, produtoId);
             return (204, null);
         }
         catch (DbUpdateConcurrencyException)
