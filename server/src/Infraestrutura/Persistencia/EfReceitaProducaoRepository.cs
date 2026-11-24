@@ -18,18 +18,18 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
 
     public async Task<ReceitaResult> SalvarAsync(Guid? id, ReceitaInput input, Guid autor, CancellationToken ct)
     {
-        var receita = id.HasValue ? await Detalhes().SingleOrDefaultAsync(r => r.Id == id, ct) : null;
-        if (id.HasValue && receita is null) return new(ReceitaStatus.Ausente);
-        if (receita is not null && receita.Token != input.Token)
-            return Conflito("A receita foi alterada. Atualize o detalhe antes de salvar.");
-        if (receita is not null && receita.ProdutoVarianteId != input.ProdutoVarianteId)
-            return new(ReceitaStatus.Invalida, Erro: "A variante é fixa. Cadastre outra receita para outra variante.");
-
         try
         {
+            await using var transacao = await db.Database.BeginTransactionAsync(ct);
+            if (id is Guid receitaId) await EfExcluirReceita.BloquearAsync(db, receitaId, ct);
+            var receita = id.HasValue ? await Detalhes().SingleOrDefaultAsync(r => r.Id == id, ct) : null;
+            if (id.HasValue && receita is null) return new(ReceitaStatus.Ausente);
+            if (receita is not null && receita.Token != input.Token)
+                return Conflito("A receita foi alterada. Atualize o detalhe antes de salvar.");
+            if (receita is not null && receita.ProdutoVarianteId != input.ProdutoVarianteId)
+                return new(ReceitaStatus.Invalida, Erro: "A variante é fixa. Cadastre outra receita para outra variante.");
             if (input.Itens is not { Count: >= 1 and <= 100 } || input.Itens.Any(i => i is null))
                 throw new ArgumentException("Informe de 1 a 100 materiais.");
-            await using var transacao = await db.Database.BeginTransactionAsync(ct);
             foreach (var material in input.Itens.Select(item => item.InsumoId).Distinct().Order())
                 await EfExcluirInsumo.BloquearVinculoAsync(db, material, ct);
             var agora = relogio.GetUtcNow();
@@ -65,11 +65,13 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
 
     public async Task<ReceitaResult> AlterarStatusAsync(Guid id, bool ativa, Guid token, Guid autor, CancellationToken ct)
     {
-        var receita = await Detalhes().SingleOrDefaultAsync(r => r.Id == id, ct);
-        if (receita is null) return new(ReceitaStatus.Ausente);
-        if (receita.Token != token) return Conflito("A receita foi alterada. Atualize o detalhe antes de continuar.");
         try
         {
+            await using var transacao = await db.Database.BeginTransactionAsync(ct);
+            await EfExcluirReceita.BloquearAsync(db, id, ct);
+            var receita = await Detalhes().SingleOrDefaultAsync(r => r.Id == id, ct);
+            if (receita is null) return new(ReceitaStatus.Ausente);
+            if (receita.Token != token) return Conflito("A receita foi alterada. Atualize o detalhe antes de continuar.");
             if (ativa && !receita.Ativa)
             {
                 var ids = receita.Atual.Itens.Select(i => i.InsumoId).ToArray();
@@ -77,11 +79,17 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
                     throw new ArgumentException("Substitua ou reative os materiais inativos antes de reativar a receita.");
             }
             receita.DefinirAtiva(ativa, autor, relogio.GetUtcNow());
-            return await GravarAsync(receita, ct);
+            var resultado = await GravarAsync(receita, ct);
+            if (resultado.Status == ReceitaStatus.Sucesso) await transacao.CommitAsync(ct);
+            return resultado;
         }
         catch (ArgumentException erro)
         {
             return new(ReceitaStatus.Invalida, Erro: erro.Message);
+        }
+        catch (Exception erro) when (EfFornecedorRepository.ErroLock(erro))
+        {
+            return Conflito("A receita mudou durante a operação. Atualize o detalhe.");
         }
     }
 

@@ -22,6 +22,7 @@ import {
   DetalheReceita,
   ItemReceitaInput,
   ReceitasProducaoService,
+  RevisaoReceita,
   ResumoReceita,
   VersaoReceita,
 } from '../../core/receitas-producao.service';
@@ -65,6 +66,8 @@ export class AdminReceitasComponent {
   protected readonly sucesso = signal('');
   protected readonly busca = signal('');
   protected readonly filtro = signal('');
+  protected readonly exclusao = signal<{ revisao: string | null; token: string; chave: string } | null>(null);
+  protected readonly fichaDesatualizada = signal(false);
 
   protected readonly visiveis = computed(() => {
     const termo = this.normalizar(this.busca());
@@ -94,6 +97,8 @@ export class AdminReceitasComponent {
     if (this.ocupado()) return;
     this.sucesso.set('');
     this.historico.set(null);
+    this.exclusao.set(null);
+    this.fichaDesatualizada.set(false);
     const pagina = (numero: number) =>
       this.insumosApi.listar({ ativo: true, pagina: numero, itensPorPagina: 50 });
     const insumos = pagina(1).pipe(
@@ -122,6 +127,8 @@ export class AdminReceitasComponent {
     this.editor.set(null);
     this.historico.set(null);
     this.erro.set('');
+    this.exclusao.set(null);
+    this.fichaDesatualizada.set(false);
   }
 
   protected variantes(produtoId: string) {
@@ -234,6 +241,57 @@ export class AdminReceitasComponent {
     );
   }
 
+  protected excluir(detalhe: DetalheReceita, versao?: RevisaoReceita): void {
+    if (this.ocupado() || this.fichaDesatualizada()) return;
+    const revisao = versao?.id ?? null;
+    const pendente = this.exclusao();
+    if (pendente && pendente.revisao !== revisao) return;
+    const alvo = versao ? `a versão ${versao.numero} de “${detalhe.resumo.nome}”` : `a receita “${detalhe.resumo.nome}”`;
+    if (!pendente && !window.confirm(
+      `Excluir permanentemente ${alvo}? ${versao ? 'Os itens da versão serão removidos.' : 'As versões e seus itens serão removidos.'}`,
+    )) return;
+    const tentativa = pendente ?? { revisao, token: detalhe.token, chave: crypto.randomUUID() };
+    this.exclusao.set(tentativa);
+    this.sucesso.set('');
+    this.executar(
+      this.api.excluir(detalhe.resumo.id, revisao, tentativa.token, tentativa.chave),
+      () => {
+        this.exclusao.set(null);
+        if (revisao) {
+          this.historico.set(null);
+          this.aplicarDetalhe({ ...detalhe, historico: detalhe.historico.filter((v) => v.id !== revisao) });
+          this.sucesso.set('Versão excluída.');
+          this.fichaDesatualizada.set(true);
+          queueMicrotask(() => {
+            if (!this.destroy.destroyed) this.recarregarFicha(detalhe.resumo.id);
+          });
+        } else {
+          this.fechar();
+          this.receitas.update((lista) => lista.filter((r) => r.id !== detalhe.resumo.id));
+          this.sucesso.set('Receita excluída.');
+          queueMicrotask(() => {
+            if (!this.destroy.destroyed) this.carregar();
+          });
+        }
+      },
+      'Não foi possível confirmar a exclusão. Recupere o resultado com a mesma ação.',
+      (erro) => {
+        if (!(erro instanceof HttpErrorResponse) || erro.status === 0 || erro.status >= 500) return;
+        this.exclusao.set(null);
+        if (erro.error?.codigo === 'versao_desatualizada' || erro.error?.codigo === 'conflito_concorrencia')
+          this.fichaDesatualizada.set(true);
+      },
+    );
+  }
+
+  protected recarregarFicha(id: string): void {
+    this.executar(this.api.obter(id), (detalhe) => {
+      this.historico.set(null);
+      this.aplicarDetalhe(detalhe);
+      this.fichaDesatualizada.set(false);
+    }, 'Não foi possível atualizar a ficha. Tente recarregá-la.');
+  }
+
   private atualizar(detalhe: DetalheReceita, mensagem: string): void {
     this.receitas.update((lista) =>
       [...lista.filter((r) => r.id !== detalhe.resumo.id), detalhe.resumo].sort((a, b) =>
@@ -264,7 +322,7 @@ export class AdminReceitasComponent {
     requisicao: Observable<T>,
     sucesso: (valor: T) => void,
     mensagem: string,
-    falha?: () => void,
+    falha?: (erro: unknown) => void,
   ): void {
     if (this.ocupado()) return;
     this.ocupado.set(true);
@@ -277,7 +335,7 @@ export class AdminReceitasComponent {
       .subscribe({
         next: sucesso,
         error: (erro: unknown) => {
-          falha?.();
+          falha?.(erro);
           if (erro instanceof HttpErrorResponse) {
             if (erro.status === 401) void this.router.navigateByUrl('/admin/login');
             if (erro.status === 403)

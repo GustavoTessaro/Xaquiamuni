@@ -3198,6 +3198,45 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("OperacoesExclusaoProduto", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoExclusaoReceita", b =>
+                {
+                    b.Property<Guid>("Autor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<DateTimeOffset>("InstanteUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("nvarchar(120)");
+
+                    b.Property<Guid>("ReceitaId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<Guid?>("RevisaoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("RevisoesJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<Guid>("Token")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.HasKey("Autor", "Chave");
+
+                    b.ToTable("OperacoesExclusaoReceita", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoExclusaoVariante", b =>
                 {
                     b.Property<Guid>("Autor")

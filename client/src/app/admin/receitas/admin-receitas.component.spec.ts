@@ -1,12 +1,13 @@
 import { TestBed } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of, throwError } from 'rxjs';
 import { InsumosService } from '../../core/admin-estoque/insumos.service';
 import { ProdutosService } from '../../core/admin-produtos/produtos.service';
 import { DetalheReceita, ReceitasProducaoService } from '../../core/receitas-producao.service';
 import { AdminReceitasComponent } from './admin-receitas.component';
 
-const revisao = { numero: 1, rendimento: 4, criadaEmUtc: '2026-11-19T00:00:00Z' };
+const revisao = { id: 'v-receita', numero: 1, rendimento: 4, criadaEmUtc: '2026-11-19T00:00:00Z' };
 const detalhe: DetalheReceita = {
   resumo: {
     id: 'r1',
@@ -38,6 +39,7 @@ async function montar() {
     versao: vi.fn(() => of(detalhe.atual)),
     salvar: vi.fn(() => of(detalhe)),
     alterarStatus: vi.fn(() => of({ ...detalhe, resumo: { ...detalhe.resumo, ativa: false } })),
+    excluir: vi.fn<ReceitasProducaoService['excluir']>(() => of(undefined)),
   };
   TestBed.configureTestingModule({
     providers: [
@@ -100,10 +102,88 @@ async function montar() {
     await atualizar();
   }
   await atualizar();
-  return { api, root, preencher, clicar };
+  return { api, root, preencher, clicar, atualizar };
 }
 
 describe('Receitas de produção', () => {
+  it('cancela a exclusão e preserva a busca após excluir a receita', async () => {
+    const { api, root, preencher, clicar } = await montar();
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      await preencher('input[type=search]', 'floral');
+      await clicar('Abrir receita');
+      await clicar('Excluir receita');
+      expect(api.excluir).not.toHaveBeenCalled();
+      api.listar.mockReturnValueOnce(of([]));
+      await clicar('Excluir receita');
+      expect(confirmar).toHaveBeenCalledWith(expect.stringContaining('Receita floral'));
+      expect(api.excluir).toHaveBeenCalledWith('r1', null, 't1', expect.any(String));
+      expect(root.textContent).toContain('Receita excluída.');
+      expect(root.querySelector<HTMLInputElement>('input[type=search]')?.value).toBe('floral');
+    } finally {
+      confirmar.mockRestore();
+    }
+  });
+
+  it('recupera com a mesma chave quando perde a resposta da exclusão de uma versão', async () => {
+    const { api, root, clicar } = await montar();
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await clicar('Abrir receita');
+      api.excluir.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+      await clicar('Excluir versão');
+      api.obter.mockReturnValueOnce(of({ ...detalhe, token: 't2', historico: [] }));
+      await clicar('Recuperar exclusão da versão');
+      expect(confirmar).toHaveBeenCalledTimes(1);
+      expect(api.excluir.mock.calls[1]).toEqual(api.excluir.mock.calls[0]);
+      expect(root.textContent).toContain('Versão excluída.');
+      expect(root.textContent).toContain('Editar receita');
+    } finally {
+      confirmar.mockRestore();
+    }
+  });
+
+  it('recarrega a versão desatualizada e exige nova confirmação', async () => {
+    const { api, root, clicar } = await montar();
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await clicar('Abrir receita');
+      api.excluir.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+        status: 409, error: { codigo: 'versao_desatualizada', detail: 'Recarregue a receita.' },
+      })));
+      await clicar('Excluir receita');
+      expect(root.textContent).toContain('Recarregue a receita.');
+      api.obter.mockReturnValueOnce(of({ ...detalhe, token: 't2' }));
+      await clicar('Recarregar ficha');
+      await clicar('Excluir receita');
+      expect(confirmar).toHaveBeenCalledTimes(2);
+      expect(api.excluir).toHaveBeenLastCalledWith('r1', null, 't2', expect.any(String));
+      expect(api.excluir.mock.calls[0][3]).not.toEqual(api.excluir.mock.calls[1][3]);
+    } finally {
+      confirmar.mockRestore();
+    }
+  });
+
+  it('bloqueia envio duplicado e preserva o sucesso quando falha a atualização da lista', async () => {
+    const { api, root, clicar, atualizar } = await montar();
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    try {
+      await clicar('Abrir receita');
+      const resposta = new Subject<undefined>();
+      api.excluir.mockReturnValueOnce(resposta);
+      await clicar('Excluir receita');
+      await clicar('Recuperar exclusão da receita');
+      expect(api.excluir).toHaveBeenCalledTimes(1);
+      api.listar.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })));
+      resposta.next(undefined);
+      resposta.complete();
+      await atualizar();
+      await clicar('Tentar novamente');
+      expect(root.textContent).toContain('Receita excluída.');
+    } finally {
+      confirmar.mockRestore();
+    }
+  });
   it('busca por produto, filtra situação, consulta histórico e envia edição por token', async () => {
     const { api, root, preencher, clicar } = await montar();
     expect(root.querySelector('a[href="/admin/receitas"]')?.getAttribute('aria-current')).toBe(

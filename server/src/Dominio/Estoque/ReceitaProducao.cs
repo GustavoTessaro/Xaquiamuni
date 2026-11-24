@@ -65,6 +65,13 @@ public sealed class ReceitaProducao
         Auditar(autor, agora);
     }
 
+    public void RemoverVersaoAnterior(ReceitaProducaoVersao versao, Guid autor, DateTimeOffset agora)
+    {
+        if (versao == Atual || !_versoes.Remove(versao))
+            throw new ArgumentException("Selecione uma versão anterior desta receita.");
+        Auditar(autor, agora);
+    }
+
     private void Auditar(Guid autor, DateTimeOffset agora)
     {
         Token = Guid.NewGuid();

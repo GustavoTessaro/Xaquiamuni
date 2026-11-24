@@ -7,6 +7,13 @@ internal static class ReceitaProducaoMapping
 {
     public static void MapearReceitasProducao(this ModelBuilder model)
     {
+        model.Entity<OperacaoExclusaoReceita>(e =>
+        {
+            e.ToTable("OperacoesExclusaoReceita");
+            e.HasKey(x => new { x.Autor, x.Chave });
+            e.Property(x => x.Nome).HasMaxLength(ReceitaProducao.NomeMax);
+            e.Property(x => x.Resultado).HasMaxLength(24);
+        });
         model.Entity<ReceitaProducao>(r =>
         {
             r.ToTable("ReceitasProducao");

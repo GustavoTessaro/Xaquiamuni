@@ -69,6 +69,7 @@ public sealed partial class EfEstoqueInsumoRepository : IGerenciarOrdensProducao
                     ? new(OperacaoProducaoStatus.Repetida, anterior.Id)
                     : ConflitoProducao("A chave já foi usada com outros dados.");
 
+            await EfExcluirReceita.BloquearAsync(_dbContext, input.ReceitaId, ct);
             var receita = await CarregarReceitaAsync(input.ReceitaId, true, ct);
             if (receita is null) return new(OperacaoProducaoStatus.Ausente);
             ValidarReceitaProducao(receita);

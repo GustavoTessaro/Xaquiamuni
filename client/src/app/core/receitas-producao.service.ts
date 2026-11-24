@@ -31,6 +31,7 @@ export interface ResumoReceita {
 }
 
 export interface RevisaoReceita {
+  id: string;
   numero: number;
   rendimento: number;
   criadaEmUtc: string;
@@ -63,6 +64,18 @@ export class ReceitasProducaoService {
 
   versao(id: string, numero: number) {
     return this.http.get<VersaoReceita>(`${this.rota}/${encodeURIComponent(id)}/versoes/${numero}`);
+  }
+
+  excluir(id: string, revisao: string | null, token: string, chave: string) {
+    const ficha = `${this.rota}/${encodeURIComponent(id)}`;
+    const url = revisao ? `${ficha}/versoes/${encodeURIComponent(revisao)}` : ficha;
+    return this.csrf.getRequestToken().pipe(
+      switchMap(({ requestToken }) =>
+        this.http.delete<void>(url, {
+          headers: { 'X-XSRF-TOKEN': requestToken, 'If-Match': `"${token}"`, 'Idempotency-Key': chave },
+        }),
+      ),
+    );
   }
 
   salvar(id: string | null, dados: ReceitaInput) {

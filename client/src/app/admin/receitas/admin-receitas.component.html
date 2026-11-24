@@ -35,7 +35,7 @@
           </h2>
           <p class="text-sm">Cadastrar ou editar uma receita não movimenta estoque.</p>
         </div>
-        <fieldset [disabled]="ocupado()" class="grid min-w-0 gap-3 sm:grid-cols-2">
+        <fieldset [disabled]="ocupado() || !!exclusao() || fichaDesatualizada()" class="grid min-w-0 gap-3 sm:grid-cols-2">
           @if (receita.detalhe; as detalhe) {
             <p class="min-w-0 [overflow-wrap:anywhere] sm:col-span-2">
               {{ detalhe.resumo.produto }} · {{ detalhe.resumo.variante }} ·
@@ -96,7 +96,7 @@
             />
           </label>
         </fieldset>
-        <fieldset [disabled]="ocupado()" class="min-w-0 space-y-3">
+        <fieldset [disabled]="ocupado() || !!exclusao() || fichaDesatualizada()" class="min-w-0 space-y-3">
           <legend class="font-semibold">Matérias-primas</legend>
           @for (item of receita.itens; track item; let n = $index) {
             <div class="grid gap-3 rounded-lg border border-slate-200 p-3 sm:grid-cols-2">
@@ -164,7 +164,7 @@
         <div class="flex flex-wrap items-center gap-3">
           <button
             type="submit"
-            [disabled]="ocupado()"
+            [disabled]="ocupado() || !!exclusao() || fichaDesatualizada()"
             class="min-h-11 rounded-xl bg-emerald-800 px-4 font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Salvar receita
@@ -172,7 +172,7 @@
           <button
             type="button"
             (click)="fechar()"
-            [disabled]="ocupado()"
+            [disabled]="ocupado() || !!exclusao()"
             class="min-h-11 px-2 underline focus-visible:outline-2"
           >
             Voltar à lista
@@ -181,11 +181,24 @@
             <button
               type="button"
               (click)="alterarSituacao(detalhe)"
-              [disabled]="ocupado()"
+              [disabled]="ocupado() || !!exclusao() || fichaDesatualizada()"
               class="min-h-11 px-2 underline focus-visible:outline-2"
             >
               {{ detalhe.resumo.ativa ? 'Inativar receita' : 'Reativar receita' }}
             </button>
+            @if (!exclusao() || exclusao()?.revisao === null) {
+              <button type="button" (click)="excluir(detalhe)"
+                [disabled]="ocupado() || fichaDesatualizada()"
+                class="min-h-11 px-2 font-semibold text-red-800 underline focus-visible:outline-2">
+                {{ exclusao() ? 'Recuperar exclusão da receita' : 'Excluir receita' }}
+              </button>
+            }
+            @if (fichaDesatualizada()) {
+              <button type="button" (click)="recarregarFicha(detalhe.resumo.id)" [disabled]="ocupado()"
+                class="min-h-11 px-2 underline focus-visible:outline-2">
+                Recarregar ficha
+              </button>
+            }
           }
         </div>
       </form>
@@ -197,7 +210,7 @@
           </summary>
           <ul class="mt-2 grid gap-2">
             @for (revisao of detalhe.historico; track revisao.numero) {
-              <li>
+              <li class="flex flex-wrap items-center gap-x-3">
                 <button
                   type="button"
                   (click)="verVersao(detalhe, revisao.numero)"
@@ -206,6 +219,13 @@
                 >
                   Ver versão {{ revisao.numero }} · {{ revisao.criadaEmUtc | date: 'dd/MM/yyyy' }}
                 </button>
+                @if (!exclusao() || exclusao()?.revisao === revisao.id) {
+                  <button type="button" (click)="excluir(detalhe, revisao)"
+                    [disabled]="ocupado() || fichaDesatualizada()"
+                    class="min-h-11 text-left text-sm text-red-800 underline focus-visible:outline-2">
+                    {{ exclusao() ? 'Recuperar exclusão da versão' : 'Excluir versão' }} {{ revisao.numero }}
+                  </button>
+                }
               </li>
             }
           </ul>

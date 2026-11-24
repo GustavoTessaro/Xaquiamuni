@@ -539,6 +539,127 @@ try {
     console.log('Insumo, formas, compras, estoque, receitas, produção e inativação verificados no Chrome.');
   }
 
+  if (dados.exclusaoReceita) {
+    await call('Page.enable', {}, a.sessionId);
+    const base = '/api/admin/receitas';
+    const pedir = (rota, method = 'GET', corpo, versao) => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(rota)}, { method: ${JSON.stringify(method)},
+        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+          ...${JSON.stringify(versao ? { 'If-Match': versao } : {})} },
+        body: ${corpo === undefined ? 'undefined' : JSON.stringify(JSON.stringify(corpo))} });
+      const texto = await r.text();
+      return { status: r.status, etag: r.headers.get('ETag'), body: texto && r.headers.get('Content-Type')?.includes('json') ? JSON.parse(texto) : null };
+    })()`);
+    const obter = async (rota, status, metodo, corpo, versao) => {
+      const r = await pedir(rota, metodo, corpo, versao);
+      assert.equal(r.status, status, JSON.stringify(r));
+      return r;
+    };
+    const botao = rotulo => "[...document.querySelectorAll('main button')].find(b => !b.disabled && "
+      + "(b.textContent.trim() === " + JSON.stringify(rotulo) + " || b.getAttribute('aria-label') === " + JSON.stringify(rotulo) + "))";
+    const clicar = async rotulo => {
+      await waitFor(() => a.ev('!!(' + botao(rotulo) + ')'), rotulo);
+      await a.ev('(' + botao(rotulo) + ').click()');
+    };
+    const texto = mensagem => waitFor(() => a.ev("document.querySelector('main')?.innerText.includes("
+      + JSON.stringify(mensagem) + ')'), mensagem);
+    const confirmar = async (rotulo, alvo, aceitar) => {
+      const dialogo = { aceitar };
+      confirmacoes.set(a.sessionId, dialogo);
+      try {
+        await waitFor(() => a.ev('!!(' + botao(rotulo) + ')'), rotulo);
+        await a.ev('setTimeout(() => (' + botao(rotulo) + ').click(), 0)');
+        await waitFor(() => dialogo.processada, 'confirmação de ' + alvo);
+        assert.ok(dialogo.mensagem.includes(alvo) && dialogo.mensagem.includes('permanente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    };
+    const abrir = async nome => {
+      await a.ir('/admin/receitas');
+      await clicar('Abrir receita ' + nome);
+      await texto('Editar receita');
+    };
+    const historico = () => a.ev("document.querySelector('main details').open = true");
+    const insumoUrl = '/api/admin/insumos';
+    const material = (await obter(insumoUrl, 201, 'POST',
+      { nome: 'Material da receita', tipo: 'MateriaPrima', unidadeBase: 'Grama' })).body.resumo.insumoId;
+    const fichaMaterial = insumoUrl + '/' + material;
+    const criar = (nome, produtoVarianteId) => ({
+      nome, produtoVarianteId, rendimento: 1,
+      itens: [{ insumoId: material, quantidade: '1', unidadeBase: 'Grama' }]
+    });
+    const teste = criar('Receita descartável', dados.exclusaoReceita.extra);
+    const inicial = (await obter(base, 201, 'POST', teste)).body;
+    const rota = base + '/' + inicial.resumo.id;
+    await obter(rota, 200, 'PUT', { ...teste, token: inicial.token, rendimento: 2 });
+    await abrir(teste.nome);
+    for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      await waitFor(async () => await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") === modo, modo);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+    }
+    await a.ev('(' + botao('Excluir receita') + ').focus()');
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    assert.ok(await a.ev("document.activeElement.matches(':focus-visible')"));
+    await confirmar('Excluir receita', teste.nome, false);
+    assert.equal((await obter(rota, 200)).body.historico.length, 2);
+    await historico();
+    await confirmar('Excluir versão 1', 'versão 1', true);
+    await texto('Versão excluída.');
+    assert.deepEqual((await obter(rota, 200)).body.historico.map(v => v.numero), [2]);
+    const variante = '/api/admin/produtos/' + inicial.resumo.produtoId;
+    const fichaVariante = variante + '/variantes/' + teste.produtoVarianteId;
+    await obter(fichaMaterial, 409, 'DELETE', undefined, (await obter(fichaMaterial, 200)).etag);
+    await obter(fichaVariante, 409, 'DELETE', undefined, (await obter(variante, 200)).etag);
+    await confirmar('Excluir receita', teste.nome, true);
+    await texto('Receita excluída.');
+    await a.ir('/admin/receitas');
+    await texto('Nenhuma receita encontrada.');
+    await obter(rota, 404);
+    await obter(fichaMaterial, 200);
+    await obter(fichaVariante, 204, 'DELETE', undefined, (await obter(variante, 200)).etag);
+    await obter(fichaMaterial, 204, 'DELETE', undefined, (await obter(fichaMaterial, 200)).etag);
+
+    const outro = (await obter(insumoUrl, 201, 'POST',
+      { nome: 'Material do histórico', tipo: 'MateriaPrima', unidadeBase: 'Grama' })).body.resumo.insumoId;
+    const usada = { ...criar('Receita em produção', dados.exclusaoReceita.variante),
+      itens: [{ insumoId: outro, quantidade: '1', unidadeBase: 'Grama' }] };
+    const registrada = (await obter(base, 201, 'POST', usada)).body;
+    const emUso = base + '/' + registrada.resumo.id;
+    await obter(insumoUrl + '/' + outro + '/entradas', 201, 'POST',
+      { tipo: 'EstoqueInicial', quantidadeOriginal: 2, unidadeOriginal: 'Grama', custoTotal: 10 });
+    const producao = '/api/admin/producao';
+    const ordem = (await obter(producao, 201, 'POST', { receitaId: registrada.resumo.id,
+      receitaVersaoId: registrada.atual.id, quantidade: 1 })).body;
+    await abrir(usada.nome);
+    await historico();
+    await confirmar('Excluir versão 1', 'versão 1', true);
+    await texto('Esta versão foi utilizada em produção');
+    await confirmar('Excluir receita', usada.nome, true);
+    await texto('Uma versão desta receita foi utilizada em produção');
+    await obter(emUso, 200, 'PUT', { ...usada, token: registrada.token, rendimento: 2 });
+    await abrir(usada.nome);
+    await historico();
+    await confirmar('Excluir versão 1', 'versão 1', true);
+    await texto('Esta versão foi utilizada em produção');
+    const fichaOrdem = producao + '/' + ordem.ordemId;
+    const aberta = (await obter(fichaOrdem, 200)).body;
+    const conclusao = (await obter(fichaOrdem + '/concluir', 200, 'POST', {
+      versao: aberta.resumo.versaoOrdem, quantidadeProduzida: 1, semControleValidade: true,
+      consumos: [{ insumoId: outro, unidadeBase: 'Grama', quantidade: '1' }]
+    })).body;
+    await confirmar('Excluir receita', usada.nome, true);
+    await texto('Uma versão desta receita foi utilizada em produção');
+    const encerrada = (await obter(fichaOrdem, 200)).body;
+    assert.equal(encerrada.resumo.situacao, 'Concluida');
+    assert.deepEqual(encerrada.conclusao, conclusao);
+  }
+
   if (dados.exclusaoProduto) {
     await call('Page.enable', {}, a.sessionId);
     const base = '/api/admin/produtos';
