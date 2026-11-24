@@ -143,20 +143,29 @@ public static class AdminEstoqueProdutoAcabadoEndpoints
         {
             return ValidationError("Os dados da política são obrigatórios.");
         }
+        if (request.RedefinirSeCorresponder is { } precondicao &&
+            (precondicao.Length > 32 || !precondicao.StartsWith("politica:", StringComparison.Ordinal) ||
+                request.EstoqueMinimo is not null || request.PrazoValidadePadraoDias is not null))
+            return ValidationError("Informe somente a precondição da política para redefini-la.");
 
         var result = await configurar.ExecuteAsync(
             new ConfigurarPoliticaProdutoAcabadoInput(
                 varianteId,
                 request.EstoqueMinimo,
-                request.PrazoValidadePadraoDias),
+                request.PrazoValidadePadraoDias,
+                request.RedefinirSeCorresponder),
             cancellationToken).ConfigureAwait(false);
         return result.Status switch
         {
             ConfigurarPoliticaProdutoAcabadoStatus.Sucesso =>
                 Results.Ok(new PoliticaProdutoAcabadoAdminResponse(
                     varianteId,
-                    result.Politica!.EstoqueMinimo,
-                    result.Politica.PrazoValidadePadraoDias)),
+                    result.Politica?.EstoqueMinimo,
+                    result.Politica?.PrazoValidadePadraoDias)
+                { Precondicao = result.Politica is { } politica
+                    ? ConfigurarPoliticaProdutoAcabadoInput.Precondicao(politica.EstoqueMinimo, politica.PrazoValidadePadraoDias)
+                    : null }),
+            ConfigurarPoliticaProdutoAcabadoStatus.Conflito => Results.Problem(statusCode: 409, detail: result.Erro),
             ConfigurarPoliticaProdutoAcabadoStatus.VarianteNaoEncontrada => ResourceNotFound(),
             _ => ValidationError(result.Erro)
         };
@@ -722,6 +731,7 @@ public sealed record PaginaAdminProdutoAcabadoResponse<T>(
 
 public sealed record PoliticaProdutoAcabadoAdminRequest
 {
+    public string? RedefinirSeCorresponder { get; init; }
     public int? EstoqueMinimo { get; init; }
     public int? PrazoValidadePadraoDias { get; init; }
 }
@@ -731,9 +741,11 @@ public sealed record PoliticaProdutoAcabadoAdminResponse(
     int? EstoqueMinimo,
     int? PrazoValidadePadraoDias)
 {
+    public string? Precondicao { get; init; }
     public static PoliticaProdutoAcabadoAdminResponse From(
         PoliticaEstoqueProdutoVarianteConsulta politica) =>
-        new(politica.ProdutoVarianteId, politica.EstoqueMinimo, politica.PrazoValidadePadraoDias);
+        new(politica.ProdutoVarianteId, politica.EstoqueMinimo, politica.PrazoValidadePadraoDias)
+        { Precondicao = ConfigurarPoliticaProdutoAcabadoInput.Precondicao(politica.EstoqueMinimo, politica.PrazoValidadePadraoDias) };
 }
 
 public sealed record LoteProdutoAcabadoAdminResponse(

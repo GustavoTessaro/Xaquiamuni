@@ -80,7 +80,7 @@ function criarApi() {
     configurarPolitica: vi.fn(),
     consultarPosicao: vi.fn(() => of(criarPosicao())),
     consultarLote: vi.fn(() => of(loteInicial)),
-    consultarPolitica: vi.fn(() =>
+    consultarPolitica: vi.fn<ProdutosAcabadosService['consultarPolitica']>(() =>
       of({
         produtoVarianteId: 'variant-1',
         estoqueMinimo: 2,
@@ -401,6 +401,30 @@ describe('AdminProdutosAcabadosComponent', () => {
     expect(minimo.hasAttribute('aria-invalid')).toBe(false);
     expect(minimo.getAttribute('aria-describedby')).toBe('finished-minimum-help');
     expect(root.querySelector('#finished-minimum-error')).toBeNull();
+  });
+
+  it('redefine somente após confirmação e atualiza a ficha', async () => {
+    const api = criarApi();
+    api.consultarPolitica.mockReturnValue(of({
+      produtoVarianteId: 'variant-1', estoqueMinimo: null, prazoValidadePadraoDias: null,
+      precondicao: 'politica::',
+    }));
+    api.configurarPolitica.mockReturnValue(of({
+      produtoVarianteId: 'variant-1', estoqueMinimo: null, prazoValidadePadraoDias: null,
+    }));
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValueOnce(false).mockReturnValueOnce(true);
+    try {
+      const fixture = await montarComponente(api);
+      clicar(fixture, 'Redefinir política');
+      expect(api.configurarPolitica).not.toHaveBeenCalled();
+      clicar(fixture, 'Redefinir política');
+      expect(api.configurarPolitica).toHaveBeenCalledExactlyOnceWith('variant-1', {
+        estoqueMinimo: null, prazoValidadePadraoDias: null, redefinirSeCorresponder: 'politica::',
+      });
+      expect(fixture.nativeElement.textContent).toContain('Política de estoque redefinida.');
+    } finally {
+      confirmar.mockRestore();
+    }
   });
 
   it('foca o primeiro erro ao salvar e envia zero e prazo em branco depois da correção', async () => {

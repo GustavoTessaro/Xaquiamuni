@@ -89,7 +89,16 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
                 .SingleOrDefaultAsync(
                     item => item.ProdutoVarianteId == variante.Id,
                     cancellationToken).ConfigureAwait(false);
-            if (politica is null)
+            if (input.RedefinirSeCorresponder is { } precondicao)
+            {
+                if (politica is not null && precondicao != ConfigurarPoliticaProdutoAcabadoInput.Precondicao(
+                    politica.EstoqueMinimo, politica.PrazoValidadePadraoDias))
+                    return new(ConfigurarPoliticaProdutoAcabadoStatus.Conflito, null,
+                        "A política mudou. Recarregue a ficha e confirme novamente.");
+                if (politica is not null) _dbContext.PoliticasEstoqueProdutoVariante.Remove(politica);
+                politica = null;
+            }
+            else if (politica is null)
             {
                 politica = PoliticaEstoqueProdutoVariante.Criar(
                     variante,

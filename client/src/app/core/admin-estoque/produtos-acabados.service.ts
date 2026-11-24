@@ -19,12 +19,14 @@ export type TipoMovimentoProdutoAcabado =
 export type CondicaoEstoqueProdutoAcabado = 'Vendavel' | 'Danificada' | 'Quarentena';
 
 export interface PoliticaEstoqueProdutoAcabado {
+  precondicao?: string | null;
   produtoVarianteId: string;
   estoqueMinimo: number | null;
   prazoValidadePadraoDias: number | null;
 }
 
 export interface PoliticaEstoqueProdutoAcabadoRequest {
+  redefinirSeCorresponder?: string;
   estoqueMinimo: number | null;
   prazoValidadePadraoDias: number | null;
 }

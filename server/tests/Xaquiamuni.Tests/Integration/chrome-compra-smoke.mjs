@@ -345,7 +345,7 @@ try {
       await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
       if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
         await a.ev("document.querySelector('.admin-theme-toggle').click()");
-      const nome = 'Fornecedor descartável ' + width;
+      const nome = 'Fornecedor descartável ' + width + ' ' + modo;
       await clicar('Novo fornecedor');
       await a.ev(`(() => {
         const campo = document.querySelector('#supplier-name');
@@ -853,22 +853,55 @@ try {
       'Idempotency-Key': await chaveNova(), 'If-Match': (await pedir(rota, 'GET')).tag,
     });
     assert.equal((await apagar(rotaCategoria)).status, 409);
+    const varianteRamo = ramo.variantes[0].id;
+    const rotaPolitica = '/api/admin/estoque/produtos-acabados/variantes/' + varianteRamo + '/politica';
+    assert.equal((await pedir(rotaPolitica, 'PUT', { estoqueMinimo: 2 })).status, 200);
+    assert.equal((await apagar(rotaRamo)).status, 409);
+    await a.ir('/admin/estoque/produtos-acabados/' + varianteRamo);
+    const redefinir = botao('Redefinir política');
+    await waitFor(() => a.ev('!!(' + redefinir + ')'), 'redefinição de política');
+    await a.ev('(' + redefinir + ').closest("details").open = true');
+    for (const aceitar of [false, true]) {
+      const dialogo = { aceitar };
+      confirmacoes.set(a.sessionId, dialogo);
+      try {
+        await a.ev('setTimeout(() => (' + redefinir + ').click(), 0)');
+        await waitFor(() => dialogo.processada, 'confirmação de redefinição');
+        assert.ok(dialogo.mensagem.includes('registros de estoque serão preservados'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+      if (!aceitar) assert.equal((await pedir(rotaPolitica, 'GET')).body.estoqueMinimo, 2);
+    }
+    await texto('Política de estoque redefinida.');
     assert.equal((await apagar(rotaRamo)).status, 204);
     assert.equal((await apagar(rotaCategoria)).status, 204);
     assert.equal((await pedir(rotaCategoria, 'GET')).status, 404);
 
     const rotaTema = '/api/admin/loja/tema';
+    await call('Network.enable', {}, c.sessionId);
+    await call('Network.setCacheDisabled', { cacheDisabled: true }, c.sessionId);
     for (const tema of ['natal', 'black-friday', 'pascoa', 'ano-novo', 'dia-das-maes', 'original']) {
       const estadoTema = await pedir(rotaTema, 'GET');
       assert.equal((await pedir(rotaTema, 'PUT', { chave: tema, revisaoEsperada: estadoTema.body.publicacao.revisao },
         { 'Idempotency-Key': await chaveNova() })).status, 200);
-      await c.ir('/produtos/' + vizinho.id);
-      await waitFor(() => c.ev(`document.querySelector('app-store-layout')?.dataset.theme === ${JSON.stringify(tema)}
-        && [...document.querySelectorAll('main img')].some(img => img.complete && img.naturalWidth > 0)`), 'foto no tema ' + tema);
-      assert.ok(await c.ev('document.documentElement.scrollWidth <= innerWidth'));
+      for (const width of [375, 1280]) {
+        await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, c.sessionId);
+        await c.ir('/produtos/' + vizinho.id);
+        await waitFor(() => c.ev(`document.querySelector('app-store-layout')?.dataset.theme === ${JSON.stringify(tema)}
+          && [...document.querySelectorAll('main img')].some(img => img.complete && img.naturalWidth > 0)`), 'foto no tema ' + tema);
+        const imagem = await c.ev("document.querySelector('main img').currentSrc");
+        assert.ok(await c.ev('document.documentElement.scrollWidth <= innerWidth'));
+        await call('Network.setBlockedURLs', { urls: [imagem] }, c.sessionId);
+        try {
+          await c.ir('/produtos/' + vizinho.id);
+          await texto('Imagem indisponível', c);
+          assert.ok(await c.ev("document.documentElement.scrollWidth <= innerWidth && ![...document.querySelectorAll('main img')].some(img => img.complete && img.naturalWidth === 0)"));
+        } finally {
+          await call('Network.setBlockedURLs', { urls: [] }, c.sessionId);
+        }
+      }
     }
-    await c.ev("document.querySelector('main img').dispatchEvent(new Event('error'))");
-    await texto('Imagem indisponível', c);
     console.log('Exclusão do produto, histórico, catálogo, imagens, carrinho obsoleto e recadastro verificados no Chrome.');
   }
 

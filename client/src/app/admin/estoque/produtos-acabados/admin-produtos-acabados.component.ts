@@ -31,6 +31,7 @@ import { AdminProduto, ProdutosService } from '../../../core/admin-produtos/prod
 import {
   LoteProdutoAcabado,
   MovimentoProdutoAcabado,
+  PoliticaEstoqueProdutoAcabado,
   PosicaoProdutoAcabado,
   ProdutosAcabadosService,
   SituacaoEstoqueProdutoAcabado,
@@ -68,11 +69,7 @@ export class AdminProdutosAcabadosComponent {
     inject(ActivatedRoute).snapshot.paramMap.get('varianteId') ?? '',
   );
   protected readonly posicao = signal<PosicaoProdutoAcabado | null>(null);
-  protected readonly politica = signal<{
-    produtoVarianteId: string;
-    estoqueMinimo: number | null;
-    prazoValidadePadraoDias: number | null;
-  } | null>(null);
+  protected readonly politica = signal<PoliticaEstoqueProdutoAcabado | null>(null);
   protected readonly movimentos = signal<MovimentoProdutoAcabado[]>([]);
   protected readonly totalMovimentos = signal(0);
   protected readonly pagina = signal(1);
@@ -1149,12 +1146,20 @@ export class AdminProdutosAcabadosComponent {
     return 'Não foi possível registrar a movimentação.';
   }
 
-  protected salvarPolitica(): void {
+  protected redefinirPolitica(): void {
+    const precondicao = this.politica()?.precondicao;
+    if (!precondicao || this.salvandoPolitica() || this.carregando()) return;
+    if (window.confirm('Redefinir a política de estoque desta variante? O estoque mínimo e a validade padrão serão removidos. Os registros de estoque serão preservados.')) {
+      this.salvarPolitica(precondicao);
+    }
+  }
+
+  protected salvarPolitica(redefinirSeCorresponder?: string): void {
     const variant = this.varianteId();
-    if (!variant || !this.politica() || this.erroPolitica() || this.carregando()) {
+    if (!variant || !this.politica() || this.erroPolitica() || this.carregando() || this.salvandoPolitica()) {
       return;
     }
-    if (this.estoqueMinimo.invalid || this.prazoValidade.invalid) {
+    if (!redefinirSeCorresponder && (this.estoqueMinimo.invalid || this.prazoValidade.invalid)) {
       this.estoqueMinimo.markAsTouched();
       this.prazoValidade.markAsTouched();
       const campo = this.estoqueMinimo.invalid ? this.campoEstoqueMinimo : this.campoPrazoValidade;
@@ -1166,7 +1171,11 @@ export class AdminProdutosAcabadosComponent {
     this.mensagemPolitica.set('');
     this.erro.set('');
     this.produtosAcabadosService
-      .configurarPolitica(variant, {
+      .configurarPolitica(variant, redefinirSeCorresponder ? {
+        estoqueMinimo: null,
+        prazoValidadePadraoDias: null,
+        redefinirSeCorresponder,
+      } : {
         estoqueMinimo: this.estoqueMinimo.value,
         prazoValidadePadraoDias: this.prazoValidade.value,
       })
@@ -1179,7 +1188,7 @@ export class AdminProdutosAcabadosComponent {
           this.politica.set(politica);
           this.estoqueMinimo.setValue(politica.estoqueMinimo);
           this.prazoValidade.setValue(politica.prazoValidadePadraoDias);
-          this.mensagemPolitica.set('Política de estoque salva.');
+          this.mensagemPolitica.set(redefinirSeCorresponder ? 'Política de estoque redefinida.' : 'Política de estoque salva.');
         },
         error: (error: unknown) => {
           this.erro.set(this.mensagemErro(error, 'Não foi possível salvar a política.'));

@@ -5,13 +5,19 @@ namespace Xaquiamuni.Aplicacao.Estoque;
 public sealed record ConfigurarPoliticaProdutoAcabadoInput(
     Guid ProdutoVarianteId,
     int? EstoqueMinimo,
-    int? PrazoValidadePadraoDias);
+    int? PrazoValidadePadraoDias,
+    string? RedefinirSeCorresponder = null)
+{
+    public static string Precondicao(int? minimo, int? validade) =>
+        FormattableString.Invariant($"politica:{minimo}:{validade}");
+}
 
 public enum ConfigurarPoliticaProdutoAcabadoStatus : byte
 {
     Sucesso = 1,
     DadosInvalidos = 2,
-    VarianteNaoEncontrada = 3
+    VarianteNaoEncontrada = 3,
+    Conflito = 4
 }
 
 public sealed record ConfigurarPoliticaProdutoAcabadoResult(
