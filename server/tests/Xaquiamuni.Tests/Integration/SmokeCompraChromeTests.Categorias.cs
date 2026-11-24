@@ -1,5 +1,7 @@
 using Xaquiamuni.Dominio.Estoque;
+using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Infraestrutura.Identidade;
+using Microsoft.EntityFrameworkCore;
 
 namespace Xaquiamuni.Tests.Integration;
 
@@ -15,7 +17,12 @@ public sealed partial class SmokeCompraChromeTests
     public async Task ChromeExclusaoFornecedores_ComApiESqlDescartavel()
         => await ExecutarExclusaoCadastroAsync(fornecedores: true);
 
-    private async Task ExecutarExclusaoCadastroAsync(bool fornecedores)
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public Task ChromeExclusaoVariante_ComApiESqlDescartavel()
+        => ExecutarExclusaoCadastroAsync(fornecedores: false, variantes: true);
+
+    private async Task ExecutarExclusaoCadastroAsync(bool fornecedores, bool variantes = false)
     {
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
@@ -29,6 +36,7 @@ public sealed partial class SmokeCompraChromeTests
             var admin = await host.CriarContaAsync(XaquiamuniRoles.Administrador);
             var cliente = await host.CriarContaAsync(XaquiamuniRoles.Cliente);
             Guid? insumoFornecedor = null;
+            object? exclusaoVariante = null;
             if (fornecedores)
             {
                 await using var db = banco.CreateVerificationContext();
@@ -41,13 +49,33 @@ public sealed partial class SmokeCompraChromeTests
             {
                 var jornada = new JornadaCompraE2E(host, new RelogioJornadaCompra(), admin.Id, cliente.Email);
                 await jornada.SemearAsync(nomeCategoria: "Categoria com produto publicado");
+                if (variantes)
+                {
+                    await using var db = banco.CreateVerificationContext();
+                    var produto = await db.Produtos.Include(p => p.Variantes).Include(p => p.Imagens)
+                        .ThenInclude(i => i.Variantes).SingleAsync();
+                    var imagem = Assert.Single(produto.Imagens);
+                    var extra = ProdutoVariante.Criar("Alecrim", "UN", 20m);
+                    produto.AdicionarVariante(extra);
+                    db.ProdutoVariantes.Add(extra);
+                    foreach (var v in produto.Variantes) produto.AssociarImagemAVariante(imagem.Id, v.Id);
+                    await db.SaveChangesAsync();
+                    exclusaoVariante = new { produto.Id, produto.Nome, produto.CategoriaId, imagem = imagem.Id,
+                        opcao = extra.Id };
+                }
             }
             await RodarChromeAsync(script, new
             {
                 origin = host.Origin, pinSpki = host.PinSpki, chromePath = DemonstracaoLocal.CaminhoChrome(),
-                profile = Path.Combine(temporario, "chrome"), cliente, admin, exclusaoCategorias = !fornecedores,
-                insumoFornecedor,
+                profile = Path.Combine(temporario, "chrome"), cliente, admin, exclusaoCategorias = !fornecedores && !variantes,
+                insumoFornecedor, exclusaoVariante,
             }, null);
+            if (variantes)
+            {
+                await using var db = banco.CreateVerificationContext();
+                Assert.False(await db.Pedidos.AnyAsync());
+                Assert.False(await db.ReservasProdutoAcabado.AnyAsync());
+            }
         }
         finally
         {

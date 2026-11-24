@@ -158,6 +158,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
         if (await abertas.CountAsync(ct) >= LimiteCotacoesAbertas) return new(429, "limite_solicitacoes_abertas");
 
         var ids = ordenados.Select(x => x.ProdutoVarianteId).ToArray();
+        foreach (var varianteId in ids)
+            await AdquirirLockVarianteAsync(varianteId, ct);
         var catalogo = await (from produto in EfCatalogoPublicoRepository.FiltrarProdutosVisiveis(_dbContext.Produtos)
             from variante in produto.Variantes
             where variante.Ativa && EF.Parameter(ids).Contains(variante.Id)

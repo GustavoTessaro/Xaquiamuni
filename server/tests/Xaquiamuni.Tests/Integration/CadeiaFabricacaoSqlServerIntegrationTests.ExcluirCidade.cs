@@ -167,11 +167,16 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     private sealed class BarreiraAtendimento : DbCommandInterceptor
     {
         private int _solicitacoes = -1;
+        private string _recurso = "store-fulfillment-config";
         public TaskCompletionSource PrimeiroAdquiriu { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource SegundoSolicitou { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Prosseguir { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-        public void Armar() => Volatile.Write(ref _solicitacoes, 0);
+        public void Armar(string recurso = "store-fulfillment-config")
+        {
+            _recurso = recurso;
+            Volatile.Write(ref _solicitacoes, 0);
+        }
 
         public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
@@ -190,8 +195,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             return result;
         }
 
-        private static bool EhLockAtendimento(DbCommand command) =>
+        private bool EhLockAtendimento(DbCommand command) =>
             command.CommandText.Contains("sp_getapplock", StringComparison.Ordinal) &&
-            command.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, "store-fulfillment-config"));
+            (command.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, _recurso)) ||
+                command.CommandText.Contains($"@Resource = '{_recurso}'", StringComparison.Ordinal));
     }
 }

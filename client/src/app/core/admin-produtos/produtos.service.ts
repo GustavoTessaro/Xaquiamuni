@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, switchMap } from 'rxjs';
+import { Observable, switchMap, timeout } from 'rxjs';
 import { CsrfService } from '../security/csrf.service';
 
 export interface AdminProdutoVariante {
@@ -37,6 +37,7 @@ export interface AdminProdutoCaracteristica {
 }
 
 export interface AdminProduto {
+  versao?: string;
   id: string;
   nome: string;
   descricao: string | null;
@@ -194,6 +195,13 @@ export class ProdutosService {
         { headers: new HttpHeaders({ 'X-XSRF-TOKEN': requestToken }) },
       ),
     );
+  }
+
+  excluirVariante(id: string, varianteId: string, versao: string, chave: string): Observable<void> {
+    return this.withCsrf(token => this.http.delete<void>(
+      `${this.basePath}/${encodeURIComponent(id)}/variantes/${encodeURIComponent(varianteId)}`,
+      { headers: { 'X-XSRF-TOKEN': token, 'If-Match': `"${versao}"`, 'Idempotency-Key': chave } },
+    )).pipe(timeout(20_000));
   }
 
   alterarStatusVariante(

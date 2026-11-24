@@ -102,10 +102,31 @@
             [variante]="varianteEditando()"
             [caracteristicas]="produto.caracteristicas"
             [salvando]="salvandoVariante()"
+            [bloqueado]="!!exclusaoVariante() || versaoVarianteDesatualizada()"
             [mensagemErro]="erroVariantes()"
             (salvar)="salvarVariante($event)"
             (cancelar)="cancelarFormularioVariante()"
           />
+        }
+        @if (varianteEditando(); as variante) {
+          <div class="flex flex-wrap gap-2">
+            @if (versaoVarianteDesatualizada()) {
+              <button type="button" class="admin-button" [disabled]="carregandoVariantes()" (click)="abrirGerenciamentoVariantes(produto)">
+                Recarregar produto
+              </button>
+            } @else if (produto.versao) {
+              <button type="button" [disabled]="salvandoVariante() || variantesEmAtualizacao().size > 0"
+                (click)="excluirVarianteSelecionada(produto, variante)"
+                class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2">
+                {{ exclusaoVariante() ? 'Recuperar exclusão' : 'Excluir variante' }}
+              </button>
+              @if (varianteComDependencias() && variante.ativa) {
+                <button type="button" class="admin-button" (click)="oferecerInativacaoVariante(variante)">
+                  Desativar variante
+                </button>
+              }
+            }
+          </div>
         }
 
         @if (produto.variantes.length === 0) {

@@ -12,7 +12,7 @@
     <button
       type="button"
       (click)="cancelar.emit()"
-      [disabled]="salvando()"
+      [disabled]="salvando() || bloqueado()"
       class="min-h-9 rounded-lg px-3 text-sm font-semibold text-slate-600 underline underline-offset-4 disabled:opacity-60"
     >
       Cancelar
@@ -161,7 +161,7 @@
     <div class="flex items-end">
       <button
         type="submit"
-        [disabled]="salvando()"
+        [disabled]="salvando() || bloqueado()"
         [attr.aria-busy]="salvando()"
         class="min-h-11 w-full rounded-xl bg-emerald-800 px-4 text-sm font-semibold text-white hover:bg-emerald-900 disabled:cursor-wait disabled:opacity-70"
       >

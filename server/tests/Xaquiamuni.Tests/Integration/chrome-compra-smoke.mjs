@@ -341,7 +341,7 @@ try {
     await call('Page.enable', {}, a.sessionId);
     await a.ir(rota);
     await texto('Novo fornecedor');
-    for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
+    for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
       await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
       if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
         await a.ev("document.querySelector('.admin-theme-toggle').click()");
@@ -409,7 +409,111 @@ try {
     console.log('Fornecedores: exclusão, troca em rascunho e inativação verificadas em Chrome.');
   }
 
-  if (!dados.exclusaoCategorias && !dados.insumoFornecedor && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
+  if (dados.exclusaoVariante) {
+    const { Id: id, Nome: nome, CategoriaId: categoria, imagem, opcao } = dados.exclusaoVariante;
+    await call('Page.enable', {}, a.sessionId);
+    const base = '/api/admin/produtos';
+    const tela = '/admin/produtos';
+    const botao = (rotulo, aria = false) => "[...document.querySelectorAll('main button')].find(b => !b.disabled && "
+      + (aria ? "b.getAttribute('aria-label')" : 'b.textContent.trim()') + ' === ' + JSON.stringify(rotulo) + ')';
+    const clicar = async (rotulo, aria = false) => {
+      const expr = botao(rotulo, aria);
+      await waitFor(() => a.ev('!!(' + expr + ')'), rotulo);
+      await a.ev('(' + expr + ').click()');
+    };
+    const texto = async (mensagem, etapa = mensagem) => {
+      try {
+        await waitFor(() => a.ev("document.querySelector('main')?.innerText.includes("
+          + JSON.stringify(mensagem) + ')'), etapa);
+      } catch {
+        const alerta = await a.ev("document.querySelector('main [role=alert]')?.textContent.trim()");
+        throw new Error(etapa + (alerta ? ': ' + alerta : ''));
+      }
+    };
+    const ler = path => a.ev(`fetch(${JSON.stringify(path)}).then(r=>r.json())`);
+    const criar = (path, body) => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r=>r.json());
+      const r = await fetch(${JSON.stringify(path)}, { method: 'POST',
+        headers: {'Content-Type':'application/json','X-XSRF-TOKEN':requestToken,'Idempotency-Key':crypto.randomUUID()},
+        body: JSON.stringify(${JSON.stringify(body)}) });
+      return [r.status, await r.json()];
+    })()`);
+    const editar = async (produto, variante) => {
+      await a.ir(tela);
+      await clicar('Gerenciar opções de ' + produto, true);
+      await clicar('Editar opção ' + variante, true);
+    };
+    const confirmar = async (aceitar, identificacao) => {
+      const confirmacao = { aceitar };
+      confirmacoes.set(a.sessionId, confirmacao);
+      try {
+        await a.ev("setTimeout(() => (" + botao('Excluir variante') + ").click(), 0)");
+        await waitFor(() => confirmacao.processada, 'confirmação nativa de variante');
+        assert.ok(confirmacao.mensagem.includes(identificacao) && confirmacao.mensagem.includes('permanente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    };
+    for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      const produto = 'Produto descartável ' + width + ' ' + modo;
+      const [status, criado] = await criar(base, { nome: produto, categoriaId: categoria, simples: true,
+        variantePadrao: { unidadeVenda: 'UN', precoVenda: 19 } });
+      assert.equal(status, 201, JSON.stringify(criado));
+      const [adicionada, resposta] = await criar(base + '/' + criado.id + '/variantes',
+        { identificacao: 'Opção de teste', unidadeVenda: 'UN', precoVenda: 19 });
+      assert.equal(adicionada, 200, JSON.stringify(resposta));
+      await editar(produto, 'Opção de teste');
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), modo);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev("(" + botao('Cancelar') + ").focus()");
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      assert.ok(await a.ev("document.activeElement.matches(':focus-visible')"));
+      await confirmar(false, 'Opção de teste');
+      assert.equal((await ler(base + '/' + criado.id)).variantes.length, 2);
+      await confirmar(true, 'Opção de teste');
+      await texto('Variante excluída.', 'Excluir opção criada em ' + width + ' px');
+      await a.ir(tela);
+      const final = await ler(base + '/' + criado.id);
+      assert.equal(final.variantes.length, 1);
+      await editar(produto, final.variantes[0].identificacao);
+      await confirmar(true, produto);
+      await texto('O produto precisa manter pelo menos uma variante.');
+    }
+    const anterior = await ler(base + '/' + id);
+    const extra = anterior.variantes.find(v => v.id === opcao);
+    await c.ev(`localStorage.setItem('xaquiamuni:carrinho:v1', ${JSON.stringify(JSON.stringify([
+      { produtoId: id, varianteId: opcao, nome, variante: extra.identificacao, imagem: null,
+        precoCentavos: '1900', quantidade: 1 },
+    ]))})`);
+    await editar(nome, extra.identificacao);
+    await confirmar(true, extra.identificacao);
+    await texto('Variante excluída.', 'Excluir opção com imagem compartilhada');
+    const imagens = await ler(base + '/' + id + '/imagens');
+    assert.deepEqual(imagens.find(i => i.id === imagem).varianteIds, [anterior.variantes.find(v => v.padrao).id]);
+    assert.equal((await ler(base + '/' + id)).publicado, true);
+    await c.ir('/carrinho');
+    await waitFor(() => c.ev("document.querySelector('main')?.textContent.includes('Opção indisponível')"), 'carrinho revalidado');
+    assert.equal(await c.ev("fetch('/api/pedidos').then(r=>r.json()).then(p=>p.totalItens)"), 0);
+
+    const [statusOperacional, operacional] = await criar(base + '/' + id + '/variantes',
+      { identificacao: 'Com estoque', unidadeVenda: 'UN', precoVenda: 20 });
+    assert.equal(statusOperacional, 200);
+    const idOperacional = operacional.variantes.find(v => v.identificacao === 'Com estoque').id;
+    const [statusEntrada, respostaEntrada] = await criar('/api/admin/estoque/produtos-acabados/variantes/' + idOperacional + '/entradas',
+      { tipo: 'EntradaManual', quantidade: 1, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Ensaio' });
+    assert.equal(statusEntrada, 201, JSON.stringify(respostaEntrada));
+    await editar(nome, 'Com estoque');
+    await confirmar(true, 'Com estoque');
+    await texto('A variante possui registros de estoque');
+    assert.ok((await ler(base + '/' + id)).variantes.some(v => v.id === idOperacional));
+    console.log('Variante adicional, última variante, histórico de estoque, carrinho e imagem compartilhada verificadas no Chrome.');
+  }
+
+  if (!dados.exclusaoCategorias && !dados.insumoFornecedor && !dados.exclusaoVariante && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
     await a.ir('/admin/promocoes-frete');
     const botao = texto => waitFor(() => a.ev(`(() => {
       const alvo = [...document.querySelectorAll('main button')]

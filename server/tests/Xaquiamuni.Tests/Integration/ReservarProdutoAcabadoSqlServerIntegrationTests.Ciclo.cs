@@ -266,7 +266,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         const string atual = "20261118044605_CompartilharPrazoReservasPorPedido";
         await using var database = await SqlServerTestDatabase.CreateAsync(targetMigration: anterior);
         await using var context = database.CreateVerificationContext();
-        var variante = await CriarVarianteAsync(context);
+        var (_, variante, _) = await CriarProdutoCompravelAsync(context, categoriaAnteriorAVersao: true);
         var primeiroLote = LoteProdutoAcabado.Criar(variante, null, Hoje, Hoje);
         var segundoLote = LoteProdutoAcabado.Criar(variante, null, Hoje, Hoje);
         context.LotesProdutoAcabado.AddRange(primeiroLote, segundoLote);

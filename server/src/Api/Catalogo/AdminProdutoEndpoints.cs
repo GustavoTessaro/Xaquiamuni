@@ -1,3 +1,6 @@
+using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text.Json;
 using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Aplicacao.Catalogo;
@@ -89,8 +92,46 @@ public static class AdminProdutoEndpoints
             .ProducesProblem(StatusCodes.Status404NotFound)
             .ProducesProblem(StatusCodes.Status409Conflict);
 
+        group.MapDelete("/{id:guid}/variantes/{varianteId:guid}", ExcluirVarianteAsync)
+            .RequireXaquiamuniAntiforgery();
         return endpoints;
     }
+
+    private static async Task<IResult> ExcluirVarianteAsync(Guid id, Guid varianteId, HttpContext contexto,
+        IExcluirVariante exclusao, CancellationToken ct)
+    {
+        contexto.Response.Headers.CacheControl = "private, no-store";
+        if (!Guid.TryParse(contexto.User.FindFirstValue(ClaimTypes.NameIdentifier), out var autor) || autor == Guid.Empty)
+            return Results.Forbid();
+        var tags = contexto.Request.Headers.IfMatch;
+        if (id == Guid.Empty || varianteId == Guid.Empty)
+            return ProblemaExclusao(400, "variante_invalida");
+        if (tags.Count != 1 || tags[0] is not { Length: 66 } tag || tag[0] != '"' || tag[^1] != '"' ||
+            !tag[1..^1].All(Uri.IsHexDigit))
+            return ProblemaExclusao(400, "versao_invalida");
+        var chaves = contexto.Request.Headers["Idempotency-Key"];
+        if (chaves.Count != 1 || !Guid.TryParseExact(chaves[0], "D", out var chave) || chave == Guid.Empty)
+            return ProblemaExclusao(400, "chave_invalida");
+        var (status, codigo) = await exclusao.ExecutarAsync(id, varianteId, tag[1..^1].ToUpperInvariant(), autor, chave,
+            produto => ProdutoResponse.From(produto).Versao, ct);
+        return status == 204 ? Results.NoContent() : ProblemaExclusao(status, codigo!);
+    }
+
+    private static IResult ProblemaExclusao(int status, string codigo) => Results.Problem(statusCode: status, detail: codigo switch
+    {
+        "ultima_variante" => "O produto precisa manter pelo menos uma variante.",
+        "variante_padrao" => "Defina outra variante padrão antes de excluir esta.",
+        "variante_com_historico_comercial" => "A variante possui vínculos comerciais e precisa ser preservada.",
+        "variante_com_historico_estoque" => "A variante possui registros de estoque e precisa ser preservada.",
+        "variante_com_historico_producao" => "A variante possui registros de produção e precisa ser preservada.",
+        "variante_historico_inconclusivo" => "Não foi possível verificar o histórico com segurança.",
+        "variante_nao_encontrada" => "Variante não encontrada neste produto.",
+        "versao_invalida" => "Informe a versão atual no cabeçalho If-Match.",
+        "variante_invalida" => "Informe produto e variante válidos.",
+        "chave_invalida" => "Informe uma chave de idempotência UUID.",
+        "chave_em_uso" => "A chave já foi usada para outra operação.",
+        _ => "O catálogo foi alterado. Recarregue o produto antes de confirmar novamente."
+    }, extensions: new Dictionary<string, object?> { ["codigo"] = codigo });
 
     private static async Task<IResult> ListarAsync(
         string? busca,
@@ -107,13 +148,16 @@ public static class AdminProdutoEndpoints
 
     private static async Task<IResult> ConsultarAsync(
         Guid id,
+        HttpContext contexto,
         IGerenciarProdutos gerenciarProdutos,
         CancellationToken cancellationToken)
     {
         var produto = await gerenciarProdutos.ConsultarAsync(id, cancellationToken).ConfigureAwait(false);
-        return produto is null
-            ? NotFound("Produto não encontrado.")
-            : Results.Ok(ProdutoResponse.From(produto));
+        if (produto is null) return NotFound("Produto não encontrado.");
+        var resposta = ProdutoResponse.From(produto);
+        contexto.Response.Headers.ETag = $"\"{resposta.Versao}\"";
+        contexto.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(resposta);
     }
 
     private static async Task<IResult> CadastrarAsync(
@@ -542,10 +586,12 @@ public sealed record ProdutoResponse(
     IReadOnlyList<ProdutoVarianteResponse> Variantes,
     IReadOnlyList<ProdutoCaracteristicaResponse> Caracteristicas)
 {
+    public string Versao { get; init; } = "";
+
     public static ProdutoResponse From(Produto produto)
     {
         var imagemPrincipal = produto.Imagens.FirstOrDefault(imagem => imagem.Principal);
-        return new(
+        var resposta = new ProdutoResponse(
             produto.Id,
             produto.Nome,
             produto.Descricao,
@@ -566,5 +612,14 @@ public sealed record ProdutoResponse(
                 .OrderBy(characteristic => characteristic.NomeNormalizado, StringComparer.Ordinal)
                 .Select(ProdutoCaracteristicaResponse.From)
                 .ToArray());
+        var imagens = produto.Imagens.OrderBy(i => i.Id).Select(i => new
+        {
+            i.Id, i.Principal, i.OrdemExibicao,
+            Variantes = i.Variantes.Select(a => a.ProdutoVarianteId).Order()
+        });
+        return resposta with
+        {
+            Versao = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new { resposta, imagens })))
+        };
     }
 }

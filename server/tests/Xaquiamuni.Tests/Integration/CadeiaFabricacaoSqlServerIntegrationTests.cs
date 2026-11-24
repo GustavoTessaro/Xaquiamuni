@@ -506,6 +506,21 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var publico = (await cliente.Http.GetFromJsonAsync<ProdutoCatalogoDetalheResponse>($"/api/catalogo/produtos/{produto.Id:D}"))!;
         Assert.True(publico.Opcoes.Single(o => o.Id == variante.Id).Disponivel);
         Assert.False(publico.Opcoes.Single(o => o.Id != variante.Id).Disponivel);
+
+        var opcaoNova = atual.GetProperty("variantes").EnumerateArray()
+            .Single(v => v.GetProperty("identificacao").GetString() == "Porcao de 300 g");
+        var opcaoNovaId = opcaoNova.GetProperty("id").GetGuid();
+        using var excluida = await ExcluirVarianteAsync(admin, rota, opcaoNovaId, await VersaoProdutoAsync(admin, rota),
+            Guid.NewGuid());
+        Assert.Equal(HttpStatusCode.NoContent, excluida.StatusCode);
+        var preservado = (await admin.Http.GetFromJsonAsync<ProdutoResponse>(rota))!;
+        Assert.Equal(atual.GetProperty("caracteristicas").GetRawText(),
+            JsonSerializer.Serialize(preservado.Caracteristicas, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        Assert.Equal(200m, Assert.Single(preservado.Variantes, v => v.Id == variante.Id).PesoLiquidoGramas);
+        var recriada = await admin.PostAsync<ProdutoResponse>($"{rota}/variantes",
+            new { identificacao = "Porcao de 300 g", unidadeVenda = "KIT", precoVenda = 56m, caracteristicas = Vinculo(300) },
+            HttpStatusCode.OK);
+        Assert.NotEqual(opcaoNovaId, Assert.Single(recriada.Variantes, v => v.Identificacao == "Porcao de 300 g").Id);
     }
 
     private sealed class Sessao(HttpClient http) : IDisposable

@@ -33,6 +33,7 @@ export class AdminProdutoVarianteFormComponent {
   readonly variante = input<AdminProdutoVariante | null>(null);
   readonly caracteristicas = input<AdminProdutoCaracteristica[]>([]);
   readonly salvando = input(false);
+  readonly bloqueado = input(false);
   readonly mensagemErro = input('');
   readonly salvar = output<AdminProdutoVarianteRequest>();
   readonly cancelar = output<void>();
@@ -137,7 +138,7 @@ export class AdminProdutoVarianteFormComponent {
   }
 
   protected submit(): void {
-    if (this.salvando()) {
+    if (this.salvando() || this.bloqueado()) {
       return;
     }
     this.enviado.set(true);

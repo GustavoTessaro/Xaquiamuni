@@ -93,7 +93,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     {
         await using var banco = await SqlServerTestDatabase.CreateAsync(targetMigration: "20261120144816_CriarAgendaAdministrativa");
         await using var db = banco.CreateVerificationContext();
-        var (_, variante, _) = await CriarProdutoCompravelAsync(db);
+        var (_, variante, _) = await CriarProdutoCompravelAsync(db, categoriaAnteriorAVersao: true);
         var fabricacao = new DateOnly(2026, 1, 1);
         var validade = fabricacao.AddDays(30);
         var lote = LoteProdutoAcabado.Criar(variante, null, fabricacao, validade);

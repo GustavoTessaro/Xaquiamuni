@@ -17,6 +17,7 @@ public sealed class PedidoSqlServerIntegrationTests
         await using var context = database.CreateVerificationContext();
         var agora = new DateTimeOffset(2026, 11, 18, 15, 0, 0, TimeSpan.Zero).AddTicks(1);
         var categoria = Categoria.Criar("Artesanais", null, 0);
+        await ReservarProdutoAcabadoSqlServerIntegrationTests.InserirCategoriaAnteriorAVersaoAsync(context, categoria);
         var produto = Produto.CriarSimples("Sabonete", null, categoria, "UN", 19.99m);
         var outroProduto = Produto.CriarSimples("Vela", null, categoria, "UN", 10.01m);
         var variante = Assert.Single(produto.Variantes);

@@ -228,13 +228,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
     {
         var categoria = Categoria.Criar("Artesanais", null, 0);
         if (categoriaAnteriorAVersao)
-        {
-            await context.Database.ExecuteSqlInterpolatedAsync($"""
-                INSERT INTO [Categorias] ([Id], [Nome], [NomeNormalizado], [Ativa], [OrdemExibicao])
-                VALUES ({categoria.Id}, {categoria.Nome}, {categoria.NomeNormalizado}, {categoria.Ativa}, {categoria.OrdemExibicao})
-                """);
-            context.Attach(categoria);
-        }
+            await InserirCategoriaAnteriorAVersaoAsync(context, categoria);
         var padrao = ProdutoVariante.Criar("Padrao", "UN", preco, padrao: true);
         var alternativa = ProdutoVariante.Criar("Lavanda", "UN", 10.01m);
         var produto = Produto.Criar("Sabonete", null, categoria, [padrao, alternativa]);
@@ -244,6 +238,15 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
         return (produto, padrao, alternativa);
+    }
+
+    internal static async Task InserirCategoriaAnteriorAVersaoAsync(XaquiamuniDbContext context, Categoria categoria)
+    {
+        await context.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO [Categorias] ([Id], [Nome], [NomeNormalizado], [Ativa], [OrdemExibicao])
+            VALUES ({categoria.Id}, {categoria.Nome}, {categoria.NomeNormalizado}, {categoria.Ativa}, {categoria.OrdemExibicao})
+            """);
+        context.Attach(categoria);
     }
 
     private sealed class FalhaInjetada : Exception;

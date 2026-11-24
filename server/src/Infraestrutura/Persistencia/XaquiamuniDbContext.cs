@@ -1191,6 +1191,14 @@ public sealed class XaquiamuniDbContext
         });
 
         ExclusaoCategoriaMapping.Configurar(builder);
+        builder.Entity<OperacaoExclusaoVariante>(e =>
+        {
+            e.ToTable("OperacoesExclusaoVariante");
+            e.HasKey(x => new { x.Autor, x.Chave });
+            e.Property(x => x.Versao).HasMaxLength(64).IsUnicode(false);
+            e.Property(x => x.Identificacao).HasMaxLength(ProdutoVariante.IdentificacaoMaxLength);
+            e.Property(x => x.Resultado).HasMaxLength(24);
+        });
         builder.Entity<Categoria>(categoria =>
         {
             categoria.Property(x => x.Versao).HasDefaultValueSql("NEWID()").IsConcurrencyToken();

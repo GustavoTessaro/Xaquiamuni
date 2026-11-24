@@ -24,6 +24,7 @@ describe('AdminProdutosComponent', () => {
   let editarVariante: ReturnType<typeof vi.fn<ProdutosService['editarVariante']>>;
   let definirVariantePadrao: ReturnType<typeof vi.fn<ProdutosService['definirVariantePadrao']>>;
   let alterarStatusVariante: ReturnType<typeof vi.fn<ProdutosService['alterarStatusVariante']>>;
+  let excluirVariante: ReturnType<typeof vi.fn<ProdutosService['excluirVariante']>>;
   let alterarPublicacao: ReturnType<typeof vi.fn<ProdutosService['alterarPublicacao']>>;
   let navigateByUrl: ReturnType<typeof vi.fn<Router['navigateByUrl']>>;
 
@@ -104,6 +105,7 @@ describe('AdminProdutosComponent', () => {
     editarVariante = vi.fn<ProdutosService['editarVariante']>();
     definirVariantePadrao = vi.fn<ProdutosService['definirVariantePadrao']>();
     alterarStatusVariante = vi.fn<ProdutosService['alterarStatusVariante']>();
+    excluirVariante = vi.fn<ProdutosService['excluirVariante']>();
     alterarPublicacao = vi.fn<ProdutosService['alterarPublicacao']>();
 
     await TestBed.configureTestingModule({
@@ -129,6 +131,7 @@ describe('AdminProdutosComponent', () => {
             editarVariante,
             definirVariantePadrao,
             alterarStatusVariante,
+            excluirVariante,
             alterarPublicacao,
           },
         },
@@ -690,6 +693,99 @@ describe('AdminProdutosComponent', () => {
     });
     expect(text()).toContain('Opção atualizada com sucesso.');
     expect(text()).not.toContain('Excluir variante');
+  });
+
+  it('recovers an uncertain variant deletion with the original key and keeps the product open', () => {
+    const produto = { ...soap, versao: 'versao-consultada' };
+    obterProduto.mockReturnValueOnce(of(produto)).mockReturnValueOnce(of({
+      ...produto, versao: 'nova-versao', variantes: produto.variantes.filter(v => v.id !== 'soap-large'),
+    }));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const pendente = new Subject<void>();
+    excluirVariante.mockReturnValueOnce(pendente).mockReturnValueOnce(of(undefined));
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    const extra = produto.variantes.find(v => v.id === 'soap-large')!;
+    clickButton('Editar opção ' + extra.identificacao);
+    clickButton('Excluir variante');
+    expect(excluirVariante).not.toHaveBeenCalled();
+    confirmacao.mockReturnValue(true);
+    clickButton('Excluir variante');
+    expect(excluirVariante).toHaveBeenCalledOnce();
+    expect(Array.from(root().querySelectorAll('button')).find(b => b.textContent?.trim() === 'Recuperar exclusão')
+      ?.disabled).toBe(true);
+    pendente.error(new HttpErrorResponse({ status: 0 }));
+    fixture.detectChanges();
+    clickButton('Recuperar exclusão');
+    expect(excluirVariante.mock.calls[1]).toEqual(excluirVariante.mock.calls[0]);
+    expect(text()).toContain('Variante excluída.');
+    expect(text()).toContain('Sabonete de Lavanda');
+    expect(text()).not.toContain(extra.identificacao);
+  });
+
+  it.each([
+    ['variante_com_historico_comercial', 'A variante possui vínculos comerciais.', true],
+    ['ultima_variante', 'O produto precisa manter pelo menos uma variante.', false],
+    ['variante_padrao', 'Defina outra variante padrão antes de excluir esta.', false],
+  ])('shows the deletion conflict %s and retains the variant', (codigo, detail, permiteInativacao) => {
+    const produto = { ...soap, versao: 'atual' };
+    obterProduto.mockReturnValueOnce(of(produto));
+    const extra = produto.variantes.find(v => v.id === 'soap-large')!;
+    excluirVariante.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+      status: 409, error: { codigo, detail },
+    })));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Editar opção ' + extra.identificacao);
+    clickButton('Excluir variante');
+    expect(text()).toContain(detail);
+    expect(text()).toContain(extra.identificacao);
+    expect(text().includes('Desativar variante')).toBe(permiteInativacao);
+    if (permiteInativacao) {
+      confirmacao.mockReturnValue(false);
+      clickButton('Desativar variante');
+      expect(alterarStatusVariante).not.toHaveBeenCalled();
+      expect(text()).toContain(detail);
+    }
+  });
+
+  it('keeps the deletion key when refreshing the product fails after confirmation', () => {
+    const produto = { ...soap, versao: 'atual' };
+    const extra = produto.variantes.find(v => v.id === 'soap-large')!;
+    obterProduto.mockReturnValueOnce(of(produto))
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })))
+      .mockReturnValueOnce(of({ ...produto, variantes: produto.variantes.filter(v => v.id !== extra.id) }));
+    excluirVariante.mockReturnValue(of(undefined));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Editar opção ' + extra.identificacao);
+    clickButton('Excluir variante');
+    expect(text()).toContain('Recupere a exclusão para atualizar a lista.');
+    clickButton('Recuperar exclusão');
+    expect(excluirVariante.mock.calls[1]).toEqual(excluirVariante.mock.calls[0]);
+    expect(confirmacao).toHaveBeenCalledOnce();
+    expect(text()).not.toContain(extra.identificacao);
+  });
+
+  it('requeries a stale variant and requires a new deletion confirmation', () => {
+    const produto = { ...soap, versao: 'antiga' };
+    obterProduto.mockReturnValueOnce(of(produto)).mockReturnValueOnce(of({ ...produto, versao: 'atual' }))
+      .mockReturnValueOnce(of({ ...produto, versao: 'final' }));
+    excluirVariante.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+      status: 409, error: { codigo: 'versao_desatualizada', detail: 'Recarregue o produto.' },
+    }))).mockReturnValueOnce(of(undefined));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const extra = produto.variantes.find(v => v.id === 'soap-large')!;
+    clickButton('Gerenciar opções de Sabonete de Lavanda');
+    clickButton('Editar opção ' + extra.identificacao);
+    clickButton('Excluir variante');
+    expect(text()).toContain('Recarregue o produto.');
+    clickButton('Recarregar produto');
+    expect(excluirVariante).toHaveBeenCalledTimes(1);
+    clickButton('Editar opção ' + extra.identificacao);
+    clickButton('Excluir variante');
+    expect(confirmacao).toHaveBeenCalledTimes(2);
+    expect(excluirVariante.mock.calls[1][2]).toBe('atual');
+    expect(excluirVariante.mock.calls[0][3]).not.toBe(excluirVariante.mock.calls[1][3]);
   });
 
   it('prevents duplicate create submissions and safely redirects expired sessions', () => {

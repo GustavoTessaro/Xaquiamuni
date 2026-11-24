@@ -119,6 +119,11 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
         {
             return Conflito("Já existe receita ativa para a variante ou a receita foi alterada. Atualize a lista.");
         }
+        catch (DbUpdateException erro) when (erro.InnerException is SqlException { Number: 547 } sql
+            && sql.Message.Contains("FK_ReceitasProducao_ProdutoVariantes_ProdutoVarianteId", StringComparison.Ordinal))
+        {
+            return Conflito("A variante não está mais disponível. Atualize a lista antes de salvar.");
+        }
     }
 
     private static ReceitaResult Conflito(string erro) => new(ReceitaStatus.Conflito, Erro: erro);

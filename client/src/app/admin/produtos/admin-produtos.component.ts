@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { finalize, forkJoin } from 'rxjs';
+import { finalize, forkJoin, switchMap, timeout } from 'rxjs';
 import { AdminCategoria, CategoriasService } from '../../core/admin-categorias/categorias.service';
 import {
   AdminProduto,
@@ -83,6 +83,9 @@ export class AdminProdutosComponent {
   protected readonly varianteFormMode = signal<VarianteFormMode>(null);
   protected readonly varianteEditando = signal<AdminProdutoVariante | null>(null);
   protected readonly salvandoVariante = signal(false);
+  protected readonly exclusaoVariante = signal<{ produto: string; variante: string; versao: string; chave: string } | null>(null);
+  protected readonly versaoVarianteDesatualizada = signal(false);
+  protected readonly varianteComDependencias = signal(false);
   protected readonly erroVariantes = signal('');
   protected readonly mensagemVariantes = signal('');
   protected readonly variantesEmAtualizacao = signal<ReadonlySet<string>>(new Set());
@@ -242,7 +245,7 @@ export class AdminProdutosComponent {
   }
 
   protected abrirGerenciamentoVariantes(produto: AdminProduto): void {
-    if (this.carregandoVariantes() || this.salvandoVariante()) {
+    if (this.carregandoVariantes() || this.salvandoVariante() || this.exclusaoVariante()) {
       return;
     }
     this.carregandoVariantes.set(true);
@@ -256,6 +259,8 @@ export class AdminProdutosComponent {
       )
       .subscribe({
         next: (detalhe) => {
+          this.versaoVarianteDesatualizada.set(false);
+          this.varianteComDependencias.set(false);
           this.produtoVariantes.set(detalhe);
           this.varianteFormMode.set(null);
           this.varianteEditando.set(null);
@@ -274,6 +279,7 @@ export class AdminProdutosComponent {
 
   protected fecharGerenciamentoVariantes(): void {
     if (
+      this.exclusaoVariante() ||
       this.carregandoVariantes() ||
       this.salvandoVariante() ||
       this.variantesEmAtualizacao().size > 0
@@ -297,17 +303,18 @@ export class AdminProdutosComponent {
   }
 
   protected iniciarEdicaoVariante(variante: AdminProdutoVariante): void {
-    if (this.salvandoVariante() || this.variantesEmAtualizacao().size > 0) {
+    if (this.salvandoVariante() || this.exclusaoVariante() || this.variantesEmAtualizacao().size > 0) {
       return;
     }
     this.varianteEditando.set(variante);
+    this.varianteComDependencias.set(false);
     this.varianteFormMode.set('edit');
     this.erroVariantes.set('');
     this.mensagemVariantes.set('');
   }
 
   protected cancelarFormularioVariante(): void {
-    if (this.salvandoVariante()) {
+    if (this.salvandoVariante() || this.exclusaoVariante()) {
       return;
     }
     this.varianteFormMode.set(null);
@@ -328,7 +335,7 @@ export class AdminProdutosComponent {
   }
 
   protected salvarVariante(request: AdminProdutoVarianteRequest): void {
-    if (this.salvandoVariante()) {
+    if (this.salvandoVariante() || this.exclusaoVariante() || this.versaoVarianteDesatualizada()) {
       return;
     }
     const produto = this.produtoVariantes();
@@ -345,6 +352,62 @@ export class AdminProdutosComponent {
     }
 
     this.persistirOpcao(operation, mode === 'create' ? 'Opção adicionada com sucesso.' : 'Opção atualizada com sucesso.');
+  }
+
+  protected oferecerInativacaoVariante(variante: AdminProdutoVariante): void {
+    if (!window.confirm(`Desativar “${variante.identificacao}”?`)) return;
+    this.cancelarFormularioVariante();
+    this.alterarStatusVariante(variante, false);
+  }
+
+  protected excluirVarianteSelecionada(produto: AdminProduto, variante: AdminProdutoVariante): void {
+    if (this.salvandoVariante() || this.variantesEmAtualizacao().size > 0 ||
+        this.versaoVarianteDesatualizada() || !produto.versao) return;
+    if (!this.exclusaoVariante()) {
+      if (!window.confirm(`Excluir “${this.nomeLegivelVariante(produto, variante)}” de “${produto.nome}”? A exclusão é permanente.`)) return;
+      this.exclusaoVariante.set({ produto: produto.id, variante: variante.id, versao: produto.versao, chave: crypto.randomUUID() });
+    }
+    const tentativa = this.exclusaoVariante()!;
+    this.salvandoVariante.set(true);
+    this.erroVariantes.set('');
+    this.varianteComDependencias.set(false);
+    let exclusaoConfirmada = false;
+    this.produtosService.excluirVariante(tentativa.produto, tentativa.variante, tentativa.versao, tentativa.chave)
+      .pipe(
+        switchMap(() => {
+          exclusaoConfirmada = true;
+          return this.produtosService.obter(tentativa.produto).pipe(timeout(20_000));
+        }),
+        takeUntilDestroyed(this.destroyRef),
+        finalize(() => this.salvandoVariante.set(false)),
+      )
+      .subscribe({
+        next: atualizado => {
+          this.exclusaoVariante.set(null);
+          this.atualizarProduto(atualizado);
+          this.produtoVariantes.set(atualizado);
+          this.varianteEditando.set(null);
+          this.varianteFormMode.set(null);
+          this.mensagemVariantes.set('Variante excluída.');
+        },
+        error: (erro: unknown) => {
+          if (exclusaoConfirmada) {
+            if (!this.redirecionarSessaoExpirada(erro)) {
+              this.erroVariantes.set('Variante excluída. Recupere a exclusão para atualizar a lista.');
+            }
+          } else if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500) {
+            this.exclusaoVariante.set(null);
+            if (this.redirecionarSessaoExpirada(erro)) return;
+            const codigo = erro.error?.codigo;
+            this.versaoVarianteDesatualizada.set(['versao_desatualizada', 'conflito_concorrencia'].includes(codigo));
+            this.varianteComDependencias.set(typeof codigo === 'string' && codigo.includes('historico'));
+            this.erroVariantes.set(erro.status === 409 && typeof erro.error?.detail === 'string'
+              ? erro.error.detail : this.mensagemErroHttp(erro, 'Não foi possível excluir a variante.'));
+          } else {
+            this.erroVariantes.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');
+          }
+        },
+      });
   }
 
   private persistirOpcao(operation: Observable<AdminProduto>, mensagem: string): void {
@@ -407,7 +470,7 @@ export class AdminProdutosComponent {
 
   protected alterarStatusVariante(variante: AdminProdutoVariante, ativa: boolean): void {
     const produto = this.produtoVariantes();
-    if (!produto || this.variantesEmAtualizacao().size > 0) {
+    if (!produto || this.salvandoVariante() || this.exclusaoVariante() || this.variantesEmAtualizacao().size > 0) {
       return;
     }
     if (ativa) {

@@ -237,8 +237,7 @@ public sealed class ProdutoSqlServerIntegrationTests
             targetMigration: AddProdutosEVariantesMigration);
         await using var context = database.CreateVerificationContext();
         var category = Categoria.Criar("Sabonetes", null, 0);
-        context.Categorias.Add(category);
-        await context.SaveChangesAsync();
+        await ReservarProdutoAcabadoSqlServerIntegrationTests.InserirCategoriaAnteriorAVersaoAsync(context, category);
 
         var productId = Guid.NewGuid();
         var defaultVariantId = Guid.NewGuid();
@@ -855,8 +854,7 @@ public sealed class ProdutoSqlServerIntegrationTests
             targetMigration: AddProdutosEVariantesMigration);
         await using var context = database.CreateVerificationContext();
         var category = Categoria.Criar("Sabonetes", null, 0);
-        context.Categorias.Add(category);
-        await context.SaveChangesAsync();
+        await ReservarProdutoAcabadoSqlServerIntegrationTests.InserirCategoriaAnteriorAVersaoAsync(context, category);
 
         var productId = Guid.NewGuid();
         var variantId = Guid.NewGuid();

@@ -388,7 +388,7 @@ public sealed class EfProdutoRepository : IProdutoRepository
         }
     }
 
-    private static IQueryable<Produto> IncluirAgregado(IQueryable<Produto> produtos) =>
+    internal static IQueryable<Produto> IncluirAgregado(IQueryable<Produto> produtos) =>
         produtos
             .Include(produto => produto.Categoria)
             .Include(produto => produto.Caracteristicas)
