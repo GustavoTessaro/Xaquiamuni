@@ -51,7 +51,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 
         Assert.Equal(new[] { "20261123200209_AdicionarNumeroPublicoPedido", "20261123202620_CriarPromocoesFrete",
             "20261123225109_CongelarDescontoFretePostal", "20261123234034_VersionarEExcluirCategorias",
-            "20261124011336_RegistrarUsoEExclusaoFornecedor", "20261124012758_AuditarExclusaoVariante" },
+            "20261124011336_RegistrarUsoEExclusaoFornecedor", "20261124012758_AuditarExclusaoVariante",
+            "20261124060713_AuditarExclusaoProdutoELimpezaImagens" },
             await db.Database.GetPendingMigrationsAsync());
         await db.Database.MigrateAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());

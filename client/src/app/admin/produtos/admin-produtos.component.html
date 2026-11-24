@@ -4,11 +4,32 @@
       <app-admin-produto-form
         [categorias]="categorias()"
         [produto]="produtoEditando()"
-        [salvando]="salvandoProduto()"
+        [salvando]="salvandoProduto() || !!exclusaoProduto() || (!!produtoEditando() && versaoProdutoDesatualizada())"
         [mensagemErro]="erroOperacao()"
         (salvar)="salvarProduto($event)"
         (cancelar)="cancelarFormularioProduto()"
       />
+      @if (produtoEditando(); as produto) {
+        <div class="flex flex-wrap gap-2">
+          @if (versaoProdutoDesatualizada()) {
+            <button type="button" class="admin-button" (click)="editarProduto(produto)" [disabled]="!!carregandoDetalheId()">
+              Recarregar produto
+            </button>
+            <button type="button" class="admin-button" (click)="cancelarFormularioProduto()">Fechar edição</button>
+          } @else if (produto.versao) {
+            <button type="button"
+              class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2"
+              [disabled]="salvandoProduto() || !!carregandoDetalheId() || produtoPendente(produto.id)"
+              (click)="excluirProdutoSelecionado(produto)">
+              {{ exclusaoProduto() ? 'Recuperar exclusão do produto' : 'Excluir produto' }}
+            </button>
+            @if (produtoComDependencias() && produto.publicado) {
+              <button type="button" class="admin-button" [disabled]="produtoPendente(produto.id)"
+                (click)="publicar(produto)">Despublicar produto</button>
+            }
+          }
+        </div>
+      }
     } @else if (produtoVariantes(); as produto) {
       <section class="space-y-5" aria-labelledby="options-title">
         <header class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -427,13 +448,12 @@
             >
             <select
               id="category-filter"
-              [value]="categoriaFiltro()"
               (change)="definirCategoria($event)"
               class="mt-1.5 min-h-11 w-full rounded-xl border border-slate-300 bg-white px-3 text-slate-900 shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
             >
-              <option value="">Todas as categorias</option>
+              <option value="" [selected]="!categoriaFiltro()">Todas as categorias</option>
               @for (categoria of categorias(); track categoria.id) {
-                <option [value]="categoria.id">
+                <option [value]="categoria.id" [selected]="categoriaFiltro() === categoria.id">
                   {{ categoria.nome }}{{ categoria.ativa ? '' : ' (inativa)' }}
                 </option>
               }

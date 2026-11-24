@@ -25,6 +25,7 @@ describe('AdminProdutosComponent', () => {
   let definirVariantePadrao: ReturnType<typeof vi.fn<ProdutosService['definirVariantePadrao']>>;
   let alterarStatusVariante: ReturnType<typeof vi.fn<ProdutosService['alterarStatusVariante']>>;
   let excluirVariante: ReturnType<typeof vi.fn<ProdutosService['excluirVariante']>>;
+  let excluirProduto: ReturnType<typeof vi.fn<ProdutosService['excluirProduto']>>;
   let alterarPublicacao: ReturnType<typeof vi.fn<ProdutosService['alterarPublicacao']>>;
   let navigateByUrl: ReturnType<typeof vi.fn<Router['navigateByUrl']>>;
 
@@ -106,6 +107,7 @@ describe('AdminProdutosComponent', () => {
     definirVariantePadrao = vi.fn<ProdutosService['definirVariantePadrao']>();
     alterarStatusVariante = vi.fn<ProdutosService['alterarStatusVariante']>();
     excluirVariante = vi.fn<ProdutosService['excluirVariante']>();
+    excluirProduto = vi.fn<ProdutosService['excluirProduto']>();
     alterarPublicacao = vi.fn<ProdutosService['alterarPublicacao']>();
 
     await TestBed.configureTestingModule({
@@ -132,6 +134,7 @@ describe('AdminProdutosComponent', () => {
             definirVariantePadrao,
             alterarStatusVariante,
             excluirVariante,
+            excluirProduto,
             alterarPublicacao,
           },
         },
@@ -806,6 +809,72 @@ describe('AdminProdutosComponent', () => {
     pending.error(new HttpErrorResponse({ status: 401 }));
     expect(navigateByUrl).toHaveBeenCalledWith('/admin/login');
     expect(text()).not.toContain('network details');
+  });
+
+  it('cancels, prevents duplicate product deletion and recovers with the original key', () => {
+    const detalhe = { ...soap, versao: 'atual' };
+    obterProduto.mockReturnValueOnce(of(detalhe));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const pendente = new Subject<void>();
+    excluirProduto.mockReturnValueOnce(pendente).mockReturnValueOnce(of(undefined));
+    clickButton('Editar Sabonete de Lavanda');
+    clickButton('Excluir produto');
+    expect(confirmacao.mock.calls[0][0]).toContain(detalhe.nome);
+    expect(excluirProduto).not.toHaveBeenCalled();
+    confirmacao.mockReturnValue(true);
+    clickButton('Excluir produto');
+    expect(Array.from(root().querySelectorAll('button'))
+      .find(b => b.textContent?.trim() === 'Recuperar exclusão do produto')?.disabled).toBe(true);
+    pendente.error(new HttpErrorResponse({ status: 0 }));
+    fixture.detectChanges();
+    listarProdutos.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })));
+    clickButton('Recuperar exclusão do produto');
+    expect(excluirProduto.mock.calls[1]).toEqual(excluirProduto.mock.calls[0]);
+    expect(confirmacao).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('Produto excluído.');
+    expect(text()).not.toContain(detalhe.nome);
+    listarProdutos.mockReturnValueOnce(of([candle]));
+    clickButton('Tentar novamente');
+    expect(text()).toContain(candle.nome);
+  });
+
+  it.each(['produto_com_historico_comercial', 'variante_com_historico_estoque', 'produto_historico_inconclusivo'])(
+    'preserves the product and offers unpublishing after %s', codigo => {
+      obterProduto.mockReturnValueOnce(of({ ...soap, versao: 'atual' }));
+      excluirProduto.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+        status: 409, error: { codigo, detail: 'O produto precisa ser preservado.' },
+      })));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      clickButton('Editar Sabonete de Lavanda');
+      clickButton('Excluir produto');
+      expect(text()).toContain('O produto precisa ser preservado.');
+      expect(alterarPublicacao).not.toHaveBeenCalled();
+      alterarPublicacao.mockReturnValueOnce(of({ ...soap, publicado: false }));
+      clickButton('Despublicar produto');
+      expect(alterarPublicacao).toHaveBeenCalledWith(soap.id, { publicado: false });
+    },
+  );
+
+  it('reloads a stale product while requiring fresh confirmation and idempotency key', () => {
+    obterProduto.mockReturnValueOnce(of({ ...soap, versao: 'antiga' }))
+      .mockReturnValueOnce(of({ ...soap, versao: 'atual' }));
+    listarProdutos.mockReturnValue(of([candle]));
+    excluirProduto.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+      status: 409, error: { codigo: 'versao_desatualizada', detail: 'Recarregue o produto.' },
+    }))).mockReturnValueOnce(of(undefined));
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    setField('product-search', 'Sabonete');
+    setField('category-filter', 'soaps');
+    clickButton('Editar Sabonete de Lavanda');
+    clickButton('Excluir produto');
+    clickButton('Recarregar produto');
+    expect(excluirProduto).toHaveBeenCalledOnce();
+    clickButton('Excluir produto');
+    expect(confirmacao).toHaveBeenCalledTimes(2);
+    expect(excluirProduto.mock.calls[1][1]).toBe('atual');
+    expect(excluirProduto.mock.calls[1][2]).not.toBe(excluirProduto.mock.calls[0][2]);
+    expect(root().querySelector<HTMLInputElement>('#product-search')?.value).toBe('Sabonete');
+    expect(root().querySelector<HTMLSelectElement>('#category-filter')?.value).toBe('soaps');
   });
 
   function root(): HTMLElement {

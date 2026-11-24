@@ -409,6 +409,147 @@ try {
     console.log('Fornecedores: exclusão, troca em rascunho e inativação verificadas em Chrome.');
   }
 
+  if (dados.exclusaoProduto) {
+    await call('Page.enable', {}, a.sessionId);
+    const base = '/api/admin/produtos';
+    const pedir = (path, method, body, headers = {}) => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(path)}, { method: ${JSON.stringify(method)},
+        headers: {'Content-Type':'application/json', 'X-XSRF-TOKEN':requestToken, ...${JSON.stringify(headers)}},
+        body: ${body === undefined ? 'undefined' : JSON.stringify(JSON.stringify(body))} });
+      return {status:r.status, tag:r.headers.get('ETag'), body:r.status===204 ? null : await r.json()};
+    })()`);
+    const criar = async nome => {
+      const r = await pedir(base, 'POST', { nome, categoriaId: dados.exclusaoProduto, simples: true,
+        variantePadrao: { unidadeVenda: 'UN', precoVenda: 19 } });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      assert.equal(r.body.variantes.filter(v => v.padrao).length, 1);
+      return r.body;
+    };
+    const botao = rotulo => "[...document.querySelectorAll('main button')].find(b => !b.disabled && "
+      + "(b.textContent.trim() === " + JSON.stringify(rotulo) + " || b.getAttribute('aria-label') === " + JSON.stringify(rotulo) + "))";
+    const editar = async produto => {
+      await a.ir('/admin/produtos');
+      const expr = botao('Editar ' + produto.nome);
+      await waitFor(() => a.ev('!!(' + expr + ')'), produto.nome);
+      await a.ev('(' + expr + ').click()');
+      await waitFor(() => a.ev('!!(' + botao('Excluir produto') + ')'), 'ação Excluir produto');
+    };
+    const confirmar = async (produto, aceitar) => {
+      const decisao = { aceitar };
+      confirmacoes.set(a.sessionId, decisao);
+      try {
+        await a.ev("setTimeout(() => (" + botao('Excluir produto') + ").click(), 0)");
+        await waitFor(() => decisao.processada, 'confirmação de exclusão');
+        assert.ok(decisao.mensagem.includes(produto.nome) && decisao.mensagem.includes('permanente') &&
+          decisao.mensagem.includes('variantes'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    };
+    const texto = (frase, browser = a) =>
+      waitFor(() => browser.ev("document.querySelector('main')?.innerText.includes(" + JSON.stringify(frase) + ")"), frase);
+
+    for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
+      const produto = await criar('Produto descartável ' + width + ' ' + modo);
+      const rota = base + '/' + produto.id;
+      const caracteristicas = await pedir(rota, 'PUT',
+        { caracteristicas: [{ nome: 'Aroma', valores: [{ nome: 'Lavanda' }, { nome: 'Alecrim' }] }] });
+      assert.equal(caracteristicas.status, 200, JSON.stringify(caracteristicas));
+      const aroma = caracteristicas.body.caracteristicas[0];
+      const variante = await pedir(rota + '/variantes', 'POST', { identificacao: 'Alecrim', unidadeVenda: 'UN', precoVenda: 22,
+        caracteristicas: [{ caracteristicaId: aroma.id, valorId: aroma.valores.find(v => v.nome === 'Alecrim').id }] });
+      assert.equal(variante.status, 200, JSON.stringify(variante));
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      await editar(produto);
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), modo);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await a.ev("(" + botao('Cancelar') + ").focus()");
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      assert.ok(await a.ev("document.activeElement.matches(':focus-visible')"));
+      await confirmar(produto, false);
+      assert.equal((await pedir(rota, 'GET')).body.variantes.length, 2);
+      await confirmar(produto, true);
+      await texto('Produto excluído.');
+      await a.ir('/admin/produtos');
+      assert.equal((await pedir(rota, 'GET')).status, 404);
+      assert.equal((await pedir('/api/admin/categorias/' + dados.exclusaoProduto, 'GET')).status, 200);
+    }
+
+    const foto = produto => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = 96;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#277c51'; ctx.fillRect(0, 0, 96, 96);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      const form = new FormData(); form.append('arquivo', blob, 'foto.png');
+      const r = await fetch(${JSON.stringify(base + '/' + produto.id + '/imagens')}, {
+        method:'POST', headers:{'X-XSRF-TOKEN':requestToken}, body:form });
+      return [r.status, await r.json()];
+    })()`);
+    const vizinho = await criar('Produto preservado');
+    const [vizinhoStatus] = await foto(vizinho);
+    assert.equal(vizinhoStatus, 201);
+    const publicado = await criar('Produto publicado descartável');
+    const rotaPublicada = base + '/' + publicado.id;
+    const [statusFoto, fotoCriada] = await foto(publicado);
+    assert.equal(statusFoto, 201, JSON.stringify(fotoCriada));
+    assert.equal((await pedir(rotaPublicada + '/publicacao', 'PATCH', { publicado: true })).status, 200);
+    const consulta = '/api/catalogo/produtos/' + publicado.id;
+    const noCatalogo = () => c.ev(`fetch('/api/catalogo/produtos').then(r=>r.json()).then(p=>p.itens.some(i=>i.id===${JSON.stringify(publicado.id)}))`);
+    assert.equal(await c.ev(`fetch(${JSON.stringify(consulta)}).then(r=>r.status)`), 200);
+    assert.ok(await noCatalogo());
+    // Sem estoque, a seleção antiga é semeada para testar a revalidação da página real.
+    await c.ev(`localStorage.setItem('xaquiamuni:carrinho:v1', ${JSON.stringify(JSON.stringify([{
+      produtoId: publicado.id, varianteId: publicado.variantes[0].id, nome: publicado.nome,
+      variante: publicado.variantes[0].identificacao, imagem: null, precoCentavos: '1900', quantidade: 1,
+    }]))})`);
+    await editar(publicado);
+    await confirmar(publicado, true);
+    await texto('Produto excluído.');
+    assert.equal((await pedir(rotaPublicada + '/imagens', 'GET')).status, 404);
+    assert.equal(await c.ev(`fetch(${JSON.stringify(consulta)}).then(r=>r.status)`), 404);
+    assert.equal(await noCatalogo(), false);
+    await c.ir('/carrinho');
+    await texto('Opção indisponível.', c);
+    assert.equal((await pedir(base + '/' + vizinho.id + '/imagens', 'GET')).body.length, 1);
+
+    const bloqueado = await criar('Produto com histórico');
+    const rotaBloqueada = base + '/' + bloqueado.id;
+    const adicao = await pedir(rotaBloqueada + '/variantes', 'POST',
+      { identificacao: 'Adicional', unidadeVenda: 'UN', precoVenda: 20 });
+    assert.equal(adicao.status, 200, JSON.stringify(adicao));
+    const extra = adicao.body.variantes.find(v => !v.padrao);
+    const entrada = await pedir('/api/admin/estoque/produtos-acabados/variantes/' + extra.id + '/entradas', 'POST',
+      { tipo: 'EntradaManual', quantidade: 1, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Ensaio' },
+      { 'Idempotency-Key': await a.ev('crypto.randomUUID()') });
+    assert.equal(entrada.status, 201, JSON.stringify(entrada));
+    await editar(bloqueado);
+    await confirmar(bloqueado, true);
+    await texto('A variante possui registros de estoque');
+    assert.equal((await pedir(rotaBloqueada, 'GET')).body.variantes.length, 2);
+
+    const antigo = await criar('Produto recadastrado');
+    const anterior = base + '/' + antigo.id;
+    const chave = await a.ev('crypto.randomUUID()');
+    const etag = (await pedir(anterior, 'GET')).tag;
+    const headers = { 'Idempotency-Key': chave, 'If-Match': etag };
+    assert.equal((await pedir(anterior, 'DELETE', undefined, headers)).status, 204);
+    const novo = await criar(antigo.nome);
+    assert.notEqual(novo.id, antigo.id);
+    assert.notEqual(novo.variantes[0].id, antigo.variantes[0].id);
+    assert.equal((await pedir(anterior, 'DELETE', undefined, headers)).status, 204);
+    const novaRota = base + '/' + novo.id;
+    const novaTag = (await pedir(novaRota, 'GET')).tag;
+    assert.equal((await pedir(novaRota, 'DELETE', undefined, { ...headers, 'If-Match': novaTag })).status, 409);
+    assert.equal((await pedir(novaRota, 'GET')).status, 200);
+    console.log('Exclusão do produto, histórico, catálogo, imagens, carrinho obsoleto e recadastro verificados no Chrome.');
+  }
+
   if (dados.exclusaoVariante) {
     const { Id: id, Nome: nome, CategoriaId: categoria, imagem, opcao } = dados.exclusaoVariante;
     await call('Page.enable', {}, a.sessionId);
@@ -513,7 +654,7 @@ try {
     console.log('Variante adicional, última variante, histórico de estoque, carrinho e imagem compartilhada verificadas no Chrome.');
   }
 
-  if (!dados.exclusaoCategorias && !dados.insumoFornecedor && !dados.exclusaoVariante && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
+  if (!dados.exclusaoCategorias && !dados.insumoFornecedor && !dados.exclusaoVariante && !dados.exclusaoProduto && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
     await a.ir('/admin/promocoes-frete');
     const botao = texto => waitFor(() => a.ev(`(() => {
       const alvo = [...document.querySelectorAll('main button')]

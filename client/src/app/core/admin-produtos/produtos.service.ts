@@ -204,6 +204,13 @@ export class ProdutosService {
     )).pipe(timeout(20_000));
   }
 
+  excluirProduto(id: string, versao: string, chave: string): Observable<void> {
+    return this.withCsrf(token => this.http.delete<void>(
+      `${this.basePath}/${encodeURIComponent(id)}`,
+      { headers: { 'X-XSRF-TOKEN': token, 'If-Match': `"${versao}"`, 'Idempotency-Key': chave } },
+    )).pipe(timeout(20_000));
+  }
+
   alterarStatusVariante(
     id: string,
     varianteId: string,

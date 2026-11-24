@@ -108,6 +108,10 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(1, await db.ContagensSemDiferencaProdutoAcabado.CountAsync());
         Assert.Equal(2, await db.MovimentosProdutoAcabado.CountAsync(m => m.ProdutoVarianteId == extra.Id));
         Assert.True(await db.ProdutoVariantes.AnyAsync(v => v.Id == extra.Id));
+        var produtoBloqueado = await new EfExcluirProduto(db, TimeProvider.System).ExecutarAsync(
+            produto.Id, ProdutoResponse.From(agregado!).Versao, autor, Guid.NewGuid(),
+            p => ProdutoResponse.From(p).Versao, default);
+        Assert.Equal((409, "variante_com_historico_estoque"), produtoBloqueado);
     }
 
     [SqlServerIntegrationFact]
@@ -324,6 +328,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await ConferirErroPostalAsync(bloqueada, 409, "variante_com_historico_producao");
         Assert.False(await db.LotesProdutoAcabado.AnyAsync());
         Assert.True(await db.ProdutoVariantes.AnyAsync(v => v.Id == extra.Id));
+        using var produtoBloqueado = await ExcluirProdutoAsync(admin, rota, await VersaoProdutoAsync(admin, rota), Guid.NewGuid());
+        await ConferirErroPostalAsync(produtoBloqueado, 409, "variante_com_historico_producao");
     }
 
     [SqlServerIntegrationFact]
@@ -348,6 +354,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await ConferirErroPostalAsync(bloqueada, 409, "variante_com_historico_producao");
         Assert.Equal(SituacaoOrdemProducao.Cancelada, (await db.OrdensProducao.AsNoTracking().SingleAsync()).Situacao);
         Assert.True(await db.ProdutoVariantes.AnyAsync(v => v.Id == dados.VarianteId));
+        using var produtoBloqueado = await ExcluirProdutoAsync(admin, rota, await VersaoProdutoAsync(admin, rota), Guid.NewGuid());
+        await ConferirErroPostalAsync(produtoBloqueado, 409, "variante_com_historico_producao");
     }
 
     [SqlServerIntegrationFact]
@@ -369,6 +377,8 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(0, (await db.SaldosProdutoAcabado.SingleAsync()).QuantidadeFisica);
         Assert.Equal(1, await db.Set<VendaExterna>().CountAsync());
         Assert.True(await db.ProdutoVariantes.AnyAsync(v => v.Id == extra.Id));
+        using var produtoBloqueado = await ExcluirProdutoAsync(admin, rota, await VersaoProdutoAsync(admin, rota), Guid.NewGuid());
+        await ConferirErroPostalAsync(produtoBloqueado, 409, "variante_com_historico_comercial");
     }
 
     private static async Task<string> VersaoProdutoAsync(Sessao admin, string rota)
@@ -396,7 +406,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     [SqlServerIntegrationFact]
     public Task ExclusaoVariante_ExclusaoAntesDoCheckout() => DisputarVarianteCheckoutAsync(checkoutPrimeiro: false);
 
-    private static async Task DisputarVarianteCheckoutAsync(bool checkoutPrimeiro)
+    private static async Task DisputarVarianteCheckoutAsync(bool checkoutPrimeiro, bool excluirProduto = false)
     {
         var barreira = new BarreiraAtendimento();
         await using var ambiente = await Ambiente.CriarAsync(interceptor: barreira);
@@ -419,7 +429,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.False(string.IsNullOrWhiteSpace(ofertaEntregaId));
         }
         Task<HttpResponseMessage> Checkout() => cliente.EnviarAsync("/api/pedidos", new { itens, ofertaEntregaId }, Guid.NewGuid());
-        Task<HttpResponseMessage> Excluir() => ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
+        Task<HttpResponseMessage> Excluir() => excluirProduto
+            ? ExcluirProdutoAsync(admin, rota, versao, Guid.NewGuid())
+            : ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
         barreira.Armar($"finished-variant:{extra.Id:D}");
         var primeira = checkoutPrimeiro ? Checkout() : Excluir();
         Task<HttpResponseMessage> segunda;
@@ -450,9 +462,10 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.Conflict, recusa.StatusCode);
         Assert.Equal(checkoutPrimeiro ? 1 : 0, await db.Pedidos.CountAsync());
         Assert.Equal(checkoutPrimeiro ? 1 : 0, await db.ReservasProdutoAcabado.CountAsync());
+        Assert.Equal(!excluirProduto || checkoutPrimeiro, await db.Produtos.AnyAsync(p => p.Id == produto.Id));
     }
 
-    private static async Task DisputarVarianteEstoqueAsync(bool entradaPrimeiro)
+    private static async Task DisputarVarianteEstoqueAsync(bool entradaPrimeiro, bool excluirProduto = false)
     {
         var barreira = new BarreiraAtendimento();
         await using var ambiente = await Ambiente.CriarAsync(interceptor: barreira);
@@ -466,7 +479,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             semControleValidade = true, motivo = "Teste de concorrência" };
         Task<HttpResponseMessage> Registrar() => outroAdmin.EnviarAsync(
             $"/api/admin/estoque/produtos-acabados/variantes/{extra.Id:D}/entradas", entrada, Guid.NewGuid());
-        Task<HttpResponseMessage> Excluir() => ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
+        Task<HttpResponseMessage> Excluir() => excluirProduto
+            ? ExcluirProdutoAsync(admin, rota, versao, Guid.NewGuid())
+            : ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
         barreira.Armar($"finished-variant:{extra.Id:D}");
         var primeira = entradaPrimeiro ? Registrar() : Excluir();
         Task<HttpResponseMessage> segunda;
@@ -490,9 +505,10 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             Assert.Equal(HttpStatusCode.NotFound, recusa.StatusCode);
         Assert.Equal(entradaPrimeiro ? 1 : 0, await db.MovimentosProdutoAcabado.CountAsync());
         Assert.Equal(entradaPrimeiro, await db.ProdutoVariantes.AnyAsync(v => v.Id == extra.Id));
+        Assert.Equal(!excluirProduto || entradaPrimeiro, await db.Produtos.AnyAsync(p => p.Id == produto.Id));
     }
 
-    private static async Task DisputarVariantePostalAsync(bool postalPrimeiro)
+    private static async Task DisputarVariantePostalAsync(bool postalPrimeiro, bool excluirProduto = false)
     {
         var barreira = new BarreiraAtendimento();
         await using var ambiente = await Ambiente.CriarAsync(interceptor: barreira, municipiosPostais: MunicipiosPostaisTeste);
@@ -507,7 +523,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var corpo = new { itens = new[] { new { produtoId = produto.Id, produtoVarianteId = extra.Id, quantidade = 1 } },
             endereco = DestinoPostalTeste };
         Task<HttpResponseMessage> Cotar() => EscreverPostalAsync(cliente, Postal, corpo);
-        Task<HttpResponseMessage> Excluir() => ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
+        Task<HttpResponseMessage> Excluir() => excluirProduto
+            ? ExcluirProdutoAsync(admin, rota, versao, Guid.NewGuid())
+            : ExcluirVarianteAsync(admin, rota, extra.Id, versao, Guid.NewGuid());
         barreira.Armar($"finished-variant:{extra.Id:D}");
         var primeira = postalPrimeiro ? Cotar() : Excluir();
         Task<HttpResponseMessage> segunda;
@@ -526,8 +544,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         using var recusa = await segunda;
         Assert.Equal(postalPrimeiro ? HttpStatusCode.Created : HttpStatusCode.NoContent, sucesso.StatusCode);
         await ConferirErroPostalAsync(recusa, postalPrimeiro ? 409 : 400,
-            postalPrimeiro ? "variante_com_historico_comercial" : "itens_invalidos");
+            postalPrimeiro ? (excluirProduto ? "produto_com_historico_comercial" : "variante_com_historico_comercial") : "itens_invalidos");
         Assert.Equal(postalPrimeiro, await db.ProdutoVariantes.AnyAsync(v => v.Id == extra.Id));
+        Assert.Equal(!excluirProduto || postalPrimeiro, await db.Produtos.AnyAsync(p => p.Id == produto.Id));
     }
 
     private static async Task<HttpResponseMessage> ExcluirVarianteAsync(Sessao sessao, string rota, Guid variante,

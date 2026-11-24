@@ -31,6 +31,9 @@ namespace Xaquiamuni.Infraestrutura;
 
 public static class DependencyInjection
 {
+    public static IServiceCollection AddProductImageCleanupWorker(this IServiceCollection services) =>
+        services.AddHostedService<LimpezaImagensProdutoBackgroundService>();
+
     public static IServiceCollection AddInfrastructureServices(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -70,6 +73,7 @@ public static class DependencyInjection
         services.AddScoped<IGerenciarCategorias, GerenciarCategorias>();
         services.AddScoped<IProdutoRepository, EfProdutoRepository>();
         services.AddScoped<IExcluirVariante, EfExcluirVariante>();
+        services.AddScoped<IExcluirProduto, EfExcluirProduto>();
         services.AddScoped<IGerenciarProdutos, GerenciarProdutos>();
         services.AddScoped<ICatalogoPublicoRepository, EfCatalogoPublicoRepository>();
         services.AddScoped<IConsultarCatalogoPublico, ConsultarCatalogoPublico>();
@@ -130,6 +134,7 @@ public static class DependencyInjection
                 "Product image storage RootPath must be an absolute path.")
             .ValidateOnStart();
         services.AddSingleton<IArmazenamentoImagemProduto, ArmazenamentoLocalImagemProduto>();
+        services.AddScoped<LimpezaImagensProduto>();
         services.AddSingleton<IProcessadorImagemProduto, ProcessadorImagemProduto>();
         services.AddSingleton<IProdutoImagemOperacaoLogger, ProdutoImagemOperacaoLogger>();
         services.AddScoped<IClienteTransactionFactory, EfClienteTransactionFactory>();

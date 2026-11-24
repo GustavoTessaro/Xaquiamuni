@@ -94,26 +94,39 @@ public static class AdminProdutoEndpoints
 
         group.MapDelete("/{id:guid}/variantes/{varianteId:guid}", ExcluirVarianteAsync)
             .RequireXaquiamuniAntiforgery();
+        group.MapDelete("/{id:guid}", ExcluirProdutoAsync)
+            .RequireXaquiamuniAntiforgery();
         return endpoints;
     }
 
-    private static async Task<IResult> ExcluirVarianteAsync(Guid id, Guid varianteId, HttpContext contexto,
-        IExcluirVariante exclusao, CancellationToken ct)
+    private static Task<IResult> ExcluirVarianteAsync(Guid id, Guid varianteId, HttpContext contexto,
+        IExcluirVariante exclusao, CancellationToken ct) =>
+        ExecutarExclusaoAsync(contexto, id != Guid.Empty && varianteId != Guid.Empty, "variante_invalida",
+            (versao, autor, chave) => exclusao.ExecutarAsync(id, varianteId, versao, autor, chave, CalcularVersao, ct));
+
+    private static Task<IResult> ExcluirProdutoAsync(Guid id, HttpContext contexto,
+        IExcluirProduto exclusao, CancellationToken ct) =>
+        ExecutarExclusaoAsync(contexto, id != Guid.Empty, "produto_invalido",
+            (versao, autor, chave) => exclusao.ExecutarAsync(id, versao, autor, chave, CalcularVersao, ct));
+
+    private static string CalcularVersao(Produto produto) => ProdutoResponse.From(produto).Versao;
+
+    private static async Task<IResult> ExecutarExclusaoAsync(HttpContext contexto, bool identificadoresValidos,
+        string codigoIdentificador, Func<string, Guid, Guid, Task<(int Status, string? Codigo)>> executar)
     {
         contexto.Response.Headers.CacheControl = "private, no-store";
         if (!Guid.TryParse(contexto.User.FindFirstValue(ClaimTypes.NameIdentifier), out var autor) || autor == Guid.Empty)
             return Results.Forbid();
         var tags = contexto.Request.Headers.IfMatch;
-        if (id == Guid.Empty || varianteId == Guid.Empty)
-            return ProblemaExclusao(400, "variante_invalida");
+        if (!identificadoresValidos)
+            return ProblemaExclusao(400, codigoIdentificador);
         if (tags.Count != 1 || tags[0] is not { Length: 66 } tag || tag[0] != '"' || tag[^1] != '"' ||
             !tag[1..^1].All(Uri.IsHexDigit))
             return ProblemaExclusao(400, "versao_invalida");
         var chaves = contexto.Request.Headers["Idempotency-Key"];
         if (chaves.Count != 1 || !Guid.TryParseExact(chaves[0], "D", out var chave) || chave == Guid.Empty)
             return ProblemaExclusao(400, "chave_invalida");
-        var (status, codigo) = await exclusao.ExecutarAsync(id, varianteId, tag[1..^1].ToUpperInvariant(), autor, chave,
-            produto => ProdutoResponse.From(produto).Versao, ct);
+        var (status, codigo) = await executar(tag[1..^1].ToUpperInvariant(), autor, chave);
         return status == 204 ? Results.NoContent() : ProblemaExclusao(status, codigo!);
     }
 
@@ -126,6 +139,11 @@ public static class AdminProdutoEndpoints
         "variante_com_historico_producao" => "A variante possui registros de produção e precisa ser preservada.",
         "variante_historico_inconclusivo" => "Não foi possível verificar o histórico com segurança.",
         "variante_nao_encontrada" => "Variante não encontrada neste produto.",
+        "produto_nao_encontrado" => "Produto não encontrado.",
+        "produto_invalido" => "Informe um produto válido.",
+        "produto_com_historico_comercial" => "O produto possui vínculos comerciais e precisa ser preservado.",
+        "produto_historico_inconclusivo" => "Não foi possível verificar o histórico do produto com segurança.",
+        "produto_imagem_inconclusiva" => "Não foi possível verificar o armazenamento de uma imagem com segurança.",
         "versao_invalida" => "Informe a versão atual no cabeçalho If-Match.",
         "variante_invalida" => "Informe produto e variante válidos.",
         "chave_invalida" => "Informe uma chave de idempotência UUID.",

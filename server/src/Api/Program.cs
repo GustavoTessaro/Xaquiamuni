@@ -18,6 +18,7 @@ builder.Services.AddExceptionHandler<ApiExceptionHandler>();
 builder.Services.AddProblemDetails();
 builder.Services.AddDataProtection();
 builder.Services.AddInfrastructureServices(builder.Configuration);
+builder.Services.AddProductImageCleanupWorker();
 builder.Services.AddXaquiamuniAuthentication();
 builder.Services.AddXaquiamuniAntiforgery();
 builder.Services.AddXaquiamuniAuthorization();
