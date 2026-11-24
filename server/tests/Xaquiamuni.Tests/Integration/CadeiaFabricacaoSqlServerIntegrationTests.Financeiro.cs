@@ -78,6 +78,18 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var id = dados.Compra.Resumo.Id;
         var url = Financeiro + $"/compras/{id:D}";
         var pagar = url + "/pagamentos";
+        async Task VerificarFornecedorPreservadoAsync()
+        {
+            var rota = $"/api/admin/fornecedores/{dados.FornecedorId:D}";
+            using var detalhe = await admin.Http.GetAsync(rota);
+            using var pedidoExclusao = new HttpRequestMessage(HttpMethod.Delete, rota);
+            pedidoExclusao.Headers.IfMatch.Add(detalhe.Headers.ETag!);
+            pedidoExclusao.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
+            pedidoExclusao.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
+            using var excl = await admin.Http.SendAsync(pedidoExclusao);
+            Assert.Equal(HttpStatusCode.Conflict, excl.StatusCode);
+            Assert.Equal("fornecedor_com_compras", (await excl.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("codigo").GetString());
+        }
         var original = (await admin.Http.GetFromJsonAsync<CompraFinanceiraDto>(url))!;
         Assert.Equal(("Rascunho", "Pendente", "4650", "0", "4650"),
             (original.SituacaoCompra, original.SituacaoFinanceira, original.TotalCentavos, original.PagoCentavos, original.SaldoCentavos));
@@ -105,6 +117,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal("650", (await admin.Http.GetFromJsonAsync<CompraFinanceiraDto>(url))!.PagoCentavos);
         var movimentos = await db.MovimentosInsumo.CountAsync();
         Assert.Equal(4, movimentos);
+        await VerificarFornecedorPreservadoAsync();
 
         var quitar = input with { ValorCentavos = 4000, Referencia = null };
         var respostas = await Task.WhenAll(admin.EnviarAsync(pagar, quitar, Guid.NewGuid()),
@@ -114,6 +127,7 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var quitada = (await admin.Http.GetFromJsonAsync<CompraFinanceiraDto>(url))!;
         Assert.Equal(("Recebida", "Quitada", "4650", "0"),
             (quitada.SituacaoCompra, quitada.SituacaoFinanceira, quitada.PagoCentavos, quitada.SaldoCentavos));
+        await VerificarFornecedorPreservadoAsync();
         Assert.Equal(parcial, await admin.PostAsync<PagamentoFornecedorDto>(pagar, input, HttpStatusCode.OK, chave));
         using var divergente = await admin.EnviarAsync(pagar, input with { ValorCentavos = 651 }, chave);
         Assert.Equal(HttpStatusCode.Conflict, divergente.StatusCode);

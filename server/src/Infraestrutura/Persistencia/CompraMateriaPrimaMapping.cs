@@ -10,7 +10,7 @@ internal static class CompraMateriaPrimaMapping
     {
         model.Entity<CompraMateriaPrima>(compra =>
         {
-            compra.ToTable("ComprasMateriasPrimas");
+            compra.ToTable("ComprasMateriasPrimas", t => t.UseSqlOutputClause(false));
             compra.Property(c => c.NomeFornecedor).HasMaxLength(Fornecedor.NomeMax);
             compra.Property(c => c.Situacao).HasConversion<string>().HasMaxLength(20);
             compra.Property(c => c.Total).HasPrecision(18, 2);

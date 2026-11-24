@@ -20,11 +20,14 @@ public sealed class Fornecedor
     public bool Ativo { get; private set; }
     public DateTimeOffset CriadoEmUtc { get; private set; }
     public DateTimeOffset AtualizadoEmUtc { get; private set; }
+    public Guid Versao { get; private set; }
+    public bool? UtilizadoEmCompra { get; private set; }
 
     public static Fornecedor Criar(string? nome, string? telefone, string? email, string? observacoes,
         DateTimeOffset agora)
     {
-        var fornecedor = new Fornecedor { Id = Guid.NewGuid(), Ativo = true, CriadoEmUtc = agora.ToUniversalTime() };
+        var fornecedor = new Fornecedor { Id = Guid.NewGuid(), Ativo = true, CriadoEmUtc = agora.ToUniversalTime(),
+            UtilizadoEmCompra = false };
         fornecedor.Editar(nome, telefone, email, observacoes, agora);
         return fornecedor;
     }
@@ -49,6 +52,7 @@ public sealed class Fornecedor
         Telefone = telefoneLimpo;
         Email = emailLimpo;
         Observacoes = observacoesLimpas;
+        Versao = Guid.NewGuid();
         AtualizadoEmUtc = agora.ToUniversalTime();
     }
 
@@ -56,6 +60,7 @@ public sealed class Fornecedor
     {
         if (Ativo == ativo) return;
         Ativo = ativo;
+        Versao = Guid.NewGuid();
         AtualizadoEmUtc = agora.ToUniversalTime();
     }
 

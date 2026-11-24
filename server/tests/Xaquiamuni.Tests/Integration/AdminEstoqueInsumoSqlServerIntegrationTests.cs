@@ -252,10 +252,11 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
         using var semCsrf = await admin.PostAsJsonAsync(path, new { nome = "Vale" });
         Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
         var csrf = await GetCsrfAsync(admin);
-        async Task<HttpResponseMessage> Enviar(HttpMethod metodo, string url, object corpo)
+        async Task<HttpResponseMessage> Enviar(HttpMethod metodo, string url, object corpo, Guid? versao = null)
         {
             using var request = new HttpRequestMessage(metodo, url) { Content = JsonContent.Create(corpo) };
             AddAntiforgery(request, csrf);
+            if (versao is { } atual) request.Headers.IfMatch.ParseAdd($"\"{atual:D}\"");
             return await admin.SendAsync(request);
         }
 
@@ -264,13 +265,14 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
         using var criado = await Enviar(HttpMethod.Post, path, new { nome = " Ervas  do Vale " });
         Assert.Equal(HttpStatusCode.Created, criado.StatusCode);
         var url = Assert.IsType<Uri>(criado.Headers.Location).ToString();
+        var versao = (await criado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("versao").GetGuid();
         using var duplicado = await Enviar(HttpMethod.Post, path, new { nome = "ERVAS DO VALE" });
         Assert.Equal(HttpStatusCode.Conflict, duplicado.StatusCode);
         using var editado = await Enviar(HttpMethod.Put, url, new
         {
             nome = "Ervas da Serra", telefone = "+55 (11) 90000-0000", email = "teste@example.test",
             observacoes = "Entrega semanal"
-        });
+        }, versao);
         Assert.Equal(HttpStatusCode.OK, editado.StatusCode);
         using var inativado = await Enviar(HttpMethod.Patch, url + "/status", new { ativo = false });
         Assert.Equal(HttpStatusCode.OK, inativado.StatusCode);
@@ -290,6 +292,37 @@ public sealed partial class AdminEstoqueInsumoSqlServerIntegrationTests
         Assert.Equal(TimeSpan.Zero, persistido.CriadoEmUtc.Offset);
         Assert.True(persistido.AtualizadoEmUtc >= persistido.CriadoEmUtc);
         Assert.False(await db.MovimentosInsumo.AnyAsync());
+        var chaveExclusao = Guid.NewGuid();
+        async Task<HttpResponseMessage> Excluir(HttpClient sessao, Guid? tokenVersao, bool comCsrf)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            if (comCsrf) AddAntiforgery(request, csrf);
+            if (tokenVersao is { } token) request.Headers.IfMatch.ParseAdd($"\"{token:D}\"");
+            request.Headers.Add("Idempotency-Key", chaveExclusao.ToString("D"));
+            return await sessao.SendAsync(request);
+        }
+        using var exclAnonimo = await Excluir(anonimo, persistido.Versao, false);
+        using var exclCliente = await Excluir(cliente, persistido.Versao, false);
+        using var exclSemCsrf = await Excluir(admin, persistido.Versao, false);
+        using var exclSemVersao = await Excluir(admin, null, true);
+        using var exclVersaoAntiga = await Excluir(admin, versao, true);
+        using var excluido = await Excluir(admin, persistido.Versao, true);
+        using var replay = await Excluir(admin, persistido.Versao, true);
+        using var divergente = await Excluir(admin, versao, true);
+        Assert.Equal(HttpStatusCode.Unauthorized, exclAnonimo.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, exclCliente.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, exclSemCsrf.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, exclSemVersao.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, exclVersaoAntiga.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, excluido.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, replay.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, divergente.StatusCode);
+        Assert.False(await db.Fornecedores.AnyAsync());
+        Assert.Equal("Ervas da Serra", await db.Database.SqlQuery<string>(
+            $"SELECT Nome AS [Value] FROM OperacoesExclusaoFornecedor WHERE Chave = {chaveExclusao}").SingleAsync());
+        using var novo = await Enviar(HttpMethod.Post, path, new { nome = "Ervas da Serra" });
+        Assert.Equal(HttpStatusCode.Created, novo.StatusCode);
+        Assert.NotEqual(url, novo.Headers.Location?.ToString());
     }
 
     [SqlServerIntegrationFact]

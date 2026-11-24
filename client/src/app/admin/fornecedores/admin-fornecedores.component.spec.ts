@@ -7,6 +7,7 @@ import { AdminFornecedoresComponent } from './admin-fornecedores.component';
 
 const item: Fornecedor = {
   id: 'f1',
+  versao: '00112233-4455-4677-8899-aabbccddeeff',
   nome: 'Ervas São João',
   ativo: true,
   email: null,
@@ -18,6 +19,8 @@ function montar(resposta: Observable<Fornecedor[]> = of([item])) {
   const api = {
     listar: vi.fn(() => resposta),
     salvar: vi.fn(() => of(item)),
+    obter: vi.fn(() => of(item)),
+    excluir: vi.fn<FornecedoresService['excluir']>(() => of(undefined)),
     inativar: vi.fn(() => of({ ...item, ativo: false })),
   };
   TestBed.configureTestingModule({
@@ -86,7 +89,7 @@ describe('AdminFornecedoresComponent', () => {
       email: null,
       telefone: null,
       observacoes: null,
-    });
+    }, undefined);
     expect(root.textContent).toContain('Fornecedor cadastrado.');
     clicar('Editar');
     expect(root.querySelector<HTMLInputElement>('#supplier-name')?.value).toBe(item.nome);
@@ -97,6 +100,7 @@ describe('AdminFornecedoresComponent', () => {
     expect(api.salvar).toHaveBeenLastCalledWith(
       item.id,
       expect.objectContaining({ nome: item.nome }),
+      item.versao,
     );
     clicar('Inativar');
     expect(api.inativar).not.toHaveBeenCalled();
@@ -104,5 +108,87 @@ describe('AdminFornecedoresComponent', () => {
     expect(api.inativar).toHaveBeenCalledWith(item.id);
     expect(root.textContent).toContain('Inativo');
     expect(root.textContent).toContain('Fornecedor inativado.');
+  });
+
+  it('cancela a confirmação, recupera a resposta com a mesma chave e atualiza a lista', () => {
+    const { fixture, root, api } = montar();
+    const resposta = new Subject<void>();
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const clicar = (texto: string) => {
+      [...root.querySelectorAll('button')].find(b => b.textContent.trim() === texto)!.click();
+      fixture.detectChanges();
+    };
+    try {
+      fixture.detectChanges();
+      clicar('Editar');
+      clicar('Excluir fornecedor');
+      expect(confirmacao).toHaveBeenCalledWith(expect.stringContaining(item.nome));
+      expect(api.excluir).not.toHaveBeenCalled();
+      confirmacao.mockReturnValue(true);
+      api.excluir.mockReturnValueOnce(resposta);
+      clicar('Excluir fornecedor');
+      clicar('Excluindo…');
+      expect(api.excluir).toHaveBeenCalledTimes(1);
+      resposta.error(new HttpErrorResponse({ status: 0 }));
+      fixture.detectChanges();
+      api.listar.mockReturnValue(of([]));
+      clicar('Recuperar exclusão');
+      expect(api.excluir.mock.calls[0]).toEqual(api.excluir.mock.calls[1]);
+      expect(root.textContent).toContain('Fornecedor excluído.');
+      expect(root.textContent).toContain('Nenhum fornecedor cadastrado.');
+    } finally {
+      confirmacao.mockRestore();
+    }
+  });
+
+  it.each([
+    ['fornecedor_com_compras', 'Há compras vinculadas'],
+    ['fornecedor_com_historico', 'já foi utilizado'],
+    ['fornecedor_historico_inconclusivo', 'Não foi possível confirmar'],
+  ])('preserva o cadastro e oferece inativação quando o servidor retorna %s', (codigo, mensagem) => {
+    const { fixture, root, api } = montar();
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const clicar = (texto: string) => {
+      [...root.querySelectorAll('button')].find(b => b.textContent.trim() === texto)!.click();
+      fixture.detectChanges();
+    };
+    try {
+      api.excluir.mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 409, error: { codigo } })));
+      fixture.detectChanges();
+      clicar('Editar');
+      clicar('Excluir fornecedor');
+      expect(root.querySelector('[role=alert]')?.textContent).toContain(mensagem);
+      clicar('Inativar fornecedor');
+      expect(api.inativar).not.toHaveBeenCalled();
+      clicar('Confirmar inativação');
+      expect(api.inativar).toHaveBeenCalledWith(item.id);
+    } finally {
+      confirmacao.mockRestore();
+    }
+  });
+
+  it('recarrega a versão e exige nova confirmação após conflito', () => {
+    const { fixture, root, api } = montar();
+    const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const clicar = (texto: string) => {
+      [...root.querySelectorAll('button')].find(b => b.textContent.trim() === texto)!.click();
+      fixture.detectChanges();
+    };
+    try {
+      api.excluir.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+        status: 409, error: { codigo: 'versao_desatualizada' },
+      })));
+      api.obter.mockReturnValueOnce(of({ ...item, versao: 'versao-nova' }));
+      fixture.detectChanges();
+      clicar('Editar');
+      clicar('Excluir fornecedor');
+      clicar('Recarregar fornecedor');
+      expect(api.excluir).toHaveBeenCalledTimes(1);
+      clicar('Excluir fornecedor');
+      expect(confirmacao).toHaveBeenCalledTimes(2);
+      expect(api.excluir).toHaveBeenLastCalledWith(item.id, 'versao-nova', expect.any(String));
+    } finally {
+      confirmacao.mockRestore();
+    }
   });
 });

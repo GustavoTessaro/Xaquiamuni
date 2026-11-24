@@ -40,15 +40,22 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
         if (existente is not null) return Repetir(existente, impressao);
         try
         {
+            await using var transacao = await db.Database.BeginTransactionAsync(ct);
+            await EfFornecedorRepository.BloquearVinculoAsync(db, input.FornecedorId, ct);
             var (fornecedor, linhas) = await PrepararAsync(input, null, ct);
             var compra = CompraMateriaPrima.Criar(fornecedor, input.DataCompra, linhas, autor, chave, impressao, relogio.GetUtcNow());
             db.ComprasMateriasPrimas.Add(compra);
             await db.SaveChangesAsync(ct);
+            await transacao.CommitAsync(ct);
             return new(CompraMateriaPrimaStatus.Sucesso, compra);
         }
         catch (ArgumentException erro)
         {
             return new(CompraMateriaPrimaStatus.Invalida, Erro: erro.Message);
+        }
+        catch (Exception erro) when (EfFornecedorRepository.ErroLock(erro))
+        {
+            return Conflito();
         }
         catch (DbUpdateException erro) when (erro.InnerException is SqlException { Number: 2601 or 2627 } sql &&
             sql.Message.Contains("UX_ComprasMateriasPrimas_Criacao", StringComparison.Ordinal))
@@ -73,6 +80,7 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
 
         try
         {
+            await EfFornecedorRepository.BloquearVinculoAsync(db, input.FornecedorId, ct);
             var (fornecedor, linhas) = await PrepararAsync(input, compra, ct);
             compra.Editar(fornecedor, input.DataCompra, linhas, autor, relogio.GetUtcNow());
             db.AddRange(linhas);
@@ -83,6 +91,10 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
         catch (ArgumentException erro)
         {
             return new(CompraMateriaPrimaStatus.Invalida, Erro: erro.Message);
+        }
+        catch (Exception erro) when (EfFornecedorRepository.ErroLock(erro))
+        {
+            return Conflito();
         }
     }
 

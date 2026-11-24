@@ -306,7 +306,110 @@ try {
     console.log('Exclusão de categorias em 375 e 1280 px, versões antigas e produtos publicados e despublicados validados.');
   }
 
-  if (!dados.exclusaoCategorias && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
+  if (dados.insumoFornecedor) {
+    const rota = '/admin/fornecedores';
+    const base = '/api/admin/fornecedores';
+    const compras = '/api/admin/compras-materias-primas';
+    const botao = nome => "[...document.querySelectorAll('main button')].find(b => !b.disabled && (b.textContent.trim() === "
+      + JSON.stringify(nome) + " || b.getAttribute('aria-label') === " + JSON.stringify(nome) + "))";
+    const clicar = async nome => {
+      const expr = botao(nome);
+      await waitFor(() => a.ev('!!(' + expr + ')'), nome);
+      await a.ev('(' + expr + ').click()');
+    };
+    const texto = esperado => waitFor(() => a.ev("document.querySelector('main')?.innerText.includes("
+      + JSON.stringify(esperado) + ")"), esperado);
+    const ler = path => a.ev(`fetch(${JSON.stringify(path)}).then(r=>r.json())`);
+    const api = (path, method, body) => a.ev(`(async () => {
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(path)}, { method: ${JSON.stringify(method)},
+        headers: { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID() },
+        body: JSON.stringify(${JSON.stringify(body)}) });
+      return [r.status, await r.json().catch(() => null)];
+    })()`);
+    async function confirmar(aceitar, nome) {
+      const confirmacao = { aceitar };
+      confirmacoes.set(a.sessionId, confirmacao);
+      try {
+        await a.ev("setTimeout(() => (" + botao('Excluir fornecedor') + ").click(), 0)");
+        await waitFor(() => confirmacao.processada, 'confirmação nativa de exclusão');
+        assert.ok(confirmacao.mensagem.includes(nome) && confirmacao.mensagem.includes('permanente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    }
+    await call('Page.enable', {}, a.sessionId);
+    await a.ir(rota);
+    await texto('Novo fornecedor');
+    for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      const nome = 'Fornecedor descartável ' + width;
+      await clicar('Novo fornecedor');
+      await a.ev(`(() => {
+        const campo = document.querySelector('#supplier-name');
+        campo.value = ${JSON.stringify(nome)}; campo.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      await clicar('Salvar fornecedor');
+      await texto('Fornecedor cadastrado.');
+      const primeiro = (await ler(base)).find(f => f.nome === nome);
+      await clicar('Editar ' + nome);
+      await a.ev("(" + botao('Cancelar') + ").focus()");
+      await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+      assert.ok(await a.ev("document.activeElement.textContent.trim() === 'Excluir fornecedor' && document.activeElement.matches(':focus-visible')"));
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      await confirmar(false, nome);
+      assert.ok((await ler(base)).some(f => f.id === primeiro.id));
+      await confirmar(true, nome);
+      await texto('Fornecedor excluído.');
+      await a.ir(rota);
+      await texto('Novo fornecedor');
+      assert.ok(!(await ler(base)).some(f => f.id === primeiro.id));
+      const [status, novo] = await api(base, 'POST', { nome });
+      assert.equal(status, 201);
+      assert.notEqual(novo.id, primeiro.id);
+      await a.ir(rota);
+      await texto(nome);
+    }
+    const [statusA, fornecedorA] = await api(base, 'POST', { nome: 'Fornecedor com histórico A' });
+    const [statusB, fornecedorB] = await api(base, 'POST', { nome: 'Fornecedor com histórico B' });
+    assert.equal(statusA, 201);
+    assert.equal(statusB, 201);
+    const entrada = {
+      fornecedorId: fornecedorA.id, dataCompra: '2026-11-23',
+      linhas: [{ quantidade: 1, valorTotal: 10, componentes: [{ insumoId: dados.insumoFornecedor, quantidade: 1 }] }],
+    };
+    const [statusCompra, compra] = await api(compras, 'POST', entrada);
+    assert.equal(statusCompra, 201);
+    await a.ir(rota);
+    await clicar('Editar ' + fornecedorA.nome);
+    await confirmar(true, fornecedorA.nome);
+    await texto('Há compras vinculadas');
+    const compraUrl = compras + '/' + compra.resumo.id;
+    assert.equal((await ler(compraUrl)).resumo.fornecedorId, fornecedorA.id);
+    const [statusTroca] = await api(compraUrl, 'PUT', { ...entrada, fornecedorId: fornecedorB.id, versao: compra.versao });
+    assert.equal(statusTroca, 200);
+    await confirmar(true, fornecedorA.nome);
+    await texto('já foi utilizado');
+    await clicar('Inativar fornecedor');
+    await clicar('Confirmar inativação');
+    await texto('Fornecedor inativado.');
+    await clicar('Editar ' + fornecedorB.nome);
+    await confirmar(true, fornecedorB.nome);
+    await texto('Há compras vinculadas');
+    assert.equal((await ler(compraUrl)).resumo.fornecedorId, fornecedorB.id);
+    assert.equal(await a.ev(`fetch('${base}?ativo=true').then(r=>r.json()).then(x=>x.some(f=>f.id==='${fornecedorA.id}'))`), false);
+    await a.ir('/admin/compras');
+    await clicar('Nova compra');
+    await waitFor(() => a.ev(`[...document.querySelectorAll('select[name=fornecedor] option')].some(o=>o.value==='${fornecedorB.id}')`),
+      'fornecedor ativo disponível no formulário de compra');
+    assert.equal(await a.ev(`[...document.querySelectorAll('select[name=fornecedor] option')].some(o=>o.value==='${fornecedorA.id}')`), false);
+    console.log('Fornecedores: exclusão, troca em rascunho e inativação verificadas em Chrome.');
+  }
+
+  if (!dados.exclusaoCategorias && !dados.insumoFornecedor && process.env.XAQUIAMUNI_CHROME_PROMOCOES_FRETE === '1') {
     await a.ir('/admin/promocoes-frete');
     const botao = texto => waitFor(() => a.ev(`(() => {
       const alvo = [...document.querySelectorAll('main button')]

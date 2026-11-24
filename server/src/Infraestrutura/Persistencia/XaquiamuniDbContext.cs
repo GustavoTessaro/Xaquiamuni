@@ -91,6 +91,7 @@ public sealed class XaquiamuniDbContext
         builder.Entity<Fornecedor>(fornecedor =>
         {
             fornecedor.ToTable("Fornecedores");
+            fornecedor.Property(f => f.Versao).HasDefaultValueSql("NEWID()").IsConcurrencyToken();
             fornecedor.HasKey(f => f.Id);
             fornecedor.Property(f => f.Nome).HasMaxLength(Fornecedor.NomeMax).IsRequired();
             fornecedor.Property(f => f.NomeNormalizado).HasMaxLength(Fornecedor.NomeMax).IsRequired();
@@ -98,6 +99,13 @@ public sealed class XaquiamuniDbContext
             fornecedor.Property(f => f.Email).HasMaxLength(Fornecedor.EmailMax);
             fornecedor.Property(f => f.Observacoes).HasMaxLength(Fornecedor.ObservacoesMax);
             fornecedor.HasIndex(f => f.NomeNormalizado).IsUnique().HasDatabaseName("UX_Fornecedores_NomeNormalizado");
+        });
+        builder.Entity<ExclusaoFornecedor>(operacao =>
+        {
+            operacao.ToTable("OperacoesExclusaoFornecedor");
+            operacao.HasKey(x => new { x.Autor, x.Chave });
+            operacao.Property(x => x.Nome).HasMaxLength(Fornecedor.NomeMax);
+            operacao.Property(x => x.Resultado).HasMaxLength(24);
         });
         PedidoMapping.Configurar(builder);
         AtendimentoMapping.Configurar(builder);
