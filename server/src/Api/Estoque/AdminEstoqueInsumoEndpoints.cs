@@ -62,6 +62,11 @@ public static class AdminEstoqueInsumoEndpoints
             .Produces<MovimentoAdminResponse>(StatusCodes.Status200OK)
             .ProducesProblem(StatusCodes.Status404NotFound);
 
+        group.MapDelete("/{insumoId:guid}", (Guid insumoId, HttpContext contexto, IExcluirInsumo exclusao, CancellationToken ct) =>
+            ExcluirCadastroAsync(insumoId, null, contexto, exclusao, ct)).RequireXaquiamuniAntiforgery();
+        group.MapDelete("/{insumoId:guid}/formas-compra/{formaCompraId:guid}", ExcluirCadastroAsync)
+            .RequireXaquiamuniAntiforgery();
+
         group.MapPost("", CadastrarAsync)
             .RequireXaquiamuniAntiforgery()
             .WithName("CreateAdminStockSupply")
@@ -199,6 +204,7 @@ public static class AdminEstoqueInsumoEndpoints
     private static async Task<IResult> ConsultarAsync(
         Guid insumoId,
         IConsultarEstoqueInsumo consulta,
+        HttpContext contexto,
         CancellationToken cancellationToken)
     {
         if (insumoId == Guid.Empty)
@@ -208,10 +214,49 @@ public static class AdminEstoqueInsumoEndpoints
 
         var result = await consulta.ConsultarInsumoAsync(insumoId, cancellationToken)
             .ConfigureAwait(false);
-        return result is null
-            ? ResourceNotFound()
-            : Results.Ok(DetalheInsumoAdminResponse.From(result));
+        if (result is null) return ResourceNotFound();
+        var resposta = DetalheInsumoAdminResponse.From(result);
+        contexto.Response.Headers.ETag = $"\"{resposta.Versao}\"";
+        contexto.Response.Headers.CacheControl = "private, no-store";
+        return Results.Ok(resposta);
     }
+
+    private static async Task<IResult> ExcluirCadastroAsync(Guid insumoId, Guid? formaCompraId,
+        HttpContext contexto, IExcluirInsumo exclusao, CancellationToken ct)
+    {
+        contexto.Response.Headers.CacheControl = "private, no-store";
+        if (!Guid.TryParse(contexto.User.FindFirstValue(ClaimTypes.NameIdentifier), out var autor) || autor == Guid.Empty)
+            return Results.Forbid();
+        if (insumoId == Guid.Empty || formaCompraId == Guid.Empty)
+            return ProblemaExclusao(400, "identificador_invalido", "Informe identificadores válidos.");
+        var tags = contexto.Request.Headers.IfMatch;
+        if (tags.Count != 1 || tags[0] is not { Length: 66 } tag || tag[0] != '"' || tag[^1] != '"' ||
+            !tag[1..^1].All(Uri.IsHexDigit))
+            return ProblemaExclusao(400, "versao_invalida", "Informe a versão atual em If-Match.");
+        var chaves = contexto.Request.Headers["Idempotency-Key"];
+        if (chaves.Count != 1 || !Guid.TryParseExact(chaves[0], "D", out var chave) || chave == Guid.Empty)
+            return ProblemaExclusao(400, "chave_invalida", "Informe uma chave de idempotência UUID.");
+        var (status, codigo) = await exclusao.ExecutarAsync(insumoId, formaCompraId, tag[1..^1].ToUpperInvariant(), autor, chave, ct);
+        if (status == 204) return Results.NoContent();
+        return ProblemaExclusao(status, codigo!, codigo switch
+        {
+            "insumo_nao_encontrado" => "Material não encontrado.",
+            "forma_compra_nao_encontrada" => "Apresentação não encontrada neste material.",
+            "insumo_com_compras" => "O material possui histórico de compras e precisa ser preservado.",
+            "insumo_com_historico_estoque" => "O material possui histórico de estoque e precisa ser preservado.",
+            "insumo_com_receitas" => "O material consta em uma versão de receita e precisa ser preservado.",
+            "insumo_com_producao" => "O material possui histórico de produção e precisa ser preservado.",
+            "forma_compra_com_historico" => "A apresentação possui histórico de compras ou estoque e precisa ser preservada.",
+            "insumo_historico_inconclusivo" or "forma_compra_historico_inconclusivo" =>
+                "Não foi possível verificar o histórico legado com segurança.",
+            "chave_em_uso" => "Esta chave já foi utilizada para outra operação.",
+            _ => "O cadastro foi alterado. Recarregue os dados e confirme novamente."
+        });
+    }
+
+    private static IResult ProblemaExclusao(int status, string codigo, string detalhe) =>
+        Results.Problem(statusCode: status, detail: detalhe,
+            extensions: new Dictionary<string, object?> { ["codigo"] = codigo });
 
     private static async Task<IResult> ConsultarPosicaoAsync(
         Guid insumoId,
@@ -417,7 +462,7 @@ public static class AdminEstoqueInsumoEndpoints
             ? MapAdministrarFailure(result)
             : Results.Created(
                 $"{BasePath}/{insumoId:D}/formas-compra/{result.FormaCompra!.Id:D}",
-                FormaCompraAdminResponse.From(result.FormaCompra));
+                FormaComVersao(result));
     }
 
     private static async Task<IResult> AtualizarFormaCompraAsync(
@@ -437,7 +482,7 @@ public static class AdminEstoqueInsumoEndpoints
             cancellationToken).ConfigureAwait(false);
         return !result.Sucesso
             ? MapAdministrarFailure(result)
-            : Results.Ok(FormaCompraAdminResponse.From(result.FormaCompra!));
+            : Results.Ok(FormaComVersao(result));
     }
 
     private static async Task<IResult> AlterarStatusFormaCompraAsync(
@@ -459,8 +504,14 @@ public static class AdminEstoqueInsumoEndpoints
             cancellationToken).ConfigureAwait(false);
         return !result.Sucesso
             ? MapAdministrarFailure(result)
-            : Results.Ok(FormaCompraAdminResponse.From(result.FormaCompra!));
+            : Results.Ok(FormaComVersao(result));
     }
+
+    private static FormaCompraAdminResponse FormaComVersao(AdministrarInsumoEstoqueResult result) =>
+        FormaCompraAdminResponse.From(result.FormaCompra!) with
+        {
+            VersaoCadastro = result.Insumo is null ? null : VersaoCadastroInsumo.Calcular(result.Insumo)
+        };
 
     private static async Task<IResult> RegistrarEntradaAsync(
         Guid insumoId,
@@ -766,6 +817,9 @@ public sealed record FormaCompraAdminResponse(
     [property: JsonConverter(typeof(JsonStringEnumConverter))] UnidadeFisicaEstoque Unidade,
     bool Ativa)
 {
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? VersaoCadastro { get; init; }
+
     public static FormaCompraAdminResponse From(FormaCompraInsumoConsulta forma) =>
         new(
             forma.Id,
@@ -822,11 +876,16 @@ public sealed record DetalheInsumoAdminResponse(
     IReadOnlyList<FormaCompraAdminResponse> FormasCompra,
     IReadOnlyList<PosicaoEstoqueAdminResponse> Posicoes)
 {
+    public string? Versao { get; init; }
+
     public static DetalheInsumoAdminResponse From(DetalheEstoqueInsumo detalhe) =>
         new(
             ResumoInsumoAdminResponse.From(detalhe.Resumo),
             detalhe.FormasCompra.Select(FormaCompraAdminResponse.From).ToArray(),
-            detalhe.Posicoes.Select(PosicaoEstoqueAdminResponse.From).ToArray());
+            detalhe.Posicoes.Select(PosicaoEstoqueAdminResponse.From).ToArray())
+        {
+            Versao = VersaoCadastroInsumo.Calcular(detalhe)
+        };
 }
 
 /// <summary>Resumo dos saldos e posições do insumo, sem dados de cadastro adicionais.</summary>

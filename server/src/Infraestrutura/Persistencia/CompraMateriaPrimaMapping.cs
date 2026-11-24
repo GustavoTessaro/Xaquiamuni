@@ -46,7 +46,7 @@ internal static class CompraMateriaPrimaMapping
         });
         model.Entity<ComponenteCompraMateriaPrima>(componente =>
         {
-            componente.ToTable("ComponentesCompraMateriaPrima");
+            componente.ToTable("ComponentesCompraMateriaPrima", t => t.UseSqlOutputClause(false));
             componente.Property(c => c.NomeInsumo).HasMaxLength(InsumoEstoque.NomeMaxLength);
             componente.Property(c => c.NomeApresentacao).HasMaxLength(FormaCompraInsumo.NomeMaxLength);
             componente.Property(c => c.Quantidade).HasPrecision(18, 6);

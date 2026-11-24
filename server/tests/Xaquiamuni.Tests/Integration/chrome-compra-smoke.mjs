@@ -409,6 +409,136 @@ try {
     console.log('Fornecedores: exclusão, troca em rascunho e inativação verificadas em Chrome.');
   }
 
+  if (dados.exclusaoInsumo) {
+    await call('Page.enable', {}, a.sessionId);
+    const base = '/api/admin/insumos';
+    const tela = '/admin/estoque/insumos';
+    const comprarEm = '/api/admin/compras-materias-primas';
+    const pedir = (rota, method = 'GET', dados = undefined) => a.ev(`(async () => {
+      const {requestToken} = await fetch('/api/auth/csrf').then(r => r.json());
+      const r = await fetch(${JSON.stringify(rota)}, {method:${JSON.stringify(method)},
+        headers:{'Content-Type':'application/json','X-XSRF-TOKEN':requestToken,'Idempotency-Key':crypto.randomUUID()},
+        body:${dados === undefined ? 'undefined' : JSON.stringify(JSON.stringify(dados))}});
+      const texto = await r.text();
+      return {status:r.status, body:texto && r.headers.get('Content-Type')?.includes('json') ? JSON.parse(texto) : null};
+    })()`);
+    const criar = async nome => {
+      const r = await pedir(base, 'POST', { nome, tipo: 'MateriaPrima', unidadeBase: 'Grama',
+        controlaLote: false, validadeObrigatoria: false });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      return r.body.resumo.insumoId;
+    };
+    const apresentar = async (id, nome) => {
+      const r = await pedir(base + '/' + id + '/formas-compra', 'POST', {
+        nome, quantidadeEquivalentePorEmbalagem: 10, unidade: 'Grama'
+      });
+      assert.equal(r.status, 201, JSON.stringify(r));
+      return r.body.id;
+    };
+    const botao = rotulo => "[...document.querySelectorAll('main button')].find(b => !b.disabled && "
+      + "(b.textContent.trim() === " + JSON.stringify(rotulo) + " || b.getAttribute('aria-label') === " + JSON.stringify(rotulo) + "))";
+    const texto = palavra => waitFor(() => a.ev("document.querySelector('main')?.innerText.includes("
+      + JSON.stringify(palavra) + ')'), palavra);
+    const confirmar = async (rotulo, nome, aceitar) => {
+      const dialogo = { aceitar };
+      confirmacoes.set(a.sessionId, dialogo);
+      try {
+        await waitFor(() => a.ev('!!(' + botao(rotulo) + ')'), rotulo);
+        await a.ev('setTimeout(() => (' + botao(rotulo) + ').click(), 0)');
+        await waitFor(() => dialogo.processada, 'confirmação de ' + nome);
+        assert.ok(dialogo.mensagem.includes(nome));
+        if (rotulo.startsWith('Excluir')) assert.ok(dialogo.mensagem.includes('permanente'));
+      } finally {
+        confirmacoes.delete(a.sessionId);
+      }
+    };
+    const detalhe = id => pedir(base + '/' + id);
+    const editar = id => a.ir(tela + '/' + id);
+    const editarFormas = id => a.ir('/admin/compras/apresentacoes/' + id);
+    const inicial = await criar('Material descartável');
+    await apresentar(inicial, 'Caixa descartável');
+    await apresentar(inicial, 'Saco preservado');
+    await editar(inicial);
+    await waitFor(() => a.ev('!!(' + botao('Excluir insumo') + ')'), 'ficha do insumo');
+    for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
+      await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);
+      if (await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") !== modo)
+        await a.ev("document.querySelector('.admin-theme-toggle').click()");
+      await waitFor(async () => await a.ev("document.querySelector('.admin-shell').dataset.adminTheme") === modo, modo);
+      assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+    }
+    await a.ev("(" + botao('Excluir insumo') + ").focus()");
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    assert.ok(await a.ev("document.activeElement.matches(':focus-visible')"));
+    await editarFormas(inicial);
+    await confirmar('Excluir forma de compra Caixa descartável', 'Caixa descartável', false);
+    assert.equal((await detalhe(inicial)).body.formasCompra.length, 2);
+    await confirmar('Excluir forma de compra Caixa descartável', 'Caixa descartável', true);
+    await texto('Forma de compra excluída.');
+    await editarFormas(inicial);
+    assert.deepEqual((await detalhe(inicial)).body.formasCompra.map(f => f.nome), ['Saco preservado']);
+    await apresentar(inicial, 'Outra embalagem');
+    await editar(inicial);
+    await confirmar('Excluir insumo', 'Material descartável', false);
+    assert.equal((await detalhe(inicial)).body.formasCompra.length, 2);
+    await confirmar('Excluir insumo', 'Material descartável', true);
+    await texto('Insumo excluído.');
+    assert.equal((await detalhe(inicial)).status, 404);
+    assert.notEqual(await criar('Material descartável'), inicial);
+
+    const comercial = await criar('Material comprado');
+    const forma = await apresentar(comercial, 'Pacote da compra');
+    const compra = { fornecedorId: dados.exclusaoInsumo.fornecedor, dataCompra: '2026-11-17',
+      linhas: [{ quantidade: 1, valorTotal: 20, componentes: [{ insumoId: comercial, apresentacaoId: forma, quantidade: 1 }] }] };
+    const registro = await pedir(comprarEm, 'POST', compra);
+    assert.equal(registro.status, 201, JSON.stringify(registro));
+    await editarFormas(comercial);
+    await confirmar('Excluir forma de compra Pacote da compra', 'Pacote da compra', true);
+    await texto('A apresentação possui histórico');
+    await editar(comercial);
+    await confirmar('Excluir insumo', 'Material comprado', true);
+    await texto('O material possui histórico de compras');
+    await editarFormas(comercial);
+    await confirmar('Inativar forma de compra Pacote da compra', 'Pacote da compra', true);
+    await texto('Forma de compra inativada');
+    assert.equal((await pedir(comprarEm, 'POST', compra)).status, 400);
+    assert.equal((await detalhe(comercial)).body.formasCompra[0].ativa, false);
+
+    const estoque = await criar('Material com estoque');
+    const entrada = await pedir(base + '/' + estoque + '/entradas', 'POST',
+      { tipo: 'EstoqueInicial', quantidadeOriginal: 2, unidadeOriginal: 'Grama' });
+    assert.equal(entrada.status, 201, JSON.stringify(entrada));
+    const saida = await pedir(base + '/' + estoque + '/saidas', 'POST',
+      { tipo: 'SaidaManual', quantidadeOriginal: 2, unidadeOriginal: 'Grama', motivo: 'Uso de teste' });
+    assert.ok([200, 201].includes(saida.status), JSON.stringify(saida));
+    assert.equal((await detalhe(estoque)).body.resumo.saldoFisico, 0);
+    await editar(estoque);
+    await confirmar('Excluir insumo', 'Material com estoque', true);
+    await texto('O material possui histórico de estoque');
+    assert.equal((await pedir(base + '/' + estoque + '/movimentacoes')).body.totalItens, 2);
+
+    const receitaInsumo = await criar('Material da receita');
+    const receita = await pedir('/api/admin/receitas', 'POST', {
+      produtoVarianteId: dados.exclusaoInsumo.variante, nome: 'Receita de validação', rendimento: 1,
+      itens: [{ insumoId: receitaInsumo, quantidade: '1', unidadeBase: 'Grama' }]
+    });
+    assert.equal(receita.status, 201, JSON.stringify(receita));
+    const receitaId = receita.body.resumo.id;
+    await editar(receitaInsumo);
+    await confirmar('Excluir insumo', 'Material da receita', true);
+    await texto('O material consta em uma versão de receita');
+    assert.equal((await pedir('/api/admin/receitas/' + receitaId)).status, 200);
+    assert.equal((await pedir(base + '/' + receitaInsumo + '/entradas', 'POST',
+      { tipo: 'EstoqueInicial', quantidadeOriginal: 2, unidadeOriginal: 'Grama' })).status, 201);
+    const previa = await pedir('/api/admin/producao/previa?receitaId=' + receitaId + '&quantidade=1');
+    assert.equal(previa.status, 200, JSON.stringify(previa));
+    const ordem = await pedir('/api/admin/producao', 'POST',
+      { receitaId, receitaVersaoId: previa.body.receitaVersaoId, quantidade: 1 });
+    assert.equal(ordem.status, 201, JSON.stringify(ordem));
+    console.log('Insumo, formas, compras, estoque, receitas, produção e inativação verificados no Chrome.');
+  }
+
   if (dados.exclusaoProduto) {
     await call('Page.enable', {}, a.sessionId);
     const base = '/api/admin/produtos';

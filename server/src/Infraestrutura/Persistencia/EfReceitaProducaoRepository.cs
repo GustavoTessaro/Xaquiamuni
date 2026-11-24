@@ -29,6 +29,9 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
         {
             if (input.Itens is not { Count: >= 1 and <= 100 } || input.Itens.Any(i => i is null))
                 throw new ArgumentException("Informe de 1 a 100 materiais.");
+            await using var transacao = await db.Database.BeginTransactionAsync(ct);
+            foreach (var material in input.Itens.Select(item => item.InsumoId).Distinct().Order())
+                await EfExcluirInsumo.BloquearVinculoAsync(db, material, ct);
             var agora = relogio.GetUtcNow();
             if (receita is null)
             {
@@ -46,11 +49,17 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
                 var nova = receita.Editar(input.Nome, input.Rendimento, itens, autor, agora);
                 if (nova is not null) db.Add(nova);
             }
-            return await GravarAsync(receita, ct);
+            var resultado = await GravarAsync(receita, ct);
+            if (resultado.Status == ReceitaStatus.Sucesso) await transacao.CommitAsync(ct);
+            return resultado;
         }
         catch (ArgumentException erro)
         {
             return new(ReceitaStatus.Invalida, Erro: erro.Message);
+        }
+        catch (Exception erro) when (EfFornecedorRepository.ErroLock(erro))
+        {
+            return Conflito("O cadastro foi alterado durante a operação. Atualize os dados antes de salvar.");
         }
     }
 
@@ -123,6 +132,11 @@ public sealed class EfReceitaProducaoRepository(XaquiamuniDbContext db, TimeProv
             && sql.Message.Contains("FK_ReceitasProducao_ProdutoVariantes_ProdutoVarianteId", StringComparison.Ordinal))
         {
             return Conflito("A variante não está mais disponível. Atualize a lista antes de salvar.");
+        }
+        catch (DbUpdateException erro) when (erro.InnerException is SqlException { Number: 547 } sql
+            && sql.Message.Contains("FK_ItensReceitaProducao_InsumosEstoque_InsumoId", StringComparison.Ordinal))
+        {
+            return Conflito("Um material não está mais disponível. Atualize a lista antes de salvar.");
         }
     }
 

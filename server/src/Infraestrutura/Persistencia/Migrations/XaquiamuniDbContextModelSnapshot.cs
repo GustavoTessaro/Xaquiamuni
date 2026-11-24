@@ -1405,6 +1405,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("LinhaId");
 
                     b.ToTable("ComponentesCompraMateriaPrima", (string)null);
+
+                    b.HasAnnotation("SqlServer:UseSqlOutputClause", false);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Dominio.Estoque.CompraMateriaPrima", b =>
@@ -2852,6 +2854,26 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("EnviosComprovantePix", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.EvidenciaUsoInsumo", b =>
+                {
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("FormaCompraId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Origem")
+                        .HasMaxLength(12)
+                        .HasColumnType("nvarchar(12)");
+
+                    b.Property<bool>("Comprovada")
+                        .HasColumnType("bit");
+
+                    b.HasKey("InsumoId", "FormaCompraId", "Origem");
+
+                    b.ToTable("EvidenciasUsoInsumos", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.ExclusaoFornecedor", b =>
                 {
                     b.Property<Guid>("Autor")
@@ -3093,6 +3115,48 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasIndex("CategoriaId");
 
                     b.ToTable("OperacoesExclusaoCategoria", (string)null);
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoExclusaoInsumo", b =>
+                {
+                    b.Property<Guid>("Autor")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid?>("FormaCompraId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("FormasJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTimeOffset>("InstanteUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<Guid>("InsumoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Nome")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("nvarchar(24)");
+
+                    b.Property<string>("Versao")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.HasKey("Autor", "Chave");
+
+                    b.ToTable("OperacoesExclusaoInsumo", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.OperacaoExclusaoProduto", b =>

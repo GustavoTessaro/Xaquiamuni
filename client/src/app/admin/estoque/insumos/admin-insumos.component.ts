@@ -9,7 +9,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   EMPTY,
   Subject,
@@ -52,6 +52,7 @@ export class AdminInsumosComponent {
   protected readonly filtroSituacao = signal<SituacaoEstoqueInsumo | ''>('');
   protected readonly pagina = signal(1);
   protected readonly totalItens = signal(0);
+  protected readonly mensagem = signal('');
   protected readonly itensPorPagina = 20;
   protected readonly totalPaginas = computed(() =>
     Math.max(1, Math.ceil(this.totalItens() / this.itensPorPagina)),
@@ -73,6 +74,16 @@ export class AdminInsumosComponent {
   private idSolicitacao = 0;
 
   constructor() {
+    const parametros = inject(ActivatedRoute).snapshot.queryParamMap;
+    this.busca.setValue(parametros.get('nome') ?? '', { emitEvent: false });
+    const ativo = parametros.get('ativo');
+    if (ativo === 'ativos' || ativo === 'inativos') this.filtroAtivo.set(ativo);
+    const situacao = this.situacoes.find(item => item.valor === parametros.get('situacao'));
+    if (situacao) this.filtroSituacao.set(situacao.valor);
+    const pagina = Number(parametros.get('pagina'));
+    if (Number.isSafeInteger(pagina) && pagina > 0) this.pagina.set(pagina);
+    const mensagem = this.router.getCurrentNavigation()?.extras.state?.['mensagem'];
+    if (typeof mensagem === 'string') this.mensagem.set(mensagem);
     this.solicitacoes
       .pipe(
         switchMap(({ id, filtro }) => {
@@ -114,6 +125,11 @@ export class AdminInsumosComponent {
       });
 
     this.carregarInsumos();
+  }
+
+  protected parametrosDeRetorno() {
+    return { nome: this.busca.value || null, ativo: this.filtroAtivo() === 'todos' ? null : this.filtroAtivo(),
+      situacao: this.filtroSituacao() || null, pagina: this.pagina() > 1 ? this.pagina() : null };
   }
 
   protected carregarInsumos(): void {

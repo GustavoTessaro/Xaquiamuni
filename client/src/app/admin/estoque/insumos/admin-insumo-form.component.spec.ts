@@ -1,7 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { vi } from 'vitest';
 import { AdminAuthService } from '../../../core/admin-auth/admin-auth.service';
 import {
@@ -20,6 +20,7 @@ describe('AdminInsumoFormComponent', () => {
   let obter: ReturnType<typeof vi.fn<InsumosService['obter']>>;
   let criar: ReturnType<typeof vi.fn<InsumosService['criar']>>;
   let editar: ReturnType<typeof vi.fn<InsumosService['editar']>>;
+  let excluir: ReturnType<typeof vi.fn<InsumosService['excluir']>>;
   let alterarStatus: ReturnType<typeof vi.fn<InsumosService['alterarStatus']>>;
   let criarFormaCompra: ReturnType<typeof vi.fn<InsumosService['criarFormaCompra']>>;
   let editarFormaCompra: ReturnType<typeof vi.fn<InsumosService['editarFormaCompra']>>;
@@ -56,6 +57,7 @@ describe('AdminInsumoFormComponent', () => {
     obter = vi.fn<InsumosService['obter']>().mockReturnValue(of(detalhe));
     criar = vi.fn<InsumosService['criar']>().mockReturnValue(of(detalhe));
     editar = vi.fn<InsumosService['editar']>().mockReturnValue(of(detalhe));
+    excluir = vi.fn<InsumosService['excluir']>();
     alterarStatus = vi.fn<InsumosService['alterarStatus']>().mockReturnValue(of(detalhe));
     criarFormaCompra = vi.fn<InsumosService['criarFormaCompra']>();
     editarFormaCompra = vi.fn<InsumosService['editarFormaCompra']>();
@@ -80,6 +82,7 @@ describe('AdminInsumoFormComponent', () => {
             obter,
             criar,
             editar,
+            excluir,
             alterarStatus,
             criarFormaCompra,
             editarFormaCompra,
@@ -350,6 +353,89 @@ describe('AdminInsumoFormComponent', () => {
     expect(alterarStatus).toHaveBeenCalledWith('insumo-1', { ativo: false });
     expect(text()).toContain('O status do insumo mudou em outra operação.');
     expect(text()).not.toContain('persistence details');
+  });
+
+  it('cancels deletion and reuses the confirmed key when the response is lost', () => {
+    routeId = resumo.insumoId;
+    obter.mockReturnValue(of({ ...detalhe, versao: 'atual' }));
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const pendente = new Subject<void>();
+    excluir.mockReturnValueOnce(pendente).mockReturnValueOnce(of(undefined));
+    render();
+    clickButton('Excluir insumo');
+    expect(excluir).not.toHaveBeenCalled();
+    confirmar.mockReturnValue(true);
+    clickButton('Excluir insumo');
+    expect(Array.from(root().querySelectorAll('button'))
+      .find(b => b.textContent?.trim() === 'Recuperar exclusão do insumo')?.disabled).toBe(true);
+    pendente.error(new HttpErrorResponse({ status: 0 }));
+    fixture.detectChanges();
+    clickButton('Recuperar exclusão do insumo');
+    expect(excluir.mock.calls[1]).toEqual(excluir.mock.calls[0]);
+    expect(navigate).toHaveBeenCalledWith(['/admin/estoque/insumos'], {
+      queryParamsHandling: 'preserve', state: { mensagem: 'Insumo excluído.' },
+    });
+  });
+
+  it('retains the form after a stale version and refreshes the presentations after confirmation', () => {
+    routeId = resumo.insumoId;
+    apresentacoes = true;
+    const forma: AdminFormaCompra = {
+      id: 'forma-1', nome: 'Caixa', quantidadeEquivalentePorEmbalagem: 20, unidade: 'Grama', ativa: true,
+    };
+    obter.mockReturnValueOnce(of({ ...detalhe, formasCompra: [forma], versao: 'antiga' }))
+      .mockReturnValueOnce(of({ ...detalhe, formasCompra: [forma], versao: 'nova' }))
+      .mockReturnValueOnce(of({ ...detalhe, versao: 'final' }));
+    excluir.mockReturnValueOnce(throwError(() => new HttpErrorResponse({
+      status: 409, error: { codigo: 'versao_desatualizada', detail: 'Recarregue os dados.' },
+    }))).mockReturnValueOnce(of(undefined));
+    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render();
+    clickButton('Excluir forma de compra Caixa');
+    expect(text()).toContain('Recarregue os dados.');
+    clickButton('Recarregar cadastro');
+    clickButton('Excluir forma de compra Caixa');
+    expect(confirmar).toHaveBeenCalledTimes(2);
+    expect(excluir.mock.calls[1][2]).toBe('nova');
+    expect(excluir.mock.calls[1][3]).not.toBe(excluir.mock.calls[0][3]);
+    expect(text()).toContain('Forma de compra excluída.');
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it.each(['insumo_com_compras', 'insumo_com_historico_estoque', 'insumo_com_receitas',
+    'insumo_com_producao', 'insumo_historico_inconclusivo'])(
+    'preserves the active material and offers inactivation after %s', codigo => {
+      routeId = resumo.insumoId;
+      obter.mockReturnValue(of({ ...detalhe, versao: 'atual' }));
+      excluir.mockReturnValue(throwError(() => new HttpErrorResponse({
+        status: 409, error: { codigo, detail: 'O cadastro precisa ser preservado.' },
+      })));
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      render();
+      clickButton('Excluir insumo');
+      expect(text()).toContain('O cadastro precisa ser preservado. Você pode inativar o cadastro.');
+      expect(alterarStatus).not.toHaveBeenCalled();
+      expect(navigate).not.toHaveBeenCalled();
+      clickButton('Inativar');
+      expect(alterarStatus).toHaveBeenCalledWith(resumo.insumoId, { ativo: false });
+    },
+  );
+
+  it('keeps the deletion success visible when the presentation refresh fails', () => {
+    routeId = resumo.insumoId;
+    apresentacoes = true;
+    const forma: AdminFormaCompra = {
+      id: 'forma-1', nome: 'Caixa', quantidadeEquivalentePorEmbalagem: 20, unidade: 'Grama', ativa: true,
+    };
+    obter.mockReturnValueOnce(of({ ...detalhe, formasCompra: [forma], versao: 'atual' }))
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 503 })));
+    excluir.mockReturnValue(of(undefined));
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    render();
+    clickButton('Excluir forma de compra Caixa');
+    expect(text()).toContain('Forma de compra excluída.');
+    expect(text()).toContain('Tentar novamente');
+    expect(excluir).toHaveBeenCalledOnce();
   });
 
   function render(): void {

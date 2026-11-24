@@ -880,6 +880,8 @@ public sealed partial class EfEstoqueInsumoRepository : IEstoqueInsumoRepository
             var anterior = saldo?.QuantidadeFisica ?? QuantidadeEstoque.Criar(0m, insumo.UnidadeBase);
             if (contada.ValorBase == anterior.ValorBase)
             {
+                await EvidenciaUsoInsumo.RegistrarContagemAsync(_dbContext, insumo.Id, cancellationToken)
+                    .ConfigureAwait(false);
                 _dbContext.AjustesSemDiferencaInsumo.Add(AjusteSemDiferencaInsumo.Criar(
                     input.ResponsavelId,
                     chave!,

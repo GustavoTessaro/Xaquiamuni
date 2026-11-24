@@ -2,6 +2,7 @@
   <div class="space-y-6">
     <a
       [routerLink]="apresentacoes ? '/admin/compras' : '/admin/estoque/insumos'"
+      queryParamsHandling="preserve"
       class="inline-flex min-h-10 items-center text-sm font-semibold text-emerald-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800"
     >
       {{ apresentacoes ? 'Voltar para compras' : 'Voltar para matérias-primas' }}
@@ -44,6 +45,9 @@
         Carregando dados do insumo...
       </p>
     } @else if (erroCarregamento()) {
+      @if (mensagemForma()) {
+        <p role="status" class="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{{ mensagemForma() }}</p>
+      }
       <section
         class="rounded-2xl border border-red-200 bg-red-50 p-5"
         role="alert"
@@ -170,7 +174,7 @@
                   <button
                     type="button"
                     (click)="alterarStatus()"
-                    [disabled]="alterandoStatus() || salvando()"
+                    [disabled]="alterandoStatus() || salvando() || !!exclusao()"
                     class="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-800 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {{
@@ -181,6 +185,13 @@
                           : 'Ativar'
                     }}
                   </button>
+                  @if (item.versao && (!exclusao() || exclusao()?.forma === null)) {
+                    <button type="button" (click)="excluirCadastro()"
+                      class="min-h-10 rounded-lg border border-current px-3 text-sm font-semibold text-[var(--admin-error)] focus-visible:outline-2"
+                      [disabled]="bloqueioExclusao() || versaoDesatualizada()">
+                      {{ exclusao() ? 'Recuperar exclusão do insumo' : 'Excluir insumo' }}
+                    </button>
+                  }
                 </div>
               </nav>
             }
@@ -512,7 +523,7 @@
                     <button
                       type="button"
                       (click)="editarForma(forma)"
-                      [disabled]="mostrandoForma() || salvandoForma() || formaPendente(forma.id)"
+                      [disabled]="mostrandoForma() || salvandoForma() || formaPendente(forma.id) || !!exclusao()"
                       [attr.aria-label]="'Editar forma de compra ' + forma.nome"
                       class="min-h-10 rounded-lg px-3 text-sm font-semibold text-emerald-900 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-800 disabled:cursor-not-allowed disabled:opacity-50"
                     >
@@ -521,7 +532,7 @@
                     <button
                       type="button"
                       (click)="alterarStatusForma(forma)"
-                      [disabled]="formaPendente(forma.id)"
+                      [disabled]="formaPendente(forma.id) || !!exclusao()"
                       [attr.aria-label]="
                         (forma.ativa ? 'Inativar forma de compra ' : 'Ativar forma de compra ') +
                         forma.nome
@@ -536,6 +547,14 @@
                             : 'Ativar'
                       }}
                     </button>
+                    @if (detalhe()?.versao && (!exclusao() || exclusao()?.forma === forma.id)) {
+                      <button type="button" (click)="excluirCadastro(forma)"
+                        [attr.aria-label]="(exclusao() ? 'Recuperar exclusão de ' : 'Excluir forma de compra ') + forma.nome"
+                        class="min-h-10 rounded-lg border border-current px-3 text-sm font-semibold text-[var(--admin-error)] focus-visible:outline-2"
+                        [disabled]="bloqueioExclusao() || versaoDesatualizada()">
+                        {{ exclusao() ? 'Recuperar exclusão' : 'Excluir forma de compra' }}
+                      </button>
+                    }
                   </div>
                 </li>
               }
@@ -543,6 +562,11 @@
           }
         </section>
       }
+    }
+    @if (versaoDesatualizada()) {
+      <button type="button" (click)="carregarDetalhe()" [disabled]="carregando()" class="admin-button">
+        Recarregar cadastro
+      </button>
     }
   </div>
 </app-admin-workspace>

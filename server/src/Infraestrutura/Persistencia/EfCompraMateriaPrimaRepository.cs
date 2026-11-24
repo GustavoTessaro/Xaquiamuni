@@ -161,6 +161,8 @@ public sealed class EfCompraMateriaPrimaRepository(XaquiamuniDbContext db, TimeP
             throw new ArgumentException("Selecione um fornecedor ativo.");
 
         var insumoIds = input.Linhas.SelectMany(l => l.Componentes!).Select(c => c.InsumoId).Distinct().ToArray();
+        foreach (var id in insumoIds.Order())
+            await EfExcluirInsumo.BloquearVinculoAsync(db, id, ct);
         var insumos = await db.InsumosEstoque.AsNoTracking().Include(i => i.FormasCompra)
             .Where(i => insumoIds.Contains(i.Id)).ToDictionaryAsync(i => i.Id, ct);
         var snapshots = compra?.Linhas.SelectMany(l => l.Componentes).ToDictionary(c => c.Id) ?? [];

@@ -134,6 +134,12 @@ export class AdminInsumoFormComponent {
   protected readonly erroForma = signal('');
   protected readonly mensagemForma = signal('');
   protected readonly formasEmAtualizacao = signal<ReadonlySet<string>>(new Set());
+  protected readonly exclusao = signal<{ forma: string | null; versao: string; chave: string } | null>(null);
+  protected readonly excluindo = signal(false);
+  protected readonly versaoDesatualizada = signal(false);
+  protected readonly bloqueioExclusao = computed(() =>
+    this.carregando() || this.salvando() || this.alterandoStatus() ||
+    this.salvandoForma() || this.formasEmAtualizacao().size > 0 || this.excluindo());
   protected readonly titulo = computed(() =>
     this.editando ? 'Detalhe do material' : 'Novo material',
   );
@@ -222,6 +228,11 @@ export class AdminInsumoFormComponent {
       .subscribe({
         next: (detalhe) => {
           this.definirDetalhe(detalhe);
+          if (detalhe.versao && this.versaoDesatualizada()) {
+            this.versaoDesatualizada.set(false);
+            this.erroFormulario.set('');
+            this.erroForma.set('');
+          }
           this.erroCarregamento.set('');
         },
         error: (error: unknown) => this.tratarErroCarregamento(error),
@@ -229,7 +240,7 @@ export class AdminInsumoFormComponent {
   }
 
   protected salvarInsumo(): void {
-    if (this.salvando()) {
+    if (this.salvando() || this.exclusao()) {
       return;
     }
 
@@ -289,7 +300,7 @@ export class AdminInsumoFormComponent {
 
   protected alterarStatus(): void {
     const detalhe = this.detalhe();
-    if (!this.insumoId || !detalhe || this.alterandoStatus()) {
+    if (!this.insumoId || !detalhe || this.alterandoStatus() || this.exclusao()) {
       return;
     }
 
@@ -324,7 +335,7 @@ export class AdminInsumoFormComponent {
   }
 
   protected abrirNovaForma(): void {
-    if (this.salvandoForma() || this.mostrandoForma()) {
+    if (this.salvandoForma() || this.mostrandoForma() || this.exclusao()) {
       return;
     }
     this.formaEmEdicao.set(null);
@@ -339,7 +350,7 @@ export class AdminInsumoFormComponent {
   }
 
   protected editarForma(forma: AdminFormaCompra): void {
-    if (this.salvandoForma() || this.mostrandoForma()) {
+    if (this.salvandoForma() || this.mostrandoForma() || this.exclusao()) {
       return;
     }
     this.formaEmEdicao.set(forma);
@@ -363,7 +374,7 @@ export class AdminInsumoFormComponent {
   }
 
   protected salvarForma(): void {
-    if (this.salvandoForma() || !this.insumoId) {
+    if (this.salvandoForma() || !this.insumoId || this.exclusao()) {
       return;
     }
 
@@ -414,7 +425,7 @@ export class AdminInsumoFormComponent {
   }
 
   protected alterarStatusForma(forma: AdminFormaCompra): void {
-    if (!this.insumoId || this.formasEmAtualizacao().has(forma.id)) {
+    if (!this.insumoId || this.formasEmAtualizacao().has(forma.id) || this.exclusao()) {
       return;
     }
 
@@ -447,6 +458,58 @@ export class AdminInsumoFormComponent {
           );
         },
         error: (error: unknown) => this.tratarErroForma(error, 'status'),
+      });
+  }
+
+  protected excluirCadastro(forma?: AdminFormaCompra): void {
+    const insumo = this.detalhe();
+    const id = this.insumoId;
+    const formaId = forma?.id ?? null;
+    if (!id || !insumo?.versao || this.bloqueioExclusao() || this.versaoDesatualizada()) return;
+    const anterior = this.exclusao();
+    if (anterior && anterior.forma !== formaId) return;
+    if (!anterior && !window.confirm(forma
+      ? `Excluir a forma de compra “${forma.nome}” de “${insumo.resumo.nome}”? A exclusão é permanente.`
+      : `Excluir “${insumo.resumo.nome}”? A exclusão é permanente e remove suas formas de compra.`)) return;
+    const tentativa = anterior ?? { forma: formaId, versao: insumo.versao, chave: crypto.randomUUID() };
+    this.exclusao.set(tentativa);
+    this.excluindo.set(true);
+    const erro = forma ? this.erroForma : this.erroFormulario;
+    erro.set('');
+    this.insumosService.excluir(id, tentativa.forma, tentativa.versao, tentativa.chave)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.excluindo.set(false)))
+      .subscribe({
+        next: () => {
+          this.exclusao.set(null);
+          if (!forma) {
+            this.detalhe.set(null);
+            void this.router.navigate(['/admin/estoque/insumos'], {
+              queryParamsHandling: 'preserve', state: { mensagem: 'Insumo excluído.' },
+            });
+            return;
+          }
+          this.detalhe.update(atual => atual && ({
+            ...atual, formasCompra: atual.formasCompra.filter(f => f.id !== formaId),
+          }));
+          if (this.formaEmEdicao()?.id === formaId) this.cancelarForma();
+          this.mensagemForma.set('Forma de compra excluída.');
+          this.versaoDesatualizada.set(true);
+          this.carregarDetalhe();
+        },
+        error: (falha: unknown) => {
+          if (falha instanceof HttpErrorResponse && falha.status >= 400 && falha.status < 500 && falha.status !== 408) {
+            this.exclusao.set(null);
+            if (this.redirecionarSessaoExpirada(falha)) return;
+            const codigo = falha.error?.codigo;
+            this.versaoDesatualizada.set(codigo === 'versao_desatualizada' || codigo === 'conflito_concorrencia');
+            const detalhe = typeof falha.error?.detail === 'string' ? falha.error.detail : 'Não foi possível excluir.';
+            const podeInativar = forma ? forma.ativa : insumo.resumo.ativo;
+            erro.set(falha.status === 409 && podeInativar && !this.versaoDesatualizada()
+              ? `${detalhe} Você pode inativar o cadastro.` : detalhe);
+          } else {
+            erro.set('Resultado da exclusão desconhecido. Recupere a exclusão antes de continuar.');
+          }
+        },
       });
   }
 
@@ -672,7 +735,7 @@ export class AdminInsumoFormComponent {
       const formas = existe
         ? detalhe.formasCompra.map((item) => (item.id === forma.id ? forma : item))
         : [...detalhe.formasCompra, forma];
-      return { ...detalhe, formasCompra: this.ordenarFormas(formas) };
+      return { ...detalhe, versao: forma.versaoCadastro ?? detalhe.versao, formasCompra: this.ordenarFormas(formas) };
     });
   }
 

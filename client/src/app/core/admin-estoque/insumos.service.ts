@@ -1,6 +1,6 @@
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
-import { Observable, map, switchMap } from 'rxjs';
+import { Observable, map, switchMap, timeout } from 'rxjs';
 import { CsrfService } from '../security/csrf.service';
 
 export type TipoInsumoEstoque = 'MateriaPrima' | 'Embalagem' | 'Outro';
@@ -42,6 +42,7 @@ export interface AdminPagina<T> {
 }
 
 export interface AdminFormaCompra {
+  versaoCadastro?: string;
   id: string;
   nome: string;
   quantidadeEquivalentePorEmbalagem: number;
@@ -67,6 +68,7 @@ export interface AdminPosicaoEstoque {
 }
 
 export interface AdminInsumoDetalhe {
+  versao?: string;
   resumo: AdminInsumoResumo;
   formasCompra: AdminFormaCompra[];
   posicoes: AdminPosicaoEstoque[];
@@ -292,6 +294,14 @@ export class InsumosService {
 
   obter(id: string): Observable<AdminInsumoDetalhe> {
     return this.http.get<AdminInsumoDetalhe>(`${this.basePath}/${encodeURIComponent(id)}`);
+  }
+
+  excluir(id: string, forma: string | null, versao: string, chave: string): Observable<void> {
+    const recurso = `${this.basePath}/${encodeURIComponent(id)}`;
+    const url = forma ? `${recurso}/formas-compra/${encodeURIComponent(forma)}` : recurso;
+    return this.withCsrf(token => this.http.delete<void>(url, {
+      headers: { 'X-XSRF-TOKEN': token, 'If-Match': `"${versao}"`, 'Idempotency-Key': chave },
+    })).pipe(timeout(20_000));
   }
 
   consultarPosicao(id: string): Observable<AdminPosicaoInsumoPrecisa> {
