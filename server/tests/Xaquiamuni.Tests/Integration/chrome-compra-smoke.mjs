@@ -228,11 +228,11 @@ try {
       await a.ev('(' + expr + ').click()');
     };
     const contem = texto => waitFor(() => a.ev("document.querySelector('main')?.innerText.includes(" + JSON.stringify(texto) + ")"), texto);
-    const confirmar = async (aceitar, nome) => {
+    const confirmar = async (aceitar, nome, acao = 'Excluir categoria') => {
       const confirmacao = { aceitar };
       confirmacoes.set(a.sessionId, confirmacao);
       try {
-        await a.ev("setTimeout(() => (" + botao('Excluir categoria') + ").click(), 0)");
+        await a.ev("setTimeout(() => (" + botao(acao) + ").click(), 0)");
         await waitFor(() => confirmacao.processada, 'confirmação nativa de exclusão');
         assert.ok(confirmacao.mensagem.includes(nome) && confirmacao.mensagem.includes('permanente'));
       } finally {
@@ -264,9 +264,12 @@ try {
         campo.dispatchEvent(new Event('input', { bubbles: true })); })()`);
       await acionar('Salvar categoria');
       await contem('Categoria criada com sucesso.');
+      await confirmar(false, nome, 'Excluir ' + nome);
+      assert.equal(await a.ev("!!document.querySelector('app-categoria-form')"), false);
       await acionar('Editar ' + nome);
       await waitFor(() => a.ev('!!(' + botao('Excluir categoria') + ')'), 'ação de exclusão');
       const exclusaoBotao = '(' + botao('Excluir categoria') + ')';
+      assert.ok(await a.ev(exclusaoBotao + ".closest('app-categoria-form section') !== null"));
       await a.ev(exclusaoBotao + '.focus()');
       await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 }, a.sessionId);
       await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9, modifiers: 8 }, a.sessionId);
@@ -274,7 +277,8 @@ try {
       await confirmar(false, nome);
       await contem(nome);
       assert.equal(await a.ev("document.documentElement.scrollWidth <= innerWidth"), true);
-      await confirmar(true, nome);
+      await acionar('Cancelar');
+      await confirmar(true, nome, 'Excluir ' + nome);
       await contem('Categoria excluída com sucesso.');
       await a.ir('/admin/categorias');
       await waitFor(() => a.ev("!document.querySelector('app-categoria-form') && !!document.querySelector('main #category-search')"), 'listagem após recarregar');
@@ -688,11 +692,11 @@ try {
       await a.ev('(' + expr + ').click()');
       await waitFor(() => a.ev('!!(' + botao('Excluir produto') + ')'), 'ação Excluir produto');
     };
-    const confirmar = async (produto, aceitar) => {
+    const confirmar = async (produto, aceitar, acao = 'Excluir produto') => {
       const decisao = { aceitar };
       confirmacoes.set(a.sessionId, decisao);
       try {
-        await a.ev("setTimeout(() => (" + botao('Excluir produto') + ").click(), 0)");
+        await a.ev("setTimeout(() => (" + botao(acao) + ").click(), 0)");
         await waitFor(() => decisao.processada, 'confirmação de exclusão');
         assert.ok(decisao.mensagem.includes(produto.nome) && decisao.mensagem.includes('permanente') &&
           decisao.mensagem.includes('variantes'));
@@ -719,13 +723,17 @@ try {
         await a.ev("document.querySelector('.admin-theme-toggle').click()");
       assert.equal(await a.ev("document.querySelector('.admin-shell').dataset.adminTheme"), modo);
       assert.ok(await a.ev('document.documentElement.scrollWidth <= innerWidth'));
+      assert.ok(await a.ev("(" + botao('Excluir produto') + ").closest('app-admin-produto-form section') !== null"));
       await a.ev("(" + botao('Cancelar') + ").focus()");
       await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
       await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
       assert.ok(await a.ev("document.activeElement.matches(':focus-visible')"));
       await confirmar(produto, false);
       assert.equal((await pedir(rota, 'GET')).body.variantes.length, 2);
-      await confirmar(produto, true);
+      await a.ev("(" + botao('Cancelar') + ").click()");
+      const excluirNaLista = 'Excluir ' + produto.nome;
+      await waitFor(() => a.ev('!!(' + botao(excluirNaLista) + ')'), 'ação de exclusão na lista');
+      await confirmar(produto, true, excluirNaLista);
       await texto('Produto excluído.');
       await a.ir('/admin/produtos');
       assert.equal((await pedir(rota, 'GET')).status, 404);
@@ -753,7 +761,7 @@ try {
     const galeria = '/admin/produtos/' + vizinho.id + '/fotos';
     const rotaImagens = base + '/' + vizinho.id + '/imagens';
     await a.ir(galeria);
-    const removerFoto = botao('Remover removivel.png');
+    const removerFoto = botao('Remover foto removivel.png');
     await waitFor(() => a.ev('!!(' + removerFoto + ')'), 'ação de remoção individual');
     for (const [width, modo] of [[375, 'dark'], [375, 'light'], [1280, 'dark'], [1280, 'light']]) {
       await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, a.sessionId);

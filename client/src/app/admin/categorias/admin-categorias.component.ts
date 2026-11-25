@@ -30,6 +30,11 @@ export class AdminCategoriasComponent {
   protected readonly salvando = signal(false);
   protected readonly erroFormulario = signal('');
   protected readonly versaoDesatualizada = signal(false);
+  protected readonly alvoExclusaoLista = signal<AdminCategoria | null>(null);
+  protected readonly listaOcultaAlvoExclusao = computed(() => {
+    const alvo = this.alvoExclusaoLista();
+    return alvo !== null && !this.categoriasVisiveis().some(item => item.id === alvo.id);
+  });
   protected readonly exclusaoPendente = signal<{ id: string; versao: string; chave: string } | null>(null);
   protected readonly statusEmAtualizacao = signal<ReadonlySet<string>>(new Set());
 
@@ -181,15 +186,38 @@ export class AdminCategoriasComponent {
       });
   }
 
-  protected excluirCategoria(): void {
-    const categoria = this.categoriaSelecionada();
-    if (!categoria?.versao || this.salvando() || this.versaoDesatualizada()) return;
+  protected prepararExclusaoCategoria(categoria: AdminCategoria): void {
+    if (this.salvando() || this.carregandoEdicao()) return;
+    const pendente = this.exclusaoPendente();
+    if (pendente) {
+      if (pendente.id === categoria.id) this.excluirCategoria(categoria, true);
+      return;
+    }
+    this.carregandoEdicao.set(true);
+    this.erroFormulario.set('');
+    this.categoriasService.obter(categoria.id)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.carregandoEdicao.set(false)))
+      .subscribe({
+        next: atual => this.excluirCategoria(atual, true),
+        error: (erro: unknown) => {
+          if (this.redirecionarSessaoExpirada(erro)) return;
+          this.erroFormulario.set('Não foi possível carregar a categoria para exclusão. Confira a lista atualizada.');
+          this.carregarCategorias();
+        },
+      });
+  }
+
+  protected excluirCategoria(categoria = this.categoriaSelecionada(), pelaLista = false): void {
+    if (!categoria || this.salvando() || (!pelaLista && this.versaoDesatualizada())) return;
     if (!this.exclusaoPendente()) {
-      if (!window.confirm(`Excluir a categoria “${categoria.nome}”? A exclusão é permanente.`)) return;
+      if (!categoria.versao) return;
+      if (!window.confirm(`Excluir a categoria “${categoria.nome}”? A exclusão é permanente e só é permitida sem produtos vinculados.`)) return;
       this.exclusaoPendente.set({ id: categoria.id, versao: categoria.versao, chave: crypto.randomUUID() });
+      if (pelaLista) this.alvoExclusaoLista.set(categoria);
     }
 
     const tentativa = this.exclusaoPendente()!;
+    if (tentativa.id !== categoria.id) return;
     this.salvando.set(true);
     this.erroFormulario.set('');
     this.categoriasService.excluir(tentativa.id, tentativa.versao, tentativa.chave)
@@ -197,22 +225,28 @@ export class AdminCategoriasComponent {
       .subscribe({
         next: () => {
           this.exclusaoPendente.set(null);
+          this.alvoExclusaoLista.set(null);
           this.categorias.update(lista => lista.filter(x => x.id !== tentativa.id));
-          this.categoriaSelecionada.set(null);
-          this.modoFormulario.set(null);
+          if (!pelaLista || this.categoriaSelecionada()?.id === tentativa.id) {
+            this.categoriaSelecionada.set(null);
+            this.modoFormulario.set(null);
+          }
           this.mensagem.set('Categoria excluída com sucesso.');
           this.carregarCategorias();
         },
         error: (erro: unknown) => {
-          if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500) {
+          if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500 && erro.status !== 408) {
             this.exclusaoPendente.set(null);
+            this.alvoExclusaoLista.set(null);
             if (this.redirecionarSessaoExpirada(erro)) return;
             if (erro.error?.codigo === 'versao_desatualizada' || erro.error?.codigo === 'conflito_concorrencia') {
               this.marcarVersaoDesatualizada();
+              if (pelaLista) this.carregarCategorias();
             } else {
               this.erroFormulario.set(erro.error?.codigo === 'categoria_com_produtos'
-                ? 'Esta categoria possui produtos vinculados e não pode ser excluída.'
+                ? 'Esta categoria possui produtos vinculados e não pode ser excluída. Você pode desativá-la.'
                 : erro.status === 404 ? 'Esta categoria não está mais disponível.' : 'Não foi possível excluir a categoria.');
+              if (pelaLista && erro.status === 404) this.carregarCategorias();
             }
           } else {
             this.erroFormulario.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');

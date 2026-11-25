@@ -1,4 +1,13 @@
 <app-admin-workspace activePage="stock">
+  @if (listaOcultaAlvoExclusao()) {
+    @if (exclusao(); as alvo) {
+      <button type="button" class="admin-acao-exclusao" [disabled]="excluindo()"
+        (click)="confirmarExclusao(alvo)">Recuperar exclusão de {{ alvo.nome }}</button>
+    }
+  }
+  @if (erroExclusao()) {
+    <p role="alert" class="rounded-xl p-3 text-sm text-[var(--admin-error)]">{{ erroExclusao() }}</p>
+  }
   @if (mensagem()) {
     <p role="status" class="rounded-xl bg-emerald-50 p-3 text-sm text-emerald-900">{{ mensagem() }}</p>
   }
@@ -239,6 +248,11 @@
                   >
                     Ver e editar
                   </a>
+                  <button type="button" class="admin-acao-exclusao" (click)="prepararExclusao(insumo)"
+                    [disabled]="excluindo() || (!!exclusao() && exclusao()?.id !== insumo.insumoId)"
+                    [attr.aria-label]="(exclusao()?.id === insumo.insumoId ? 'Recuperar exclusão de ' : 'Excluir ') + insumo.nome">
+                    {{ exclusao()?.id === insumo.insumoId ? 'Recuperar exclusão' : 'Excluir' }}
+                  </button>
                   @if (insumo.ativo) {
                     <a
                       [routerLink]="['/admin/estoque/insumos/entradas']"

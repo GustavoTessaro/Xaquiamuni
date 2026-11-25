@@ -187,7 +187,7 @@
                   </button>
                   @if (item.versao && (!exclusao() || exclusao()?.forma === null)) {
                     <button type="button" (click)="excluirCadastro()"
-                      class="min-h-10 rounded-lg border border-current px-3 text-sm font-semibold text-[var(--admin-error)] focus-visible:outline-2"
+                      class="admin-acao-exclusao"
                       [disabled]="bloqueioExclusao() || versaoDesatualizada()">
                       {{ exclusao() ? 'Recuperar exclusão do insumo' : 'Excluir insumo' }}
                     </button>
@@ -550,7 +550,7 @@
                     @if (detalhe()?.versao && (!exclusao() || exclusao()?.forma === forma.id)) {
                       <button type="button" (click)="excluirCadastro(forma)"
                         [attr.aria-label]="(exclusao() ? 'Recuperar exclusão de ' : 'Excluir forma de compra ') + forma.nome"
-                        class="min-h-10 rounded-lg border border-current px-3 text-sm font-semibold text-[var(--admin-error)] focus-visible:outline-2"
+                        class="admin-acao-exclusao"
                         [disabled]="bloqueioExclusao() || versaoDesatualizada()">
                         {{ exclusao() ? 'Recuperar exclusão' : 'Excluir forma de compra' }}
                       </button>

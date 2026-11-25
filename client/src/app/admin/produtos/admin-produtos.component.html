@@ -1,4 +1,11 @@
 <app-admin-workspace activePage="products">
+  @if (alvoExclusaoLista(); as alvo) {
+    @if (exclusaoProduto() && listaOcultaAlvoExclusao()) {
+      <button type="button" class="admin-acao-exclusao" [disabled]="salvandoProduto()" (click)="excluirProdutoSelecionado(alvo, true)">
+        Recuperar exclusão de {{ alvo.nome }}
+      </button>
+    }
+  }
   <div class="space-y-6">
     @if (formularioProdutoVisivel()) {
       <app-admin-produto-form
@@ -8,28 +15,29 @@
         [mensagemErro]="erroOperacao()"
         (salvar)="salvarProduto($event)"
         (cancelar)="cancelarFormularioProduto()"
-      />
-      @if (produtoEditando(); as produto) {
-        <div class="flex flex-wrap gap-2">
-          @if (versaoProdutoDesatualizada()) {
-            <button type="button" class="admin-button" (click)="editarProduto(produto)" [disabled]="!!carregandoDetalheId()">
-              Recarregar produto
-            </button>
-            <button type="button" class="admin-button" (click)="cancelarFormularioProduto()">Fechar edição</button>
-          } @else if (produto.versao) {
-            <button type="button"
-              class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2"
-              [disabled]="salvandoProduto() || !!carregandoDetalheId() || produtoPendente(produto.id)"
-              (click)="excluirProdutoSelecionado(produto)">
-              {{ exclusaoProduto() ? 'Recuperar exclusão do produto' : 'Excluir produto' }}
-            </button>
-            @if (produtoComDependencias() && produto.publicado) {
-              <button type="button" class="admin-button" [disabled]="produtoPendente(produto.id)"
-                (click)="publicar(produto)">Despublicar produto</button>
+      >
+        <div admin-acoes-exclusao class="mt-5 flex flex-wrap gap-2 border-t border-current/20 pt-4 empty:hidden">
+          @if (produtoEditando(); as produto) {
+            @if (versaoProdutoDesatualizada()) {
+              <button type="button" class="admin-button" (click)="editarProduto(produto)" [disabled]="!!carregandoDetalheId()">
+                Recarregar produto
+              </button>
+              <button type="button" class="admin-button" (click)="cancelarFormularioProduto()">Fechar edição</button>
+            } @else if (produto.versao) {
+              <button type="button"
+                class="admin-acao-exclusao"
+                [disabled]="salvandoProduto() || !!carregandoDetalheId() || produtoPendente(produto.id)"
+                (click)="excluirProdutoSelecionado(produto)">
+                {{ exclusaoProduto() ? 'Recuperar exclusão do produto' : 'Excluir produto' }}
+              </button>
+              @if (produtoComDependencias() && produto.publicado) {
+                <button type="button" class="admin-button" [disabled]="produtoPendente(produto.id)"
+                  (click)="publicar(produto)">Despublicar produto</button>
+              }
             }
           }
         </div>
-      }
+      </app-admin-produto-form>
     } @else if (produtoVariantes(); as produto) {
       <section class="space-y-5" aria-labelledby="options-title">
         <header class="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
@@ -138,7 +146,7 @@
             } @else if (produto.versao) {
               <button type="button" [disabled]="salvandoVariante() || variantesEmAtualizacao().size > 0"
                 (click)="excluirVarianteSelecionada(produto, variante)"
-                class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2">
+                class="admin-acao-exclusao">
                 {{ exclusaoVariante() ? 'Recuperar exclusão' : 'Excluir variante' }}
               </button>
               @if (varianteComDependencias() && variante.ativa) {
@@ -150,6 +158,10 @@
           </div>
         }
 
+        @if (!varianteEditando() && versaoVarianteDesatualizada()) {
+          <button type="button" class="admin-button" [disabled]="carregandoVariantes()"
+            (click)="abrirGerenciamentoVariantes(produto)">Recarregar produto</button>
+        }
         @if (produto.variantes.length === 0) {
           <p
             class="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-600"
@@ -203,6 +215,14 @@
                     >
                       Editar
                     </button>
+                    @if (produto.versao && !varianteFormMode()) {
+                      <button type="button" class="admin-acao-exclusao"
+                        (click)="excluirVarianteSelecionada(produto, variante)"
+                        [disabled]="salvandoVariante() || variantesEmAtualizacao().size > 0 || versaoVarianteDesatualizada() || (!!exclusaoVariante() && exclusaoVariante()?.variante !== variante.id)"
+                        [attr.aria-label]="(exclusaoVariante()?.variante === variante.id ? 'Recuperar exclusão de ' : 'Excluir opção ') + nomeLegivelVariante(produto, variante)">
+                        {{ exclusaoVariante()?.variante === variante.id ? 'Recuperar exclusão' : 'Excluir' }}
+                      </button>
+                    }
                     @if (variante.ativa && !variante.padrao) {
                       <button
                         type="button"
@@ -691,6 +711,11 @@
                     class="min-h-10 rounded-lg border border-emerald-800 px-4 text-sm font-semibold text-emerald-800 hover:bg-emerald-50 disabled:opacity-60"
                   >
                     {{ carregandoDetalheId() === produto.id ? 'Carregando...' : 'Editar' }}
+                  </button>
+                  <button type="button" class="admin-acao-exclusao" (click)="prepararExclusaoProduto(produto)"
+                    [disabled]="salvandoProduto() || !!carregandoDetalheId() || produtoPendente(produto.id) || (!!exclusaoProduto() && exclusaoProduto()?.id !== produto.id)"
+                    [attr.aria-label]="(exclusaoProduto()?.id === produto.id ? 'Recuperar exclusão de ' : 'Excluir ') + produto.nome">
+                    {{ exclusaoProduto()?.id === produto.id ? 'Recuperar exclusão' : 'Excluir' }}
                   </button>
                   <button
                     type="button"

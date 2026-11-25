@@ -67,6 +67,11 @@ export class AdminReceitasComponent {
   protected readonly busca = signal('');
   protected readonly filtro = signal('');
   protected readonly exclusao = signal<{ revisao: string | null; token: string; chave: string } | null>(null);
+  protected readonly exclusaoLista = signal<DetalheReceita | null>(null);
+  protected readonly listaOcultaAlvoExclusao = computed(() => {
+    const alvo = this.exclusaoLista();
+    return alvo !== null && !this.visiveis().some(item => item.id === alvo.resumo.id);
+  });
   protected readonly fichaDesatualizada = signal(false);
 
   protected readonly visiveis = computed(() => {
@@ -94,7 +99,7 @@ export class AdminReceitasComponent {
   }
 
   protected abrir(id?: string): void {
-    if (this.ocupado()) return;
+    if (this.ocupado() || this.exclusaoLista()) return;
     this.sucesso.set('');
     this.historico.set(null);
     this.exclusao.set(null);
@@ -241,8 +246,26 @@ export class AdminReceitasComponent {
     );
   }
 
-  protected excluir(detalhe: DetalheReceita, versao?: RevisaoReceita): void {
-    if (this.ocupado() || this.fichaDesatualizada()) return;
+  protected prepararExclusao(id: string): void {
+    if (this.ocupado()) return;
+    const anterior = this.exclusaoLista();
+    if (anterior?.resumo.id === id) {
+      this.excluir(anterior, undefined, true);
+      return;
+    }
+    if (this.exclusao()) return;
+    this.executar(this.api.obter(id), detalhe => {
+      queueMicrotask(() => {
+        if (!this.destroy.destroyed) this.excluir(detalhe, undefined, true);
+      });
+    }, 'Não foi possível carregar a receita para exclusão.', erro => {
+      if (erro instanceof HttpErrorResponse && erro.status === 404)
+        this.receitas.update(lista => lista.filter(receita => receita.id !== id));
+    });
+  }
+
+  protected excluir(detalhe: DetalheReceita, versao?: RevisaoReceita, pelaLista = false): void {
+    if (this.ocupado() || (!pelaLista && this.fichaDesatualizada())) return;
     const revisao = versao?.id ?? null;
     const pendente = this.exclusao();
     if (pendente && pendente.revisao !== revisao) return;
@@ -252,11 +275,13 @@ export class AdminReceitasComponent {
     )) return;
     const tentativa = pendente ?? { revisao, token: detalhe.token, chave: crypto.randomUUID() };
     this.exclusao.set(tentativa);
+    if (pelaLista) this.exclusaoLista.set(detalhe);
     this.sucesso.set('');
     this.executar(
       this.api.excluir(detalhe.resumo.id, revisao, tentativa.token, tentativa.chave),
       () => {
         this.exclusao.set(null);
+        this.exclusaoLista.set(null);
         if (revisao) {
           this.historico.set(null);
           this.aplicarDetalhe({ ...detalhe, historico: detalhe.historico.filter((v) => v.id !== revisao) });
@@ -276,8 +301,11 @@ export class AdminReceitasComponent {
       },
       'Não foi possível confirmar a exclusão. Recupere o resultado com a mesma ação.',
       (erro) => {
-        if (!(erro instanceof HttpErrorResponse) || erro.status === 0 || erro.status >= 500) return;
+        if (!(erro instanceof HttpErrorResponse) || erro.status === 0 || erro.status === 408 || erro.status >= 500) return;
         this.exclusao.set(null);
+        this.exclusaoLista.set(null);
+        if (pelaLista && erro.status === 404)
+          this.receitas.update(lista => lista.filter(receita => receita.id !== detalhe.resumo.id));
         if (erro.error?.codigo === 'versao_desatualizada' || erro.error?.codigo === 'conflito_concorrencia')
           this.fichaDesatualizada.set(true);
       },

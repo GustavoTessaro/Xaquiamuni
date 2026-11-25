@@ -33,9 +33,15 @@ export class AdminFornecedoresComponent {
   protected readonly editando = signal<Fornecedor | null>(null);
   protected readonly formularioAberto = signal(false);
   protected readonly confirmar = signal<string | null>(null);
+  protected readonly alvoExclusaoLista = signal<Fornecedor | null>(null);
+  protected readonly listaOcultaAlvoExclusao = computed(() => {
+    const alvo = this.alvoExclusaoLista();
+    return alvo !== null && !this.visiveis().some(item => item.id === alvo.id);
+  });
   protected readonly exclusaoPendente = signal<{ id: string; versao: string; chave: string } | null>(null);
   protected readonly versaoDesatualizada = signal(false);
   protected readonly exclusaoBloqueada = signal(false);
+  protected readonly carregandoExclusao = signal(false);
   protected readonly visiveis = computed(() => {
     const termo = this.normalizar(this.busca());
     return this.lista().filter((item) => this.normalizar(item.nome).includes(termo));
@@ -69,6 +75,7 @@ export class AdminFornecedoresComponent {
   }
 
   protected abrir(item: Fornecedor | null): void {
+    if (this.carregandoExclusao() || this.exclusaoPendente()) return;
     this.editando.set(item);
     this.erro.set('');
     this.sucesso.set('');
@@ -128,13 +135,37 @@ export class AdminFornecedoresComponent {
     });
   }
 
-  protected excluir(item: Fornecedor): void {
-    if (this.salvando() || this.versaoDesatualizada() || !item.versao) return;
+  protected prepararExclusao(item: Fornecedor): void {
+    if (this.salvando() || this.carregandoExclusao()) return;
+    const pendente = this.exclusaoPendente();
+    if (pendente) {
+      if (pendente.id === item.id) this.excluir(item, true);
+      return;
+    }
+    this.carregandoExclusao.set(true);
+    this.erro.set('');
+    this.api.obter(item.id).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.carregandoExclusao.set(false)),
+    ).subscribe({
+      next: atual => this.excluir(atual, true),
+      error: erro => {
+        this.erro.set(this.mensagem(erro, 'Não foi possível carregar o fornecedor para exclusão.'));
+        this.carregar();
+      },
+    });
+  }
+
+  protected excluir(item: Fornecedor, pelaLista = false): void {
+    if (this.salvando() || (!pelaLista && this.versaoDesatualizada())) return;
     if (!this.exclusaoPendente()) {
+      if (!item.versao) return;
       if (!window.confirm(`Excluir “${item.nome}”? A exclusão é permanente.`)) return;
       this.exclusaoPendente.set({ id: item.id, versao: item.versao, chave: crypto.randomUUID() });
+      if (pelaLista) this.alvoExclusaoLista.set(item);
     }
     const tentativa = this.exclusaoPendente()!;
+    if (tentativa.id !== item.id) return;
     this.salvando.set(true);
     this.erro.set('');
     this.exclusaoBloqueada.set(false);
@@ -144,17 +175,22 @@ export class AdminFornecedoresComponent {
     ).subscribe({
       next: () => {
         this.exclusaoPendente.set(null);
+        this.alvoExclusaoLista.set(null);
         this.lista.update(itens => itens.filter(f => f.id !== tentativa.id));
         this.formularioAberto.set(false);
         this.sucesso.set('Fornecedor excluído.');
         this.carregar();
       },
       error: (erro: unknown) => {
-        if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500) {
+        if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500 && erro.status !== 408) {
           this.exclusaoPendente.set(null);
+          this.alvoExclusaoLista.set(null);
           const codigo = erro.error?.codigo;
           this.exclusaoBloqueada.set(['fornecedor_com_compras', 'fornecedor_com_historico', 'fornecedor_historico_inconclusivo'].includes(codigo));
-          this.erro.set(this.mensagem(erro, 'Não foi possível excluir o fornecedor.'));
+          const detalhe = this.mensagem(erro, 'Não foi possível excluir o fornecedor.');
+          this.erro.set(pelaLista && item.ativo && this.exclusaoBloqueada()
+            ? `${detalhe} Você pode inativar o fornecedor.` : detalhe);
+          if (pelaLista && (erro.status === 404 || this.versaoDesatualizada())) this.carregar();
         } else {
           this.erro.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');
         }

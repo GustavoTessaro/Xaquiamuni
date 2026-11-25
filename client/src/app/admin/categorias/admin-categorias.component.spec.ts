@@ -332,6 +332,32 @@ describe('AdminCategoriasComponent', () => {
     expect(categoryNames()).toEqual(categories.slice(1).map(category => category.nome));
   });
 
+  it('loads the latest category from the list and recovers without fetching or re-confirming', () => {
+    const confirmar = vi.fn().mockReturnValue(false);
+    vi.stubGlobal('confirm', confirmar);
+    const atual = { ...categories[0], nome: 'Categoria atualizada', versao: 'versao-atual' };
+    obter.mockReturnValue(of(atual));
+    excluir
+      .mockReturnValueOnce(throwError(() => new HttpErrorResponse({ status: 0 })))
+      .mockReturnValueOnce(of(void 0));
+    listar.mockReturnValueOnce(of(categories)).mockReturnValueOnce(of(categories.slice(1)));
+    render();
+    clickButton('Excluir Sabonetes Artesanais');
+    expect(confirmar).toHaveBeenCalledWith(expect.stringContaining(atual.nome));
+    expect(excluir).not.toHaveBeenCalled();
+    confirmar.mockReturnValue(true);
+    clickButton('Excluir Sabonetes Artesanais');
+    expect(excluir).toHaveBeenCalledWith(atual.id, atual.versao, expect.any(String));
+    setSearch('ocultar categoria');
+    clickButton('Recuperar exclusão de Categoria atualizada');
+    expect(excluir.mock.calls[1]).toEqual(excluir.mock.calls[0]);
+    expect(obter).toHaveBeenCalledTimes(2);
+    expect(confirmar).toHaveBeenCalledTimes(2);
+    expect((root().querySelector('#category-search') as HTMLInputElement).value).toBe('ocultar categoria');
+    setSearch('');
+    expect(categoryNames()).toEqual(categories.slice(1).map(categoria => categoria.nome));
+  });
+
   it('requires a fresh confirmation after an outdated version and reports linked products', () => {
     const confirm = vi.fn().mockReturnValue(true);
     vi.stubGlobal('confirm', confirm);

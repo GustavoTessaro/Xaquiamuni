@@ -244,10 +244,10 @@
                       type="button"
                       (click)="removerImagem(imagem)"
                       [disabled]="ocupado() || naoPodeRemoverUltima()"
-                      [attr.aria-label]="'Remover ' + imagem.nomeOriginal"
-                      class="min-h-10 rounded-lg border border-red-300 px-3 text-sm font-semibold text-red-800 hover:bg-red-50 disabled:opacity-50"
+                      [attr.aria-label]="'Remover foto ' + imagem.nomeOriginal"
+                      class="admin-acao-exclusao"
                     >
-                      Remover
+                      Remover foto
                     </button>
                   </div>
 

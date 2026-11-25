@@ -1,4 +1,11 @@
 <app-admin-workspace activePage="suppliers">
+  @if (alvoExclusaoLista(); as alvo) {
+    @if (exclusaoPendente() && listaOcultaAlvoExclusao()) {
+      <button type="button" class="admin-acao-exclusao" [disabled]="salvando()" (click)="excluir(alvo, true)">
+        Recuperar exclusão de {{ alvo.nome }}
+      </button>
+    }
+  }
   <section class="space-y-5" aria-labelledby="suppliers-title">
     <header class="flex flex-wrap items-center justify-between gap-3">
       <h1 id="suppliers-title" class="text-2xl font-semibold text-slate-900">Fornecedores</h1>
@@ -139,7 +146,7 @@
               </button>
             } @else if (item.versao) {
               <button type="button" (click)="excluir(item)" [disabled]="salvando()"
-                class="min-h-11 rounded-lg border border-current px-3 font-semibold text-[var(--admin-error)] focus-visible:outline-2">
+                class="admin-acao-exclusao">
                 {{ exclusaoPendente() ? (salvando() ? 'Excluindo…' : 'Recuperar exclusão') : 'Excluir fornecedor' }}
               </button>
             }
@@ -222,6 +229,11 @@
                       class="min-h-11 px-2 font-semibold text-emerald-900 focus-visible:outline-2"
                     >
                       Editar
+                    </button>
+                    <button type="button" class="admin-acao-exclusao" (click)="prepararExclusao(item)"
+                      [disabled]="salvando() || carregandoExclusao() || (!!exclusaoPendente() && exclusaoPendente()?.id !== item.id)"
+                      [attr.aria-label]="(exclusaoPendente()?.id === item.id ? 'Recuperar exclusão de ' : 'Excluir ') + item.nome">
+                      {{ exclusaoPendente()?.id === item.id ? 'Recuperar exclusão' : 'Excluir' }}
                     </button>
                     @if (item.ativo) {
                       <button

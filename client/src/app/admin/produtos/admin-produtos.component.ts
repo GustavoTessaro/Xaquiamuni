@@ -74,6 +74,11 @@ export class AdminProdutosComponent {
 
   protected readonly formularioProdutoVisivel = signal(false);
   protected readonly produtoEditando = signal<AdminProduto | null>(null);
+  protected readonly alvoExclusaoLista = signal<AdminProduto | null>(null);
+  protected readonly listaOcultaAlvoExclusao = computed(() => {
+    const alvo = this.alvoExclusaoLista();
+    return alvo !== null && !this.produtosVisiveis().some(item => item.id === alvo.id);
+  });
   protected readonly exclusaoProduto = signal<{ id: string; versao: string; chave: string } | null>(null);
   protected readonly versaoProdutoDesatualizada = signal(false);
   protected readonly produtoComDependencias = signal(false);
@@ -250,14 +255,38 @@ export class AdminProdutosComponent {
       });
   }
 
-  protected excluirProdutoSelecionado(produto: AdminProduto): void {
-    if (this.salvandoProduto() || this.carregandoDetalheId() || this.produtoPendente(produto.id) ||
-        this.versaoProdutoDesatualizada() || !produto.versao) return;
+  protected prepararExclusaoProduto(produto: AdminProduto): void {
+    if (this.salvandoProduto() || this.carregandoDetalheId() || this.produtoPendente(produto.id)) return;
+    const pendente = this.exclusaoProduto();
+    if (pendente) {
+      if (pendente.id === produto.id) this.excluirProdutoSelecionado(produto, true);
+      return;
+    }
+    this.carregandoDetalheId.set(produto.id);
+    this.erroOperacao.set('');
+    this.produtosService.obter(produto.id)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.carregandoDetalheId.set('')))
+      .subscribe({
+        next: atual => this.excluirProdutoSelecionado(atual, true),
+        error: (erro: unknown) => {
+          if (this.redirecionarSessaoExpirada(erro)) return;
+          this.erroOperacao.set('Não foi possível carregar o produto para exclusão. Confira a lista atualizada.');
+          this.carregarProdutos();
+        },
+      });
+  }
+
+  protected excluirProdutoSelecionado(produto: AdminProduto, pelaLista = false): void {
+    if (this.salvandoProduto() || this.produtoPendente(produto.id) ||
+        (!pelaLista && (this.carregandoDetalheId() || this.versaoProdutoDesatualizada()))) return;
     if (!this.exclusaoProduto()) {
+      if (!produto.versao) return;
       if (!window.confirm(`Excluir “${produto.nome}”? A exclusão é permanente e remove as variantes e os componentes internos elegíveis.`)) return;
       this.exclusaoProduto.set({ id: produto.id, versao: produto.versao, chave: crypto.randomUUID() });
+      if (pelaLista) this.alvoExclusaoLista.set(produto);
     }
     const tentativa = this.exclusaoProduto()!;
+    if (tentativa.id !== produto.id) return;
     this.salvandoProduto.set(true);
     this.erroOperacao.set('');
     this.produtoComDependencias.set(false);
@@ -266,6 +295,7 @@ export class AdminProdutosComponent {
       .subscribe({
         next: () => {
           this.exclusaoProduto.set(null);
+          this.alvoExclusaoLista.set(null);
           this.produtoEditando.set(null);
           this.formularioProdutoVisivel.set(false);
           this.produtos.update(produtos => produtos.filter(item => item.id !== tentativa.id));
@@ -273,15 +303,19 @@ export class AdminProdutosComponent {
           this.carregarProdutos();
         },
         error: (erro: unknown) => {
-          if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500) {
+          if (erro instanceof HttpErrorResponse && erro.status >= 400 && erro.status < 500 && erro.status !== 408) {
             this.exclusaoProduto.set(null);
+            this.alvoExclusaoLista.set(null);
             if (this.redirecionarSessaoExpirada(erro)) return;
             const codigo = erro.error?.codigo;
             this.versaoProdutoDesatualizada.set(['versao_desatualizada', 'conflito_concorrencia'].includes(codigo));
+            if (pelaLista && (this.versaoProdutoDesatualizada() || erro.status === 404)) this.carregarProdutos();
             this.produtoComDependencias.set(typeof codigo === 'string' &&
               (codigo.includes('historico') || codigo === 'produto_imagem_inconclusiva'));
-            this.erroOperacao.set(erro.status === 409 && typeof erro.error?.detail === 'string'
-              ? erro.error.detail : this.mensagemErroHttp(erro, 'Não foi possível excluir o produto.'));
+            const detalhe = erro.status === 409 && typeof erro.error?.detail === 'string'
+              ? erro.error.detail : this.mensagemErroHttp(erro, 'Não foi possível excluir o produto.');
+            this.erroOperacao.set(pelaLista && produto.publicado && this.produtoComDependencias()
+              ? `${detalhe} Você pode despublicar o produto.` : detalhe);
           } else {
             this.erroOperacao.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');
           }
@@ -413,6 +447,7 @@ export class AdminProdutosComponent {
       this.exclusaoVariante.set({ produto: produto.id, variante: variante.id, versao: produto.versao, chave: crypto.randomUUID() });
     }
     const tentativa = this.exclusaoVariante()!;
+    if (tentativa.produto !== produto.id || tentativa.variante !== variante.id) return;
     this.salvandoVariante.set(true);
     this.erroVariantes.set('');
     this.varianteComDependencias.set(false);

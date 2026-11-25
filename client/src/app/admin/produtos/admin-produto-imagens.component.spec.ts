@@ -348,7 +348,7 @@ describe('AdminProdutoImagensComponent', () => {
     fixture.destroy();
     fixture = TestBed.createComponent(AdminProdutoImagensComponent);
     fixture.detectChanges();
-    clickButton('Remover lavanda.png');
+    clickButton('Remover foto lavanda.png');
 
     await vi.waitFor(() => {
       fixture.detectChanges();
@@ -366,7 +366,7 @@ describe('AdminProdutoImagensComponent', () => {
     fixture = TestBed.createComponent(AdminProdutoImagensComponent);
     fixture.detectChanges();
     expect(text()).toContain('despublique o produto ou adicione outra foto');
-    expect(button('Remover lavanda.png')?.disabled).toBe(true);
+    expect(button('Remover foto lavanda.png')?.disabled).toBe(true);
     expect(remover).toHaveBeenCalledOnce();
   });
 
@@ -379,7 +379,7 @@ describe('AdminProdutoImagensComponent', () => {
     fixture = TestBed.createComponent(AdminProdutoImagensComponent);
     fixture.detectChanges();
 
-    clickButton('Remover lavanda.png');
+    clickButton('Remover foto lavanda.png');
 
     await vi.waitFor(() => {
       fixture.detectChanges();
@@ -395,12 +395,12 @@ describe('AdminProdutoImagensComponent', () => {
     fixture.destroy();
     fixture = TestBed.createComponent(AdminProdutoImagensComponent);
     fixture.detectChanges();
-    clickButton('Remover lavanda.png');
+    clickButton('Remover foto lavanda.png');
     expect(remover).not.toHaveBeenCalled();
     expect(imageNames()).toEqual(['lavanda.png', 'camomila.webp']);
     confirmar.mockReturnValue(true);
-    clickButton('Remover lavanda.png');
-    expect(button('Remover lavanda.png')?.disabled).toBe(true);
+    clickButton('Remover foto lavanda.png');
+    expect(button('Remover foto lavanda.png')?.disabled).toBe(true);
     await vi.waitFor(() => {
       fixture.detectChanges();
       expect(imageNames()).toEqual(['camomila.webp']);

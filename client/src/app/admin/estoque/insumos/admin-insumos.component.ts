@@ -53,6 +53,15 @@ export class AdminInsumosComponent {
   protected readonly pagina = signal(1);
   protected readonly totalItens = signal(0);
   protected readonly mensagem = signal('');
+  protected readonly erroExclusao = signal('');
+  protected readonly excluindo = signal(false);
+  protected readonly exclusao = signal<{
+    id: string; nome: string; ativa: boolean; versao: string; chave: string;
+  } | null>(null);
+  protected readonly listaOcultaAlvoExclusao = computed(() => {
+    const alvo = this.exclusao();
+    return alvo !== null && !this.insumos().some(item => item.insumoId === alvo.id);
+  });
   protected readonly itensPorPagina = 20;
   protected readonly totalPaginas = computed(() =>
     Math.max(1, Math.ceil(this.totalItens() / this.itensPorPagina)),
@@ -130,6 +139,68 @@ export class AdminInsumosComponent {
   protected parametrosDeRetorno() {
     return { nome: this.busca.value || null, ativo: this.filtroAtivo() === 'todos' ? null : this.filtroAtivo(),
       situacao: this.filtroSituacao() || null, pagina: this.pagina() > 1 ? this.pagina() : null };
+  }
+
+  protected prepararExclusao(insumo: AdminResumoInsumoPreciso): void {
+    if (this.excluindo()) return;
+    const anterior = this.exclusao();
+    if (anterior) {
+      if (anterior.id === insumo.insumoId) this.confirmarExclusao(anterior);
+      return;
+    }
+    this.excluindo.set(true);
+    this.erroExclusao.set('');
+    this.insumosService.obter(insumo.insumoId).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: atual => {
+        this.excluindo.set(false);
+        if (!atual.versao || !window.confirm(
+          `Excluir a matéria-prima “${atual.resumo.nome}”? A exclusão é permanente e remove as formas de compra elegíveis.`,
+        )) return;
+        this.confirmarExclusao({
+          id: insumo.insumoId, nome: atual.resumo.nome, ativa: atual.resumo.ativo,
+          versao: atual.versao, chave: crypto.randomUUID(),
+        });
+      },
+      error: erro => {
+        this.excluindo.set(false);
+        if (this.redirecionarSessaoExpirada(erro)) return;
+        this.erroExclusao.set('Não foi possível carregar a matéria-prima para exclusão. Confira a lista atualizada.');
+        this.carregarInsumos();
+      },
+    });
+  }
+
+  protected confirmarExclusao(tentativa: NonNullable<ReturnType<typeof this.exclusao>>): void {
+    if (this.excluindo()) return;
+    this.exclusao.set(tentativa);
+    this.excluindo.set(true);
+    this.erroExclusao.set('');
+    this.insumosService.excluir(tentativa.id, null, tentativa.versao, tentativa.chave)
+      .pipe(takeUntilDestroyed(this.destroyRef), finalize(() => this.excluindo.set(false)))
+      .subscribe({
+        next: () => {
+          this.exclusao.set(null);
+          this.insumos.update(lista => lista.filter(item => item.insumoId !== tentativa.id));
+          this.totalItens.update(total => Math.max(0, total - 1));
+          this.mensagem.set('Matéria-prima excluída.');
+          this.carregarInsumos();
+        },
+        error: erro => {
+          if (!(erro instanceof HttpErrorResponse) || erro.status === 0 || erro.status === 408 || erro.status >= 500) {
+            this.erroExclusao.set('Resultado da exclusão desconhecido. Recupere a tentativa antes de continuar.');
+            return;
+          }
+          this.exclusao.set(null);
+          if (this.redirecionarSessaoExpirada(erro)) return;
+          const codigo = erro.error?.codigo;
+          const desatualizado = codigo === 'versao_desatualizada' || codigo === 'conflito_concorrencia';
+          const detalhe = typeof erro.error?.detail === 'string' ? erro.error.detail : 'Não foi possível excluir a matéria-prima.';
+          this.erroExclusao.set(desatualizado ? 'O cadastro foi alterado. Confira a lista e confirme novamente.'
+            : tentativa.ativa && typeof codigo === 'string' && (codigo.startsWith('insumo_com_') || codigo === 'insumo_historico_inconclusivo')
+              ? `${detalhe} Você pode inativar o cadastro.` : detalhe);
+          if (desatualizado || erro.status === 404) this.carregarInsumos();
+        },
+      });
   }
 
   protected carregarInsumos(): void {
