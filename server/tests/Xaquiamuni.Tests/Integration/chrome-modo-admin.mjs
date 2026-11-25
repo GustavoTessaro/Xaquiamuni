@@ -309,25 +309,25 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
       await c.ev("document.querySelector('main form').requestSubmit()");
       await waitFor(() => c.ev("location.pathname === '/checkout' && !!document.querySelector('#modalidade-entrega')"), 'Retorno ao checkout com carrinho');
     }
-    await abrir(c, '/checkout', "!!document.querySelector('#modalidade-entrega option[value=EntregaPropria]')");
+    await abrir(c, '/checkout', "!!document.querySelector('input[name=modalidade][value=EntregaPropria]')");
     await waitFor(() => c.ev("!!document.querySelector('a[href^=\"https://wa.me/\"]')"), 'Contato no checkout');
     assert.deepEqual(await conferirWhatsApp(c), whatsapp);
-    await campo(c, '#modalidade-entrega', 'EntregaPropria');
+    await c.ev("document.querySelector('input[name=modalidade][value=EntregaPropria]').click()");
     await botaoTexto('Consultar valores de entrega', c);
     const totalCotado = width === 375 ? '22,24' : '10,99';
     await waitFor(() => c.ev(`document.querySelector('app-frete-pedido')?.textContent.includes('Economia na entrega')
-      && [...document.querySelectorAll('main p')].some(p => p.textContent.includes('Total final:') && p.textContent.includes('${totalCotado}'))`),
+      && document.querySelector('.resumo-total')?.textContent.includes('${totalCotado}')`),
       'Total com frete promocional');
     if (width === 1280) assert.ok(await c.ev("document.querySelector('app-frete-pedido')?.textContent.includes('Frete grátis')"));
     console.log(`Entrega própria em ${width} px: cotação real com desconto conferida.`);
     assert.ok(await semEstouro(c));
     if (width === 375) {
       assert.equal(await alterar(true, '1300'), 200);
-      await botaoTexto('Confirmar valor e finalizar compra', c);
+      await botaoTexto('Confirmar pedido', c);
       await waitFor(() => c.ev("location.pathname === '/checkout' && document.querySelector('main').textContent.includes('Confira a nova cotação') && document.querySelector('main').textContent.includes('22,69')"), 'Reconfirmação após mudar a tarifa');
     }
     const perdaDesconto = width === 1280 ? c.perderResposta('/api/pedidos') : null;
-    await botaoTexto('Confirmar valor e finalizar compra', c);
+    await botaoTexto('Confirmar pedido', c);
     if (perdaDesconto) {
       await botaoTexto('Recuperar tentativa original', c);
     }

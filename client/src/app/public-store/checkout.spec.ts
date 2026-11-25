@@ -171,6 +171,22 @@ describe('checkout integrado aos contratos HTTP', () => {
   }
 
   const rotaEndereco = '/api/clientes/me/endereco-padrao';
+
+  it('exige nova cotação ao voltar para a modalidade anterior', async () => {
+    carrinho.adicionar(produto, varianteId);
+    const harness = await RouterTestingHarness.create('/checkout');
+    await modalidades(harness, true);
+    const view = harness.routeNativeElement!;
+    view.querySelector<HTMLButtonElement>('[data-acao="cotar"]')!.click();
+    await responderCotacao(harness, 'retirada-original', '250');
+    expect(view.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')?.disabled).toBe(false);
+    selecionarModalidade(harness, 'EntregaPropria');
+    http.expectOne(rotaEndereco).flush({ endereco: null });
+    selecionarModalidade(harness, 'RetiradaLocal');
+    expect(view.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')?.disabled).toBe(true);
+    expect(view.querySelector('.resumo-total')).toBeNull();
+    http.expectNone('/api/pedidos');
+  });
   const enderecoSalvo = {
     cep: '95200000', uf: 'RS', cidade: 'Vacaria', bairro: 'Centro', logradouro: 'Rua cadastrada', numero: '12', complemento: null,
   };
@@ -188,14 +204,13 @@ describe('checkout integrado aos contratos HTTP', () => {
   }
 
   function selecionarModalidade(harness: RouterTestingHarness, modalidade: string) {
-    const select = harness.routeNativeElement!.querySelector<HTMLSelectElement>('#modalidade-entrega')!;
-    select.value = modalidade;
-    select.dispatchEvent(new Event('change'));
+    const radio = harness.routeNativeElement!.querySelector<HTMLInputElement>(`input[name="modalidade"][value="${modalidade}"]`)!;
+    radio.click();
     harness.detectChanges();
   }
 
   function campoEndereco(harness: RouterTestingHarness, indice: number, valor?: string) {
-    const campo = harness.routeNativeElement!.querySelectorAll<HTMLInputElement>('fieldset input')[indice];
+    const campo = harness.routeNativeElement!.querySelectorAll<HTMLInputElement>('.endereco-campos input')[indice];
     if (valor !== undefined) {
       campo.value = valor;
       campo.dispatchEvent(new Event('input'));
@@ -210,6 +225,11 @@ describe('checkout integrado aos contratos HTTP', () => {
 
   it('sugere o endereço sem sobrescrever a digitação e permite alternar e editar os campos', async () => {
     const harness = await abrirPostal();
+    const view = harness.routeNativeElement!;
+    expect(view.querySelector('.checkout-dados .endereco-campos')).not.toBeNull();
+    expect(view.querySelector('.resumo .endereco-campos, .resumo-total')).toBeNull();
+    expect(view.querySelector('.resumo')?.textContent).toContain('Sob cotação');
+    expect(acaoPostal(harness, 'Solicitar cotação de frete')?.classList.contains('principal')).toBe(true);
     const consulta = http.expectOne(rotaEndereco);
     expect(consulta.request.method).toBe('GET');
     expect(acaoPostal(harness, 'Usar endereço cadastrado')).toBeUndefined();
@@ -265,7 +285,9 @@ describe('checkout integrado aos contratos HTTP', () => {
     selecionarModalidade(harness, 'Correios');
     http.expectOne(rotaEndereco).flush({ endereco: enderecoSalvo });
     harness.detectChanges();
-    expect(campoEndereco(harness, 0)).toBe('');
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(campoEndereco(harness, 0)).toBe('95200000');
   });
 
   it('envia somente o destino revisado e permite corrigir uma rejeição postal', async () => {
@@ -277,7 +299,7 @@ describe('checkout integrado aos contratos HTTP', () => {
     campoEndereco(harness, 4, 'Rua editada');
     const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
     try {
-      acaoPostal(harness, 'Solicitar cotação')!.click();
+      acaoPostal(harness, 'Solicitar cotação de frete')!.click();
       http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-postal' });
       const post = await vi.waitFor(() => http.expectOne('/api/cotacoes-correios'));
       expect(post.request.body).toEqual({ endereco: { ...enderecoSalvo, logradouro: 'Rua editada' }, itens: [item] });
@@ -298,7 +320,7 @@ describe('checkout integrado aos contratos HTTP', () => {
     carrinho.adicionar(produto, varianteId);
     const harness = await RouterTestingHarness.create('/checkout');
     await modalidades(harness);
-    expect(harness.routeNativeElement?.querySelector('option[value="Correios"]')).toBeNull();
+    expect(harness.routeNativeElement?.querySelector('input[name=modalidade][value="Correios"]')).toBeNull();
   });
 
   it('recupera conversão postal com o token original e preserva o carrinho independente', async () => {
@@ -513,11 +535,10 @@ describe('checkout integrado aos contratos HTTP', () => {
     const harness = await RouterTestingHarness.create('/checkout');
     await modalidades(harness, true);
     const view = harness.routeNativeElement!;
-    const seletor = view.querySelector<HTMLSelectElement>('select')!;
-    seletor.value = 'EntregaPropria';
-    seletor.dispatchEvent(new Event('change'));
+    selecionarModalidade(harness, 'EntregaPropria');
+    http.expectOne(rotaEndereco).flush({ endereco: enderecoSalvo });
     harness.detectChanges();
-    const consultar = view.querySelector<HTMLButtonElement>('.consulta-entrega')!;
+    const consultar = view.querySelector<HTMLButtonElement>('[data-acao="cotar"]')!;
     const finalizar = view.querySelector<HTMLButtonElement>('[data-acao="finalizar"]')!;
     consultar.click();
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });

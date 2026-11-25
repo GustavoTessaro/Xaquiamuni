@@ -34,11 +34,18 @@ const enderecoVazio: EnderecoEntrega = {
   selector: 'app-checkout',
   imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, FretePedidoComponent, DatePipe, ConsultaCepComponent],
   templateUrl: './checkout.component.html',
-  styleUrl: './compra.css',
+  styleUrls: ['./compra.css', './checkout.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckoutComponent {
-  protected readonly mensagensDeEndereco = Object.values(mensagensCep);
+  protected readonly mensagensDeEndereco = [
+    ...Object.values(mensagensCep),
+    'Preencha o endereço completo e informe um CEP válido.',
+    'Preencha o endereço completo, com CEP de oito dígitos e UF.',
+    'Não foi possível validar o CEP deste endereço. Confira os dados ou informe outro endereço.',
+    'O CEP, a cidade e a UF devem corresponder a um município atendido. Consulte as outras opções de recebimento.',
+    erroPostal({ error: { codigo: 'destino_nao_validado' } }),
+  ];
   private readonly correios = inject(CotacoesCorreiosService);
   protected readonly cotacaoCriada = signal<string | null>(null);
   protected readonly solicitacaoIncerta = signal(false);
@@ -99,6 +106,7 @@ export class CheckoutComponent {
   protected readonly carrinho = inject(CarrinhoService);
   protected readonly checkout = inject(CheckoutService);
   protected readonly formatarPreco = formatarCentavos;
+  protected readonly paraCentavos = BigInt;
   protected readonly erro = signal('');
   protected readonly consultando = signal(true);
   protected readonly precoMudou = signal(false);
@@ -110,6 +118,7 @@ export class CheckoutComponent {
   protected readonly usarPadrao = signal(true);
   protected readonly endereco = signal<EnderecoEntrega>({ ...enderecoVazio });
   private readonly enderecoPostal = signal<EnderecoEntrega>({ ...enderecoVazio });
+  private enderecoPostalEditado = false;
   protected readonly enderecoPostalCadastrado = signal<EnderecoEntrega | null>(null);
   protected readonly avisoEnderecoPostal = signal('');
   protected readonly enderecoFormulario = computed(() =>
@@ -131,6 +140,9 @@ export class CheckoutComponent {
     const oferta = this.oferta();
     return oferta ? (BigInt(oferta.totalCentavos) - BigInt(oferta.freteCentavos)).toString() : '0';
   });
+  protected readonly subtotalOriginal = computed(() => this.carrinho.itens().reduce((total, item) =>
+    total + BigInt(item.preco?.regularCentavos ?? item.precoCentavos) * BigInt(item.quantidade), 0n));
+  protected readonly fotosIndisponiveis = signal(new Set<string>());
   protected readonly itensCompra = computed(() =>
     this.carrinho.itens().map((item) => ({
       produtoId: item.produtoId,
@@ -158,7 +170,8 @@ export class CheckoutComponent {
 
   constructor() {
     effect(onCleanup => {
-      if (this.modalidade() !== 'Correios') {
+      const modalidade = this.modalidade();
+      if (modalidade === 'RetiradaLocal') {
         this.enderecoPostalCadastrado.set(null);
         return;
       }
@@ -166,6 +179,7 @@ export class CheckoutComponent {
       const consulta = this.correios.consultarEnderecoPadrao().subscribe({
         next: ({ endereco }) => {
           this.enderecoPostalCadastrado.set(endereco);
+          if (modalidade === 'Correios' && endereco && !this.enderecoPostalEditado) this.enderecoPostal.set({ ...endereco });
           this.avisoEnderecoPostal.set(endereco ? '' : 'Endereço cadastrado ausente ou incompleto. Informe o destino abaixo.');
         },
         error: (falha: unknown) => {
@@ -205,11 +219,15 @@ export class CheckoutComponent {
   }
 
   protected alterarEndereco(campo: keyof EnderecoEntrega, valor: string): void {
+    this.cotacao.set(null);
+    if (this.modalidade() === 'Correios') this.enderecoPostalEditado = true;
     const endereco = this.modalidade() === 'Correios' ? this.enderecoPostal : this.endereco;
     endereco.update(atual => ({ ...atual, [campo]: campo === 'cep' ? formatarCep(valor) : valor }));
   }
 
   protected aplicarCep(campos: CamposCep): void {
+    this.cotacao.set(null);
+    if (this.modalidade() === 'Correios') this.enderecoPostalEditado = true;
     const endereco = this.modalidade() === 'Correios' ? this.enderecoPostal : this.endereco;
     endereco.update(atual => ({ ...atual, ...campos }));
   }
@@ -217,7 +235,26 @@ export class CheckoutComponent {
   protected escolherEnderecoPostal(cadastrado: boolean): void {
     if (this.cotando() || this.solicitacaoIncerta()) return;
     const endereco = cadastrado ? this.enderecoPostalCadastrado() : enderecoVazio;
+    this.enderecoPostalEditado = true;
     if (endereco) this.enderecoPostal.set({ ...endereco });
+  }
+
+  protected selecionarModalidade(modalidade: ModalidadeEntrega): void {
+    if (this.checkout.pendente() || this.checkout.enviando() || this.solicitacaoIncerta() || this.cotando()) return;
+    if (modalidade === this.modalidade()) return;
+    this.cotacao.set(null);
+    this.erro.set('');
+    this.modalidade.set(modalidade);
+  }
+
+  protected selecionarEnderecoPadrao(padrao: boolean): void {
+    this.cotacao.set(null);
+    this.erro.set('');
+    this.usarPadrao.set(padrao);
+  }
+
+  protected marcarFotoIndisponivel(url: string): void {
+    this.fotosIndisponiveis.update(fotos => new Set([...fotos, url]));
   }
 
   private chaveCotacao(): string {
@@ -251,7 +288,7 @@ export class CheckoutComponent {
         const motivos: Record<string, string> = {
           ...mensagensCep,
           destino_nao_validado: 'Não foi possível validar o CEP deste endereço. Confira os dados ou informe outro endereço.',
-          municipio_nao_atendido: 'O CEP, a cidade e a UF devem corresponder a um município atendido.',
+          municipio_nao_atendido: 'O CEP, a cidade e a UF devem corresponder a um município atendido. Consulte as outras opções de recebimento.',
           itens_indisponiveis: 'Revise a disponibilidade dos itens do carrinho.',
         };
         this.erro.set(motivos[resultado.motivoEntregaPropriaIndisponivel ?? ''] ?? 'Não há cotação para esta modalidade.');

@@ -178,7 +178,7 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   assert.equal((await api(admin, '/api/admin/configuracoes/pix-manual', 'PUT',
     { tipoChave: 'Email', chavePix: 'promocoes@example.test', nomeRecebedor: 'Loja E2E' })).status, 200);
   await perderResposta(cliente, 'POST', '/api/pedidos');
-  await clicar(cliente, 'Confirmar valor e finalizar compra');
+  await clicar(cliente, 'Confirmar pedido');
   await waitFor(() => cliente.ev('window.statusAntesDaPerda'), 'Resposta real do pedido antes da perda');
   await tem(cliente, 'Repita a tentativa original');
   assert.ok(cliente.compra(), 'POST não foi observado no Chrome.');
@@ -206,7 +206,7 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   const pix = await api(cliente, '/api/pedidos/' + pedido.id + '/pagamento');
   assert.deepEqual([pix.body.situacao, pix.body.valorCentavos], ['disponivel', '1190']);
 
-  await clicar(outro, 'Confirmar valor e finalizar compra');
+  await clicar(outro, 'Confirmar pedido');
   await tem(outro, 'Confira a nova cotação');
   await tem(outro, '11,12');
   assert.equal((await consulta(outro)).length, 1);
@@ -239,16 +239,16 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   await tem(admin, 'Inativa');
   assert.equal((await api(admin, promocoes + '/' + geral.id)).body.ativa, false);
 
-  await clicar(outro, 'Confirmar valor e finalizar compra');
+  await clicar(outro, 'Confirmar pedido');
   await waitFor(() => outro.compra()?.total === expirada.total + 1, 'POST com a oferta anterior após desativar a promoção');
   await tem(outro, '13,90');
-  await waitFor(() => outro.ev(`!!${botao('Confirmar valor e finalizar compra')} && !document.querySelector('main app-preco-exibido del')`),
+  await waitFor(() => outro.ev(`!!${botao('Confirmar pedido')} && !document.querySelector('main app-preco-exibido del')`),
     'Preço regular exibido antes da nova confirmação');
   const alterada = outro.compra();
   assert.equal(alterada.total, 2, 'Envios observados após desativar a promoção');
   assert.notEqual(alterada.chave, expirada.chave);
   assert.equal((await consulta(outro)).length, 1);
-  await clicar(outro, 'Confirmar valor e finalizar compra');
+  await clicar(outro, 'Confirmar pedido');
   await tem(outro, 'Aguardando pagamento');
   assert.notEqual(outro.compra().chave, alterada.chave);
   const cancelavel = (await consulta(outro)).find(p => p.id !== pedido.id);

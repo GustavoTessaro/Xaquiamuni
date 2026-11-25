@@ -279,7 +279,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     await tem(c, 'Rua da retirada de ensaio');
     await tem(c, 'Retire no balcão de ensaio.');
     await tem(c, '0,00');
-    await clicar(c, 'Confirmar valor e finalizar compra');
+    await clicar(c, 'Confirmar pedido');
     const caminho = await pronto(c, 'location.pathname.startsWith("/pedidos/") && location.pathname', 'Detalhe após checkout');
     const id = caminho.split('/').at(-1);
     await tem(c, 'Aguardando pagamento');

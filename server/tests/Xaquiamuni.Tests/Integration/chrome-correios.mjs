@@ -86,12 +86,17 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     await c.ir('/produtos/' + dados.produtoFinanceiro);
     if (width === 375) await clicar(c, 'Adicionar ao carrinho');
     await c.ir('/checkout');
-    await waitFor(() => c.ev("!!document.querySelector('#modalidade-entrega option[value=Correios]')"), 'Opção Correios');
+    await waitFor(() => c.ev("!!document.querySelector('input[name=modalidade][value=Correios]')"), 'Opção Correios');
     const rotaEndereco = '/api/clientes/me/endereco-padrao';
-    const seletor = i => '.resumo fieldset label:nth-of-type(' + (i + 1) + ') input';
+    const seletor = i => '.checkout-dados .endereco-campos .campo-endereco:nth-of-type(' + (i + 1) + ') input';
     const preencher = async (i, valor) => assert.ok(await campo(c, seletor(i), valor));
     const ler = i => c.ev(`document.querySelector(${JSON.stringify(seletor(i))})?.value`);
-    const selecionar = modalidade => campo(c, '#modalidade-entrega', modalidade);
+    const selecionar = modalidade => c.ev(`(() => {
+      const radio = document.querySelector('input[name=modalidade][value=' + ${JSON.stringify(modalidade)} + ']');
+      if (!radio) return false;
+      radio.click();
+      return radio.checked;
+    })()`);
     if (width === 375) {
       c.falharProximaConsultaPix(rotaEndereco);
       assert.ok(await selecionar('Correios'));
@@ -131,6 +136,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       })()`);
     }
     assert.ok(await selecionar('Correios'));
+    await texto(c, 'Sob cotação');
+    assert.ok(await c.ev("!!document.querySelector('.checkout-dados .endereco-campos') && !document.querySelector('.resumo .endereco-campos, .resumo-total')"));
     if (width === 375) {
       await texto(c, 'Consultando endereço cadastrado');
       await preencher(4, 'Digitado durante a consulta');
@@ -152,7 +159,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       await c.ev('window.confirm = () => true');
       for (const [i, valor, original] of [[2, 'Caxias do Sul', 'Vacaria'], [1, 'SP', 'RS'], [0, '99999999', '95200000']]) {
         await preencher(i, valor);
-        await clicar(c, 'Solicitar cotação');
+        await clicar(c, 'Solicitar cotação de frete');
         await texto(c, i === 0 ? 'CEP não encontrado' : 'O CEP precisa corresponder ao município informado');
         await preencher(i, original);
       }
@@ -160,7 +167,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     }
     await c.ev('window.confirm = () => true');
     const perdaSolicitacao = width === 375 ? c.perderResposta('/api/cotacoes-correios') : null;
-    await clicar(c, 'Solicitar cotação');
+    await clicar(c, 'Solicitar cotação de frete');
     if (perdaSolicitacao) {
       await texto(c, 'Resultado incerto');
       assert.equal(perdaSolicitacao.status[0], 201);

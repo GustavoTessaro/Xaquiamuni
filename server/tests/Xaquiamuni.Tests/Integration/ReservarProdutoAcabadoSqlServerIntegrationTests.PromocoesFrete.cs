@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Dominio.Entidades;
+using Xaquiamuni.Dominio.Estoque;
 using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Tests.Integration;
@@ -17,8 +18,13 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         await using var db = banco.CreateVerificationContext();
         var clienteId = await CriarClienteCompraAsync(db);
         var (produto, variante, _) = await CriarProdutoCompravelAsync(db, categoriaAnteriorAVersao: true);
-        await EntrarAsync(db, variante.Id, 2);
-        var pedido = (await Compra(db).ExecuteAsync(new(clienteId, Guid.NewGuid(), [new(produto.Id, variante.Id, 1)]))).Pedido!;
+        var lote = (await EntrarAsync(db, variante.Id, 2)).Lote!;
+        // A base anterior às promoções ainda não tem as colunas lidas pelo checkout atual.
+        var pedido = Pedido.Criar(clienteId, Agora,
+            [new DadosItemPedido(produto.Id, variante.Id, "Sabonete", "Padrão", 1, 250)]);
+        db.Pedidos.Add(pedido);
+        db.ReservasProdutoAcabado.Add(ReservaProdutoAcabado.Criar(pedido.Id, variante.Id, lote.Id, 1, Agora));
+        await db.SaveChangesAsync();
         await db.Database.MigrateAsync();
         using var factory = CriarApiPedidos(banco);
         using var admin = ClienteHttpPedidos(factory, Responsavel, XaquiamuniRoles.Administrador);

@@ -1,0 +1,103 @@
+.checkout-dados {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.checkout-cabecalho, .checkout-item, .resumo-linha {
+  display: flex;
+  align-items: start;
+  gap: .75rem;
+}
+
+.checkout-cabecalho, .resumo-linha {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.checkout-item {
+  min-width: 0;
+}
+
+.checkout-item h3 {
+  font-weight: 650;
+}
+
+.checkout-item img, .foto-vazia {
+  flex: none;
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: var(--brand-radius-sm);
+  border: 1px solid var(--brand-line);
+  object-fit: cover;
+}
+
+.foto-vazia {
+  background: var(--brand-surface);
+}
+
+.modalidade {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  gap: .65rem;
+  padding: .75rem;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius-sm);
+  cursor: pointer;
+}
+
+.modalidade :is(strong, span) { display: block; }
+.modalidade input { accent-color: var(--brand-action); }
+.modalidade:has(input:checked) {
+  border-color: var(--brand-action);
+  box-shadow: inset 0 0 0 1px var(--brand-action);
+}
+.modalidade:has(input:disabled) { cursor: default; }
+.modalidade svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.endereco-campos {
+  display: grid;
+  min-width: 0;
+  gap: .75rem;
+}
+
+.campo-endereco label { display: block; font-weight: 550; }
+.campo-endereco input {
+  min-height: 44px;
+  margin-block: .25rem;
+  border: 1px solid var(--brand-line);
+  border-radius: var(--brand-radius-sm);
+  padding-inline: .75rem;
+  background: var(--brand-surface);
+  color: var(--brand-green);
+  box-shadow: inset 0 0 0 1px var(--brand-line);
+}
+
+.secundaria {
+  justify-self: start;
+  min-height: 44px;
+  padding: .5rem .75rem;
+  border: 1px solid currentColor;
+  border-radius: var(--brand-radius-sm);
+  color: var(--brand-link);
+}
+.secundaria:disabled { opacity: .65; }
+.checkout-acao { width: 100%; font-weight: 700; }
+.resumo-total {
+  border-top: 1px solid var(--brand-line);
+  padding-top: .75rem;
+  font-size: 1.15rem;
+}
+
+@media (min-width: 640px) {
+  .endereco-campos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .campo-amplo, .campo-cep { grid-column: 1 / -1; }
+}
