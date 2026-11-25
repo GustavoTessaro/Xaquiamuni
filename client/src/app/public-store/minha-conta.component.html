@@ -41,6 +41,10 @@
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>
           <strong>Meu endereço</strong><span>Cadastre ou atualize seu endereço padrão.</span>
         </a>
+        <a href="#conta-seguranca">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3m-4 4v2"/></svg>
+          <strong>Segurança da conta</strong><span>Solicite um link para alterar sua senha.</span>
+        </a>
         @if (contatos()?.whatsApp || contatos()?.email) {
           <a href="#conta-contato">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19l1-4a9 9 0 1 1 4 4l-5 1zM8 12h8"/></svg>
@@ -147,6 +151,25 @@
       @if (conflito() || (erro() && !salvando())) {
         <button type="button" (click)="recarregar()">Recarregar dados</button>
       }
+      <section id="conta-seguranca" class="conta-seguranca" tabindex="-1" aria-labelledby="conta-seguranca-titulo">
+        <h2 id="conta-seguranca-titulo">Segurança da conta</h2>
+        <h3>Alterar minha senha</h3>
+        @if (atual.perfil.email; as email) {
+          <p>E-mail cadastrado: <strong>{{ email }}</strong></p>
+          <p>Para sua segurança, enviaremos um link de redefinição de senha para o e-mail cadastrado na sua conta.</p>
+          <div class="conta-acoes">
+            <button type="button" class="conta-acao-principal" (click)="solicitarSenha()"
+              [disabled]="!conta.session() || solicitandoSenha()" [attr.aria-busy]="solicitandoSenha()">
+              {{ solicitandoSenha() ? 'Solicitando…' : 'Solicitar alteração de senha' }}
+            </button>
+          </div>
+          @if (retornoSenha(); as retorno) {
+            <p [attr.role]="retorno.tipo === 'erro' ? 'alert' : 'status'">{{ retorno.mensagem }}</p>
+          }
+        } @else {
+          <p>O e-mail cadastrado está indisponível. Tente recarregar os dados da conta.</p>
+        }
+      </section>
       @if (contatos()?.whatsApp || contatos()?.email) {
         <app-contato-loja ancora="conta-contato" descricao="Tire dúvidas sobre produtos e compras." />
       }

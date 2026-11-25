@@ -1158,6 +1158,7 @@ try {
           return document.documentElement.scrollWidth <= innerWidth
             && (cores[1] + .05) / (cores[0] + .05) >= 4.5;
         })()`), 'Contraste ou largura em ' + tema + ' a ' + width + ' px');
+        assert.ok(await conta.ev("!!document.querySelector('#conta-seguranca button') && document.documentElement.scrollWidth <= innerWidth"));
         for (const rotulo of ['Editar dados pessoais', 'Editar endereço padrão']) {
           await conta.ev(`document.querySelector('button[aria-label="' + ${JSON.stringify(rotulo)} + '"]').click()`);
           await waitFor(() => conta.ev("!!document.querySelector('.conta form input')"), rotulo);
@@ -2031,11 +2032,10 @@ try {
         const { cep, uf, cidade, bairro, logradouro, numero, complemento } = endereco;
         const postal = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade, bairro, logradouro, numero, complemento } });
         const invalida = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade: 'Outro município', bairro, logradouro, numero } });
-        const recuperacao = await post('/api/auth/forgot-password', { email: ${JSON.stringify(cliente.Email)} });
         const indisponivel = await post('/api/checkout/cotacoes-entrega', { itens, endereco: { cep: '99999998', uf, cidade, bairro, logradouro, numero } });
         const falha = await indisponivel.json();
         return { modalidades, cep, uf, cidade, ofertas, ofertasOutra, falha,
-          postal: postal.status, invalida: invalida.status, recuperacao: recuperacao.status };
+          postal: postal.status, invalida: invalida.status };
       })()`);
       assert.deepEqual([resultado.cep, resultado.uf, resultado.cidade], ['88500000', 'SC', 'Lages']);
       assert.ok(resultado.modalidades.retiradaLocal && resultado.modalidades.entregaPropria && resultado.modalidades.correiosCotacaoManual);
@@ -2043,11 +2043,92 @@ try {
       assert.deepEqual(resultado.ofertasOutra, ['RetiradaLocal']);
       assert.equal(resultado.falha.motivoEntregaPropriaIndisponivel, 'cep_indisponivel');
       assert.deepEqual(resultado.falha.ofertas.map(o => o.modalidade), ['RetiradaLocal']);
-      assert.deepEqual([resultado.postal, resultado.invalida, resultado.recuperacao], [201, 400, 202]);
+      assert.deepEqual([resultado.postal, resultado.invalida], [201, 400]);
+      const rotaSolicitacao = '/api/clientes/me/seguranca/alteracao-senha';
+      const perfil = navegador => navegador.ev("fetch('/api/clientes/me/perfil').then(r => r.json())");
+      const cotacoes = navegador => navegador.ev("fetch('/api/cotacoes-correios').then(r => r.json())");
+      const antes = await perfil(c);
+      const cotacoesAntes = await cotacoes(c);
+      const sessaoAnterior = await abrir('/login');
+      await login(sessaoAnterior, cliente, '/api/auth');
+      await sessaoAnterior.ir('/');
+      await waitFor(() => sessaoAnterior.ev("!!document.querySelector('footer a[href=\"/minha-conta\"]')"), 'Rodapé da sessão anterior');
+      const outro = await abrir('/login');
+      await login(outro, dados.outroCliente, '/api/auth');
+      assert.equal(await a.ev(`(async () => {
+        const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+        return (await fetch(${JSON.stringify(rotaSolicitacao)}, { method: 'POST',
+          headers: { 'X-XSRF-TOKEN': requestToken } })).status;
+      })()`), 403);
+
+      await call('Page.bringToFront', {}, c.sessionId);
+      await c.ir('/minha-conta');
+      await waitFor(() => c.ev(`document.querySelector('#conta-seguranca')?.textContent.includes(${JSON.stringify(cliente.Email)})`), 'Destinatário em Minha conta');
+      for (const width of [375, 1280]) {
+        await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, c.sessionId);
+        assert.ok(await c.ev('document.documentElement.scrollWidth <= innerWidth'));
+        await c.ev("document.querySelector('#conta-seguranca').focus()");
+        for (const type of ['keyDown', 'keyUp']) {
+          await call('Input.dispatchKeyEvent', { type, key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, c.sessionId);
+        }
+        assert.ok(await c.ev("document.activeElement.matches('#conta-seguranca button:focus-visible')"));
+      }
+      await c.ev("document.querySelector('#conta-seguranca button').click()");
+      await waitFor(() => c.ev("document.querySelector('#conta-seguranca [role=status]')?.textContent.includes('Solicitação aceita')"), 'Solicitação autenticada aceita');
+      assert.equal(await c.ev("fetch('/api/auth/me').then(r => r.status)"), 200);
       const recuperacao = new URL(await checkpoint('recuperacao'));
       assert.equal(recuperacao.origin, origin);
       assert.equal(recuperacao.pathname, '/reset-password');
+      const caminhoReset = recuperacao.pathname + recuperacao.hash;
       assert.ok(new URLSearchParams(recuperacao.hash.slice(1)).get('token'));
+      const semSessao = await abrir(caminhoReset);
+      await waitFor(() => semSessao.ev("!!document.querySelector('#new-password') && !location.hash"), 'Link abre sem sessão e limpa o fragmento');
+      await outro.ir(caminhoReset);
+      await waitFor(() => outro.ev("!!document.querySelector('#new-password') && !location.hash"), 'Link abre com sessão de outro cliente');
+
+      await c.ir(caminhoReset);
+      await waitFor(() => c.ev("!!document.querySelector('#new-password') && !location.hash"), 'Link abre com a sessão do titular');
+      for (const width of [375, 1280]) {
+        await call('Emulation.setDeviceMetricsOverride', { width, height: 900, mobile: false, deviceScaleFactor: 1 }, c.sessionId);
+        assert.ok(await c.ev("document.documentElement.scrollWidth <= innerWidth && document.querySelector('#new-password').labels.length === 1"));
+      }
+      const nova = await c.ev("'Nova!' + crypto.randomUUID() + 'a1'");
+      async function confirmarSenha(navegador, senha, confirmacao = senha) {
+        await navegador.ev(`(() => {
+          for (const [id, valor] of Object.entries(${JSON.stringify({ 'new-password': senha, 'confirm-password': confirmacao })})) {
+            const campo = document.getElementById(id);
+            campo.value = valor;
+            campo.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+          document.querySelector('form').requestSubmit();
+        })()`);
+      }
+      await confirmarSenha(c, nova, nova + 'X');
+      await waitFor(() => c.ev("document.querySelector('#confirm-password-error')?.textContent.includes('não coincidem')"), 'Confirmação divergente');
+      await confirmarSenha(c, nova);
+      await waitFor(() => c.ev("document.querySelector('#success-title')?.textContent.includes('Senha redefinida')"), 'Redefinição concluída');
+      assert.equal(await sessaoAnterior.ev("fetch('/api/clientes/me/perfil').then(r => r.status)"), 401);
+      await call('Page.bringToFront', {}, sessaoAnterior.sessionId);
+      await sessaoAnterior.ev("document.dispatchEvent(new Event('visibilitychange'))");
+      await waitFor(() => sessaoAnterior.ev("!!document.querySelector('footer a[href^=\"/login\"]') && !document.querySelector('header a[href=\"/minha-conta\"]')"), 'Navegação volta ao estado de visitante');
+      await sessaoAnterior.ir('/minha-conta');
+      await waitFor(() => sessaoAnterior.ev("location.pathname === '/login'"), 'Conta protegida após redefinição');
+      assert.equal(await outro.ev("fetch('/api/clientes/me/perfil').then(r => r.status)"), 200);
+
+      await confirmarSenha(semSessao, nova);
+      await waitFor(() => semSessao.ev("!!document.querySelector('#invalid-title')"), 'Link utilizado rejeitado');
+      await c.ev("document.querySelector('main a[href=\"/login\"]').click()");
+      await waitFor(() => c.ev("location.pathname === '/login'"), 'Voltar ao login');
+      assert.equal(await c.ev(`(async () => {
+        const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+        return (await fetch('/api/auth/login', { method: 'POST',
+          headers: { 'X-XSRF-TOKEN': requestToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify(${JSON.stringify({ email: cliente.Email, senha: cliente.Senha })}),
+        })).status;
+      })()`), 401);
+      await login(c, { ...cliente, Senha: nova }, '/api/auth');
+      assert.deepEqual(await perfil(c), antes);
+      assert.deepEqual(await cotacoes(c), cotacoesAntes);
       console.log('Demonstração: três modalidades, CEP determinístico e recuperação de senha local conferidos.');
     }
     console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');

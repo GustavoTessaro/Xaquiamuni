@@ -276,7 +276,7 @@ describe('ResetPasswordComponent', () => {
     page.detectChanges();
     expect(page.nativeElement.textContent).toContain('Senha redefinida com sucesso');
     expect(page.nativeElement.textContent)
-      .toContain('Sua senha foi atualizada. Você já pode entrar na sua conta com a nova senha.');
+      .toContain('Sua senha foi alterada. Entre novamente utilizando sua nova senha.');
     expect(page.nativeElement.querySelector('form')).toBeNull();
     expect(page.nativeElement.textContent).not.toContain(email);
     expect(page.nativeElement.textContent).not.toContain(token);
@@ -484,7 +484,7 @@ describe('ResetPasswordComponent', () => {
 
     expect(page.nativeElement.textContent).toContain('Link de recuperação inválido');
     expect(page.nativeElement.textContent)
-      .toContain('Este link de recuperação é inválido ou não está mais disponível.');
+      .toContain('Este link pode ter expirado, já ter sido utilizado ou ser inválido.');
     expect(page.nativeElement.textContent).not.toContain('private account or token information');
     expect(page.nativeElement.textContent).not.toContain(email);
     expect(page.nativeElement.textContent).not.toContain(token);

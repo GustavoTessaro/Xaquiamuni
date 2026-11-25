@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
 using Xaquiamuni.Aplicacao.Autenticacao;
 using Xaquiamuni.Aplicacao.Cadastro;
@@ -14,6 +15,7 @@ public static class AuthEndpoints
     public const string ConfirmEmailEndpoint = "/api/auth/confirm-email";
     public const string ResendConfirmationEmailEndpoint = "/api/auth/resend-confirmation-email";
     public const string ForgotPasswordEndpoint = "/api/auth/forgot-password";
+    public const string RequestPasswordChangeEndpoint = "/api/clientes/me/seguranca/alteracao-senha";
     public const string ResetPasswordEndpoint = "/api/auth/reset-password";
     public const string LoginEndpoint = "/api/auth/login";
     public const string MeEndpoint = "/api/auth/me";
@@ -63,6 +65,17 @@ public static class AuthEndpoints
             .Produces<ForgotPasswordResponse>(StatusCodes.Status202Accepted)
             .ProducesValidationProblem(StatusCodes.Status400BadRequest)
             .ProducesProblem(StatusCodes.Status500InternalServerError);
+
+        endpoints.MapPost(RequestPasswordChangeEndpoint, RequestPasswordChangeAsync)
+            .RequireAuthorization(AuthorizationPolicies.ClienteAutenticado)
+            .RequireXaquiamuniAntiforgery()
+            .RequireRateLimiting(ResendConfirmationEmailRateLimiting.ForgotPasswordPolicyName)
+            .WithName("RequestClientPasswordChange")
+            .Produces<ForgotPasswordResponse>(StatusCodes.Status202Accepted)
+            .ProducesProblem(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status429TooManyRequests);
 
         endpoints.MapPost(ResetPasswordEndpoint, ResetPasswordAsync)
             .AllowAnonymous()
@@ -304,14 +317,32 @@ public static class AuthEndpoints
                 },
                 title: "Requisição inválida",
                 statusCode: StatusCodes.Status400BadRequest),
-            SolicitarRecuperacaoSenhaStatus.RequestProcessed =>
-                Results.Accepted(value: new ForgotPasswordResponse(
-                    "Se existir uma conta elegível para recuperação, você receberá instruções para redefinir sua senha.")),
+            SolicitarRecuperacaoSenhaStatus.RequestProcessed => PasswordRecoveryAccepted(),
             _ => throw new ArgumentOutOfRangeException(
                 nameof(result),
                 "The password recovery use case returned an unsupported result.")
         };
     }
+
+    private static async Task<IResult> RequestPasswordChangeAsync(HttpContext context,
+        ISolicitarRecuperacaoSenha recuperar, CancellationToken ct)
+    {
+        if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var clienteId)
+            || clienteId == Guid.Empty)
+            return Results.Unauthorized();
+
+        if (context.Features.Get<IHttpRequestBodyDetectionFeature>()
+            is { CanHaveBody: true })
+            return Results.Problem(statusCode: StatusCodes.Status400BadRequest,
+                title: "A solicitação não aceita dados adicionais.");
+
+        await recuperar.ParaClienteAsync(clienteId, ct).ConfigureAwait(false);
+        return PasswordRecoveryAccepted();
+    }
+
+    private static IResult PasswordRecoveryAccepted() =>
+        Results.Accepted(value: new ForgotPasswordResponse(
+            "Se existir uma conta elegível para recuperação, você receberá instruções para redefinir sua senha."));
 
     private static async Task<IResult> ResetPasswordAsync(
         ResetPasswordRequest? request,

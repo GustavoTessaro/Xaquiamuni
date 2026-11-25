@@ -86,6 +86,7 @@ app.Use(async (context, next) =>
                 StringComparison.OrdinalIgnoreCase);
 
     if (isAuthenticationWrite || isCurrentClientRequest
+        || context.Request.Path == AuthEndpoints.RequestPasswordChangeEndpoint
         || context.Request.Path.StartsWithSegments(PedidosClienteEndpoints.BasePath)
         || context.Request.Path.StartsWithSegments(AdminPedidosEndpoints.BasePath)
         || context.Request.Path.StartsWithSegments(PagamentoPixManualEndpoints.AdminPath))

@@ -6,9 +6,10 @@ import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal 
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subscription, fromEvent } from 'rxjs';
+import { Subscription, finalize, fromEvent, timeout } from 'rxjs';
 import { PerfilClienteService, type PerfilClienteVersionado } from '../core/perfil-cliente.service';
 
+import { AuthService } from '../core/auth/auth.service';
 import { StoreCustomerSession } from './store-customer-session.service';
 import { ContatoLojaComponent, ContatoLojaPublicado } from './contato-loja.component';
 
@@ -29,12 +30,14 @@ export class MinhaContaComponent {
   protected readonly conta = inject(StoreCustomerSession);
   protected readonly contatos = toSignal(inject(ContatoLojaPublicado).contatos);
   protected readonly formatarCep = formatarCep;
+  private readonly auth = inject(AuthService);
   private readonly perfil = inject(PerfilClienteService);
   private readonly documento = inject(DOCUMENT);
   private readonly fb = inject(FormBuilder).nonNullable;
   private readonly destroyRef = inject(DestroyRef);
   private consulta?: Subscription;
   private gravacao?: Subscription;
+  private solicitacaoSenha?: Subscription;
 
   protected readonly estado = signal<Estado>({ tipo: 'carregando' });
   protected readonly editando = signal<'perfil' | 'endereco' | null>(null);
@@ -43,6 +46,8 @@ export class MinhaContaComponent {
   protected readonly aviso = signal('');
   protected readonly erro = signal('');
   protected readonly erros = signal<Record<string, string[]>>({});
+  protected readonly solicitandoSenha = signal(false);
+  protected readonly retornoSenha = signal<{ tipo: 'aceita' | 'erro'; mensagem: string } | null>(null);
   protected readonly dados = this.fb.group({ nomeCompleto: ['', Validators.required], telefone: ['', Validators.required] });
   protected readonly camposEndereco = [
     { chave: 'cep', rotulo: 'CEP', autocomplete: 'postal-code' },
@@ -66,6 +71,10 @@ export class MinhaContaComponent {
     effect(() => {
       if (this.conta.loading()) return;
       const atual = this.conta.session()?.userId ?? null;
+      if (titular !== undefined && titular !== atual) {
+        this.solicitacaoSenha?.unsubscribe();
+        this.retornoSenha.set(null);
+      }
       if (!atual) {
         this.consulta?.unsubscribe();
         this.gravacao?.unsubscribe();
@@ -98,6 +107,35 @@ export class MinhaContaComponent {
         const tipo = this.classificarErro(erro);
         if (tipo === 'sessao') this.conta.invalidar();
         this.estado.set({ tipo });
+      },
+    });
+  }
+
+  protected solicitarSenha(): void {
+    if (!this.conta.session() || this.solicitandoSenha()) return;
+    this.solicitandoSenha.set(true);
+    this.retornoSenha.set(null);
+    this.solicitacaoSenha = this.auth.solicitarAlteracaoSenha().pipe(
+      timeout(15_000),
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => this.solicitandoSenha.set(false)),
+    ).subscribe({
+      next: () => this.retornoSenha.set({
+        tipo: 'aceita',
+        mensagem: 'Solicitação aceita. Verifique a caixa de entrada e a pasta de spam do e-mail cadastrado.',
+      }),
+      error: (erro: unknown) => {
+        const status = erro instanceof HttpErrorResponse ? erro.status : 0;
+        if (status === 401 || status === 403) {
+          this.conta.invalidar();
+          return;
+        }
+        this.retornoSenha.set({
+          tipo: 'erro',
+          mensagem: status === 429
+            ? 'Muitas solicitações. Aguarde antes de tentar novamente.'
+            : 'Não foi possível confirmar a solicitação. Verifique seu e-mail antes de tentar novamente.',
+        });
       },
     });
   }

@@ -1,9 +1,9 @@
-import { provideHttpClient } from '@angular/common/http';
+import { HttpErrorResponse, provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { BehaviorSubject, of } from 'rxjs';
+import { BehaviorSubject, Subject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { routes } from '../app.routes';
 import { AtendimentoService } from '../core/atendimento.service';
@@ -23,17 +23,22 @@ const perfil = {
 describe('Minha conta', () => {
   let http: HttpTestingController;
   let autenticado: boolean;
+  let alteracao: Subject<void>;
+  let solicitarAlteracaoSenha: ReturnType<typeof vi.fn>;
   let canais: BehaviorSubject<{ whatsApp: string | null; emailComercial: string | null }>;
   const conta = routes.find(r => r.path === '' && r.children)?.children?.find(r => r.path === 'minha-conta')!;
 
   beforeEach(() => {
     autenticado = true;
+    alteracao = new Subject<void>();
+    solicitarAlteracaoSenha = vi.fn(() => alteracao);
     canais = new BehaviorSubject<{ whatsApp: string | null; emailComercial: string | null }>({ whatsApp: null, emailComercial: null });
     TestBed.configureTestingModule({ providers: [
       provideHttpClient(), provideHttpClientTesting(),
       provideRouter([conta, ...['', 'login', 'pedidos', 'cotacoes-correios', 'produtos']
         .map(path => ({ path, component: StoreHeaderComponent }))]),
       { provide: AuthService, useValue: {
+        solicitarAlteracaoSenha,
         obterSessao: () => of(autenticado ? { userId: 'cliente' } : null),
         logout: () => { autenticado = false; return of(undefined); },
       } },
@@ -55,10 +60,40 @@ describe('Minha conta', () => {
     }
     expect(tela.routeNativeElement?.textContent).not.toContain('CPF');
     expect([...tela.routeNativeElement!.querySelectorAll('nav a')].map(a => a.getAttribute('href')))
-      .toEqual(['/pedidos', '/cotacoes-correios', '#conta-dados-pessoais', '#conta-endereco-padrao']);
+      .toEqual(['/pedidos', '/cotacoes-correios', '#conta-dados-pessoais', '#conta-endereco-padrao', '#conta-seguranca']);
     expect(tela.routeNativeElement?.textContent).toContain('Olá, Cliente Teste!');
     tela.routeNativeElement!.querySelector<HTMLAnchorElement>('nav a')!.click();
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/pedidos'));
+  });
+
+  it.each([202, 429, 0, 401])('solicita a alteração somente uma vez por envio e trata HTTP %i', async (status) => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    http.expectOne(api).flush(perfil);
+    tela.detectChanges();
+    const painel = () => tela.routeNativeElement!.querySelector<HTMLElement>('#conta-seguranca');
+    expect(painel()?.textContent).toContain(perfil.email);
+    expect(painel()?.querySelector('input')).toBeNull();
+    const botao = painel()!.querySelector('button')!;
+    botao.click();
+    botao.click();
+    tela.detectChanges();
+    expect(solicitarAlteracaoSenha).toHaveBeenCalledExactlyOnceWith();
+    expect(botao.disabled).toBe(true);
+    if (status === 202) {
+      alteracao.next();
+      alteracao.complete();
+    } else {
+      alteracao.error(new HttpErrorResponse({ status }));
+    }
+    tela.detectChanges();
+    if (status === 401) {
+      expect(painel()).toBeNull();
+      expect(tela.routeNativeElement?.textContent).not.toContain(perfil.email);
+    } else {
+      expect(botao.disabled).toBe(false);
+      expect(painel()?.textContent).toContain(status === 202 ? 'pasta de spam' : status === 429
+        ? 'Muitas solicitações' : 'Não foi possível confirmar');
+    }
   });
 
   it('oferece cadastro de endereço e omite canais comerciais indisponíveis', async () => {

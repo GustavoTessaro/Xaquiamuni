@@ -92,6 +92,15 @@ export class AuthService {
     );
   }
 
+  solicitarAlteracaoSenha(): Observable<void> {
+    return this.postWithCsrf<null, void>(
+      '/api/clientes/me/seguranca/alteracao-senha',
+      null,
+      202,
+      () => undefined,
+    );
+  }
+
   resetPassword(request: ResetPasswordRequest): Observable<void> {
     return this.postWithCsrf<ResetPasswordRequest, void>(
       '/api/auth/reset-password',

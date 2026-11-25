@@ -675,6 +675,10 @@ public sealed class AuthPasswordRecoveryRateLimitingTests
 
         public int Calls => Volatile.Read(ref _calls);
 
+        public Task<SolicitarRecuperacaoSenhaResult> ParaClienteAsync(
+            Guid clienteId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<SolicitarRecuperacaoSenhaResult> ExecuteAsync(
             string? email,
             CancellationToken cancellationToken = default)

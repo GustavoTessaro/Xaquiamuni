@@ -22,7 +22,8 @@ dd { margin: 0 0 0.65rem; }
   margin-block-start: 1rem;
 }
 
-.conta-dados section {
+.conta-dados section,
+.conta-seguranca {
   border: 1px solid var(--brand-line);
   border-radius: 0.75rem;
   padding: 1rem;
@@ -30,6 +31,8 @@ dd { margin: 0 0 0.65rem; }
   color: var(--brand-ink);
 }
 
+.conta-seguranca { margin-block-start: 1rem; }
+.conta-seguranca h3 { margin-block-start: 0.75rem; font-weight: 700; }
 address { font-style: normal; line-height: 1.6; }
 .conta-boas-vindas { margin-block-end: 1.25rem; }
 .conta-saudacao { font-family: var(--brand-display); font-size: 1.5rem; }
@@ -97,15 +100,15 @@ input {
 input[aria-invalid='true'] { border-color: var(--brand-error); }
 button:disabled { color: var(--brand-disabled); cursor: not-allowed; }
 .conta-acoes { display: flex; gap: 1rem; flex-wrap: wrap; margin-block-start: 0.5rem; }
-.conta-acoes button[type='submit'] {
+.conta-acoes button:is([type='submit'], .conta-acao-principal) {
   border-radius: var(--brand-radius-sm);
   background: var(--brand-action);
   color: var(--brand-surface);
   padding: 0.5rem 0.85rem;
   text-decoration: none;
 }
-.conta-acoes button[type='submit']:hover:not(:disabled) { background: var(--brand-action-hover); }
-.conta-acoes button[type='submit']:disabled { background: var(--brand-disabled); }
+.conta-acoes button:is([type='submit'], .conta-acao-principal):hover:not(:disabled) { background: var(--brand-action-hover); }
+.conta-acoes button:is([type='submit'], .conta-acao-principal):disabled { background: var(--brand-disabled); }
 
 a:focus-visible, button:focus-visible, input:focus-visible, section:focus-visible {
   outline: 2px solid var(--brand-focus);

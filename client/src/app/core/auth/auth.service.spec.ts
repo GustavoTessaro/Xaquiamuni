@@ -238,6 +238,18 @@ describe('AuthService', () => {
     http.expectNone('/api/auth/me');
   });
 
+  it('solicita a alteração autenticada com CSRF e sem enviar dados de destinatário', () => {
+    const aceitou = vi.fn();
+    service.solicitarAlteracaoSenha().subscribe(aceitou);
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'alteracao-token' });
+    const requisicao = http.expectOne('/api/clientes/me/seguranca/alteracao-senha');
+    expect(requisicao.request.method).toBe('POST');
+    expect(requisicao.request.headers.get('X-XSRF-TOKEN')).toBe('alteracao-token');
+    expect(requisicao.request.body).toBeNull();
+    requisicao.flush({ message: 'Solicitação aceita' }, { status: 202, statusText: 'Accepted' });
+    expect(aceitou).toHaveBeenCalledOnce();
+  });
+
   it('gets the CSRF request token before posting forgot password and preserves the 202 response', () => {
     let response: ForgotPasswordResponse | undefined;
     const email = 'cliente+tag@example.test';

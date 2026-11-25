@@ -118,7 +118,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                 Assert.Contains("20261121101248_RegistrarPrecoAceitoPedido", await database.GetAppliedMigrationsAsync());
             }
             var script = Path.Combine(EncontrarRepositorio(), "server", "tests", "Xaquiamuni.Tests", "Integration", "chrome-compra-smoke.mjs");
-            var outroCliente = cnpj ? await demo.Host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
+            var outroCliente = await demo.Host.CriarContaAsync(XaquiamuniRoles.Cliente);
             await RodarChromeAsync(script, new
             {
                 origin = demo.Host.Origin, pinSpki = demo.Host.PinSpki, chromePath = DemonstracaoLocal.CaminhoChrome(),

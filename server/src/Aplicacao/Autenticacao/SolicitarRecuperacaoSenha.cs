@@ -38,8 +38,15 @@ public sealed class SolicitarRecuperacaoSenha : ISolicitarRecuperacaoSenha
             return SolicitarRecuperacaoSenhaResult.RequestProcessed();
         }
 
+        return await ParaClienteAsync(userId.Value, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<SolicitarRecuperacaoSenhaResult> ParaClienteAsync(
+        Guid clienteId,
+        CancellationToken cancellationToken = default)
+    {
         var outboxResult = await _passwordResetOutbox
-            .RequestAsync(userId.Value, cancellationToken)
+            .RequestAsync(clienteId, cancellationToken)
             .ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
 

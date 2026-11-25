@@ -44,6 +44,57 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
     private static readonly IPAddress TestRemoteIpAddress = IPAddress.Parse("203.0.113.80");
 
     [SqlServerIntegrationFact]
+    public async Task PasswordChange_UsesAuthenticatedIdentityCsrfAndSharedRecoveryLimits()
+    {
+        await using var environment = await CreateEnvironmentAsync();
+        var conta = await CreateRegisteredClientAsync(environment.Database);
+        var outra = await CreateIdentityUserAsync(environment.Database, emailConfirmed: true);
+        await ConfirmAccountAsync(environment.Database, conta);
+        using var cliente = environment.CreateClient();
+        var csrfAnonimo = await GetAntiforgeryAsync(cliente);
+        var login = await LoginAsync(cliente, csrfAnonimo, conta.Email, OriginalPassword);
+        Assert.Equal(HttpStatusCode.NoContent, login.StatusCode);
+        var cookie = Assert.IsType<string>(login.AuthCookie);
+        var csrfCliente = await GetAntiforgeryAsync(cliente, cookie);
+        var antes = await ReadUserStateAsync(environment.Database, conta.Id);
+
+        using var outraOrigem = environment.CreateClient(IPAddress.Parse("203.0.113.81"));
+        using var anonimo = await outraOrigem.PostAsync(AuthEndpoints.RequestPasswordChangeEndpoint, null);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+        using var semToken = new HttpRequestMessage(HttpMethod.Post, AuthEndpoints.RequestPasswordChangeEndpoint);
+        semToken.Headers.Add("Cookie", cookie);
+        using var semCsrf = await outraOrigem.SendAsync(semToken);
+        Assert.Equal(HttpStatusCode.BadRequest, semCsrf.StatusCode);
+        using var destinatario = await SendJsonAsync(outraOrigem, AuthEndpoints.RequestPasswordChangeEndpoint,
+            new { email = outra.Email, clienteId = outra.Id }, csrfCliente);
+        Assert.Equal(HttpStatusCode.BadRequest, destinatario.StatusCode);
+
+        using var aceita = await SolicitarAsync();
+        await AssertForgotAcceptedAsync(aceita);
+        using var sessao = await GetMeAsync(cliente, cookie);
+        Assert.Equal(HttpStatusCode.OK, sessao.StatusCode);
+        AssertSameCredentialState(antes, await ReadUserStateAsync(environment.Database, conta.Id));
+
+        for (var i = 0; i < 9; i++)
+        {
+            using var repeticao = await SendForgotPasswordAsync(cliente, csrfAnonimo, conta.Email);
+            await AssertForgotAcceptedAsync(repeticao);
+        }
+        using var limitada = await SolicitarAsync();
+        Assert.Equal(HttpStatusCode.TooManyRequests, limitada.StatusCode);
+        Assert.NotNull(limitada.Headers.RetryAfter);
+        Assert.Single(await ReadResetMessagesAsync(environment.Database, conta.Id));
+        Assert.Empty(await ReadResetMessagesAsync(environment.Database, outra.Id));
+
+        async Task<HttpResponseMessage> SolicitarAsync()
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Post, AuthEndpoints.RequestPasswordChangeEndpoint);
+            AddAntiforgery(request, csrfCliente);
+            return await cliente.SendAsync(request);
+        }
+    }
+
+    [SqlServerIntegrationFact]
     public async Task ForgotAndResetEndpoints_ProcessRealEmailAndInvalidatePreviousSession()
     {
         await using var environment = await CreateEnvironmentAsync();
@@ -1400,15 +1451,17 @@ public sealed class AuthPasswordRecoverySqlServerIntegrationTests
         Assert.Equal(expected.EmailConfirmed, actual.EmailConfirmed);
     }
 
-    private static async Task<AntiforgeryState> GetAntiforgeryAsync(HttpClient client)
+    private static async Task<AntiforgeryState> GetAntiforgeryAsync(HttpClient client, string? sessao = null)
     {
-        using var response = await client.GetAsync(AntiforgeryConfiguration.TokenEndpoint);
+        using var request = new HttpRequestMessage(HttpMethod.Get, AntiforgeryConfiguration.TokenEndpoint);
+        if (sessao is not null) request.Headers.Add("Cookie", sessao);
+        using var response = await client.SendAsync(request);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var requestToken = document.RootElement.GetProperty("requestToken").GetString();
         Assert.False(string.IsNullOrWhiteSpace(requestToken));
         var cookie = FindCookiePair(response, AntiforgeryConfiguration.CookieName);
-        return new AntiforgeryState(requestToken!, cookie);
+        return new AntiforgeryState(requestToken!, sessao is null ? cookie : $"{sessao}; {cookie}");
     }
 
     private static async Task<LoginResult> LoginAsync(

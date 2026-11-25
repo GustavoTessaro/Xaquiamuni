@@ -293,6 +293,10 @@ public sealed class AuthForgotPasswordEndpointTests
         public string? LastEmail { get; private set; }
         public CancellationToken LastCancellationToken { get; private set; }
 
+        public Task<SolicitarRecuperacaoSenhaResult> ParaClienteAsync(
+            Guid clienteId, CancellationToken cancellationToken = default) =>
+            throw new NotSupportedException();
+
         public Task<SolicitarRecuperacaoSenhaResult> ExecuteAsync(
             string? email,
             CancellationToken cancellationToken = default)
