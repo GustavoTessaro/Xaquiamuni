@@ -153,6 +153,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                 conexaoMaster = new SqlConnectionStringBuilder(db.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
                 var relogio = jornada ? new RelogioJornadaCompra() : null;
                 await using (var host = new HostE2ECompra(db, dist, temporario, relogio,
+                    promocoesComerciais: modoAdmin,
                     municipiosPorCep: modoAdmin ? new Dictionary<string, string>
                         { ["95200000"] = "4322509", ["90000000"] = "4314902" } : null,
                     municipiosPostais: postal ? new Dictionary<string, MunicipioPostal> { ["95200000"] = new("4322509", "Vacaria", "RS") } : null))
@@ -209,7 +210,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         {
                             Assert.Equal(SituacaoPedido.Entregue, p.Situacao);
                             var retiradaDoCadastro = p.Entrega!.Destino!.Logradouro == "Rua cadastrada do ensaio";
-                            Assert.Equal(retiradaDoCadastro ? (1199L, 1170L, 2369L) : (1199L, 0L, 1199L),
+                            Assert.Equal(retiradaDoCadastro ? (1099L, 1170L, 2269L) : (1099L, 0L, 1099L),
                                 (p.SubtotalProdutosCentavos, p.FreteCentavos, p.TotalCentavos));
                             Assert.Equal(1300L, p.Entrega.DescontoFrete?.OriginalCentavos);
                             Assert.Equal(retiradaDoCadastro ? 130L : 1300L, p.Entrega.DescontoFrete?.DescontoCentavos);
@@ -226,7 +227,16 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         var reservaIds = reservas.Select(r => (Guid?)r.Id).ToArray();
                         Assert.Equal(2, await verificacao.MovimentosProdutoAcabado.CountAsync(m =>
                             reservaIds.Contains(m.ReservaProdutoAcabadoId)));
-                        output.WriteLine("SQL: snapshots de 1199 + 1170 = 2369 e 1199 + 0 = 1199 centavos, com uma baixa por entrega.");
+                        var itensEntrega = await verificacao.ItensPedido.AsNoTracking()
+                            .Where(i => ids.Contains(i.PedidoId)).ToListAsync();
+                        Assert.Equal(2, itensEntrega.Count);
+                        Assert.All(itensEntrega, i =>
+                        {
+                            Assert.Equal(1199, i.PrecoRegularCentavos);
+                            Assert.Equal(1099, i.PrecoUnitarioCentavos);
+                            Assert.NotNull(i.PromocaoId);
+                        });
+                        output.WriteLine("SQL: snapshots de 1099 + 1170 = 2269 e 1099 + 0 = 1099 centavos, com uma baixa por entrega.");
                     }
                     if (postal)
                     {
