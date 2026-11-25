@@ -227,6 +227,8 @@
                     required (input)="maskCep($event)"
                     [attr.aria-invalid]="fieldInvalid(form.controls.enderecoInicial.controls.cep) || !!serverFieldError('cep')"
                     aria-describedby="cep-error cep-server-error">
+                  <app-consulta-cep [cep]="form.controls.enderecoInicial.controls.cep.value"
+                    (endereco)="form.controls.enderecoInicial.patchValue($event)" />
                   @if (fieldInvalid(form.controls.enderecoInicial.controls.cep)) {
                     <p id="cep-error" class="field-error" role="alert">Informe um CEP com oito dígitos.</p>
                   }

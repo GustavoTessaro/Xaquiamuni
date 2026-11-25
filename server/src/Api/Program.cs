@@ -103,6 +103,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/api/cep/{cep}", async (string cep, Xaquiamuni.Aplicacao.Pedidos.IConsultaCep consulta,
+    HttpContext contexto, CancellationToken ct) =>
+{
+    contexto.Response.Headers.CacheControl = "no-store";
+    var resultado = await consulta.ConsultarAsync(cep, ct);
+    if (resultado.Endereco is { Uf: not null, Cidade: not null } encontrado)
+        return Results.Ok(encontrado);
+    var codigo = resultado.Codigo ?? "cep_nao_encontrado";
+    return Results.Json(new { codigo }, statusCode: codigo switch
+    {
+        "cep_invalido" => 400,
+        "cep_indisponivel" => 503,
+        _ => 404
+    });
+}).AllowAnonymous().RequireRateLimiting(Xaquiamuni.Api.Autenticacao.ResendConfirmationEmailRateLimiting.CepPolicyName);
 app.MapXaquiamuniCsrfEndpoint();
 app.MapXaquiamuniAuthEndpoints();
 app.MapXaquiamuniAdminAuthEndpoints();

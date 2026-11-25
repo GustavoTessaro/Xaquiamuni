@@ -92,9 +92,16 @@
                         [maxlength]="campo.limite" [required]="campo.campo !== 'complemento'"
                         [attr.inputmode]="campo.campo === 'cep' ? 'numeric' : null" />
                     </label>
+                    @if (campo.campo === 'cep') {
+                      <app-consulta-cep [cep]="enderecoFormulario().cep" [contexto]="modalidade()"
+                        (endereco)="aplicarCep($event)" />
+                    }
                   }
                 </fieldset>
               }
+            }
+            @if (mensagensDeEndereco.includes(erro())) {
+              <p role="alert" class="aviso">{{ erro() }}</p>
             }
             @if (modalidade() === 'Correios') {
               <p>A loja calculará o frete para os itens do carrinho e enviará uma proposta em Minhas cotações.</p>
@@ -164,7 +171,7 @@
   @if (checkout.enviando()) {
     <p role="status">Processando a solicitação do pedido…</p>
   }
-  @if (erro()) {
+  @if (erro() && !mensagensDeEndereco.includes(erro())) {
     <p role="alert" class="aviso">{{ erro() }}</p>
   }
 </section>

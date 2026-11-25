@@ -39,7 +39,8 @@ internal sealed class HostE2ECompra : IAsyncDisposable
     public HostE2ECompra(SqlServerTestDatabase banco, string angular, string temporario, RelogioJornadaCompra? relogio = null,
         bool promocoesComerciais = false, TimeProvider? relogioAplicacao = null,
         IReadOnlyDictionary<string, string>? municipiosPorCep = null,
-        IReadOnlyDictionary<string, MunicipioPostal>? municipiosPostais = null, IInterceptor? interceptor = null)
+        IReadOnlyDictionary<string, MunicipioPostal>? municipiosPostais = null, IInterceptor? interceptor = null,
+        IReadOnlyList<string>? cepsIndisponiveis = null)
     {
         var alvo = new AlvoSqlE2E(banco.NomeBanco);
         alvo.ValidarConfiguracao(banco.ConexaoIsolada);
@@ -87,7 +88,11 @@ internal sealed class HostE2ECompra : IAsyncDisposable
                 configuracao[$"{prefixo}:CodigoIbge"] = municipio.CodigoIbge;
                 configuracao[$"{prefixo}:Cidade"] = municipio.Cidade;
                 configuracao[$"{prefixo}:Uf"] = municipio.Uf;
+                if (municipio.Bairro is not null) configuracao[$"{prefixo}:Bairro"] = municipio.Bairro;
+                if (municipio.Logradouro is not null) configuracao[$"{prefixo}:Logradouro"] = municipio.Logradouro;
             }
+        for (var i = 0; i < cepsIndisponiveis?.Count; i++)
+            configuracao[$"ConsultaCep:Indisponiveis:{i}"] = cepsIndisponiveis[i];
 
         _factory = _baseFactory.WithWebHostBuilder(builder =>
         {

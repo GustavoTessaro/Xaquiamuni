@@ -53,6 +53,22 @@ public static class DependencyInjection
         services.Configure<PromocoesComerciaisOptions>(configuration.GetSection("PromocoesComerciais"));
         services.Configure<EntregaCheckoutOptions>(configuration.GetSection("EntregaCheckout"));
         services.Configure<CorreiosManualOptions>(configuration.GetSection("CorreiosManual"));
+        services.AddHttpClient(ConsultaViaCep.Cliente, cliente =>
+        {
+            cliente.BaseAddress = new Uri("https://viacep.com.br/");
+            cliente.MaxResponseContentBufferSize = 16384;
+        }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+        services.AddSingleton<ConsultaViaCep>();
+        services.AddScoped<IConsultaCep>(sp =>
+        {
+            var ambiente = sp.GetService<IHostEnvironment>();
+            var config = sp.GetService<IConfiguration>() ?? configuration;
+            return ambiente is null || ambiente.IsEnvironment("Testing") || config["ConsultaCep:Provedor"] == "Mapas"
+                ? new ConsultaCepMapas(sp.GetRequiredService<IOptions<EntregaCheckoutOptions>>().Value.MunicipiosPorCep,
+                    sp.GetRequiredService<IOptions<CorreiosManualOptions>>().Value.MunicipiosPorCep,
+                    config.GetSection("ConsultaCep:Indisponiveis").Get<string[]>())
+                : sp.GetRequiredService<ConsultaViaCep>();
+        });
         services.AddOptions<CalendarioOperacionalEstoqueOptions>()
             .Bind(configuration.GetSection(CalendarioOperacionalEstoque.SectionName))
             .Validate(

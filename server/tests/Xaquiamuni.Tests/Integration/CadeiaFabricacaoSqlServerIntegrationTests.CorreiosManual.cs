@@ -44,11 +44,13 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         using (var invalido = await EscreverPostalAsync(cliente, Postal,
             pedidoCotacao with { itens = [itens[0] with { quantidade = 0 }] }))
             await ConferirErroPostalAsync(invalido, 400, "itens_invalidos");
-        foreach (var endereco in new[] { DestinoPostalTeste with { Numero = "" },
-            DestinoPostalTeste with { Cidade = "Outra cidade" }, DestinoPostalTeste with { Cep = "90000000" } })
+        foreach (var (endereco, codigo) in new[] {
+            (DestinoPostalTeste with { Numero = "" }, "endereco_incompleto"),
+            (DestinoPostalTeste with { Cidade = "Outra cidade" }, "cep_municipio_divergente"),
+            (DestinoPostalTeste with { Cep = "90000000" }, "cep_nao_encontrado") })
         {
             using var invalido = await EscreverPostalAsync(cliente, Postal, pedidoCotacao with { endereco = endereco });
-            await ConferirErroPostalAsync(invalido, 400, "destino_nao_validado");
+            await ConferirErroPostalAsync(invalido, 400, codigo);
         }
         var chave = Guid.NewGuid();
         using var criada = await EscreverPostalAsync(cliente, Postal, pedidoCotacao, chave: chave);

@@ -1,3 +1,5 @@
+import { ConsultaCepComponent } from '../shared/consulta-cep.component';
+import { formatarCep } from '../core/consulta-cep.service';
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
@@ -15,12 +17,13 @@ const enderecoVazio = { cep: '', uf: '', cidade: '', bairro: '', logradouro: '',
 
 @Component({
   selector: 'app-minha-conta',
-  imports: [RouterLink, ReactiveFormsModule],
+  imports: [RouterLink, ReactiveFormsModule, ConsultaCepComponent],
   templateUrl: './minha-conta.component.html',
   styleUrl: './minha-conta.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MinhaContaComponent {
+  protected readonly formatarCep = formatarCep;
   private readonly perfil = inject(PerfilClienteService);
   private readonly documento = inject(DOCUMENT);
   private readonly fb = inject(FormBuilder).nonNullable;

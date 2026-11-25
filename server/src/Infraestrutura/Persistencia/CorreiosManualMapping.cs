@@ -42,6 +42,8 @@ public sealed class CorreiosManualOptions
 public sealed record MunicipioPostal(string CodigoIbge, string Cidade, string Uf)
 {
     public MunicipioPostal() : this("", "", "") { }
+    public string? Bairro { get; init; }
+    public string? Logradouro { get; init; }
 }
 
 internal static class CorreiosManualMapping

@@ -13,7 +13,6 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
 {
     private const int LimiteCotacoesAbertas = 3;
     private const int LimiteCotacoesPorHora = 5;
-    private readonly Dictionary<string, MunicipioPostal> _municipiosPostais;
     private static readonly JsonSerializerOptions JsonPostal = new(JsonSerializerDefaults.Web);
     private DbSet<SolicitacaoCorreios> SolicitacoesPostais => _dbContext.Set<SolicitacaoCorreios>();
 
@@ -74,6 +73,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
             return new(403);
         try
         {
+            var endereco = comando.Acao == AcaoCotacaoCorreios.Criar
+                ? PrepararEndereco(comando.Autor, comando.Solicitacao?.Endereco) : null;
+            var cep = endereco is null ? FalhaEndereco(comando.Solicitacao?.Endereco)
+                : await _consultaCep.ConsultarAsync(endereco.Cep, ct);
+            var destino = MontarDestino(endereco, cep, exigeMunicipio: true);
             await using var transacao = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
             if (!comando.Previa) await AdquirirLockAsync($"postal-key:{comando.Admin}:{comando.Autor:D}:{comando.Chave:D}", ct);
             var agora = _timeProvider.GetUtcNow();
@@ -99,7 +103,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
                 await AdquirirLockAsync($"postal-client:{comando.Autor:D}", ct);
                 await BloquearConfiguracaoEntregaAsync(ct);
                 agora = _timeProvider.GetUtcNow();
-                resultado = await CriarSolicitacaoPostalAsync(comando, agora, ct);
+                resultado = await CriarSolicitacaoPostalAsync(comando, agora, destino, ct);
             }
             else
             {
@@ -135,7 +139,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
     }
 
     private async Task<ResultadoCotacaoCorreios> CriarSolicitacaoPostalAsync(
-        ComandoCotacaoCorreios comando, DateTimeOffset agora, CancellationToken ct)
+        ComandoCotacaoCorreios comando, DateTimeOffset agora,
+        (EnderecoEntregaPedido? Destino, string? Erro) endereco, CancellationToken ct)
     {
         if (!(await CarregarConfiguracaoAsync(ct)).CotacaoManualCorreiosHabilitada)
             return new(409, "cotacao_manual_desabilitada");
@@ -147,8 +152,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
             itens.Any(x => x is null || x.ProdutoId == Guid.Empty || x.ProdutoVarianteId == Guid.Empty || x.Quantidade <= 0)
             || itens.Select(x => x.ProdutoVarianteId).Distinct().Count() != itens.Length)
             return new(400, "itens_invalidos");
-        var destino = ValidarEnderecoPostal(comando.Autor, solicitacao.Endereco);
-        if (destino is null) return new(400, "destino_nao_validado");
+        var destino = endereco.Destino;
+        if (destino is null) return new(endereco.Erro == "cep_indisponivel" ? 503 : 400, endereco.Erro);
         var ordenados = itens.OrderBy(x => x.ProdutoVarianteId).ToArray();
         var impressao = ImpressaoPostal(new { itens = ordenados, destino });
         var abertas = consulta.Where(x => x.Situacao == SituacaoCotacaoCorreios.AguardandoAnalise ||
@@ -257,28 +262,6 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotacoesCorreio
             return null;
         return new(cotacao.Id, checked((cotacao.Revisao ?? 0) + 1), servico, proposta.FreteCentavos.Value,
             proposta.PrazoDias.Value, validade, proposta.PesoTotalGramas, SerializarPostal(volumes), agora, comando.Autor);
-    }
-
-    private EnderecoEntregaPedido? ValidarEnderecoPostal(Guid titular, EnderecoCotacaoEntrega? input)
-    {
-        if (input is null) return null;
-        try
-        {
-            var endereco = ClienteEndereco.Criar(Guid.NewGuid(), titular, input.Cep, input.Uf, input.Cidade,
-                input.Bairro, input.Logradouro, input.Numero, input.Complemento, false);
-            if (!_municipiosPostais.TryGetValue(endereco.Cep, out var municipio) ||
-                municipio.CodigoIbge is not { Length: 7 } codigo || !codigo.All(char.IsAsciiDigit) ||
-                municipio.Uf != endereco.Uf ||
-                CultureInfo.InvariantCulture.CompareInfo.Compare(municipio.Cidade, endereco.Cidade,
-                    CompareOptions.IgnoreCase | CompareOptions.IgnoreNonSpace) != 0)
-                return null;
-            return new(endereco.Cep, municipio.Uf, municipio.Cidade, endereco.Bairro, endereco.Logradouro,
-                endereco.Numero, endereco.Complemento, codigo);
-        }
-        catch (ArgumentException)
-        {
-            return null;
-        }
     }
 
     private IQueryable<SolicitacaoCorreios> ConsultarSolicitacoesPostais(Guid? titular) =>

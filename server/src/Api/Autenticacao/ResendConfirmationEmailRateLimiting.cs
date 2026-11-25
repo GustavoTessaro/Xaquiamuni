@@ -12,6 +12,7 @@ public static class ResendConfirmationEmailRateLimiting
     public const string PolicyName = "resend-confirmation-email";
     public const string ForgotPasswordPolicyName = "forgot-password";
     public const string ResetPasswordPolicyName = "reset-password";
+    public const string CepPolicyName = "consulta-cep";
 
     private const string UnavailableIpPartition = "ip-unavailable";
 
@@ -41,6 +42,7 @@ public static class ResendConfirmationEmailRateLimiting
                 CreatePartition(httpContext, ForgotPasswordPolicyName));
             options.AddPolicy(ResetPasswordPolicyName, httpContext =>
                 CreatePartition(httpContext, ResetPasswordPolicyName));
+            options.AddPolicy(CepPolicyName, httpContext => CreatePartition(httpContext, CepPolicyName));
         });
 
         return services;

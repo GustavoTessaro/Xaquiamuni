@@ -90,7 +90,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       assert.ok(await selecionar('Correios'));
       await texto(c, 'Não foi possível consultar o endereço cadastrado');
       await preencher(0, '95000000');
-      assert.equal(await ler(0), '95000000');
+      assert.equal(await ler(0), '95000-000');
       for (const [resposta, aviso] of [
         [`new Response('{"endereco":null}', {status: 200})`, 'Endereço cadastrado ausente ou incompleto'],
         [`new Response(null, {status: 401})`, 'Entre na sua conta para consultar o endereço cadastrado'],
@@ -107,7 +107,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
         })()`);
         assert.ok(await selecionar('Correios'));
         await texto(c, aviso);
-        assert.equal(await ler(0), '95000000');
+        assert.equal(await ler(0), '95000-000');
       }
       await selecionar('RetiradaLocal');
       await c.ev(`(() => {
@@ -146,7 +146,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       for (const [i, valor, original] of [[2, 'Caxias do Sul', 'Vacaria'], [1, 'SP', 'RS'], [0, '99999999', '95200000']]) {
         await preencher(i, valor);
         await clicar(c, 'Solicitar cotação');
-        await texto(c, 'O CEP precisa corresponder ao município informado');
+        await texto(c, i === 0 ? 'CEP não encontrado' : 'O CEP precisa corresponder ao município informado');
         await preencher(i, original);
       }
       console.log('Endereço postal: falha, ausência, 401, resposta tardia, alternativa e destinos divergentes verificados.');

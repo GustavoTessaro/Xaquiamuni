@@ -1,3 +1,5 @@
+import { ConsultaCepComponent } from '../shared/consulta-cep.component';
+import { CamposCep, formatarCep, mensagensCep } from '../core/consulta-cep.service';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -30,12 +32,13 @@ const enderecoVazio: EnderecoEntrega = {
 
 @Component({
   selector: 'app-checkout',
-  imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, FretePedidoComponent, DatePipe],
+  imports: [RouterLink, PrecoExibidoComponent, FormsModule, DadosEntregaComponent, FretePedidoComponent, DatePipe, ConsultaCepComponent],
   templateUrl: './checkout.component.html',
   styleUrl: './compra.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CheckoutComponent {
+  protected readonly mensagensDeEndereco = Object.values(mensagensCep);
   private readonly correios = inject(CotacoesCorreiosService);
   protected readonly cotacaoCriada = signal<string | null>(null);
   protected readonly solicitacaoIncerta = signal(false);
@@ -79,8 +82,9 @@ export class CheckoutComponent {
       this.tentativaPostal = undefined;
       this.solicitacaoIncerta.set(false);
     } catch (falha) {
-      const status = (falha as { status?: number }).status;
-      const incerta = !!this.tentativaPostal && (!status || status >= 500 || status === 408 || status === 401);
+      const { status, error } = falha as { status?: number; error?: { codigo?: string } };
+      const incerta = !!this.tentativaPostal && error?.codigo !== 'cep_indisponivel'
+        && (!status || status >= 500 || status === 408 || status === 401);
       if (!incerta && this.tentativaPostal) {
         this.correios.concluirSolicitacao(this.tentativaPostal.registro);
         this.tentativaPostal = undefined;
@@ -202,7 +206,12 @@ export class CheckoutComponent {
 
   protected alterarEndereco(campo: keyof EnderecoEntrega, valor: string): void {
     const endereco = this.modalidade() === 'Correios' ? this.enderecoPostal : this.endereco;
-    endereco.update(atual => ({ ...atual, [campo]: valor }));
+    endereco.update(atual => ({ ...atual, [campo]: campo === 'cep' ? formatarCep(valor) : valor }));
+  }
+
+  protected aplicarCep(campos: CamposCep): void {
+    const endereco = this.modalidade() === 'Correios' ? this.enderecoPostal : this.endereco;
+    endereco.update(atual => ({ ...atual, ...campos }));
   }
 
   protected escolherEnderecoPostal(cadastrado: boolean): void {
@@ -240,6 +249,7 @@ export class CheckoutComponent {
       const oferta = resultado.ofertas.find(item => item.modalidade === modalidade);
       if (!oferta) {
         const motivos: Record<string, string> = {
+          ...mensagensCep,
           destino_nao_validado: 'Não foi possível validar o CEP deste endereço. Confira os dados ou informe outro endereço.',
           municipio_nao_atendido: 'O CEP, a cidade e a UF devem corresponder a um município atendido.',
           itens_indisponiveis: 'Revise a disponibilidade dos itens do carrinho.',

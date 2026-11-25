@@ -32,6 +32,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
 
         try
         {
+            var inicial = await LerEnderecoEntregaAsync(clienteId, enderecoCadastradoId, endereco, usarEnderecoPadrao, ct);
+            var cep = inicial is null ? FalhaEndereco(endereco)
+                : await _consultaCep.ConsultarAsync(inicial.Cep, ct);
             await using var transacao = await _dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, ct);
             await BloquearConfiguracaoEntregaAsync(ct);
             if (_promocoesHabilitadas)
@@ -66,13 +69,11 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
             string? motivo = "entrega_propria_desabilitada";
             if (configuracao.EntregaPropriaHabilitada)
             {
-                if (usarEnderecoPadrao)
-                    enderecoCadastradoId = await _dbContext.ClienteEnderecos
-                        .Where(item => item.ClienteUserId == clienteId && item.IsDefault)
-                        .Select(item => (Guid?)item.Id).SingleOrDefaultAsync(ct);
-                var destino = await ResolverDestinoAsync(clienteId, enderecoCadastradoId, endereco, ct);
+                var atual = await LerEnderecoEntregaAsync(clienteId, enderecoCadastradoId, endereco, usarEnderecoPadrao, ct);
+                if (usarEnderecoPadrao) enderecoCadastradoId = atual?.Id;
+                var (destino, erro) = MontarDestino(atual, cep, exigeMunicipio: false);
                 var cidade = destino is null ? null : await BuscarCidadeAsync(destino, ct);
-                motivo = destino is null ? "destino_nao_validado" : "municipio_nao_atendido";
+                motivo = destino is null ? erro : "municipio_nao_atendido";
                 if (cidade is not null)
                 {
                     var (frete, desconto, revisaoCampanha) = await EfPromocoesFrete.CalcularEntregaPropriaAsync(
@@ -106,7 +107,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
     }
 
     private async Task<(DadosEntregaPedido? Dados, long Frete, ModalidadeEntregaPedido Modalidade)?> ValidarEntregaAsync(
-        CriarPedidoCompraInput input, DadosItemPedido[] itens, DateTimeOffset agora, CancellationToken ct)
+        CriarPedidoCompraInput input, OfertaProtegida? oferta, ResultadoCep? cep, DadosItemPedido[] itens,
+        DateTimeOffset agora, CancellationToken ct)
     {
         var configuracao = await CarregarConfiguracaoAsync(ct);
         if (input.OfertaEntregaId is null)
@@ -115,17 +117,6 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
                     ? null : new DadosEntregaPedido(EnderecoRetirada: configuracao.EnderecoRetirada,
                         InstrucoesRetirada: configuracao.InstrucoesRetirada), 0, ModalidadeEntregaPedido.RetiradaLocal) : null;
 
-        OfertaProtegida? oferta;
-        try
-        {
-            var json = _ofertasEntrega?.Unprotect(input.OfertaEntregaId);
-            oferta = json is null ? null : JsonSerializer.Deserialize<OfertaProtegida>(json);
-        }
-        catch (Exception exception) when (exception is CryptographicException or FormatException or JsonException)
-        {
-            return null;
-        }
-
         if (oferta is null || oferta.ClienteId != input.ClienteId || oferta.ValidaAteUtc <= agora
             || oferta.RevisaoConfiguracao != configuracao.Revisao || oferta.Carrinho != IdentificarCarrinho(itens))
             return null;
@@ -133,12 +124,14 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
         if (oferta.Dados.Destino is not { } destino)
             return configuracao.RetiradaHabilitada ? (oferta.Dados, 0, ModalidadeEntregaPedido.RetiradaLocal) : null;
 
-        if (!configuracao.EntregaPropriaHabilitada ||
-            !_municipiosPorCep.TryGetValue(destino.Cep, out var ibge) || ibge != destino.CodigoIbge)
+        if (!configuracao.EntregaPropriaHabilitada || cep?.Endereco is not { } atual ||
+            atual.Cep != destino.Cep || atual.CodigoIbge != destino.CodigoIbge ||
+            (atual.Uf is not null && (atual.Uf != destino.Uf || !ResultadoCep.MesmoMunicipio(atual.Cidade, destino.Cidade))))
             return null;
 
         if (oferta.EnderecoCadastradoId.HasValue &&
-            await ResolverDestinoAsync(input.ClienteId, oferta.EnderecoCadastradoId, null, ct) != destino)
+            MontarDestino(await LerEnderecoEntregaAsync(input.ClienteId, oferta.EnderecoCadastradoId, null, false, ct),
+                cep, exigeMunicipio: false).Destino != destino)
             return null;
 
         var cidade = await BuscarCidadeAsync(destino, ct);
@@ -152,6 +145,20 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
             ? (oferta.Dados, oferta.Frete, ModalidadeEntregaPedido.EntregaPropria) : null;
     }
 
+    private OfertaProtegida? LerOferta(string? token)
+    {
+        if (token is null) return null;
+        try
+        {
+            var json = _ofertasEntrega?.Unprotect(token);
+            return json is null ? null : JsonSerializer.Deserialize<OfertaProtegida>(json);
+        }
+        catch (Exception exception) when (exception is CryptographicException or FormatException or JsonException)
+        {
+            return null;
+        }
+    }
+
     private async Task<ConfiguracaoAtendimento> CarregarConfiguracaoAsync(CancellationToken ct) =>
         await _dbContext.Set<ConfiguracaoAtendimento>().AsNoTracking().SingleOrDefaultAsync(ct) ?? new();
 
@@ -160,38 +167,47 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICotarEntrega
         var cidade = await _dbContext.Set<CidadeEntregaPropria>().AsNoTracking().SingleOrDefaultAsync(
             item => item.Ativa && item.CodigoIbge == destino.CodigoIbge, ct);
         return cidade is not null && cidade.Uf == destino.Uf &&
-            string.Equals(cidade.Nome, destino.Cidade, StringComparison.InvariantCultureIgnoreCase) ? cidade : null;
+            ResultadoCep.MesmoMunicipio(cidade.Nome, destino.Cidade) ? cidade : null;
     }
 
-    private async Task<EnderecoEntregaPedido?> ResolverDestinoAsync(Guid clienteId, Guid? enderecoId,
-        EnderecoCotacaoEntrega? novo, CancellationToken ct)
+    private async Task<ClienteEndereco?> LerEnderecoEntregaAsync(Guid clienteId, Guid? enderecoId,
+        EnderecoCotacaoEntrega? novo, bool usarPadrao, CancellationToken ct)
     {
-        ClienteEndereco? endereco;
-        if (novo is null)
-        {
-            if (!enderecoId.HasValue)
-                return null;
-            endereco = await _dbContext.ClienteEnderecos.AsNoTracking().SingleOrDefaultAsync(
-                item => item.ClienteUserId == clienteId && item.Id == enderecoId, ct);
-        }
-        else
-        {
-            try
-            {
-                endereco = ClienteEndereco.Criar(Guid.NewGuid(), clienteId, novo.Cep, novo.Uf, novo.Cidade,
-                    novo.Bairro, novo.Logradouro, novo.Numero, novo.Complemento, false);
-            }
-            catch (ArgumentException)
-            {
-                return null;
-            }
-        }
-
-        if (endereco is null || !_municipiosPorCep.TryGetValue(endereco.Cep, out var ibge))
-            return null;
-        return new(endereco.Cep, endereco.Uf, endereco.Cidade, endereco.Bairro, endereco.Logradouro,
-            endereco.Numero, endereco.Complemento, ibge);
+        if (novo is not null && !usarPadrao) return PrepararEndereco(clienteId, novo);
+        if (!usarPadrao && !enderecoId.HasValue) return null;
+        return await _dbContext.ClienteEnderecos.AsNoTracking().SingleOrDefaultAsync(
+            item => item.ClienteUserId == clienteId && (usarPadrao ? item.IsDefault : item.Id == enderecoId), ct);
     }
+
+    private static ClienteEndereco? PrepararEndereco(Guid clienteId, EnderecoCotacaoEntrega? novo)
+    {
+        if (novo is null) return null;
+        try
+        {
+            return ClienteEndereco.Criar(Guid.NewGuid(), clienteId, novo.Cep, novo.Uf, novo.Cidade,
+                novo.Bairro, novo.Logradouro, novo.Numero, novo.Complemento, false);
+        }
+        catch (ArgumentException) { return null; }
+    }
+
+    private static (EnderecoEntregaPedido? Destino, string? Erro) MontarDestino(
+        ClienteEndereco? endereco, ResultadoCep consulta, bool exigeMunicipio)
+    {
+        if (endereco is null) return (null, consulta.Codigo ?? "endereco_incompleto");
+        if (consulta.Endereco is not { } cep) return (null, consulta.Codigo);
+        if (cep.Cep != endereco.Cep) return (null, "destino_nao_validado");
+        if (cep.CodigoIbge is not { Length: 7 } || !cep.CodigoIbge.All(char.IsAsciiDigit))
+            return (null, "cep_indisponivel");
+        if (exigeMunicipio && cep.Cidade is null) return (null, "cep_nao_encontrado");
+        if (cep.Uf is not null && (cep.Uf != endereco.Uf || !ResultadoCep.MesmoMunicipio(cep.Cidade, endereco.Cidade)))
+            return (null, "cep_municipio_divergente");
+        return (new(endereco.Cep, cep.Uf ?? endereco.Uf, cep.Cidade ?? endereco.Cidade,
+            endereco.Bairro, endereco.Logradouro, endereco.Numero, endereco.Complemento, cep.CodigoIbge), null);
+    }
+
+    private static ResultadoCep FalhaEndereco(EnderecoCotacaoEntrega? endereco) =>
+        new(null, !string.IsNullOrWhiteSpace(endereco?.Cep) && ResultadoCep.Normalizar(endereco.Cep) is null
+            ? "cep_invalido" : "endereco_incompleto");
 
     private static string IdentificarCarrinho(IEnumerable<DadosItemPedido> itens) =>
         HashOferta(JsonSerializer.Serialize(itens.Select(item => new

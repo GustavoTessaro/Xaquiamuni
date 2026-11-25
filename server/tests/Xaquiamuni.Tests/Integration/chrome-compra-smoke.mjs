@@ -1865,7 +1865,7 @@ try {
       const campos = {
         nomeCompleto: 'Cliente sintético', cpf: '52998224725', telefone: '11912345678',
         email: 'demo-' + crypto.randomUUID() + '@example.test', senha, confirmacaoSenha: senha,
-        cep: '95000000', uf: 'RS', cidade: 'Caxias do Sul', bairro: 'Bairro de teste',
+        cep: ${JSON.stringify(dados.pixCnpj ? '95000000' : '95200000')}, uf: 'RS', cidade: 'Caxias do Sul', bairro: 'Bairro de teste',
         logradouro: 'Rua de teste', numero: '100',
       };
       for (const [nome, valor] of Object.entries(campos)) {
@@ -1874,10 +1874,15 @@ try {
         campo.value = valor;
         campo.dispatchEvent(new Event('input', { bubbles: true }));
       }
-      document.querySelector('form button[type=submit]').click();
       return true;
     })()`);
     assert.equal(registrado, true);
+    if (!dados.pixCnpj) {
+      await novo.ev("document.querySelector('app-consulta-cep button').click()");
+      await waitFor(() => novo.ev("document.querySelector('#cidade').value === 'Vacaria' && document.querySelector('#numero').value === '100'"),
+        'Preenchimento assistido do cadastro');
+    }
+    await novo.ev("document.querySelector('form button[type=submit]').click()");
     await waitFor(() => novo.ev("document.querySelector('main')?.textContent.includes('Cadastro realizado com sucesso')"),
       'Cadastro Angular da demonstração');
     const link = new URL(await checkpoint('email'));
@@ -1886,6 +1891,28 @@ try {
     await waitFor(() => novo.ev("document.querySelector('main')?.textContent.includes('E-mail confirmado')"),
       'Confirmação pelo e-mail capturado localmente');
     if (!dados.pixCnpj) {
+      await c.ir('/minha-conta');
+      await waitFor(() => c.ev("!!document.querySelector('button[aria-label=\"Editar endereço padrão\"]')"), 'Minha conta');
+      await c.ev("document.querySelector('button[aria-label=\"Editar endereço padrão\"]').click()");
+      await waitFor(() => c.ev("!!document.querySelector('#conta-cep')"), 'Edição do endereço');
+      const preencherCep = cep => c.ev(`(() => {
+        const campo = document.querySelector('#conta-cep');
+        campo.value = ${JSON.stringify(cep)};
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      })()`);
+      for (const [cep, mensagem] of [['99999999', 'CEP não encontrado'], ['99999998', 'temporariamente indisponível']]) {
+        await preencherCep(cep);
+        await c.ev("document.querySelector('app-consulta-cep button').click()");
+        await waitFor(() => c.ev(`document.querySelector('app-consulta-cep [role=alert]')?.textContent.includes(${JSON.stringify(mensagem)})`), mensagem);
+      }
+      await preencherCep('88500000');
+      await c.ev("document.querySelector('app-consulta-cep button').click()");
+      await waitFor(() => c.ev("document.querySelector('#conta-cidade').value === 'Lages' && document.querySelector('#conta-uf').value === 'SC'"), 'CEP geral de Lages');
+      assert.ok(await c.ev("document.querySelector('#conta-numero').value === '100'"));
+      await c.ev("document.querySelector('.conta form').requestSubmit()");
+      await waitFor(() => c.ev("!document.querySelector('.conta form') && document.querySelector('.conta-dados').textContent.includes('Lages')"), 'Endereço salvo');
+      await c.ir('/minha-conta');
+      await waitFor(() => c.ev("document.querySelector('.conta-dados')?.textContent.includes('Lages')"), 'Endereço persistido após recarga');
       const resultado = await c.ev(`(async () => {
         const modalidades = await fetch('/api/loja/modalidades-entrega').then(r => r.json());
         const { endereco } = await fetch('/api/clientes/me/endereco-padrao').then(r => r.json());
@@ -1895,17 +1922,27 @@ try {
         }, body: JSON.stringify(corpo) });
         const { produto, variante } = ${JSON.stringify(dados.produtoDemo)};
         const itens = [{ produtoId: produto, produtoVarianteId: variante, quantidade: 1 }];
-        const entrega = await post('/api/checkout/cotacoes-entrega', { itens, usarEnderecoPadrao: true });
+        const entrega = await post('/api/checkout/cotacoes-entrega', { itens, endereco: {
+          cep: '95200-000', uf: 'RS', cidade: 'Vacaria', bairro: 'Teste', logradouro: 'Rua fictícia', numero: '100',
+        } });
         const ofertas = (await entrega.json()).ofertas?.map(o => [o.modalidade, o.freteCentavos]);
+        const outra = await post('/api/checkout/cotacoes-entrega', { itens, usarEnderecoPadrao: true });
+        const ofertasOutra = (await outra.json()).ofertas?.map(o => o.modalidade);
         const { cep, uf, cidade, bairro, logradouro, numero, complemento } = endereco;
         const postal = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade, bairro, logradouro, numero, complemento } });
         const invalida = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade: 'Outro município', bairro, logradouro, numero } });
         const recuperacao = await post('/api/auth/forgot-password', { email: ${JSON.stringify(cliente.Email)} });
-        return { modalidades, cep, uf, cidade, ofertas, postal: postal.status, invalida: invalida.status, recuperacao: recuperacao.status };
+        const indisponivel = await post('/api/checkout/cotacoes-entrega', { itens, endereco: { cep: '99999998', uf, cidade, bairro, logradouro, numero } });
+        const falha = await indisponivel.json();
+        return { modalidades, cep, uf, cidade, ofertas, ofertasOutra, falha,
+          postal: postal.status, invalida: invalida.status, recuperacao: recuperacao.status };
       })()`);
-      assert.deepEqual([resultado.cep, resultado.uf, resultado.cidade], ['95200000', 'RS', 'Vacaria']);
+      assert.deepEqual([resultado.cep, resultado.uf, resultado.cidade], ['88500000', 'SC', 'Lages']);
       assert.ok(resultado.modalidades.retiradaLocal && resultado.modalidades.entregaPropria && resultado.modalidades.correiosCotacaoManual);
       assert.deepEqual(resultado.ofertas, [['RetiradaLocal', '0'], ['EntregaPropria', '1250']]);
+      assert.deepEqual(resultado.ofertasOutra, ['RetiradaLocal']);
+      assert.equal(resultado.falha.motivoEntregaPropriaIndisponivel, 'cep_indisponivel');
+      assert.deepEqual(resultado.falha.ofertas.map(o => o.modalidade), ['RetiradaLocal']);
       assert.deepEqual([resultado.postal, resultado.invalida, resultado.recuperacao], [201, 400, 202]);
       const recuperacao = new URL(await checkpoint('recuperacao'));
       assert.equal(recuperacao.origin, origin);

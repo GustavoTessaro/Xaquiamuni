@@ -17,6 +17,9 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
     {
         try
         {
+            var oferta = LerOferta(input.OfertaEntregaId);
+            var cep = oferta?.ClienteId == input.ClienteId && oferta.Dados.Destino is { } destino
+                ? await _consultaCep.ConsultarAsync(destino.Cep, cancellationToken) : null;
             // Mant?m as leituras do cadastro e do cat?logo v?lidas at? o commit.
             await using var transaction = await _dbContext.Database
                 .BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken).ConfigureAwait(false);
@@ -92,7 +95,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 return new(CriarPedidoCompraStatus.PrecoAlterado, PrecosAtuais: precos);
 
             var entrega = postal is null
-                ? await ValidarEntregaAsync(input, dados, agora, cancellationToken)
+                ? await ValidarEntregaAsync(input, oferta, cep, dados, agora, cancellationToken)
                 : (new DadosEntregaPedido(Destino: postal.Endereco, PropostaPostal: postal.Snapshot, DescontoFrete: postal.Proposta.DescontoFrete),
                     postal.Proposta.FreteCentavos, ModalidadeEntregaPedido.Correios);
             if (entrega is null)

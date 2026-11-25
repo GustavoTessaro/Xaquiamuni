@@ -1,3 +1,4 @@
+import { ConsultaCepComponent } from '../shared/consulta-cep.component';
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import {
   AbstractControl,
@@ -47,7 +48,7 @@ type RegistrationControls = {
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ReactiveFormsModule, RouterLink],
+  imports: [ReactiveFormsModule, RouterLink, ConsultaCepComponent],
   selector: 'app-cadastro',
   styleUrl: './cadastro.component.css',
   templateUrl: './cadastro.component.html',

@@ -78,10 +78,15 @@
                   <label [for]="'conta-' + campo.chave">{{ campo.rotulo }}</label>
                   <input [id]="'conta-' + campo.chave" [formControlName]="campo.chave" [autocomplete]="campo.autocomplete"
                     [required]="campo.chave !== 'complemento'" [attr.inputmode]="campo.chave === 'cep' ? 'numeric' : null"
+                    [attr.maxlength]="campo.chave === 'cep' ? 9 : null"
+                    (input)="campo.chave === 'cep' ? controle.setValue(formatarCep($any($event.target).value)) : null"
                     [attr.aria-describedby]="'conta-erro-' + campo.chave"
                     [attr.aria-invalid]="invalido || !!erros()[campo.chave]">
                   <small [id]="'conta-erro-' + campo.chave">{{ erros()[campo.chave]?.[0] ||
                     (invalido ? 'Preencha este campo.' : '') }}</small>
+                  @if (campo.chave === 'cep') {
+                    <app-consulta-cep [cep]="endereco.controls.cep.value" (endereco)="endereco.patchValue($event)" />
+                  }
                 }
                 <div class="conta-acoes">
                   <button type="submit" [disabled]="conflito()">Salvar</button>

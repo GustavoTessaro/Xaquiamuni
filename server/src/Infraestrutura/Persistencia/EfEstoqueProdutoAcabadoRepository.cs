@@ -7,6 +7,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Xaquiamuni.Aplicacao.Estoque;
+using Xaquiamuni.Aplicacao.Pedidos;
 using Xaquiamuni.Dominio.Estoque;
 
 namespace Xaquiamuni.Infraestrutura.Persistencia;
@@ -19,7 +20,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
     private readonly bool _promocoesHabilitadas;
     private readonly IDataProtector? _ofertasEntrega;
     private readonly IDataProtector? _conversoesCorreios;
-    private readonly IReadOnlyDictionary<string, string> _municipiosPorCep;
+    private readonly IConsultaCep _consultaCep;
 
     private readonly Func<string> _gerarNumeroPublico;
 
@@ -30,17 +31,18 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : IEstoqueProdutoA
         IOptions<PromocoesComerciaisOptions>? promocoes = null,
         IDataProtectionProvider? protecao = null,
         IOptions<EntregaCheckoutOptions>? entrega = null,
-        IOptions<CorreiosManualOptions>? correiosManual = null, Func<string>? gerarNumeroPublico = null)
+        IOptions<CorreiosManualOptions>? correiosManual = null, Func<string>? gerarNumeroPublico = null,
+        IConsultaCep? consultaCep = null)
     {
         _dbContext = dbContext;
         _gerarNumeroPublico = gerarNumeroPublico ?? NumeroPublicoPedido.Gerar;
         _timeProvider = timeProvider;
-        _municipiosPostais = correiosManual?.Value.MunicipiosPorCep ?? [];
+        _consultaCep = consultaCep ?? new ConsultaCepMapas(
+            entrega?.Value.MunicipiosPorCep ?? [], correiosManual?.Value.MunicipiosPorCep ?? []);
         _calendario = calendario;
         _promocoesHabilitadas = promocoes?.Value.Habilitadas == true;
         _ofertasEntrega = protecao?.CreateProtector("Xaquiamuni.Checkout.OfertaEntrega.v1");
         _conversoesCorreios = protecao?.CreateProtector("Xaquiamuni.Checkout.ConversaoCorreios.v1");
-        _municipiosPorCep = entrega?.Value.MunicipiosPorCep ?? new Dictionary<string, string>();
     }
 
     public async Task<ConfigurarPoliticaProdutoAcabadoResult> ConfigurarPoliticaAsync(

@@ -1,3 +1,4 @@
+import { mensagensCep } from './consulta-cep.service';
 import { DOCUMENT } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
@@ -164,6 +165,7 @@ export function erroPostal(erro: unknown) {
   const mensagens: Record<string, string> = {
     cotacao_manual_desabilitada: 'A loja não está recebendo solicitações dos Correios.',
     solicitacao_duplicada: 'Já existe uma solicitação em aberto com os mesmos itens e destino. Consulte Minhas cotações.',
+    ...mensagensCep,
     destino_nao_validado: 'Confira o endereço. O CEP precisa corresponder ao município informado.',
     proposta_invalida: 'Confira serviço, frete, prazo, validade e peso da proposta.',
     revisao_desatualizada: 'A versão da proposta mudou. Confira a revisão atual antes de decidir.',

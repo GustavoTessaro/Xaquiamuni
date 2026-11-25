@@ -264,7 +264,11 @@ internal sealed class AmbienteDemonstracao(
             // Este host só aceita o banco descartável que acabou de ser criado.
             host = new HostE2ECompra(banco, angular, temporario, promocoesComerciais: true,
                 municipiosPorCep: new Dictionary<string, string> { [Cep] = Ibge },
-                municipiosPostais: new Dictionary<string, MunicipioPostal> { [Cep] = new(Ibge, "Vacaria", "RS") });
+                municipiosPostais: new Dictionary<string, MunicipioPostal>
+                {
+                    [Cep] = new(Ibge, "Vacaria", "RS") { Bairro = "Bairro de Teste", Logradouro = "Rua da Demonstração" },
+                    ["88500000"] = new("4209300", "Lages", "SC")
+                }, cepsIndisponiveis: ["99999998"]);
             var admin = await host.CriarContaAsync(XaquiamuniRoles.Administrador);
             var cliente = await host.CriarContaAsync(XaquiamuniRoles.Cliente);
             var dados = new JornadaCompraE2E(host, new RelogioJornadaCompra(), admin.Id, cliente.Email);
