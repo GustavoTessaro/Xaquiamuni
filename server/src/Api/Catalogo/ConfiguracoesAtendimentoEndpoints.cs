@@ -15,7 +15,7 @@ public static class ConfiguracoesAtendimentoEndpoints
         publico.MapGet("/modalidades-entrega", async (IConfiguracoesAtendimento api, CancellationToken ct) =>
             Results.Ok(await api.ModalidadesAsync(ct)));
         publico.MapGet("/contato", async (IConfiguracoesAtendimento api, CancellationToken ct) =>
-            Results.Ok(new { whatsApp = await api.ContatoAsync(ct) }));
+            Results.Ok(await api.ContatoAsync(ct)));
 
         var admin = endpoints.MapGroup("/api/admin/loja/atendimento")
             .RequireAuthorization(AuthorizationPolicies.Administracao).AddEndpointFilter(SemCacheAsync);
@@ -37,6 +37,12 @@ public static class ConfiguracoesAtendimentoEndpoints
             .RequireXaquiamuniAntiforgery();
         admin.MapPut("/whatsapp", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
             ComandoAsync<SalvarWhatsApp>(ctx, (input, autor, chave) => api.AtualizarWhatsAppAsync(input, autor, chave, ct), ct))
+            .RequireXaquiamuniAntiforgery();
+        admin.MapGet("/contato", async (IConfiguracoesAtendimento api, CancellationToken ct) =>
+            Results.Ok(await api.ConsultarContatoAsync(ct)));
+        admin.MapPut("/contato/email", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
+            ComandoAsync<SalvarEmailComercial>(ctx, (input, autor, chave) =>
+                api.AtualizarEmailComercialAsync(input, autor, chave, ct), ct))
             .RequireXaquiamuniAntiforgery();
         admin.MapPut("/correios-manual", (HttpContext ctx, IConfiguracoesAtendimento api, CancellationToken ct) =>
             ComandoAsync<SalvarCorreiosManual>(ctx, (input, autor, chave) => api.AtualizarCorreiosManualAsync(input, autor, chave, ct), ct))

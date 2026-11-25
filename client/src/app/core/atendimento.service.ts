@@ -53,6 +53,15 @@ export interface CidadeEntrega {
   id: string; codigoIbge: string; nome: string; uf: string; tarifaCentavos: string; ativa: boolean; revisao: number;
 }
 export interface EstadoMunicipios { uf: string; nome: string }
+export interface ContatoLojaPublico { whatsApp: string | null; emailComercial?: string | null }
+export interface ContatoLojaAdmin {
+  whatsApp: string | null;
+  whatsAppConfirmado: boolean;
+  whatsAppHabilitado: boolean;
+  emailComercial: string | null;
+  emailComercialHabilitado: boolean;
+  revisao: number;
+}
 export interface MunicipioIbge { codigoIbge: string; nome: string }
 
 @Injectable({ providedIn: 'root' })
@@ -62,7 +71,8 @@ export class AtendimentoService {
   private readonly admin = '/api/admin/loja/atendimento';
 
   modalidades() { return this.http.get<ModalidadesPublicas>('/api/loja/modalidades-entrega').pipe(timeout(15_000)); }
-  contato() { return this.http.get<{ whatsApp: string | null }>('/api/loja/contato').pipe(timeout(15_000)); }
+  contato() { return this.http.get<ContatoLojaPublico>('/api/loja/contato').pipe(timeout(15_000)); }
+  contatoAdmin() { return this.http.get<ContatoLojaAdmin>(this.admin + '/contato').pipe(timeout(15_000)); }
   configuracao() { return this.http.get<ConfiguracaoAtendimento>(this.admin).pipe(timeout(15_000)); }
   cidades() { return this.http.get<CidadeEntrega[]>(this.admin + '/cidades').pipe(timeout(15_000)); }
   estados() { return this.http.get<EstadoMunicipios[]>(this.admin + '/municipios').pipe(timeout(15_000)); }
@@ -79,9 +89,9 @@ export class AtendimentoService {
     );
   }
 
-  escrever(metodo: 'POST' | 'PUT' | 'DELETE', rota: string, corpo: object | null, chave: string) {
+  escrever<T = unknown>(metodo: 'POST' | 'PUT' | 'DELETE', rota: string, corpo: object | null, chave: string) {
     return this.csrf.getRequestToken().pipe(
-      switchMap(({ requestToken }) => this.http.request(metodo, this.admin + rota, {
+      switchMap(({ requestToken }) => this.http.request<T>(metodo, this.admin + rota, {
         body: corpo, headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave },
       })),
       timeout(30_000),

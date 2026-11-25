@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admin }) {
+export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admin, cliente }) {
   const tema = "document.querySelector('.admin-shell')?.dataset.adminTheme";
   const botao = "document.querySelector('.admin-theme-toggle')";
   const chave = 'xaquiamuni:admin:tema';
@@ -538,12 +538,56 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   })()`);
   assert.deepEqual(outrasModalidades, [['RetiradaLocal', '0'], ['EntregaPropria', '0']]);
   console.log('Exclusão, bloqueio por histórico e desabilitação conferidos no ADMIN.');
+  const cidadesAntes = await lerAtendimento('/cidades');
   const atual = await lerAtendimento('');
+  const rotaContato = '/admin/configuracoes/contato';
+  const emailSite = "document.querySelector('footer a[href=\"mailto:contato@example.com\"]') !== null";
+  await abrirAdmin(rotaContato);
+  await waitFor(() => a.ev("!!document.querySelector('[name=emailComercial]')"), 'formulário de e-mail');
+  await campo(a, '[name=emailComercial]', 'contato@example.com?bcc=x@example.com');
+  await a.ev("document.querySelector('[name=publicarEmail]').click()");
+  await botaoTexto('Salvar e-mail comercial', a);
+  await waitFor(() => a.ev("document.querySelector('[role=alert]')?.textContent.includes('válido')"), 'formato de e-mail inválido');
+  await campo(a, '[name=emailComercial]', 'contato@example.com');
+  await botaoTexto('Salvar e-mail comercial', a);
+  await waitFor(() => a.ev("document.querySelector('main').textContent.includes('E-mail comercial salvo.')"), 'e-mail salvo');
+  for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
+    await viewport(a, width);
+    await abrirAdmin(rotaContato);
+    await waitFor(() => a.ev("document.querySelector('[name=emailComercial]')?.value === 'contato@example.com'"), 'e-mail persistido');
+    if (await a.ev(tema) !== modo) await alternar(modo);
+    assert.ok(await semEstouro(a));
+    await a.ev("document.querySelector('[name=emailComercial]').focus()");
+    await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
+    assert.ok(await a.ev("document.activeElement.name === 'publicarEmail' && document.activeElement.matches(':focus-visible')"));
+  }
+  assert.equal(await c.ev(`(async () => {
+    const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+    return (await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-XSRF-TOKEN': requestToken } })).status;
+  })()`), 204);
+  assert.equal(await c.ev("fetch('/api/pedidos').then(r => r.status)"), 401);
+  await abrir(c, '/', emailSite);
+  assert.deepEqual(await lerAtendimento('/cidades'), cidadesAntes);
+  const depoisContato = await lerAtendimento('');
+  for (const campo of ['enderecoRetirada', 'retiradaHabilitada', 'entregaPropriaHabilitada', 'cotacaoManualCorreiosHabilitada'])
+    assert.equal(depoisContato[campo], atual[campo]);
   assert.equal(await escrever(atendimento + '/whatsapp', 'PUT', {
-    numero: atual.whatsApp, confirmado: true, habilitado: false, revisao: atual.revisao,
+    numero: atual.whatsApp, confirmado: true, habilitado: false, revisao: depoisContato.revisao,
   }), 200);
-  await abrir(c, '/', '!!document.querySelector("app-contato-whatsapp")');
+  await a.ev("document.querySelector('[name=publicarEmail]').click()");
+  await botaoTexto('Salvar e-mail comercial', a);
+  await waitFor(() => a.ev("document.querySelector('[role=alert]')?.textContent.includes('Recarregue')"), 'conflito de revisão');
+  await a.ev("window.confirm = () => true");
+  await botaoTexto('Recarregar dados', a);
+  await waitFor(() => a.ev("document.querySelector('[name=publicarEmail]')?.checked"), 'recarrega publicação atual');
+  await a.ev("document.querySelector('[name=publicarEmail]').click()");
+  await botaoTexto('Salvar e-mail comercial', a);
+  await waitFor(() => a.ev("document.querySelector('main').textContent.includes('E-mail comercial salvo.')"), 'publicação desabilitada');
+  await abrir(c, '/', '!!document.querySelector("app-contato-loja")');
+  await waitFor(() => c.ev('!(' + emailSite + ')'), 'e-mail oculto na loja');
   assert.deepEqual(await c.ev("fetch('/api/loja/contato').then(r=>r.json())"), { whatsApp: null });
   assert.equal((await conferirWhatsApp(c))[0], 0);
+  await login(c, cliente, '/api/auth');
   console.log('WhatsApp: publicação, destino normalizado, mensagem genérica e remoção após desativar.');
 }

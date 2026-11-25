@@ -97,12 +97,8 @@ export class AdminAtendimentoComponent {
         const { cotacaoManualCorreiosHabilitada, validadePropostaCorreiosHoras } = rascunho;
         Object.assign(proximo, { cotacaoManualCorreiosHabilitada, validadePropostaCorreiosHoras });
       }
-      if (rotaSalva !== '/whatsapp' && this.contatoPendente(rascunho)) {
-        const { whatsApp, whatsAppConfirmado, whatsAppHabilitado } = rascunho;
-        Object.assign(proximo, { whatsApp, whatsAppConfirmado, whatsAppHabilitado });
-      }
     } else if (rotaSalva && rascunho && (this.modalidadesPendentes(rascunho) ||
-      this.correiosPendentes(rascunho) || this.contatoPendente(rascunho))) {
+      this.correiosPendentes(rascunho))) {
       this.aviso.set('Outra sessão atualizou as configurações. Confira os dados recarregados antes de editar novamente.');
     }
     this.configSalva.set(config);
@@ -178,33 +174,10 @@ export class AdminAtendimentoComponent {
       dados.validadePropostaCorreiosHoras !== salvo.validadePropostaCorreiosHoras);
   }
 
-  protected contatoPendente(dados: ConfiguracaoAtendimento): boolean {
-    const salvo = this.configSalva();
-    return !!salvo && (dados.whatsApp !== salvo.whatsApp || dados.whatsAppConfirmado !== salvo.whatsAppConfirmado ||
-      dados.whatsAppHabilitado !== salvo.whatsAppHabilitado);
-  }
-
   protected salvarModalidades(config: ConfiguracaoAtendimento): void {
     const { retiradaHabilitada, entregaPropriaHabilitada, enderecoRetirada, instrucoesRetirada, revisao } = config;
     void this.gravar('PUT', '/modalidades', {
       retiradaHabilitada, entregaPropriaHabilitada, correiosHabilitados: false, enderecoRetirada, instrucoesRetirada, revisao,
-    });
-  }
-
-  protected alterarNumero(config: ConfiguracaoAtendimento, numero: string): void {
-    this.config.set({ ...config, whatsApp: numero, whatsAppConfirmado: false, whatsAppHabilitado: false });
-  }
-
-  protected salvarContato(config: ConfiguracaoAtendimento): void {
-    if (this.ocupado() || this.revisar()) return;
-    if (config.whatsAppHabilitado && (!config.whatsAppConfirmado || !config.whatsApp?.trim())) {
-      this.erro.set('Confirme o número antes de publicar o contato.');
-      return;
-    }
-    if (config.whatsAppHabilitado && !window.confirm('Publicar este número de WhatsApp na loja?')) return;
-    void this.gravar('PUT', '/whatsapp', {
-      numero: config.whatsApp?.trim() || null, confirmado: config.whatsAppConfirmado,
-      habilitado: config.whatsAppHabilitado, revisao: config.revisao,
     });
   }
 
@@ -280,7 +253,7 @@ export class AdminAtendimentoComponent {
       this.revisar.set(true);
       this.sucesso.set(exclusao ? 'Cidade excluída.' : rota === '/modalidades' ? 'Modalidades salvas.'
         : rota === '/correios-manual' ? 'Configuração dos Correios salva.'
-        : rota === '/whatsapp' ? 'Contato salvo.' : 'Cidade salva.');
+        : 'Cidade salva.');
       await this.carregar(rota);
     } catch (falha) {
       const status = falha instanceof HttpErrorResponse ? falha.status : 0;

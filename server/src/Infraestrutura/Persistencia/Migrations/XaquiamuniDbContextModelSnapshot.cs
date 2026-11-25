@@ -412,6 +412,13 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.Property<bool>("CotacaoManualCorreiosHabilitada")
                         .HasColumnType("bit");
 
+                    b.Property<string>("EmailComercial")
+                        .HasMaxLength(254)
+                        .HasColumnType("nvarchar(254)");
+
+                    b.Property<bool>("EmailComercialHabilitado")
+                        .HasColumnType("bit");
+
                     b.Property<string>("EnderecoRetirada")
                         .HasMaxLength(300)
                         .HasColumnType("nvarchar(300)");
@@ -449,6 +456,8 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                     b.ToTable("ConfiguracoesAtendimento", null, t =>
                         {
+                            t.HasCheckConstraint("CK_ConfiguracoesAtendimento_EmailComercial", "[EmailComercialHabilitado] = 0 OR [EmailComercial] IS NOT NULL");
+
                             t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Modalidade", "[RetiradaHabilitada] = 1 OR [EntregaPropriaHabilitada] = 1");
 
                             t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Unica", "[Id] = 1");

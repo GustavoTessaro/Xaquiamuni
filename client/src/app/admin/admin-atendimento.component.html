@@ -159,25 +159,6 @@
         </form>
       </section>
 
-      <section class="atendimento-cartao" aria-labelledby="contato-titulo">
-        <h2 id="contato-titulo">Contato comercial</h2>
-        <p>Escolha se o número de WhatsApp aparecerá na loja.</p>
-        <form (ngSubmit)="salvarContato(dados)">
-          <fieldset class="campos" [disabled]="ocupado() || revisar()">
-            <legend class="font-semibold">WhatsApp</legend>
-            <label>Número internacional
-              <input type="tel" name="numero" [ngModel]="dados.whatsApp" maxlength="40" placeholder="+55 DDD e número"
-                (ngModelChange)="alterarNumero(dados, $event)" />
-            </label>
-            <label class="opcao"><input type="checkbox" name="confirmado" [(ngModel)]="dados.whatsAppConfirmado" /> Conferi que o número está correto</label>
-            <label class="opcao"><input type="checkbox" name="publicado" [(ngModel)]="dados.whatsAppHabilitado" /> Exibir contato na loja</label>
-            <div class="flex flex-wrap items-center gap-3">
-              <button class="admin-button">Salvar contato</button>
-              @if (contatoPendente(dados)) { <p role="status">Contato tem alterações pendentes.</p> }
-            </div>
-          </fieldset>
-        </form>
-      </section>
     }
   </div>
 </app-admin-workspace>

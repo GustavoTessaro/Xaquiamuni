@@ -85,7 +85,7 @@ describe('Entregas e fretes ADMIN', () => {
     }
   });
 
-  it('grava retirada e uma cidade inativa, trata conflito e não publica um número novo automaticamente', async () => {
+  it('grava retirada e uma cidade inativa, trata conflito e mantém contato fora da tela', async () => {
     TestBed.configureTestingModule({
       imports: [AdminAtendimentoComponent],
       providers: [provideRouter([]), provideHttpClient(), provideHttpClientTesting()],
@@ -160,12 +160,7 @@ describe('Entregas e fretes ADMIN', () => {
     [...root.querySelectorAll<HTMLButtonElement>('button')]
       .find(b => b.textContent?.trim() === 'Recarregar dados')!.click();
     await carregar({ ...config, revisao: 2 }, [cidade]);
-    digitar('numero', '+55 54 9256-0258');
-    const contato = submeter(3, '/whatsapp');
-    expect(contato.request.body).toMatchObject({ confirmado: false, habilitado: false, revisao: 2 });
-    contato.flush({});
-    await Promise.resolve();
-    await carregar({ ...config, revisao: 3 });
+    expect(root.querySelector('[name="numero"]')).toBeNull();
     const confirmacao = vi.spyOn(window, 'confirm').mockReturnValue(true);
     root.querySelector<HTMLInputElement>('[name="correiosManual"]')!.click();
     digitar('validadeCorreios', '169');
@@ -175,12 +170,12 @@ describe('Entregas e fretes ADMIN', () => {
     expect(root.querySelector('#correios-titulo')?.parentElement?.parentElement?.textContent).toContain('entre 1 e 168 horas');
     digitar('validadeCorreios', '72');
     const postal = submeter(2, '/correios-manual');
-    expect(postal.request.body).toEqual({ habilitada: true, validadeHoras: 72, revisao: 3 });
+    expect(postal.request.body).toEqual({ habilitada: true, validadeHoras: 72, revisao: 2 });
     root.querySelectorAll('form')[2].dispatchEvent(new Event('submit', { cancelable: true }));
     http.expectNone('/api/auth/csrf');
     postal.flush({});
     await Promise.resolve();
-    await carregar({ ...config, revisao: 4, cotacaoManualCorreiosHabilitada: true, validadePropostaCorreiosHoras: 72 });
+    await carregar({ ...config, revisao: 3, cotacaoManualCorreiosHabilitada: true, validadePropostaCorreiosHoras: 72 });
     expect(root.querySelector('#correios-titulo')?.parentElement?.textContent).toContain('Habilitado');
     confirmacao.mockRestore();
     http.verify();

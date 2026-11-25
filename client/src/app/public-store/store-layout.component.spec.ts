@@ -62,9 +62,11 @@ describe('tema da loja pública', () => {
     try {
       document.dispatchEvent(new Event('visibilitychange'));
       http.expectOne('/api/loja/tema').flush({ chave: 'original', revisao: 2 });
+      http.expectOne('/api/loja/contato').flush({ whatsApp: null, emailComercial: 'loja+contato@example.com' });
       fixture.detectChanges();
       expect(layout.dataset['theme']).toBe('original');
       expect(layout.style.getPropertyValue('--tema-painel')).toBe('');
+      expect(layout.querySelector('footer a[href="mailto:loja%2Bcontato@example.com"]')).not.toBeNull();
       http.verify();
     } finally {
       visibility.mockRestore();

@@ -10,6 +10,15 @@ public sealed record SalvarModalidades(bool? RetiradaHabilitada, bool? EntregaPr
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record SalvarWhatsApp(string? Numero, bool? Confirmado, bool? Habilitado, int? Revisao);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SalvarEmailComercial(string? Endereco, bool? Habilitado, int? Revisao);
+
+public sealed record ContatoLojaAdmin(string? WhatsApp, bool WhatsAppConfirmado, bool WhatsAppHabilitado,
+    string? EmailComercial, bool EmailComercialHabilitado, int Revisao);
+
+public sealed record ContatoLojaPublico(string? WhatsApp,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? EmailComercial);
+
 public sealed record SalvarCorreiosManual(bool? Habilitada, int? ValidadeHoras, int? Revisao);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -46,11 +55,13 @@ public interface IConfiguracoesAtendimento
 {
     Task<AtendimentoAdmin> ConsultarAsync(CancellationToken ct);
     Task<ModalidadesPublicas> ModalidadesAsync(CancellationToken ct);
-    Task<string?> ContatoAsync(CancellationToken ct);
+    Task<ContatoLojaPublico> ContatoAsync(CancellationToken ct);
+    Task<ContatoLojaAdmin> ConsultarContatoAsync(CancellationToken ct);
     Task<IReadOnlyList<CidadeEntregaDto>> CidadesAsync(CancellationToken ct);
     Task<CidadeEntregaDto?> CidadeAsync(Guid id, CancellationToken ct);
     Task<ResultadoAtendimento> AtualizarModalidadesAsync(SalvarModalidades input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> AtualizarWhatsAppAsync(SalvarWhatsApp input, Guid autor, Guid chave, CancellationToken ct);
+    Task<ResultadoAtendimento> AtualizarEmailComercialAsync(SalvarEmailComercial input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> AtualizarCorreiosManualAsync(SalvarCorreiosManual input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> SalvarCidadeAsync(Guid? id, SalvarCidade input, Guid autor, Guid chave, CancellationToken ct);
     Task<ResultadoAtendimento> ExcluirCidadeAsync(Guid id, int? revisao, Guid autor, Guid chave, CancellationToken ct);

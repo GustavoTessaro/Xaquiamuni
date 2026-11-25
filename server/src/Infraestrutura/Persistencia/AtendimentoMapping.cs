@@ -17,6 +17,8 @@ internal static class AtendimentoMapping
                 t.HasCheckConstraint("CK_ConfiguracoesAtendimento_Modalidade", "[RetiradaHabilitada] = 1 OR [EntregaPropriaHabilitada] = 1");
                 t.HasCheckConstraint("CK_ConfiguracoesAtendimento_WhatsApp",
                     "([WhatsAppConfirmado] = 0 OR [WhatsApp] IS NOT NULL) AND ([WhatsAppHabilitado] = 0 OR [WhatsAppConfirmado] = 1)");
+                t.HasCheckConstraint("CK_ConfiguracoesAtendimento_EmailComercial",
+                    "[EmailComercialHabilitado] = 0 OR [EmailComercial] IS NOT NULL");
             });
             e.HasKey(c => c.Id);
             e.Property(c => c.Id).ValueGeneratedNever();
@@ -25,6 +27,7 @@ internal static class AtendimentoMapping
             e.Property(c => c.EnderecoRetirada).HasMaxLength(300);
             e.Property(c => c.InstrucoesRetirada).HasMaxLength(600);
             e.Property(c => c.WhatsApp).HasMaxLength(16);
+            e.Property(c => c.EmailComercial).HasMaxLength(254);
         });
 
         builder.Entity<CidadeEntregaPropria>(e =>

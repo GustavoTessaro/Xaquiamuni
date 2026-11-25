@@ -1964,7 +1964,7 @@ try {
   if (dados.postal) await validarCorreios({ a, c, call, waitFor, dados, abrir, login, cliente });
 
   if (dados.modoAdmin)
-    await validarModoAdmin({ a, c, call, waitFor, login, dados, admin });
+    await validarModoAdmin({ a, c, call, waitFor, login, dados, admin, cliente });
 
   const cookies = [];
   for (const { sessionId } of [c, a]) {

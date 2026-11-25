@@ -31,9 +31,16 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
             c.CotacaoManualCorreiosHabilitada)).SingleOrDefaultAsync(ct)
         ?? new(true, false, false);
 
-    public Task<string?> ContatoAsync(CancellationToken ct) =>
-        Configuracoes.AsNoTracking().Where(c => c.WhatsAppConfirmado && c.WhatsAppHabilitado)
-            .Select(c => c.WhatsApp).SingleOrDefaultAsync(ct);
+    public async Task<ContatoLojaPublico> ContatoAsync(CancellationToken ct)
+    {
+        var contato = await Configuracoes.AsNoTracking().Select(c => new ContatoLojaPublico(
+            c.WhatsAppConfirmado && c.WhatsAppHabilitado ? c.WhatsApp : null,
+            c.EmailComercialHabilitado ? c.EmailComercial : null)).SingleOrDefaultAsync(ct);
+        return new(contato?.WhatsApp, NormalizarEmailComercial(contato?.EmailComercial));
+    }
+
+    public async Task<ContatoLojaAdmin> ConsultarContatoAsync(CancellationToken ct) =>
+        MapearContato(await Configuracoes.AsNoTracking().SingleOrDefaultAsync(ct) ?? new());
 
     public async Task<IReadOnlyList<CidadeEntregaDto>> CidadesAsync(CancellationToken ct) =>
         (await Cidades.AsNoTracking().OrderBy(c => c.Uf).ThenBy(c => c.Nome)
@@ -87,6 +94,40 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
             AtualizarAuditoria(config, autor, agora);
             return Sucesso(Mapear(config));
         }, ct);
+
+    public Task<ResultadoAtendimento> AtualizarEmailComercialAsync(SalvarEmailComercial input, Guid autor, Guid chave, CancellationToken ct) =>
+        ExecutarAsync("email-comercial", null, input, autor, chave, async agora =>
+        {
+            if (!RevisaoValida(input.Revisao) || input.Habilitado is not bool habilitado)
+                return Invalido("Informe se deseja publicar o e-mail e use a revisão atual.");
+            var email = NormalizarEmailComercial(input.Endereco);
+            if (email is null && (habilitado || input.Endereco is not null && input.Endereco.Trim(' ').Length != 0))
+                return Invalido("Informe um endereço de e-mail comercial válido antes de salvar.");
+
+            var config = await CarregarConfiguracaoAsync(ct);
+            if (config.Revisao != input.Revisao) return RevisaoDivergente();
+            config.EmailComercial = email;
+            config.EmailComercialHabilitado = habilitado;
+            AtualizarAuditoria(config, autor, agora);
+            return Sucesso(MapearContato(config));
+        }, ct);
+
+    private static ContatoLojaAdmin MapearContato(ConfiguracaoAtendimento config) => new(
+        config.WhatsApp, config.WhatsAppConfirmado, config.WhatsAppHabilitado,
+        config.EmailComercial, config.EmailComercialHabilitado, config.Revisao);
+
+    internal static string? NormalizarEmailComercial(string? endereco)
+    {
+        if (endereco is null || endereco.Any(char.IsControl)) return null;
+        var valor = endereco.Trim(' ');
+        var arroba = valor.IndexOf('@');
+        return valor.Length <= 254 && arroba is > 0 and <= 64 && FormaEmailComercial().IsMatch(valor)
+            ? valor[..(arroba + 1)] + valor[(arroba + 1)..].ToLowerInvariant() : null;
+    }
+
+    [GeneratedRegex(@"\A[A-Za-z0-9_+\-]+(?:\.[A-Za-z0-9_+\-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}\z",
+        RegexOptions.NonBacktracking)]
+    private static partial Regex FormaEmailComercial();
 
     public Task<ResultadoAtendimento> AtualizarCorreiosManualAsync(SalvarCorreiosManual input, Guid autor, Guid chave, CancellationToken ct) =>
         ExecutarAsync("correios-manual", null, input, autor, chave, async agora =>

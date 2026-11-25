@@ -16,6 +16,62 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
     private const string ContatoSite = "/api/loja/contato";
 
     [SqlServerIntegrationFact]
+    public async Task Atendimento_EmailComercialPreservaWhatsAppEntregaEIdentidadeAoMigrar()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
+        using var cliente = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Cliente);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/modalidades",
+            new SalvarModalidades(true, false, false, "Retirada fictícia", null, 0), HttpStatusCode.OK);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/whatsapp",
+            new SalvarWhatsApp("+555492560258", true, true, 1), HttpStatusCode.OK);
+        await using var db = ambiente.Banco.CreateVerificationContext();
+        var contas = await db.Users.AsNoTracking().OrderBy(user => user.Id)
+            .Select(user => new { user.Id, user.Email, user.EmailConfirmed, user.SecurityStamp }).ToListAsync();
+        await db.Database.MigrateAsync("20261124203428_AuditarExclusaoReceitas");
+        await db.Database.MigrateAsync();
+
+        var config = (await admin.Http.GetFromJsonAsync<ContatoLojaAdmin>(Atendimento + "/contato"))!;
+        Assert.Equal(new("+555492560258", true, true, null, false, 2), config);
+        using var negado = await cliente.Http.GetAsync(Atendimento + "/contato");
+        Assert.Equal(HttpStatusCode.Forbidden, negado.StatusCode);
+        var comando = new SalvarEmailComercial("  Contato+loja@EXAMPLE.COM  ", true, config.Revisao);
+        const string rota = "/contato/email";
+        await EscreverAtendimentoAsync(cliente, HttpMethod.Put, rota, comando, HttpStatusCode.Forbidden);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, comando, HttpStatusCode.BadRequest, csrf: false);
+        foreach (var invalido in new[] { null, "inválido", "a@example.com?bcc=b@example.com", "a@example.com\r\n", "a%0a@example.com" })
+            await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, comando with { Endereco = invalido }, HttpStatusCode.BadRequest);
+        var salvo = await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, comando, HttpStatusCode.OK);
+        Assert.Equal("Contato+loja@example.com", salvo.GetProperty("emailComercial").GetString());
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, comando, HttpStatusCode.Conflict);
+        using var publico = await cliente.Http.GetAsync(ContatoSite);
+        Assert.True(publico.Headers.CacheControl?.NoStore);
+        var ambos = await publico.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(2, ambos.EnumerateObject().Count());
+        Assert.Equal(config.WhatsApp, ambos.GetProperty("whatsApp").GetString());
+        Assert.Equal("Contato+loja@example.com", ambos.GetProperty("emailComercial").GetString());
+        var entrega = (await admin.Http.GetFromJsonAsync<AtendimentoAdmin>(Atendimento))!;
+        Assert.Equal("Retirada fictícia", entrega.EnderecoRetirada);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/modalidades",
+            new SalvarModalidades(true, false, false, "Outro endereço fictício", null, 3), HttpStatusCode.OK);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, "/whatsapp",
+            new SalvarWhatsApp(config.WhatsApp, true, false, 4), HttpStatusCode.OK);
+        var apenasEmail = await cliente.Http.GetFromJsonAsync<JsonElement>(ContatoSite);
+        Assert.Equal(JsonValueKind.Null, apenasEmail.GetProperty("whatsApp").ValueKind);
+        Assert.Equal("Contato+loja@example.com", apenasEmail.GetProperty("emailComercial").GetString());
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota,
+            comando with { Habilitado = false, Revisao = 5 }, HttpStatusCode.OK);
+        Assert.Single((await cliente.Http.GetFromJsonAsync<JsonElement>(ContatoSite)).EnumerateObject());
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, new SalvarEmailComercial(null, false, 6), HttpStatusCode.OK);
+        Assert.Null((await admin.Http.GetFromJsonAsync<ContatoLojaAdmin>(Atendimento + "/contato"))!.EmailComercial);
+        using var sair = await cliente.EnviarAsync("/api/auth/logout", new { });
+        using var anonimo = await cliente.Http.GetAsync(Atendimento + "/contato");
+        Assert.Equal(HttpStatusCode.Unauthorized, anonimo.StatusCode);
+        Assert.Equal(contas, await db.Users.AsNoTracking().OrderBy(user => user.Id)
+            .Select(user => new { user.Id, user.Email, user.EmailConfirmed, user.SecurityStamp }).ToListAsync());
+    }
+
+    [SqlServerIntegrationFact]
     public async Task Atendimento_PadroesAutorizacaoCorreiosEWhatsApp()
     {
         await using var ambiente = await Ambiente.CriarAsync();

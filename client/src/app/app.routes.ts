@@ -230,6 +230,11 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   {
+    path: 'admin/configuracoes/contato',
+    loadComponent: () => import('./admin/admin-contato.component').then(m => m.AdminContatoComponent),
+    canActivate: [adminAuthGuard],
+  },
+  {
     path: 'admin/financeiro',
     loadComponent: () =>
       import('./admin/financeiro/admin-financeiro.component').then(

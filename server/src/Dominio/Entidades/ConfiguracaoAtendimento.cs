@@ -12,6 +12,8 @@ public sealed class ConfiguracaoAtendimento
     public string? WhatsApp { get; set; }
     public bool WhatsAppConfirmado { get; set; }
     public bool WhatsAppHabilitado { get; set; }
+    public string? EmailComercial { get; set; }
+    public bool EmailComercialHabilitado { get; set; }
     public int Revisao { get; set; }
     public Guid AdministradorId { get; set; }
     public DateTimeOffset AlteradoEmUtc { get; set; }

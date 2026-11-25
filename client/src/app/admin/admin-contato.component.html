@@ -1,0 +1,60 @@
+<app-admin-workspace activePage="contact">
+  <div class="grid min-w-0 gap-5">
+    <header class="flex flex-wrap items-end justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-semibold">Contato da loja</h1>
+        <p>Escolha como seus clientes poderão entrar em contato com a Xaquiamuni.</p>
+      </div>
+      <button type="button" class="admin-button" (click)="recarregar()" [disabled]="ocupado() || !!tentativa()">Recarregar dados</button>
+    </header>
+    @if (ocupado()) { <p role="status">Aguarde…</p> }
+    @if (erro()) { <p class="feedback erro" role="alert">{{ erro() }}</p> }
+    @if (sucesso()) { <p class="feedback sucesso" role="status">{{ sucesso() }}</p> }
+    @if (tentativa(); as envio) {
+      <button type="button" class="admin-button justify-self-start" (click)="enviar(envio)" [disabled]="ocupado()">Recuperar salvamento</button>
+    }
+    @if (rascunho(); as dados) {
+      <div class="grid gap-4 md:grid-cols-2">
+        <form class="atendimento-cartao" (ngSubmit)="salvar('whatsapp')" aria-labelledby="contato-whatsapp-titulo">
+          <h2 id="contato-whatsapp-titulo">WhatsApp</h2>
+          <p>Use o número do atendimento comercial da loja, com código do país e DDD.</p>
+          <fieldset class="campos" [disabled]="ocupado() || conflito() || !!tentativa()">
+            <label>Número comercial
+              <input type="tel" [ngModel]="dados.whatsApp" name="numero" maxlength="40" placeholder="+55 DDD e número"
+                (ngModelChange)="alterar({ whatsApp: $event, whatsAppConfirmado: false, whatsAppHabilitado: false })" />
+            </label>
+            <label class="opcao"><input type="checkbox" name="confirmado" [ngModel]="dados.whatsAppConfirmado"
+              (ngModelChange)="alterar($event ? { whatsAppConfirmado: true } : { whatsAppConfirmado: false, whatsAppHabilitado: false })" />
+              Conferi que o número está correto</label>
+            <label class="opcao"><input type="checkbox" name="publicado" [ngModel]="dados.whatsAppHabilitado"
+              (ngModelChange)="alterar({ whatsAppHabilitado: $event })" [disabled]="!dados.whatsAppConfirmado" /> Exibir WhatsApp na loja</label>
+            @if (erroWhatsApp()) { <p class="erro" role="alert">{{ erroWhatsApp() }}</p> }
+            <button class="admin-button justify-self-start">Salvar WhatsApp</button>
+          </fieldset>
+        </form>
+        <form class="atendimento-cartao" (ngSubmit)="salvar('email')" aria-labelledby="contato-email-titulo">
+          <h2 id="contato-email-titulo">E-mail comercial</h2>
+          <p>Use um endereço que você queira divulgar. Este campo é opcional.</p>
+          <fieldset class="campos" [disabled]="ocupado() || conflito() || !!tentativa()">
+            <label>Endereço de e-mail
+              <input type="email" name="emailComercial" autocomplete="off" maxlength="254" [ngModel]="dados.emailComercial"
+                (ngModelChange)="alterar({ emailComercial: $event, ...(!$event ? { emailComercialHabilitado: false } : {}) })" />
+            </label>
+            <label class="opcao"><input type="checkbox" name="publicarEmail" [ngModel]="dados.emailComercialHabilitado"
+              (ngModelChange)="alterar({ emailComercialHabilitado: $event })" /> Exibir e-mail na loja</label>
+            @if (erroEmail()) { <p class="erro" role="alert">{{ erroEmail() }}</p> }
+            <button class="admin-button justify-self-start">Salvar e-mail comercial</button>
+          </fieldset>
+        </form>
+      </div>
+      <section class="atendimento-cartao" aria-labelledby="contato-previa">
+        <h2 id="contato-previa">Prévia dos contatos públicos</h2>
+        <p role="status">{{ pendente() ? 'Há alterações ainda não salvas.' : 'Prévia da configuração salva.' }}</p>
+        @if (dados.whatsApp && !dados.whatsAppConfirmado) { <p>WhatsApp aguarda confirmação do número.</p> }
+        @if (previewWhatsApp(); as numero) { <p class="wrap-anywhere">WhatsApp · {{ numero }}</p> }
+        @if (previewEmail(); as email) { <p class="wrap-anywhere">E-mail comercial · {{ email }}</p> }
+        @if (!previewWhatsApp() && !previewEmail()) { <p>Nenhum canal será exibido com estas opções.</p> }
+      </section>
+    }
+  </div>
+</app-admin-workspace>

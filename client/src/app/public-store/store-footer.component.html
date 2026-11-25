@@ -10,6 +10,7 @@
         </span>
       </a>
       <p>Sabonetes artesanais e velas aromáticas feitos com carinho desde 2021.</p>
+      @if (!contexto.preview) { <app-contato-loja /> }
     </section>
     <nav class="store-footer__links" aria-label="Links do rodapé">
       <a [routerLink]="contexto.link()">Início</a>
