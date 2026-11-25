@@ -1,8 +1,8 @@
 import { DOCUMENT } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injectable, inject, input } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { NavigationEnd, Router } from '@angular/router';
-import { catchError, filter, fromEvent, map, merge, of, switchMap } from 'rxjs';
+import { catchError, filter, fromEvent, map, merge, of, shareReplay, switchMap } from 'rxjs';
 import { AtendimentoService } from '../core/atendimento.service';
 
 export function linkWhatsApp(numero: string | null): string | null {
@@ -32,8 +32,9 @@ export function linkEmailComercial(endereco: string | null | undefined): string 
   template: `
     @if (contatos(); as canais) {
       @if (canais.whatsApp || canais.email) {
-        <section class="mt-4 grid gap-2" aria-label="Contato com a loja">
+        <section class="mt-4 grid gap-2" [id]="ancora()" [attr.tabindex]="ancora() ? -1 : null" aria-label="Contato com a loja">
           <h2 class="font-semibold">Fale conosco</h2>
+          @if (descricao()) { <p>{{ descricao() }}</p> }
           @if (canais.whatsApp) {
             <a class="inline-flex w-fit items-center gap-2 underline" [href]="canais.whatsApp" target="_blank" rel="noopener noreferrer">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
@@ -56,9 +57,16 @@ export function linkEmailComercial(endereco: string | null | undefined): string 
   `,
 })
 export class ContatoLojaComponent {
+  readonly ancora = input<string>();
+  readonly descricao = input<string>();
+  protected readonly contatos = toSignal(inject(ContatoLojaPublicado).contatos);
+}
+
+@Injectable({ providedIn: 'root' })
+export class ContatoLojaPublicado {
   private readonly api = inject(AtendimentoService);
   private readonly documento = inject(DOCUMENT);
-  protected readonly contatos = toSignal(merge(
+  readonly contatos = merge(
     of(null),
     inject(Router).events.pipe(filter(evento => evento instanceof NavigationEnd)),
     fromEvent(this.documento, 'visibilitychange').pipe(filter(() => this.documento.visibilityState === 'visible')),
@@ -67,5 +75,6 @@ export class ContatoLojaComponent {
       map(contato => ({ whatsApp: linkWhatsApp(contato.whatsApp), email: linkEmailComercial(contato.emailComercial) })),
       catchError(() => of(null)),
     )),
-  ));
+    shareReplay({ bufferSize: 1, refCount: true }),
+  );
 }

@@ -2,12 +2,15 @@ import { ConsultaCepComponent } from '../shared/consulta-cep.component';
 import { formatarCep } from '../core/consulta-cep.service';
 import { DOCUMENT } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, signal } from '@angular/core';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { Subscription, fromEvent } from 'rxjs';
 import { PerfilClienteService, type PerfilClienteVersionado } from '../core/perfil-cliente.service';
+
+import { StoreCustomerSession } from './store-customer-session.service';
+import { ContatoLojaComponent, ContatoLojaPublicado } from './contato-loja.component';
 
 type Estado =
   | { tipo: 'carregando' | 'oculto' | 'sessao' | 'negado' | 'erro' }
@@ -17,12 +20,14 @@ const enderecoVazio = { cep: '', uf: '', cidade: '', bairro: '', logradouro: '',
 
 @Component({
   selector: 'app-minha-conta',
-  imports: [RouterLink, ReactiveFormsModule, ConsultaCepComponent],
+  imports: [RouterLink, ReactiveFormsModule, ConsultaCepComponent, ContatoLojaComponent],
   templateUrl: './minha-conta.component.html',
   styleUrl: './minha-conta.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class MinhaContaComponent {
+  protected readonly conta = inject(StoreCustomerSession);
+  protected readonly contatos = toSignal(inject(ContatoLojaPublicado).contatos);
   protected readonly formatarCep = formatarCep;
   private readonly perfil = inject(PerfilClienteService);
   private readonly documento = inject(DOCUMENT);
@@ -57,6 +62,22 @@ export class MinhaContaComponent {
   constructor() {
     fromEvent(this.documento, 'visibilitychange').pipe(takeUntilDestroyed()).subscribe(() => this.recarregar());
     this.recarregar();
+    let titular: string | null | undefined;
+    effect(() => {
+      if (this.conta.loading()) return;
+      const atual = this.conta.session()?.userId ?? null;
+      if (!atual) {
+        this.consulta?.unsubscribe();
+        this.gravacao?.unsubscribe();
+        this.salvando.set(false);
+        this.cancelar();
+        this.aviso.set('');
+        this.estado.set({ tipo: 'sessao' });
+      } else if (titular !== undefined && titular !== atual) {
+        this.recarregar();
+      }
+      titular = atual;
+    });
   }
 
   protected recarregar(): void {
@@ -73,7 +94,11 @@ export class MinhaContaComponent {
     this.estado.set({ tipo: 'carregando' });
     this.consulta = this.perfil.consultar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: perfil => this.estado.set({ tipo: 'pronto', perfil }),
-      error: erro => this.estado.set({ tipo: this.classificarErro(erro) }),
+      error: erro => {
+        const tipo = this.classificarErro(erro);
+        if (tipo === 'sessao') this.conta.invalidar();
+        this.estado.set({ tipo });
+      },
     });
   }
 
@@ -124,6 +149,7 @@ export class MinhaContaComponent {
         const tipo = this.classificarErro(erro);
         if (tipo !== 'erro') {
           this.cancelar();
+          if (tipo === 'sessao') this.conta.invalidar();
           this.estado.set({ tipo });
           return;
         }

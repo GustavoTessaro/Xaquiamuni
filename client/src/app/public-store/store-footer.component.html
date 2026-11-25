@@ -13,15 +13,29 @@
       @if (!contexto.preview) { <app-contato-loja /> }
     </section>
     <nav class="store-footer__links" aria-label="Links do rodapé">
+      <h2>Nossa loja</h2>
       <a [routerLink]="contexto.link()">Início</a>
       <a [routerLink]="contexto.link('produtos')">Produtos</a>
       <a [routerLink]="contexto.link()" fragment="sobre-nos">Sobre nós</a>
     </nav>
-    @if (!contexto.preview) {
-      <section class="store-footer__account" aria-label="Acesso à conta">
-        <a routerLink="/login">Entrar</a>
-        <a routerLink="/cadastro">Criar conta</a>
-      </section>
+    @if (conta; as cliente) {
+      <nav class="store-footer__account" aria-label="Acesso à conta">
+        <h2>Acesso à conta</h2>
+        @if (cliente.loading()) {
+          <span role="status">Verificando conta…</span>
+        } @else if (cliente.session()) {
+          <a routerLink="/minha-conta">Minha conta</a>
+          <a routerLink="/pedidos">Meus pedidos</a>
+          <a routerLink="/cotacoes-correios">Minhas cotações</a>
+          <button type="button" (click)="cliente.sair()" [disabled]="cliente.signingOut()">
+            {{ cliente.signingOut() ? 'Saindo…' : 'Sair' }}
+          </button>
+          @if (cliente.logoutError()) { <p>{{ cliente.logoutError() }}</p> }
+        } @else {
+          <a routerLink="/login" [queryParams]="{ destino: cliente.destino() }">Entrar</a>
+          <a routerLink="/cadastro">Criar conta</a>
+        }
+      </nav>
     }
   </div>
   <div class="store-footer__bottom">

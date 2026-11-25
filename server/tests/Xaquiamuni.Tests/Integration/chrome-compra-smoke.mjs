@@ -1077,9 +1077,59 @@ try {
     console.log('Campanha de frete criada, editada, ativada e inativada no Chrome, em 375/1280 px e nos dois modos ADMIN.');
   }
 
-  if (process.env.XAQUIAMUNI_CHROME_CONTA === '1') {
-    const conta = await abrir('/login');
-    await login(conta, cliente, '/api/auth');
+  async function validarConta() {
+    const conta = await abrir('/');
+    const rodape = '.store-footer__account';
+    const linksVisitante = `!!document.querySelector('${rodape} a[href^="/login"]')
+      && !!document.querySelector('${rodape} a[href="/cadastro"]')
+      && !document.querySelector('${rodape} button')`;
+    await waitFor(() => conta.ev(linksVisitante), 'Rodapé de visitante');
+    await conta.ir('/minha-conta');
+    await waitFor(() => conta.ev("location.pathname === '/login' && new URLSearchParams(location.search).get('destino') === '/minha-conta'"),
+      'Rota protegida e destino seguro');
+    await conta.ev(`(() => {
+      for (const [nome, valor] of Object.entries(${JSON.stringify({email: cliente.Email, senha: cliente.Senha})})) {
+        const campo = document.querySelector('[formControlName="' + nome + '"]');
+        campo.value = valor;
+        campo.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+      document.querySelector('form').requestSubmit();
+    })()`);
+    await waitFor(() => conta.ev("location.pathname === '/minha-conta' && !!document.querySelector('.conta-dados')"), 'Retorno após login');
+    await waitFor(() => conta.ev(`!!document.querySelector('${rodape} a[href="/minha-conta"]')
+      && !!document.querySelector('.store-account__link[href="/minha-conta"]')
+      && !document.querySelector('${rodape} a[href="/cadastro"]')`), 'Cabeçalho e rodapé autenticados');
+    for (const rota of ['/pedidos', '/cotacoes-correios']) {
+      await conta.ev(`document.querySelector('.conta-atalhos a[href="${rota}"]').click()`);
+      await waitFor(() => conta.ev(`location.pathname === ${JSON.stringify(rota)}`), 'Atalho ' + rota);
+      await conta.ev(`document.querySelector('${rodape} a[href="/minha-conta"]').click()`);
+      await waitFor(() => conta.ev("!!document.querySelector('.conta-dados')"), 'Volta pelo rodapé');
+    }
+    const administradorNaVitrine = await abrir('/admin/login');
+    await login(administradorNaVitrine, admin, '/api/admin/auth');
+    await administradorNaVitrine.ir('/');
+    await waitFor(() => administradorNaVitrine.ev(linksVisitante), 'ADMIN como visitante');
+    await administradorNaVitrine.ir('/minha-conta');
+    await waitFor(() => administradorNaVitrine.ev("location.pathname === '/login'"), 'ADMIN sem acesso à conta de cliente');
+
+    await call('Page.bringToFront', {}, conta.sessionId);
+    const publicarEmail = habilitado => a.ev(`(async () => {
+      const rota = '/api/admin/loja/atendimento/contato';
+      const { revisao } = await fetch(rota).then(r => r.json());
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      return (await fetch(rota + '/email', { method: 'PUT', headers: {
+        'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+      }, body: JSON.stringify({ endereco: 'contato@example.test', habilitado: ${habilitado}, revisao }) })).status;
+    })()`);
+    assert.equal(await publicarEmail(true), 200);
+    const contatoVisivel = `!!document.querySelector('#conta-contato a[href="mailto:contato@example.test"]')
+      && !!document.querySelector('footer a[href="mailto:contato@example.test"]')`;
+    await conta.ev("document.dispatchEvent(new Event('visibilitychange'))");
+    await waitFor(() => conta.ev(contatoVisivel), 'Canal comercial na conta e no rodapé');
+    assert.equal(await publicarEmail(false), 200);
+    await conta.ev("document.dispatchEvent(new Event('visibilitychange'))");
+    await waitFor(() => conta.ev(`!(${contatoVisivel}) && !document.querySelector('.conta-atalhos a[href="#conta-contato"]')
+      && !!document.querySelector('footer a[href="/produtos"]')`), 'Canal desabilitado e navegação preservada');
     const publicar = chave => a.ev(`(async () => {
       const rota = '/api/admin/loja/tema';
       const { publicacao } = await fetch(rota).then(r => r.json());
@@ -1112,7 +1162,7 @@ try {
           await conta.ev(`document.querySelector('button[aria-label="' + ${JSON.stringify(rotulo)} + '"]').click()`);
           await waitFor(() => conta.ev("!!document.querySelector('.conta form input')"), rotulo);
           assert.ok(await conta.ev('document.documentElement.scrollWidth <= innerWidth'), rotulo + ' em ' + tema + ' a ' + width + ' px');
-          await conta.ev("document.querySelector('.conta form button[type=button]').click()");
+          await conta.ev("document.querySelector('.conta form .conta-acoes button[type=button]').click()");
           await waitFor(() => conta.ev("!document.querySelector('.conta form')"), 'Cancelar edição');
         }
         await conta.ev("document.querySelector('.conta nav a').focus()");
@@ -1134,11 +1184,53 @@ try {
     await waitFor(() => conta.ev("document.querySelector('.conta [role=status]')?.textContent.includes('Alterações salvas')"), 'Edição salva');
     await conta.ir('/minha-conta');
     await waitFor(() => conta.ev("document.querySelector('.conta-dados')?.textContent.includes('Cliente Editado')"), 'Dados atualizados após recarregar');
-    await conta.ev("document.querySelector('.store-account__logout').click()");
+    await conta.ev("document.querySelector('[aria-label=\"Editar dados pessoais\"]').click()");
+    await waitFor(() => conta.ev("!!document.querySelector('#conta-nome')"), 'Edição iniciada');
+    assert.equal(await conta.ev(`(async () => {
+      const url = '/api/clientes/me/perfil';
+      const perfil = await fetch(url);
+      const { telefone } = await perfil.json();
+      const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+      return (await fetch(url, { method: 'PUT', headers: {
+        'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken,
+        'If-Match': perfil.headers.get('X-Perfil-Versao'),
+      }, body: JSON.stringify({ nomeCompleto: 'Cliente em outra sessão', telefone }) })).status;
+    })()`), 200);
+    await conta.ev("document.querySelector('.conta form').requestSubmit()");
+    await waitFor(() => conta.ev("document.querySelector('.conta [role=alert]')?.textContent.includes('Os dados mudaram')"), 'Versão desatualizada');
+    assert.equal(await conta.ev("document.querySelector('#conta-nome').value"), 'Cliente Editado');
+    await conta.ev("[...document.querySelectorAll('.conta button')].find(b => b.textContent.trim() === 'Recarregar dados').click()");
+    await waitFor(() => conta.ev("document.querySelector('.conta-dados')?.textContent.includes('Cliente em outra sessão')"), 'Revisão carregada');
+    if (dados.modoAdmin) {
+      const pedidos = await conta.ev("fetch('/api/pedidos').then(r => r.json())");
+      const pedidoId = pedidos.itens[0].id;
+      const destino = () => conta.ev(`fetch('/api/pedidos/${pedidoId}').then(r => r.json()).then(p => p.entrega.destino)`);
+      const historico = await destino();
+      await conta.ev("document.querySelector('[aria-label=\"Editar endereço padrão\"]').click()");
+      await waitFor(() => conta.ev("!!document.querySelector('#conta-cep')"), 'Editar endereço');
+      await conta.ev("document.querySelector('app-consulta-cep button').click()");
+      await waitFor(() => conta.ev("document.querySelector('app-consulta-cep [role=status]')?.textContent.includes('Endereço atualizado')"), 'Consulta de CEP simulada');
+      await conta.ev(`(() => {
+        const numero = document.querySelector('#conta-numero');
+        if (numero.value !== '12') throw Error('Número alterado pela consulta');
+        numero.value = '99';
+        numero.dispatchEvent(new Event('input', { bubbles: true }));
+        document.querySelector('.conta form').requestSubmit();
+      })()`);
+      await waitFor(() => conta.ev("document.querySelector('.conta [role=status]')?.textContent.includes('Alterações salvas')"), 'Endereço salvo');
+      assert.deepEqual(await destino(), historico);
+    }
+    await conta.ev("document.querySelector('.store-footer__account button').click()");
     await waitFor(() => conta.ev("location.pathname === '/' && !document.querySelector('.conta-dados')"), 'Saída de Minha conta');
     await conta.ir('/minha-conta');
     await waitFor(() => conta.ev("location.pathname === '/login' && new URLSearchParams(location.search).get('destino') === '/minha-conta'"),
       'Proteção de Minha conta após sair');
+    if (dados.outroCliente) {
+      await login(conta, dados.outroCliente, '/api/auth');
+      await conta.ir('/minha-conta');
+      await waitFor(() => conta.ev("!!document.querySelector('.conta-dados')"), 'Outra conta');
+      assert.ok(await conta.ev("!document.querySelector('.conta-dados').textContent.includes('Cliente em outra sessão')"));
+    }
     console.log('Minha conta conferida nos seis temas em 375 e 1280 px.');
   }
 
@@ -1965,6 +2057,8 @@ try {
 
   if (dados.modoAdmin)
     await validarModoAdmin({ a, c, call, waitFor, login, dados, admin, cliente });
+
+  if (process.env.XAQUIAMUNI_CHROME_CONTA === '1') await validarConta();
 
   const cookies = [];
   for (const { sessionId } of [c, a]) {

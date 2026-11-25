@@ -3,9 +3,10 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
 import { RouterTestingHarness } from '@angular/router/testing';
-import { of } from 'rxjs';
+import { BehaviorSubject, of } from 'rxjs';
 import { vi } from 'vitest';
 import { routes } from '../app.routes';
+import { AtendimentoService } from '../core/atendimento.service';
 import { AuthService } from '../core/auth/auth.service';
 import { CatalogoPublicoService } from './catalogo-publico.service';
 import { StoreHeaderComponent } from './store-header.component';
@@ -22,10 +23,12 @@ const perfil = {
 describe('Minha conta', () => {
   let http: HttpTestingController;
   let autenticado: boolean;
+  let canais: BehaviorSubject<{ whatsApp: string | null; emailComercial: string | null }>;
   const conta = routes.find(r => r.path === '' && r.children)?.children?.find(r => r.path === 'minha-conta')!;
 
   beforeEach(() => {
     autenticado = true;
+    canais = new BehaviorSubject<{ whatsApp: string | null; emailComercial: string | null }>({ whatsApp: null, emailComercial: null });
     TestBed.configureTestingModule({ providers: [
       provideHttpClient(), provideHttpClientTesting(),
       provideRouter([conta, ...['', 'login', 'pedidos', 'cotacoes-correios', 'produtos']
@@ -34,6 +37,7 @@ describe('Minha conta', () => {
         obterSessao: () => of(autenticado ? { userId: 'cliente' } : null),
         logout: () => { autenticado = false; return of(undefined); },
       } },
+      { provide: AtendimentoService, useValue: { contato: () => canais } },
       { provide: CatalogoPublicoService, useValue: { listarCategorias: () => of([]) } },
     ] });
     http = TestBed.inject(HttpTestingController);
@@ -51,9 +55,26 @@ describe('Minha conta', () => {
     }
     expect(tela.routeNativeElement?.textContent).not.toContain('CPF');
     expect([...tela.routeNativeElement!.querySelectorAll('nav a')].map(a => a.getAttribute('href')))
-      .toEqual(['/pedidos', '/cotacoes-correios', '/produtos']);
+      .toEqual(['/pedidos', '/cotacoes-correios', '#conta-dados-pessoais', '#conta-endereco-padrao']);
+    expect(tela.routeNativeElement?.textContent).toContain('Olá, Cliente Teste!');
     tela.routeNativeElement!.querySelector<HTMLAnchorElement>('nav a')!.click();
     await vi.waitFor(() => expect(TestBed.inject(Router).url).toBe('/pedidos'));
+  });
+
+  it('oferece cadastro de endereço e omite canais comerciais indisponíveis', async () => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    http.expectOne(api).flush({ ...perfil, endereco: null }, { headers: versoes });
+    tela.detectChanges();
+    const elemento = tela.routeNativeElement!;
+    expect(elemento.querySelector('[href="#conta-contato"]')).toBeNull();
+    expect(elemento.querySelector('[aria-label="Cadastrar endereço padrão"]')).not.toBeNull();
+    canais.next({ whatsApp: null, emailComercial: 'contato@example.test' });
+    tela.detectChanges();
+    expect(elemento.querySelector('[href="#conta-contato"]')).not.toBeNull();
+    expect(elemento.querySelector('[href="mailto:contato@example.test"]')).not.toBeNull();
+    canais.next({ whatsApp: null, emailComercial: null });
+    tela.detectChanges();
+    expect(elemento.querySelector('[href="#conta-contato"]')).toBeNull();
   });
 
   it('oferece nova tentativa sem bloquear perfis incompletos', async () => {
@@ -159,6 +180,29 @@ describe('Minha conta', () => {
     tela.detectChanges();
     expect(elemento.textContent).toContain('não tem um endereço padrão');
     expect(elemento.querySelector('form')).toBeNull();
+  });
+
+  it('preenche o endereço por CEP mantendo número, complemento e a versão de endereço', async () => {
+    const tela = await RouterTestingHarness.create('/minha-conta');
+    const elemento = tela.routeNativeElement!;
+    http.expectOne(api).flush(perfil, { headers: versoes });
+    tela.detectChanges();
+    elemento.querySelector<HTMLButtonElement>('[aria-label="Editar endereço padrão"]')!.click();
+    tela.detectChanges();
+    elemento.querySelector<HTMLButtonElement>('app-consulta-cep button')!.click();
+    http.expectOne('/api/cep/95200000').flush({ uf: 'RS', cidade: 'Vacaria', logradouro: 'Rua assistida' });
+    tela.detectChanges();
+    expect(elemento.querySelector<HTMLInputElement>('#conta-numero')?.value).toBe('12');
+    expect(elemento.querySelector<HTMLInputElement>('#conta-complemento')?.value).toBe('Apto 2');
+    expect(elemento.querySelector<HTMLInputElement>('#conta-bairro')?.value).toBe('Centro');
+    elemento.querySelector('form')!.dispatchEvent(new Event('submit'));
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' });
+    const escrita = http.expectOne({ method: 'PUT', url: '/api/clientes/me/endereco-padrao' });
+    expect(escrita.request.headers.get('If-Match')).toBe('"endereco"');
+    expect(escrita.request.body).toEqual({ ...perfil.endereco, logradouro: 'Rua assistida' });
+    escrita.flush({ ...perfil, endereco: escrita.request.body }, { headers: versoes });
+    tela.detectChanges();
+    expect(elemento.querySelector('address')?.textContent).toContain('Rua assistida');
   });
 
   it('mostra validação do servidor e remove os dados se a sessão expirar durante a gravação', async () => {

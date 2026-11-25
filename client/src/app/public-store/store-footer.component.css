@@ -44,8 +44,27 @@
   line-height: 1.7;
 }
 
+.store-footer h2 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.store-footer__account button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+}
+
+.store-footer__account button:disabled { cursor: wait; }
+
+.store-footer__account button,
 .store-footer__links a,
 .store-footer__account a {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.75rem;
   color: #f2efdf;
   font-size: 0.88rem;
   text-decoration: none;
@@ -55,6 +74,7 @@
   outline-color: var(--brand-gold-light);
 }
 
+.store-footer__account button:hover,
 .store-footer__links a:hover,
 .store-footer__account a:hover {
   color: var(--brand-gold-light);

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, inject, Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { StorefrontContext } from './storefront-context';
+import { StoreCustomerSession } from './store-customer-session.service';
 import { ContatoLojaComponent } from './contato-loja.component';
 
 @Component({
@@ -12,5 +13,6 @@ import { ContatoLojaComponent } from './contato-loja.component';
 })
 export class StoreFooterComponent {
   protected readonly contexto = inject(StorefrontContext);
+  protected readonly conta = this.contexto.preview ? null : inject(StoreCustomerSession);
   protected readonly currentYear = new Date().getFullYear();
 }

@@ -11,7 +11,7 @@ h1, h2 {
 
 h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); }
 h2 { font-size: 1.25rem; }
-p, dl { margin-block: 0.75rem 0; }
+p, dl, address { margin-block: 0.75rem 0; }
 dt { font-weight: 700; }
 dd { margin: 0 0 0.65rem; }
 
@@ -30,7 +30,35 @@ dd { margin: 0 0 0.65rem; }
   color: var(--brand-ink);
 }
 
-nav { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; margin-block-start: 1rem; }
+address { font-style: normal; line-height: 1.6; }
+.conta-boas-vindas { margin-block-end: 1.25rem; }
+.conta-saudacao { font-family: var(--brand-display); font-size: 1.5rem; }
+.conta-atalhos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11.25rem), 1fr));
+  gap: 0.75rem;
+  margin-block: 1rem 1.5rem;
+}
+.conta-atalhos a {
+  display: grid;
+  align-content: start;
+  gap: 0.4rem;
+  padding: 1rem;
+  border: 1px solid var(--brand-line);
+  border-radius: 0.75rem;
+  background: var(--brand-surface);
+  text-decoration: none;
+}
+.conta-atalhos a:hover strong { text-decoration: underline; }
+.conta-atalhos span { color: var(--brand-ink); font-weight: 400; }
+.conta-atalhos svg {
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.conta-rodape { margin-block-start: 1.25rem; justify-content: space-between; }
 
 a, button {
   display: inline-flex;
@@ -68,9 +96,18 @@ input {
 
 input[aria-invalid='true'] { border-color: var(--brand-error); }
 button:disabled { color: var(--brand-disabled); cursor: not-allowed; }
-.conta-acoes { display: flex; gap: 1rem; flex-wrap: wrap; }
+.conta-acoes { display: flex; gap: 1rem; flex-wrap: wrap; margin-block-start: 0.5rem; }
+.conta-acoes button[type='submit'] {
+  border-radius: var(--brand-radius-sm);
+  background: var(--brand-action);
+  color: var(--brand-surface);
+  padding: 0.5rem 0.85rem;
+  text-decoration: none;
+}
+.conta-acoes button[type='submit']:hover:not(:disabled) { background: var(--brand-action-hover); }
+.conta-acoes button[type='submit']:disabled { background: var(--brand-disabled); }
 
-a:focus-visible, button:focus-visible, input:focus-visible {
+a:focus-visible, button:focus-visible, input:focus-visible, section:focus-visible {
   outline: 2px solid var(--brand-focus);
   outline-offset: 3px;
 }

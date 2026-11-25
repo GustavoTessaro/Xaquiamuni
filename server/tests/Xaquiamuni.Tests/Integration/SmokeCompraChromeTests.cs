@@ -148,6 +148,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
     private async Task ExecutarChromeAsync(bool jornada, bool pixManual = false, bool auditoriaAdmin = false,
         bool financeiro = false, bool agenda = false, bool modoAdmin = false, bool postal = false)
     {
+        var validarConta = modoAdmin && Environment.GetEnvironmentVariable("XAQUIAMUNI_CHROME_CONTA") == "1";
         var repo = EncontrarRepositorio();
         var dist = Path.Combine(repo, "client", "dist", "xaquiamuni", "browser");
         var script = Path.Combine(repo, "server", "tests", "Xaquiamuni.Tests", "Integration", "chrome-compra-smoke.mjs");
@@ -172,7 +173,9 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                     promocoesComerciais: modoAdmin,
                     municipiosPorCep: modoAdmin ? new Dictionary<string, string>
                         { ["95200000"] = "4322509", ["90000000"] = "4314902" } : null,
-                    municipiosPostais: postal ? new Dictionary<string, MunicipioPostal> { ["95200000"] = new("4322509", "Vacaria", "RS") } : null))
+                    municipiosPostais: postal || validarConta
+                        ? new Dictionary<string, MunicipioPostal> { ["95200000"] = new("4322509", "Vacaria", "RS") }
+                        : null))
                 {
                     endereco = new Uri(host.Origin);
                     Assert.Equal("https", endereco.Scheme);
@@ -184,7 +187,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                         ? new ContaE2E(Guid.Empty, $"e2e-{Guid.NewGuid():N}@example.test", $"E2e!{Guid.NewGuid():N}a1")
                         : await host.CriarContaAsync(XaquiamuniRoles.Cliente);
                     var fluxo = relogio is null ? null : new JornadaCompraE2E(host, relogio, admin.Id, cliente.Email);
-                    var outroCliente = jornada ? await host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
+                    var outroCliente = jornada || validarConta ? await host.CriarContaAsync(XaquiamuniRoles.Cliente) : null;
                     var seed = fluxo is null ? null : await fluxo.SemearAsync();
                     Guid? varianteAuditoria = null;
                     Guid? insumoFinanceiro = null;

@@ -6,12 +6,13 @@ import { TemasLojaService } from '../core/temas-loja.service';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { StoreFooterComponent } from './store-footer.component';
 import { StoreHeaderComponent } from './store-header.component';
+import { StoreCustomerSession } from './store-customer-session.service';
 import { StorefrontContext } from './storefront-context';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, RouterOutlet, StoreFooterComponent, StoreHeaderComponent],
-  providers: [StorefrontContext],
+  providers: [StorefrontContext, StoreCustomerSession],
   selector: 'app-store-layout',
   host: { '[attr.data-theme]': 'contexto.tema()', '[style]': 'contexto.manifesto()?.sazonal?.tokens' },
   styleUrl: './store-layout.component.css',

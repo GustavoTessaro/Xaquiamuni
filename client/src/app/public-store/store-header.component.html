@@ -36,36 +36,36 @@
         >
           Carrinho <span aria-hidden="true">{{ quantidadeCarrinho() }}</span>
         </a>
-        @if (sessionLoading()) {
+        @if (conta?.loading()) {
           <span class="store-account__status" role="status">Verificando conta...</span>
-        } @else if (session()) {
+        } @else if (conta?.session()) {
           <a class="store-account__link" routerLink="/minha-conta">Minha conta</a>
           <a class="store-account__link" routerLink="/pedidos">Meus pedidos</a>
           <a class="store-account__link" routerLink="/cotacoes-correios">Minhas cotações</a>
           <button
             type="button"
             class="store-account__logout"
-            (click)="logout()"
-            [disabled]="signingOut()"
+            (click)="conta.sair()"
+            [disabled]="conta.signingOut()"
           >
-            {{ signingOut() ? 'Saindo...' : 'Sair' }}
+            {{ conta.signingOut() ? 'Saindo...' : 'Sair' }}
           </button>
         } @else {
-          <a class="store-account__link" routerLink="/login" [queryParams]="{ destino: destinoLogin() }">Entrar</a>
+          <a class="store-account__link" routerLink="/login" [queryParams]="{ destino: conta?.destino() }">Entrar</a>
           <a class="store-account__register" routerLink="/cadastro">Criar conta</a>
         }
       </div>
     }
   </div>
 
-  @if (sessionError()) {
-    <p class="store-header__notice" role="status">{{ sessionError() }}</p>
+  @if (conta?.sessionError()) {
+    <p class="store-header__notice" role="status">{{ conta.sessionError() }}</p>
   }
   @if (categoryError()) {
     <p class="store-header__notice" role="status">{{ categoryError() }}</p>
   }
-  @if (accountError()) {
-    <p class="store-header__notice" role="alert">{{ accountError() }}</p>
+  @if (conta?.logoutError()) {
+    <p class="store-header__notice" role="alert">{{ conta.logoutError() }}</p>
   }
 
   <nav class="store-nav" aria-label="Navegação da loja">
@@ -127,12 +127,14 @@
       </details>
       <a [routerLink]="contexto.link()" fragment="sobre-nos" (click)="closeNavigation()">Sobre nós</a>
       @if (!contexto.preview) {
-        @if (session()) {
+        @if (conta?.loading()) {
+          <span role="status">Verificando conta...</span>
+        } @else if (conta?.session()) {
           <a routerLink="/minha-conta" (click)="closeNavigation()">Minha conta</a>
           <a routerLink="/pedidos" (click)="closeNavigation()">Meus pedidos</a>
           <a routerLink="/cotacoes-correios" (click)="closeNavigation()">Minhas cotações</a>
         } @else {
-          <a routerLink="/login" [queryParams]="{ destino: destinoLogin() }" (click)="closeNavigation()">Entrar</a>
+          <a routerLink="/login" [queryParams]="{ destino: conta?.destino() }" (click)="closeNavigation()">Entrar</a>
           <a routerLink="/cadastro" (click)="closeNavigation()">Criar conta</a>
         }
       }

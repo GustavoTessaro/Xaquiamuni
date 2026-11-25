@@ -18,12 +18,42 @@
       <button type="button" (click)="recarregar()">Tentar novamente</button>
     }
     @case ('pronto') {
+      <header class="conta-boas-vindas">
+        @if (atual.perfil.nomeCompleto; as nome) {
+          <p class="conta-saudacao">Olá, {{ nome }}!</p>
+        }
+        <p>Acompanhe suas compras e gerencie seus dados em um só lugar.</p>
+      </header>
+      <nav class="conta-atalhos" aria-label="Atalhos da conta">
+        <a routerLink="/pedidos">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8h16v12H4zM8 8V5h8v3m-8 5h8"/></svg>
+          <strong>Meus pedidos</strong><span>Acompanhe suas compras e entregas.</span>
+        </a>
+        <a routerLink="/cotacoes-correios">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v14H3zM3 6l9 7 9-7"/></svg>
+          <strong>Minhas cotações</strong><span>Confira as propostas de envio pelos Correios.</span>
+        </a>
+        <a href="#conta-dados-pessoais">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>
+          <strong>Dados pessoais</strong><span>Consulte seu e-mail e atualize nome e telefone.</span>
+        </a>
+        <a href="#conta-endereco-padrao">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 0 1 14 0Z"/><circle cx="12" cy="10" r="2"/></svg>
+          <strong>Meu endereço</strong><span>Cadastre ou atualize seu endereço padrão.</span>
+        </a>
+        @if (contatos()?.whatsApp || contatos()?.email) {
+          <a href="#conta-contato">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19l1-4a9 9 0 1 1 4 4l-5 1zM8 12h8"/></svg>
+            <strong>Fale conosco</strong><span>Veja como entrar em contato com a loja.</span>
+          </a>
+        }
+      </nav>
       @if (aviso()) { <p role="status">{{ aviso() }}</p> }
       <div class="conta-dados">
-        <section>
+        <section id="conta-dados-pessoais" tabindex="-1">
           <h2>Dados pessoais</h2>
           @if (editando() === 'perfil') {
-            @if (atual.perfil.email; as email) { <p>E-mail: {{ email }}</p> }
+            @if (atual.perfil.email; as email) { <p>E-mail de acesso: {{ email }}</p> }
             <form [formGroup]="dados" (ngSubmit)="salvar(atual.perfil)">
               <fieldset [disabled]="salvando()">
                 <legend>Editar dados pessoais</legend>
@@ -40,7 +70,7 @@
                 <small id="conta-telefone-erro">{{ erros()['telefone']?.[0] ||
                   (dados.controls.telefone.touched && dados.controls.telefone.invalid ? 'Informe o telefone.' : '') }}</small>
                 <div class="conta-acoes">
-                  <button type="submit" [disabled]="conflito()">Salvar</button>
+                  <button type="submit" [disabled]="conflito()">{{ salvando() ? 'Salvando…' : 'Salvar alterações' }}</button>
                   <button type="button" (click)="cancelar()">Cancelar</button>
                 </div>
               </fieldset>
@@ -52,7 +82,7 @@
                 <dt>Nome completo</dt><dd>{{ nome }}</dd>
               }
               @if (atual.perfil.email; as email) {
-                <dt>E-mail</dt><dd>{{ email }}</dd>
+                <dt>E-mail de acesso</dt><dd>{{ email }}</dd>
               }
               @if (atual.perfil.telefone; as telefone) {
                 <dt>Telefone</dt><dd>{{ telefone }}</dd>
@@ -62,11 +92,11 @@
             <p>Seus dados pessoais ainda não estão disponíveis.</p>
           }
           @if (atual.perfil.versaoPerfil) {
-            <button type="button" aria-label="Editar dados pessoais" [disabled]="salvando()" (click)="editar('perfil', atual.perfil)">Editar</button>
+            <button type="button" aria-label="Editar dados pessoais" [disabled]="salvando()" (click)="editar('perfil', atual.perfil)">Editar dados</button>
           }
           }
         </section>
-        <section>
+        <section id="conta-endereco-padrao" tabindex="-1">
           <h2>Endereço padrão</h2>
           @if (editando() === 'endereco') {
             <form [formGroup]="endereco" (ngSubmit)="salvar(atual.perfil)">
@@ -89,23 +119,25 @@
                   }
                 }
                 <div class="conta-acoes">
-                  <button type="submit" [disabled]="conflito()">Salvar</button>
+                  <button type="submit" [disabled]="conflito()">{{ salvando() ? 'Salvando…' : 'Salvar alterações' }}</button>
                   <button type="button" (click)="cancelar()">Cancelar</button>
                 </div>
               </fieldset>
             </form>
           } @else {
           @if (atual.perfil.endereco; as endereco) {
-            <p>{{ endereco.logradouro }}, {{ endereco.numero }}
+            <address>{{ endereco.logradouro }}, {{ endereco.numero }}
               @if (endereco.complemento) { <span> — {{ endereco.complemento }}</span> }
               <br>{{ endereco.bairro }}<br>{{ endereco.cidade }} — {{ endereco.uf }}<br>
-              CEP {{ endereco.cep.slice(0, 5) }}-{{ endereco.cep.slice(5) }}
-            </p>
+              CEP {{ formatarCep(endereco.cep) }}
+            </address>
           } @else {
             <p>Você ainda não tem um endereço padrão disponível.</p>
           }
           @if (atual.perfil.versaoEndereco) {
-            <button type="button" aria-label="Editar endereço padrão" [disabled]="salvando()" (click)="editar('endereco', atual.perfil)">Editar</button>
+            <button type="button" [attr.aria-label]="atual.perfil.endereco ? 'Editar endereço padrão' : 'Cadastrar endereço padrão'" [disabled]="salvando()" (click)="editar('endereco', atual.perfil)">
+              {{ atual.perfil.endereco ? 'Editar endereço' : 'Cadastrar endereço' }}
+            </button>
           }
           }
         </section>
@@ -115,12 +147,18 @@
       @if (conflito() || (erro() && !salvando())) {
         <button type="button" (click)="recarregar()">Recarregar dados</button>
       }
+      @if (contatos()?.whatsApp || contatos()?.email) {
+        <app-contato-loja ancora="conta-contato" descricao="Tire dúvidas sobre produtos e compras." />
+      }
+      <div class="conta-acoes conta-rodape">
+        <a routerLink="/produtos">Continuar comprando</a>
+        @if (conta.session()) {
+          <button type="button" (click)="conta.sair()" [disabled]="conta.signingOut()">
+            {{ conta.signingOut() ? 'Saindo…' : 'Sair da conta' }}
+          </button>
+        }
+      </div>
+      @if (conta.logoutError()) { <p>{{ conta.logoutError() }}</p> }
     }
   }
-
-  <nav aria-label="Atalhos da conta">
-    <a routerLink="/pedidos">Meus pedidos</a>
-    <a routerLink="/cotacoes-correios">Minhas cotações</a>
-    <a routerLink="/produtos">Continuar comprando</a>
-  </nav>
 </section>
