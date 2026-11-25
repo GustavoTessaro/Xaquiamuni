@@ -5,6 +5,8 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import {
+  AlteracaoPix,
+  ConfiguracaoPix,
   DadosPix,
   PagamentoPixService,
   statusPix,
@@ -55,6 +57,12 @@ export class AdminPixComponent {
   protected readonly sucesso = signal('');
   protected readonly enviado = signal(false);
   protected readonly salvamentoIncerto = signal(false);
+  protected readonly revisaoRecarregada = signal<ConfiguracaoPix | null>(null);
+  protected readonly conflito = signal(false);
+  protected readonly pendentes = signal(0);
+  protected readonly confirmarPendentes = signal(false);
+  private revisao = 0;
+  private tentativa?: { dados: AlteracaoPix; chave: string };
   protected readonly tipos = Object.entries(tiposChavePix);
   protected readonly tiposChave = tiposChavePix;
   protected readonly formulario = new FormGroup(
@@ -102,7 +110,7 @@ export class AdminPixComponent {
   }
 
   protected carregar() {
-    if (this.salvando()) return;
+    if (this.salvando() || this.salvamentoIncerto()) return;
     this.estado.set('carregando');
     this.erro.set('');
     this.requerLogin.set(false);
@@ -111,23 +119,27 @@ export class AdminPixComponent {
       .pipe(takeUntilDestroyed(this.destroy))
       .subscribe({
         next: (dados) => {
-          if (this.salvamentoIncerto()) this.conferirSalvamento(dados);
-          else this.aplicar(dados);
+          if (this.conflito()) {
+            this.revisaoRecarregada.set(dados);
+            this.revisao = dados.revisao;
+            this.pendentes.set(dados.pedidosPendentes);
+            this.confirmarPendentes.set(false);
+            this.conflito.set(false);
+            this.estado.set(dados.pix ? 'existente' : 'nova');
+            this.erro.set('Revisão atual carregada. Confira os dados digitados antes de salvar novamente.');
+          } else {
+            this.aplicar(dados);
+          }
         },
         error: (erro: unknown) => {
-          if (statusPix(erro) === 404) {
-            this.estado.set('nova');
-            this.salvamentoIncerto.set(false);
-          } else {
-            this.estado.set('falha');
-            this.tratarFalha(erro, false);
-          }
+          this.estado.set('falha');
+          this.tratarFalha(erro, false);
         },
       });
   }
 
   protected salvar() {
-    if (this.salvando() || this.salvamentoIncerto() || this.requerLogin() || !['nova', 'existente'].includes(this.estado()))
+    if (this.salvando() || this.salvamentoIncerto() || this.conflito() || this.requerLogin() || !['nova', 'existente'].includes(this.estado()))
       return;
     this.enviado.set(true);
     this.erro.set('');
@@ -139,37 +151,68 @@ export class AdminPixComponent {
       return;
     }
 
-    this.salvando.set(true);
-    this.api
-      .salvarConfiguracao({
+    if (this.pendentes() > 0 && !this.confirmarPendentes()) {
+      this.erro.set('Confira os pedidos pendentes e marque a confirmação antes de salvar.');
+      return;
+    }
+    this.tentativa = {
+      chave: crypto.randomUUID(),
+      dados: {
         tipoChave,
         chavePix: chavePix.trim(),
         nomeRecebedor: nomeRecebedor.trim(),
         instrucoesAdicionais: instrucoesAdicionais.trim() || null,
-      })
+        revisao: this.revisao,
+        confirmarPendentes: this.confirmarPendentes(),
+      },
+    };
+    this.enviar();
+  }
+
+  protected recuperar() {
+    if (this.salvamentoIncerto()) this.enviar();
+  }
+
+  private enviar() {
+    if (this.salvando() || !this.tentativa) return;
+    const { dados, chave } = this.tentativa;
+    const recuperando = this.salvamentoIncerto();
+    this.erro.set('');
+    this.salvando.set(true);
+    this.api.salvarConfiguracao(dados, chave)
       .pipe(
         takeUntilDestroyed(this.destroy),
         finalize(() => this.salvando.set(false)),
       )
       .subscribe({
         next: (dados) => {
+          this.tentativa = undefined;
+          this.salvamentoIncerto.set(false);
           this.aplicar(dados);
-          this.sucesso.set('Configuração PIX salva.');
+          this.sucesso.set(recuperando ? 'Salvamento original confirmado.' : 'Configuração PIX salva.');
+          if (recuperando) {
+            this.salvando.set(false);
+            this.carregar();
+          }
         },
         error: (erro: unknown) => this.tratarFalha(erro, true),
       });
   }
 
-  private aplicar(dados: DadosPix) {
-    this.formulario.reset({ ...dados, instrucoesAdicionais: dados.instrucoesAdicionais ?? '' });
+  private aplicar(config: ConfiguracaoPix) {
+    this.revisaoRecarregada.set(null);
+    const { pix } = config;
+    this.revisao = config.revisao;
+    this.pendentes.set(config.pedidosPendentes);
+    this.confirmarPendentes.set(false);
+    this.formulario.reset({
+      tipoChave: pix?.tipoChave ?? '',
+      chavePix: pix?.chavePix ?? '',
+      nomeRecebedor: pix?.nomeRecebedor ?? '',
+      instrucoesAdicionais: pix?.instrucoesAdicionais ?? '',
+    });
     this.enviado.set(false);
-    this.estado.set('existente');
-  }
-
-  private conferirSalvamento(dados: DadosPix): void {
-    this.salvamentoIncerto.set(false);
-    this.aplicar(dados);
-    this.sucesso.set('Configuração atual carregada. Confira os dados antes de salvar outra alteração.');
+    this.estado.set(pix ? 'existente' : 'nova');
   }
 
   private tratarFalha(erro: unknown, salvamento: boolean) {
@@ -189,14 +232,18 @@ export class AdminPixComponent {
         );
         break;
       case 409:
-        if (salvamento) this.salvamentoIncerto.set(true);
-        this.erro.set('A configuração pode ter mudado. Consulte os dados salvos antes de continuar.');
+        this.tentativa = undefined;
+        this.salvamentoIncerto.set(false);
+        this.conflito.set(true);
+        this.erro.set(erro instanceof HttpErrorResponse && erro.error?.codigo === 'pix_confirmacao_pendente'
+          ? 'Há pedidos aguardando pagamento. Recarregue a situação dos pedidos antes de continuar.'
+          : 'A configuração mudou ou a operação entrou em conflito. Recarregue a revisão para continuar.');
         break;
       default:
         if (salvamento) this.salvamentoIncerto.set(true);
         this.erro.set(
           salvamento
-            ? 'Não foi possível confirmar o salvamento. Consulte a configuração salva antes de tentar novamente.'
+            ? 'Não foi possível confirmar o salvamento. Recupere o salvamento usando a operação original.'
             : 'Não foi possível consultar a configuração PIX. Tente novamente.',
         );
     }

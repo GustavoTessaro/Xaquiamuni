@@ -17,7 +17,19 @@ export interface DadosPix {
   instrucoesAdicionais: string | null;
 }
 
+export interface ConfiguracaoPix {
+  pix: DadosPix | null;
+  revisao: number;
+  pedidosPendentes: number;
+}
+
+export interface AlteracaoPix extends DadosPix {
+  revisao: number;
+  confirmarPendentes: boolean;
+}
+
 export interface PagamentoPixPedido {
+  legado?: boolean;
   situacao: 'disponivel' | 'configuracao_ausente' | 'pagamento_indisponivel';
   valorCentavos: string;
   prazoPagamentoEmUtc: string;
@@ -35,14 +47,14 @@ export class PagamentoPixService {
   private readonly adminUrl = '/api/admin/configuracoes/pix-manual';
 
   consultarConfiguracao() {
-    return this.http.get<DadosPix>(this.adminUrl).pipe(timeout(30_000));
+    return this.http.get<ConfiguracaoPix>(this.adminUrl).pipe(timeout(30_000));
   }
 
-  salvarConfiguracao(dados: DadosPix) {
+  salvarConfiguracao(dados: AlteracaoPix, chave: string) {
     return this.csrf.getRequestToken().pipe(
       switchMap(({ requestToken }) =>
-        this.http.put<DadosPix>(this.adminUrl, dados, {
-          headers: { 'X-XSRF-TOKEN': requestToken },
+        this.http.put<ConfiguracaoPix>(this.adminUrl, dados, {
+          headers: { 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': chave },
         }),
       ),
       timeout(30_000),

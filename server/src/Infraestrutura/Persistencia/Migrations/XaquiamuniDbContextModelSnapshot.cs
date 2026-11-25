@@ -487,6 +487,12 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("nvarchar(150)");
 
+                    b.Property<long>("Revisao")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
                     b.Property<int>("TipoChave")
                         .HasColumnType("int");
 
@@ -2798,6 +2804,32 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.ToTable("LimpezasImagensProdutos", (string)null);
                 });
 
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.AlteracaoConfiguracaoPix", b =>
+                {
+                    b.Property<Guid>("AutorId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("Chave")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .IsUnicode(false)
+                        .HasColumnType("varchar(64)");
+
+                    b.Property<DateTimeOffset>("RegistradaEmUtc")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<string>("ResultadoJson")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("AutorId", "Chave");
+
+                    b.ToTable("AlteracoesConfiguracaoPix", (string)null);
+                });
+
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.ComprovantePixAtivo", b =>
                 {
                     b.Property<Guid>("PedidoId")
@@ -3488,6 +3520,22 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
 
                             t.HasCheckConstraint("CK_PropostasCorreios_Valores", "[Revisao] > 0 AND [FreteCentavos] >= 0 AND [PrazoDias] > 0 AND [ValidaAteUtc] > [PublicadaEmUtc]");
                         });
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.SnapshotPixPedido", b =>
+                {
+                    b.Property<Guid>("PedidoId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<string>("DadosJson")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<long?>("Revisao")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("PedidoId");
+
+                    b.ToTable("SnapshotsPixPedidos", (string)null);
                 });
 
             modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", b =>
@@ -4551,6 +4599,15 @@ namespace Xaquiamuni.Infraestrutura.Persistencia.Migrations
                     b.HasOne("Xaquiamuni.Infraestrutura.Persistencia.SolicitacaoCorreios", null)
                         .WithMany()
                         .HasForeignKey("SolicitacaoId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Xaquiamuni.Infraestrutura.Persistencia.SnapshotPixPedido", b =>
+                {
+                    b.HasOne("Xaquiamuni.Dominio.Entidades.Pedido", null)
+                        .WithOne()
+                        .HasForeignKey("Xaquiamuni.Infraestrutura.Persistencia.SnapshotPixPedido", "PedidoId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

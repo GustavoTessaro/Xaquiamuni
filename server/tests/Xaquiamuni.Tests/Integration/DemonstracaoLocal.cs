@@ -297,7 +297,7 @@ internal sealed class AmbienteDemonstracao(
             scope.ServiceProvider.GetRequiredService<IOptions<EmailConfirmationEmailOptions>>().Value.PublicFrontendBaseUrl = host.Origin;
             var pix = ConfiguracaoPixManual.Criar(TipoChavePixManual.Email, "pix-demonstracao@example.invalid",
                 "Xaquiamuni Demonstração", "SIMULAÇÃO PARA O TCC. Não faça transferências.");
-            await scope.ServiceProvider.GetRequiredService<IPagamentoPixManual>().SalvarAsync(pix, CancellationToken.None);
+            await scope.ServiceProvider.GetRequiredService<IPagamentoPixManual>().SalvarAsync(pix, 0, admin.Id, Guid.NewGuid(), true, CancellationToken.None);
             return new AmbienteDemonstracao(banco, host, temporario, admin, cliente, inventarioInicial)
             {
                 Jornada = dados,

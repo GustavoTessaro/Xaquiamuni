@@ -26,7 +26,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
   const largura = contexto => contexto.ev('document.documentElement.scrollWidth <= innerWidth');
 
   assert.equal(await escrever('/api/admin/configuracoes/pix-manual', 'PUT', {
-    tipoChave: 'Email', chavePix: 'postal@example.test', nomeRecebedor: 'Loja E2E',
+    tipoChave: 'Email', revisao: 0, chavePix: 'postal@example.test', nomeRecebedor: 'Loja E2E',
   }), 200);
   assert.equal(await escrever('/api/admin/estoque/produtos-acabados/variantes/' + dados.varianteFinanceiro + '/entradas', 'POST', {
     tipo: 'EntradaManual', quantidade: 3, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Homologação postal',
@@ -265,6 +265,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       'Número público do pedido postal');
     const pix = await c.ev(`fetch(${JSON.stringify('/api' + pedido + '/pagamento')}).then(r=>r.json())`);
     assert.equal(pix.valorCentavos, '1199');
+    assert.equal(pix.pix.chavePix, 'postal@example.test');
+    assert.equal(pix.legado, false);
 
     if (width === 375) {
       const outroContexto = await abrir('/login');

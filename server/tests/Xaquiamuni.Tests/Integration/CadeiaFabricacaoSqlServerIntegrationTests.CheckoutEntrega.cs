@@ -292,6 +292,15 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         ofertaId = cotacaoPromocional.GetProperty("id").GetString()!;
         var chave = Guid.NewGuid();
         var payload = new { itens, ofertaEntregaId = ofertaId };
+        using var configurarPix = new HttpRequestMessage(HttpMethod.Put, "/api/admin/configuracoes/pix-manual")
+        {
+            Content = JsonContent.Create(new SalvarPixManualRequest("Email", "loja@example.com", "Loja teste", null, 0, true)),
+        };
+        configurarPix.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
+        configurarPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
+        using var pixConfigurado = await admin.Http.SendAsync(configurarPix);
+        Assert.Equal(HttpStatusCode.OK, pixConfigurado.StatusCode);
+
         var pedido = await cliente.PostAsync<JsonElement>("/api/pedidos", payload, HttpStatusCode.Created, chave);
         var pedidoId = pedido.GetProperty("id").GetGuid();
         Assert.Equal("EntregaPropria", pedido.GetProperty("modalidadeEntrega").GetString());
@@ -315,6 +324,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         await RecusarAsync(cliente, tokenAntigo, "chave_em_uso", chave);
 
         var caminho = $"/api/pedidos/{pedidoId:D}";
+        var pixCongelado = await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento");
+        Assert.False(pixCongelado.GetProperty("legado").GetBoolean());
+        Assert.Equal("loja@example.com", pixCongelado.GetProperty("pix").GetProperty("chavePix").GetString());
         var rotaAdmin = $"/api/admin/pedidos/{pedidoId:D}";
         async Task<string> VersaoAsync()
         {
@@ -346,13 +358,6 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(SituacaoPedido.AguardandoPagamento, (await db.Pedidos.AsNoTracking().SingleAsync()).Situacao);
         Assert.Empty((await admin.Http.GetFromJsonAsync<JsonElement>(Movimentacoes)).GetProperty("itens").EnumerateArray());
 
-        using var configurarPix = new HttpRequestMessage(HttpMethod.Put, "/api/admin/configuracoes/pix-manual")
-        {
-            Content = JsonContent.Create(new SalvarPixManualRequest("Email", "loja@example.com", "Loja teste", null)),
-        };
-        configurarPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
-        using var pixConfigurado = await admin.Http.SendAsync(configurarPix);
-        Assert.Equal(HttpStatusCode.OK, pixConfigurado.StatusCode);
         Assert.Equal("3048", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento"))
             .GetProperty("valorCentavos").GetString());
         var confirmar = $"/api/admin/pedidos/{pedidoId:D}/confirmar-pagamento";

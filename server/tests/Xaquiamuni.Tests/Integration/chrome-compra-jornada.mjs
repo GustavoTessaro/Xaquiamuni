@@ -162,6 +162,64 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
 
   const cnpjNormalizado = '00ABC34501DE56';
   const nomeRecebedorCnpj = 'Recebedor sintético da demonstração';
+  function semCache(r, status) {
+    assert.equal(r.status, status);
+    assert.ok(r.cache?.split(',').some(v => v.trim().toLowerCase() === 'no-store'));
+    return r.body;
+  }
+
+  async function configurarPix(primeiro) {
+    const config = '/api/admin/configuracoes/pix-manual';
+    const tela = '/admin/configuracoes/pix-manual';
+    const exemplo = {
+      tipoChave: 'Aleatoria', chavePix: '5fba3231-744a-4cc4-bc54-c958bb1cc890',
+      nomeRecebedor: 'Recebedor sintético', instrucoesAdicionais: 'Instrução sintética inicial',
+    };
+    const atual = { ...exemplo, chavePix: 'e3862bc7-5bdf-4a07-8268-0ba542a1366f',
+      instrucoesAdicionais: 'Instrução sintética atualizada' };
+    if (primeiro) {
+      assert.deepEqual(semCache(await api(a, config), 200), { pix: null, revisao: 0, pedidosPendentes: 0 });
+      assert.equal((await api(a, config, 'PUT', JSON.stringify(exemplo), null, false)).status, 400);
+      assert.equal((await api(c, config, 'PUT', JSON.stringify(exemplo))).status, 403);
+    }
+    await a.ir(tela);
+    await tem(a, primeiro ? 'A loja ainda não tem uma configuração PIX.' : exemplo.chavePix);
+    const dados = primeiro ? exemplo : atual;
+    await a.ev(`(() => {
+      const tipo = document.querySelector('#pix-tipo');
+      tipo.value = 'Aleatoria';
+      tipo.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    const { tipoChave, ...campos } = dados;
+    await preencher(a, campos);
+    await pronto(a, `(() => {
+      const previa = document.querySelector('[aria-labelledby="pix-previa"]');
+      return previa?.textContent.includes('Alterações ainda não salvas.')
+        && previa.textContent.includes(${JSON.stringify(dados.chavePix)});
+    })()`, 'Prévia PIX ainda não salva');
+    if (!primeiro) {
+      await tem(a, 'Pedidos aptos a pagamento: 1');
+      await a.ev('document.querySelector("form input[type=checkbox]").click()');
+    }
+    const perda = primeiro ? null : a.perderResposta(config, 'PUT');
+    await clicar(a, 'Salvar configuração');
+    if (perda) {
+      await tem(a, 'Não foi possível confirmar o salvamento.');
+      await clicar(a, 'Recuperar salvamento');
+      await tem(a, 'Salvamento original confirmado.');
+      assert.deepEqual(perda.status, [200, 200]);
+      assert.equal(perda.envios.length, 2);
+      assert.ok(perda.envios[0].chave);
+      assert.deepEqual(perda.envios[0], perda.envios[1]);
+    } else {
+      await tem(a, 'Configuração PIX salva.');
+    }
+    const persistido = semCache(await api(a, config), 200);
+    assert.equal(persistido.revisao, primeiro ? 1 : 2);
+    assert.deepEqual(persistido.pix, dados);
+    return dados;
+  }
+
   async function configurarCnpj() {
     const config = '/api/admin/configuracoes/pix-manual';
     const tela = '/admin/configuracoes/pix-manual';
@@ -183,7 +241,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     const persistido = await api(a, config);
     assert.equal(persistido.status, 200);
     assert.match(persistido.cache ?? '', /\bno-store\b/i);
-    assert.ok(persistido.body.tipoChave === tipoChave && persistido.body.chavePix === cnpjNormalizado,
+    assert.ok(persistido.body.pix.tipoChave === tipoChave && persistido.body.pix.chavePix === cnpjNormalizado,
       'API deve retornar CNPJ sem pontuação e com zeros à esquerda');
     await a.ir(tela);
     await pronto(a, `document.querySelector('#pix-tipo')?.value === 'Cnpj'
@@ -236,6 +294,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       await configurarCnpj();
     }
     etapa = 'catálogo e carrinho';
+    const pixInicial = pixManual ? await configurarPix(true) : null;
     await estoque(7, 0, 7);
     await c.ir('/produtos');
     await pronto(c, `(() => {
@@ -300,59 +359,37 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     await estoque(7, 2, 5);
 
     if (pixManual) {
-      etapa = 'PIX ausente e configuração administrativa';
-      const config = '/api/admin/configuracoes/pix-manual';
+      etapa = 'Alteração de configuração com pedido pendente';
       const pagamento = '/api/pedidos/' + id + '/pagamento';
-      const tela = '/admin/configuracoes/pix-manual';
-      const exemplo = {
-        tipoChave: 'Aleatoria', chavePix: '5fba3231-744a-4cc4-bc54-c958bb1cc890',
-        nomeRecebedor: 'Recebedor sintético', instrucoesAdicionais: 'Instrução sintética inicial',
-      };
-      const atual = { ...exemplo, chavePix: 'e3862bc7-5bdf-4a07-8268-0ba542a1366f',
-        instrucoesAdicionais: 'Instrução sintética atualizada' };
-      function semCache(r, status) {
-        assert.equal(r.status, status);
-        assert.ok(r.cache?.split(',').some(v => v.trim().toLowerCase() === 'no-store'));
-        return r.body;
-      }
-      await tem(c, 'A loja ainda não disponibilizou as instruções de pagamento.');
-      const ausente = semCache(await api(c, pagamento), 200);
       const pedido = (await api(c, '/api/pedidos/' + id)).body;
-      assert.deepEqual([ausente.situacao, ausente.valorCentavos, ausente.prazoPagamentoEmUtc, ausente.pix],
-        ['configuracao_ausente', '2780', pedido.prazoPagamentoEmUtc, null]);
-      assert.equal(await c.ev('!document.querySelector("app-pedido-pix > section button")'), true);
-      semCache(await api(a, config), 404);
-      await a.ir(tela);
-      await tem(a, 'A loja ainda não tem uma configuração PIX.');
-      assert.equal(await a.ev('[...document.querySelectorAll("main [formControlName]")].length === 4 && [...document.querySelectorAll("main [formControlName]")].every(e => e.value === "")'), true);
-      const corpo = JSON.stringify(exemplo);
-      semCache(await api(a, config, 'PUT', corpo, null, false), 400);
-      semCache(await api(c, config, 'PUT', corpo), 403);
-      semCache(await api(a, config), 404);
-
-      async function salvar(dados) {
-        await a.ev(`(() => {
-          const tipo = document.querySelector('#pix-tipo');
-          tipo.value = 'Aleatoria';
-          tipo.dispatchEvent(new Event('change', { bubbles: true }));
-        })()`);
-        const { tipoChave, ...campos } = dados;
-        await preencher(a, campos);
-        await pronto(a, `(() => {
-          const previa = document.querySelector('[aria-labelledby="pix-previa"]');
-          return previa?.textContent.includes('Alterações ainda não salvas.')
-            && previa.textContent.includes(${JSON.stringify(dados.chavePix)});
-        })()`, 'Prévia PIX ainda não salva');
-        await clicar(a, 'Salvar configuração');
-        await tem(a, 'Configuração PIX salva.');
-        const persisted = semCache(await api(a, config), 200);
-        assert.ok(Object.entries(dados).every(([campo, valor]) => persisted[campo] === valor));
+      const outraSessao = await abrir('/admin/login');
+      await entrar(outraSessao, admin, true);
+      await outraSessao.ir('/admin/configuracoes/pix-manual');
+      await pronto(outraSessao, 'document.querySelector("#pix-chave")?.value === ' +
+        JSON.stringify(pixInicial.chavePix), 'Configuração anterior na segunda sessão');
+      const novaConfig = await configurarPix(false);
+      assert.notEqual(novaConfig.chavePix, pixInicial.chavePix);
+      await preencher(outraSessao, { nomeRecebedor: 'Edição concorrente' });
+      await outraSessao.ev('document.querySelector("form input[type=checkbox]").click()');
+      await clicar(outraSessao, 'Salvar configuração');
+      await tem(outraSessao, 'Recarregue a revisão para continuar.');
+      await clicar(outraSessao, 'Recarregar revisão');
+      await tem(outraSessao, 'Configuração salva na revisão 2');
+      assert.equal(await outraSessao.ev('document.querySelector("#pix-recebedor").value'), 'Edição concorrente');
+      assert.equal((await api(a, '/api/admin/configuracoes/pix-manual')).body.pix.chavePix, novaConfig.chavePix);
+      for (const width of [375, 1280]) {
+        await largura(outraSessao, width);
+        for (const modo of ['light', 'dark']) {
+          const tema = 'document.querySelector(".admin-shell")?.dataset.adminTheme';
+          if (await outraSessao.ev(tema) !== modo)
+            await outraSessao.ev('document.querySelector(".admin-theme-toggle").click()');
+          await pronto(outraSessao, tema + ' === ' + JSON.stringify(modo), 'Tema administrativo');
+          assert.ok(await outraSessao.ev('document.documentElement.scrollWidth <= innerWidth'));
+          assert.ok(await outraSessao.ev('document.querySelector("form input[type=checkbox]").labels.length === 1'));
+        }
       }
-      await salvar(exemplo);
-      await a.ir(tela);
-      await pronto(a, 'document.querySelector("#pix-chave")?.value === ' + JSON.stringify(exemplo.chavePix), 'Persistência do PIX após recarregar');
-      await salvar(atual);
-
+      await call('Page.bringToFront', {}, outraSessao.sessionId);
+      await conferirFoco(outraSessao, 'form input[type=checkbox]');
       etapa = 'PIX disponível, falha temporária e cópia';
       c.falharProximaConsultaPix(pagamento);
       await c.ir(caminho);
@@ -362,7 +399,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       const disponivel = semCache(await api(c, pagamento), 200);
       assert.deepEqual([disponivel.situacao, disponivel.valorCentavos, disponivel.prazoPagamentoEmUtc],
         ['disponivel', '2780', pedido.prazoPagamentoEmUtc]);
-      assert.ok(Object.entries(atual).every(([campo, valor]) => disponivel.pix?.[campo] === valor));
+      assert.ok(Object.entries(pixInicial).every(([campo, valor]) => disponivel.pix?.[campo] === valor));
       assert.equal(await c.ev(`(() => {
         const texto = document.querySelector('app-pedido-pix').textContent;
         const prazo = document.querySelector('main time');
@@ -370,7 +407,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
         const pad = v => String(v).padStart(2, '0');
         const local = pad(d.getDate()) + '/' + pad(d.getMonth()+1) + '/' + d.getFullYear()
           + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
-        return ['27,80', 'Aleatória', ...${JSON.stringify(Object.values(atual).slice(1))}].every(v => texto.includes(v))
+        return ['27,80', 'Aleatória', ...${JSON.stringify(Object.values(pixInicial).slice(1))}].every(v => texto.includes(v))
           && prazo.dateTime === ${JSON.stringify(pedido.prazoPagamentoEmUtc)} && prazo.textContent.trim() === local;
       })()`), true);
       let clipboardPermitido = true;
@@ -382,12 +419,12 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
         await call('Page.bringToFront', {}, c.sessionId);
         await clicar(c, 'Copiar chave PIX');
         await tem(c, 'Chave PIX copiada.');
-        assert.equal(await c.ev('navigator.clipboard.readText().then(v => v === ' + JSON.stringify(atual.chavePix) + ')'), true);
+        assert.equal(await c.ev('navigator.clipboard.readText().then(v => v === ' + JSON.stringify(pixInicial.chavePix) + ')'), true);
       }
       console.log(clipboardPermitido ? 'PIX: cópia conferida no Chrome.' : 'PIX: Chrome recusou permissão de área de transferência.');
       await checkpoint('pedido', id);
       await estoque(7, 2, 5);
-      console.log('PIX: ausência, cadastro, atualização, recarga, CSRF, valor, prazo local, no-store e retry conferidos.');
+      console.log('PIX: cadastro, revisão, histórico, CSRF, valor, prazo local, no-store e retry conferidos.');
       etapa = 'comprovante PIX';
       const anexo = '/api/pedidos/' + id + '/comprovante-pix';
       const legivel = browser => browser.ev(`(() => {
@@ -618,6 +655,9 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       const cancelado = await novoPedido();
       await largura(c, 1280);
       await c.ir('/pedidos/' + cancelado);
+      const pixDoNovoPedido = (await api(c, '/api/pedidos/' + cancelado + '/pagamento')).body;
+      assert.equal(pixDoNovoPedido.pix.chavePix, 'e3862bc7-5bdf-4a07-8268-0ba542a1366f');
+      assert.equal(pixDoNovoPedido.legado, false);
       const arquivoCancelado = await escolher('comprovante-1280.png', 'purple');
       await tem(c, 'comprovante-1280.png');
       await tem(c, String(arquivoCancelado.tamanho));

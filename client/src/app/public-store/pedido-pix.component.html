@@ -28,6 +28,9 @@
     }
   } @else if (pix(); as dados) {
     <p class="pix-situacao">Aguardando pagamento</p>
+    @if (pagamento()?.legado) {
+      <p class="aviso">Os dados PIX originais deste pedido não estão disponíveis. Confira os dados atuais antes de pagar.</p>
+    }
     @if (pagamento(); as atual) {
       <div class="pix-resumo">
         <p>Valor exato a pagar <strong>{{ reais(atual.valorCentavos) }}</strong></p>

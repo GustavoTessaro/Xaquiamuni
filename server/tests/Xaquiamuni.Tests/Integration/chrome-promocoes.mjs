@@ -176,7 +176,7 @@ export async function validarPromocoes({ dados, cliente, admin, call, waitFor, c
   await abrirCheckout(outro);
   await abrirCheckout(cliente);
   assert.equal((await api(admin, '/api/admin/configuracoes/pix-manual', 'PUT',
-    { tipoChave: 'Email', chavePix: 'promocoes@example.test', nomeRecebedor: 'Loja E2E' })).status, 200);
+    { tipoChave: 'Email', revisao: 0, chavePix: 'promocoes@example.test', nomeRecebedor: 'Loja E2E' })).status, 200);
   await perderResposta(cliente, 'POST', '/api/pedidos');
   await clicar(cliente, 'Confirmar pedido');
   await waitFor(() => cliente.ev('window.statusAntesDaPerda'), 'Resposta real do pedido antes da perda');

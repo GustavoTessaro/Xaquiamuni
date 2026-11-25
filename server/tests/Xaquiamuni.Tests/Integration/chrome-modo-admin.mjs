@@ -48,7 +48,7 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     titulo: 'Compromisso de homologação', data: hoje, horarioInicial: '09:00', horarioFinal: '09:30',
   }), 201);
   assert.equal(await escrever('/api/admin/configuracoes/pix-manual', 'PUT', {
-    tipoChave: 'Email', chavePix: 'modo-admin@example.test', nomeRecebedor: 'Loja E2E',
+    tipoChave: 'Email', revisao: 0, chavePix: 'modo-admin@example.test', nomeRecebedor: 'Loja E2E',
   }), 200);
   assert.equal(await escrever('/api/admin/estoque/produtos-acabados/variantes/' + dados.varianteFinanceiro + '/entradas', 'POST', {
     tipo: 'EntradaManual', quantidade: 3, condicaoDestino: 'Vendavel', semControleValidade: true, motivo: 'Homologação visual',
@@ -345,6 +345,8 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
     const pix = await c.ev(`fetch('/api/pedidos/${id}/pagamento').then(r=>r.json())`);
     const totalPedido = width === 375 ? '2269' : '1099';
     assert.equal(pix.valorCentavos, totalPedido);
+    assert.equal(pix.pix.chavePix, 'modo-admin@example.test');
+    assert.equal(pix.legado, false);
     if (width === 375) {
       await c.ev(`Object.defineProperty(navigator, 'clipboard', {
         configurable: true, value: { writeText: async numero => { window.numeroCopiado = numero; } },

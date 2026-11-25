@@ -15,6 +15,8 @@ const dados = {
   instrucoesAdicionais: null,
 };
 
+const estado = (pix: typeof dados | null, revisao = 1, pedidosPendentes = 0) => ({ pix, revisao, pedidosPendentes });
+
 describe('AdminPixComponent', () => {
   let http: HttpTestingController;
 
@@ -34,7 +36,7 @@ describe('AdminPixComponent', () => {
 
   it('abre formulário vazio e permite cadastrar e atualizar com CSRF', () => {
     const fixture = TestBed.createComponent(AdminPixComponent);
-    http.expectOne({ method: 'GET', url }).flush(null, { status: 404, statusText: 'Not Found' });
+    http.expectOne({ method: 'GET', url }).flush(estado(null, 0));
     fixture.detectChanges();
     const view: HTMLElement = fixture.nativeElement;
     const campo = (id: string) => view.querySelector<HTMLInputElement>(id)!;
@@ -77,8 +79,8 @@ describe('AdminPixComponent', () => {
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
     const put = http.expectOne({ method: 'PUT', url });
     expect(put.request.headers.get('X-XSRF-TOKEN')).toBe('token-teste');
-    expect(put.request.body).toEqual(dados);
-    put.flush(dados);
+    expect(put.request.body).toEqual({ ...dados, revisao: 0, confirmarPendentes: false });
+    put.flush(estado(dados));
     fixture.detectChanges();
     expect(view.querySelector('[role=status]')).toBe(feedback);
     expect(feedback.textContent).toContain('salva');
@@ -90,31 +92,65 @@ describe('AdminPixComponent', () => {
     const atualizacao = http.expectOne({ method: 'PUT', url });
     expect(atualizacao.request.body).toEqual({
       ...dados,
+      revisao: 1,
+      confirmarPendentes: false,
       instrucoesAdicionais: 'Instrução de teste',
     });
-    atualizacao.flush(atualizacao.request.body);
+    atualizacao.flush(estado(atualizacao.request.body, 2));
   });
 
-  it('consulta o valor persistido após perder a resposta sem disparar outro PUT', () => {
+  it('repete a operação original após perder a resposta e recarrega a revisão atual', () => {
     const fixture = TestBed.createComponent(AdminPixComponent);
-    http.expectOne({ method: 'GET', url }).flush(dados);
+    http.expectOne({ method: 'GET', url }).flush(estado(dados));
     fixture.detectChanges();
     const view: HTMLElement = fixture.nativeElement;
     view.querySelector('form')!.dispatchEvent(new Event('submit'));
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
-    http.expectOne({ method: 'PUT', url }).error(new ProgressEvent('error'));
+    const original = http.expectOne({ method: 'PUT', url });
+    original.error(new ProgressEvent('error'));
     fixture.detectChanges();
     view.querySelector('form')!.dispatchEvent(new Event('submit'));
     http.expectNone({ method: 'PUT', url });
-    [...view.querySelectorAll('button')].find(item => item.textContent.includes('Consultar configuração salva'))!.click();
-    http.expectOne({ method: 'GET', url }).flush(dados);
+    [...view.querySelectorAll('button')].find(item => item.textContent.includes('Recuperar salvamento'))!.click();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'outro-token' });
+    const repeticao = http.expectOne({ method: 'PUT', url });
+    expect(repeticao.request.headers.get('Idempotency-Key')).toBe(original.request.headers.get('Idempotency-Key'));
+    expect(repeticao.request.body).toEqual(original.request.body);
+    repeticao.flush(estado(dados, 2));
+    http.expectOne({ method: 'GET', url }).flush(estado(dados));
     fixture.detectChanges();
-    expect(view.textContent).toContain('Configuração atual carregada');
+    expect(view.textContent).toContain('Salvamento original confirmado');
+  });
+
+  it('confirma pendências e preserva a edição ao recarregar uma revisão em conflito', () => {
+    const fixture = TestBed.createComponent(AdminPixComponent);
+    http.expectOne(url).flush(estado(dados, 1, 1));
+    fixture.detectChanges();
+    const view: HTMLElement = fixture.nativeElement;
+    const campo = view.querySelector<HTMLInputElement>('#pix-chave')!;
+    campo.value = 'alteracao@example.invalid';
+    campo.dispatchEvent(new Event('input'));
+    const salvar = () => view.querySelector('form')!.dispatchEvent(new Event('submit'));
+    salvar();
+    http.expectNone('/api/auth/csrf');
+    view.querySelector<HTMLInputElement>('form input[type="checkbox"]')!.click();
+    salvar();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
+    const put = http.expectOne({ method: 'PUT', url });
+    expect(put.request.body.confirmarPendentes).toBe(true);
+    put.flush({ codigo: 'pix_revisao_desatualizada' }, { status: 409, statusText: 'Conflict' });
+    fixture.detectChanges();
+    [...view.querySelectorAll('button')].find(item => item.textContent.includes('Recarregar revisão'))!.click();
+    http.expectOne(url).flush(estado({ ...dados, chavePix: 'concorrente@example.invalid' }, 2, 1));
+    fixture.detectChanges();
+    expect(view.querySelector<HTMLInputElement>('#pix-chave')?.value).toBe('alteracao@example.invalid');
+    expect(view.textContent).toContain('concorrente@example.invalid');
+    expect(view.querySelector<HTMLInputElement>('form input[type="checkbox"]')?.checked).toBe(false);
   });
 
   it('aceita CNPJ formatado, valida os dígitos e exibe a chave normalizada da API', () => {
     const fixture = TestBed.createComponent(AdminPixComponent);
-    http.expectOne({ method: 'GET', url }).flush(dados);
+    http.expectOne({ method: 'GET', url }).flush(estado(dados));
     fixture.detectChanges();
     const view: HTMLElement = fixture.nativeElement;
     const tipo = view.querySelector<HTMLSelectElement>('#pix-tipo')!;
@@ -136,17 +172,19 @@ describe('AdminPixComponent', () => {
     const put = http.expectOne({ method: 'PUT', url });
     expect(put.request.body).toEqual({
       ...dados,
+      revisao: 1,
+      confirmarPendentes: false,
       tipoChave: 'Cnpj',
       chavePix: '12.abc.345/01de-35',
     });
-    put.flush({ ...dados, tipoChave: 'Cnpj', chavePix: '12ABC34501DE35' });
+    put.flush(estado({ ...dados, tipoChave: 'Cnpj', chavePix: '12ABC34501DE35' }, 2));
     fixture.detectChanges();
     expect(chave.value).toBe('12ABC34501DE35');
   });
 
   it('carrega valores existentes e não replica dados de erros de validação', () => {
     const fixture = TestBed.createComponent(AdminPixComponent);
-    http.expectOne({ method: 'GET', url }).flush(dados);
+    http.expectOne({ method: 'GET', url }).flush(estado(dados));
     fixture.detectChanges();
     const view: HTMLElement = fixture.nativeElement;
     expect(view.querySelector<HTMLInputElement>('#pix-chave')?.value).toBe(dados.chavePix);
@@ -166,7 +204,7 @@ describe('AdminPixComponent', () => {
 
   it.each([400, 401, 403])('trata uma recusa HTTP %i ao salvar', (status) => {
     const fixture = TestBed.createComponent(AdminPixComponent);
-    http.expectOne(url).flush(dados);
+    http.expectOne(url).flush(estado(dados));
     fixture.detectChanges();
     const view: HTMLElement = fixture.nativeElement;
     view.querySelector('form')!.dispatchEvent(new Event('submit'));

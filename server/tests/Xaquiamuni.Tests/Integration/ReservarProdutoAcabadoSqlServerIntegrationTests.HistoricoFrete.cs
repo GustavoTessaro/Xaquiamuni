@@ -53,7 +53,7 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
             "20261123225109_CongelarDescontoFretePostal", "20261123234034_VersionarEExcluirCategorias",
             "20261124011336_RegistrarUsoEExclusaoFornecedor", "20261124012758_AuditarExclusaoVariante",
             "20261124060713_AuditarExclusaoProdutoELimpezaImagens", "20261124071353_AuditarExclusaoInsumos",
-            "20261124203428_AuditarExclusaoReceitas", "20261125044134_AdicionarEmailComercial" },
+            "20261124203428_AuditarExclusaoReceitas", "20261125044134_AdicionarEmailComercial", "20261125170254_PreservarHistoricoPix" },
             await db.Database.GetPendingMigrationsAsync());
         await db.Database.MigrateAsync();
         Assert.Empty(await db.Database.GetPendingMigrationsAsync());

@@ -79,6 +79,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(1, await db.ReservasProdutoAcabado.CountAsync());
 
         var chave = Guid.NewGuid();
+        using var pixConfig = await SalvarPixAsync(novoAdmin,
+            new SalvarPixManualRequest("Email", "loja@example.com", "Loja teste", null, 0, true), csrfAdmin);
+        Assert.True(pixConfig.IsSuccessStatusCode, await pixConfig.Content.ReadAsStringAsync());
         using var criada = await PostPedidoAsync(novoCliente, enviado, chave, csrf);
         Assert.Equal(HttpStatusCode.Created, criada.StatusCode);
         var pedido = await criada.Content.ReadFromJsonAsync<JsonElement>();
@@ -96,6 +99,9 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal("preco_alterado", erro.GetProperty("codigo").GetString());
         Assert.Equal("1199", Assert.Single(erro.GetProperty("precosAtuais").EnumerateArray())
             .GetProperty("preco").GetProperty("finalCentavos").GetString());
+        using var segundaConfig = await SalvarPixAsync(novoAdmin,
+            new SalvarPixManualRequest("Email", "nova@example.com", "Loja teste", null, 1, true), csrfAdmin);
+        Assert.Equal(HttpStatusCode.OK, segundaConfig.StatusCode);
         using var replay = await PostPedidoAsync(novoCliente, enviado, chave, csrf);
         Assert.Equal(HttpStatusCode.OK, replay.StatusCode);
         Assert.Equal(pedido.GetRawText(), (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetRawText());
@@ -105,11 +111,10 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(2, await db.Pedidos.CountAsync());
         Assert.Equal(2, await db.ReservasProdutoAcabado.CountAsync());
 
-        using var pixConfig = await SalvarPixAsync(novoAdmin,
-            new SalvarPixManualRequest("Email", "loja@example.com", "Loja teste", null), csrfAdmin);
-        Assert.True(pixConfig.IsSuccessStatusCode, await pixConfig.Content.ReadAsStringAsync());
         var pix = await novoCliente.GetFromJsonAsync<JsonElement>($"/api/pedidos/{pedidoId:D}/pagamento");
         Assert.Equal("disponivel", pix.GetProperty("situacao").GetString());
+        Assert.False(pix.GetProperty("legado").GetBoolean());
+        Assert.Equal("loja@example.com", pix.GetProperty("pix").GetProperty("chavePix").GetString());
         Assert.Equal("900", pix.GetProperty("valorCentavos").GetString());
         using var confirmado = await EnviarComandoAdminPedidoAsync(novoAdmin,
             $"/api/admin/pedidos/{pedidoId:D}/confirmar-pagamento", new { recebimentoConferido = true }, csrfAdmin);
@@ -128,6 +133,8 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         using var reconfirmado = await PostPedidoAsync(novoCliente, PedidoComPreco(produto.Id, padrao.Id, "1200"), Guid.NewGuid(), csrf);
         Assert.Equal(HttpStatusCode.Created, reconfirmado.StatusCode);
         var novoId = (await reconfirmado.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetGuid();
+        var novoPix = await novoCliente.GetFromJsonAsync<JsonElement>($"/api/pedidos/{novoId:D}/pagamento");
+        Assert.Equal("nova@example.com", novoPix.GetProperty("pix").GetProperty("chavePix").GetString());
         using var cancelado = await EnviarComandoAdminPedidoAsync(novoAdmin, $"/api/admin/pedidos/{novoId:D}/cancelar",
             new { motivo = "Teste" }, csrfAdmin);
         Assert.Equal(HttpStatusCode.OK, cancelado.StatusCode);

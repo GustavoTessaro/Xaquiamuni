@@ -80,6 +80,13 @@ describe('PedidoPixComponent', () => {
     },
   );
 
+  it.each([true, false])('distingue instruções legadas do snapshot de compra (%s)', (legado) => {
+    http.expectOne(url).flush({ ...resposta, legado });
+    fixture.detectChanges();
+    expect(view.textContent).toContain(pix.chavePix);
+    expect(view.textContent?.includes('Os dados PIX originais deste pedido não estão disponíveis')).toBe(legado);
+  });
+
   it.each([
     ['configuracao_ausente', 'ainda não disponibilizou'],
     ['pagamento_indisponivel', 'não está disponível'],

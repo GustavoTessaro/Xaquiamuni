@@ -13,6 +13,10 @@ public sealed class ConfiguracaoPixManual
 
     private ConfiguracaoPixManual() { }
 
+    public long Revisao { get; private set; } = 1;
+
+    public void DefinirRevisao(long revisao) => Revisao = revisao;
+
     public int Id { get; private set; } = 1;
     public TipoChavePixManual TipoChave { get; private set; }
     public string ChavePix { get; private set; } = null!;

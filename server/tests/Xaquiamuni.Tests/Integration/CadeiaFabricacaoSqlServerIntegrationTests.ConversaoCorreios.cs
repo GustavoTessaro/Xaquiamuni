@@ -206,6 +206,15 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
 
         var chaveA = Guid.NewGuid();
         var chaveB = Guid.NewGuid();
+        using var configPix = new HttpRequestMessage(HttpMethod.Put, "/api/admin/configuracoes/pix-manual")
+        {
+            Content = JsonContent.Create(new SalvarPixManualRequest("Email", "loja@example.test", "Loja teste", null, 0, true)),
+        };
+        configPix.Headers.Add("Idempotency-Key", Guid.NewGuid().ToString("D"));
+        configPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
+        using var pixSalvo = await admin.Http.SendAsync(configPix);
+        Assert.Equal(HttpStatusCode.OK, pixSalvo.StatusCode);
+
         var payload = new { conversaoCorreiosId = token };
         var csrf = await TokenComprovanteAsync(cliente);
         async Task<HttpResponseMessage> ConverterAsync(Guid chave)
@@ -279,13 +288,9 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
             new { conversaoCorreiosId = anterior }, chave: chaveOriginal))
             await ConferirErroPostalAsync(divergente, 409, "chave_em_uso");
         var caminho = $"/api/pedidos/{pedidoId:D}";
-        using var configPix = new HttpRequestMessage(HttpMethod.Put, "/api/admin/configuracoes/pix-manual")
-        {
-            Content = JsonContent.Create(new SalvarPixManualRequest("Email", "loja@example.test", "Loja teste", null)),
-        };
-        configPix.Headers.Add("X-XSRF-TOKEN", await TokenComprovanteAsync(admin));
-        using var pixSalvo = await admin.Http.SendAsync(configPix);
-        Assert.Equal(HttpStatusCode.OK, pixSalvo.StatusCode);
+        var pixCongelado = await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento");
+        Assert.False(pixCongelado.GetProperty("legado").GetBoolean());
+        Assert.Equal("loja@example.test", pixCongelado.GetProperty("pix").GetProperty("chavePix").GetString());
         Assert.Equal("2450", (await cliente.Http.GetFromJsonAsync<JsonElement>(caminho + "/pagamento")).GetProperty("valorCentavos").GetString());
         using var comprovante = await EnviarComprovanteAsync(cliente, caminho + "/comprovante-pix",
             PdfComprovante(), "teste.pdf", "application/pdf", await TokenComprovanteAsync(cliente));

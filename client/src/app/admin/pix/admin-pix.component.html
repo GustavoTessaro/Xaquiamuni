@@ -15,11 +15,15 @@
       <a routerLink="/admin/login" class="underline">Entrar novamente</a>
     }
     <p role="status" [class.sr-only]="!sucesso()">{{ sucesso() }}</p>
-    @if (salvamentoIncerto() && estado() !== 'carregando' && !requerLogin()) {
-      <button type="button" class="admin-button justify-self-start" (click)="carregar()">
-        Consultar configuração salva
+    @if (salvamentoIncerto() && !requerLogin()) {
+      <button type="button" class="admin-button justify-self-start" (click)="recuperar()" [disabled]="salvando()">
+        Recuperar salvamento
       </button>
     }
+    @if (conflito() && estado() !== 'carregando') {
+      <button type="button" class="admin-button justify-self-start" (click)="carregar()">Recarregar revisão</button>
+    }
+
     @switch (estado()) {
       @case ('carregando') {
         <p role="status">Consultando configuração…</p>
@@ -48,7 +52,29 @@
         >
           <h2>Dados da chave e do recebedor</h2>
           <p>Use a chave da conta que recebe os pagamentos da loja. O formato é conferido ao salvar.</p>
-          <fieldset [disabled]="salvando() || salvamentoIncerto() || requerLogin()" class="campos">
+          @if (revisaoRecarregada(); as atual) {
+            <div class="grid gap-1">
+              <p><strong>Configuração salva na revisão {{ atual.revisao }}</strong></p>
+              @if (atual.pix; as pix) {
+                <p class="break-all">{{ tiposChave[pix.tipoChave] }} · {{ pix.chavePix }}</p>
+                <p>{{ pix.nomeRecebedor }}</p>
+                @if (pix.instrucoesAdicionais) { <p>{{ pix.instrucoesAdicionais }}</p> }
+              } @else {
+                <p>Sem dados PIX cadastrados.</p>
+              }
+              <p>Os campos abaixo preservam suas alterações locais para conferência.</p>
+            </div>
+          }
+          @if (pendentes() > 0) {
+            <p role="status">Pedidos aptos a pagamento: {{ pendentes() }}</p>
+            <label>
+              <input type="checkbox" [checked]="confirmarPendentes()"
+                (change)="confirmarPendentes.set($any($event.target).checked)"
+                [disabled]="salvando() || salvamentoIncerto() || conflito()" />
+              Conferi o impacto da alteração nos pedidos pendentes.
+            </label>
+          }
+          <fieldset [disabled]="salvando() || salvamentoIncerto() || conflito() || requerLogin()" class="campos">
             <div class="grid gap-1">
               <label for="pix-tipo" class="font-semibold">Tipo de chave (obrigatório)</label>
               <select
@@ -184,7 +210,9 @@
           } @else {
             <p>Preencha os dados obrigatórios com um formato válido para visualizar a prévia.</p>
           }
-          <p>A página do pedido exibe a configuração salva para pedidos que ainda aguardam pagamento, inclusive os criados antes de uma troca de chave.</p>
+          <p>Os novos pedidos mantêm os dados PIX registrados no momento da compra. Antes de alterar a chave,
+            confira se os clientes com pagamentos pendentes ainda poderão utilizá-la.</p>
+          <p>Pedidos anteriores a esta atualização podem consultar os dados atuais, pois os originais não estão disponíveis.</p>
         </section>
         </div>
       }

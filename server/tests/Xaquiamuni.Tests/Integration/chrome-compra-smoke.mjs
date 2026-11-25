@@ -84,7 +84,7 @@ try {
       const { requestId, request } = data.params;
       const local = new URL(request.url).origin === origin;
       const comprovante = respostasEmRecuperacao.get(data.sessionId);
-      if (local && comprovante && request.method === 'POST' && new URL(request.url).pathname === comprovante.rota) {
+      if (local && comprovante && request.method === (comprovante.metodo ?? 'POST') && new URL(request.url).pathname === comprovante.rota) {
         if (data.params.responseStatusCode === undefined) {
           const headers = Object.fromEntries(Object.entries(request.headers).map(([nome, valor]) => [nome.toLowerCase(), valor]));
           comprovante.envios.push({ chave: headers['idempotency-key'], versao: headers['x-comprovante-versao'], ...(comprovante.capturarCorpo && { corpo: request.postData }) });
@@ -170,8 +170,8 @@ try {
     })()`), true);
     assert.equal(await ev('fetch("/health").then(r => r.status)'), 200);
     return { ev, sessionId, browserContextId,
-      perderResposta: rota => {
-        const observacao = { rota, envios: [], status: [], capturarCorpo: true };
+      perderResposta: (rota, metodo = 'POST') => {
+        const observacao = { rota, metodo, envios: [], status: [], capturarCorpo: true };
         respostasEmRecuperacao.set(sessionId, observacao);
         return observacao;
       },
@@ -1866,7 +1866,7 @@ try {
     await a.ir('/admin/pedidos');
     await waitFor(() => a.ev("document.querySelector('main h1')?.textContent.trim() === 'Pedidos'"), 'Painel administrativo');
     assert.equal(await a.ev(`fetch('/api/admin/configuracoes/pix-manual').then(async r =>
-      r.ok && (await r.json()).instrucoesAdicionais.includes('Não faça transferências.'))`), true);
+      r.ok && (await r.json()).pix.instrucoesAdicionais.includes('Não faça transferências.'))`), true);
     const novo = await abrir('/cadastro');
     const registrado = await novo.ev(`(() => {
       const senha = 'E2e!' + crypto.randomUUID() + 'a1';

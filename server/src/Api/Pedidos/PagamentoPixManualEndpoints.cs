@@ -25,14 +25,15 @@ public static class PagamentoPixManualEndpoints
         HttpContext context, IPagamentoPixManual pix, CancellationToken cancellationToken)
     {
         if (!ObterUsuario(context, out _)) return Results.Unauthorized();
-        var config = await pix.ConsultarConfiguracaoAsync(cancellationToken);
-        return config is null ? Results.NotFound() : Results.Ok(DadosPixResponse.From(config));
+        context.Response.Headers.CacheControl = "no-store";
+        var estado = await pix.ConsultarConfiguracaoAsync(cancellationToken);
+        return Results.Ok(ConfiguracaoPixResponse.From(estado));
     }
 
     private static async Task<IResult> SalvarAsync(
         HttpContext context, IPagamentoPixManual pix, CancellationToken cancellationToken)
     {
-        if (!ObterUsuario(context, out _)) return Results.Unauthorized();
+        if (!ObterUsuario(context, out var autorId)) return Results.Unauthorized();
         var (comando, erro) = await AdminPedidosEndpoints.LerComandoAsync<SalvarPixManualRequest>(context.Request, cancellationToken);
         if (erro is not null) return erro;
         if (!Enum.TryParse<TipoChavePixManual>(comando!.TipoChave, ignoreCase: true, out var tipo)
@@ -52,8 +53,22 @@ public static class PagamentoPixManualEndpoints
             return Invalido(campo, exception.Message.Split(" (Parameter", 2)[0]);
         }
 
-        await pix.SalvarAsync(configuracao, cancellationToken);
-        return Results.Ok(DadosPixResponse.From(configuracao));
+        if (comando.Revisao is not >= 0)
+            return Invalido("revisao", "Informe a revisão da configuração.");
+        if (!Guid.TryParseExact(context.Request.Headers["Idempotency-Key"].ToString(), "D", out var chave)
+            || chave == Guid.Empty)
+            return Invalido("idempotencyKey", "Informe uma chave de idempotência válida.");
+
+        context.Response.Headers.CacheControl = "no-store";
+        var resultado = await pix.SalvarAsync(configuracao, comando.Revisao.Value, autorId,
+            chave, comando.ConfirmarPendentes, cancellationToken);
+        return resultado.Status switch
+        {
+            StatusSalvarPix.Sucesso => Results.Ok(ConfiguracaoPixResponse.From(resultado.Estado!)),
+            StatusSalvarPix.ConfirmacaoPendente => Results.Conflict(new { codigo = "pix_confirmacao_pendente" }),
+            StatusSalvarPix.RevisaoDesatualizada => Results.Conflict(new { codigo = "pix_revisao_desatualizada" }),
+            _ => Results.Conflict(new { codigo = "pix_chave_incompativel" }),
+        };
     }
 
     private static async Task<IResult> ConsultarPedidoAsync(
@@ -63,11 +78,12 @@ public static class PagamentoPixManualEndpoints
         var consulta = await pix.ConsultarPedidoAsync(pedidoId, clienteId, cancellationToken);
         if (consulta is null) return Results.NotFound();
 
+        context.Response.Headers.CacheControl = "no-store";
         var situacao = !consulta.PagamentoPermitido ? "pagamento_indisponivel"
-            : consulta.Configuracao is null ? "configuracao_ausente" : "disponivel";
+            : consulta.Dados is null ? "configuracao_ausente" : "disponivel";
         return Results.Ok(new InstrucoesPixPedidoResponse(situacao, consulta.ValorCentavos,
-            consulta.PrazoPagamentoEmUtc, consulta.PagamentoPermitido && consulta.Configuracao is { } config
-                ? DadosPixResponse.From(config) : null));
+            consulta.PrazoPagamentoEmUtc, consulta.PagamentoPermitido && consulta.Dados is { } config
+                ? DadosPixResponse.From(config) : null, consulta.Legado));
     }
 
     private static bool ObterUsuario(HttpContext context, out Guid id) =>
@@ -78,14 +94,20 @@ public static class PagamentoPixManualEndpoints
 }
 
 public sealed record SalvarPixManualRequest(string? TipoChave, string? ChavePix,
-    string? NomeRecebedor, string? InstrucoesAdicionais);
+    string? NomeRecebedor, string? InstrucoesAdicionais, long? Revisao = null, bool ConfirmarPendentes = false);
 
 public sealed record DadosPixResponse(string TipoChave, string ChavePix, string NomeRecebedor, string? InstrucoesAdicionais)
 {
-    internal static DadosPixResponse From(ConfiguracaoPixManual configuracao) =>
+    internal static DadosPixResponse From(DadosPixPedido configuracao) =>
         new(configuracao.TipoChave.ToString(), configuracao.ChavePix, configuracao.NomeRecebedor, configuracao.InstrucoesAdicionais);
+}
+
+public sealed record ConfiguracaoPixResponse(DadosPixResponse? Pix, long Revisao, int PedidosPendentes)
+{
+    internal static ConfiguracaoPixResponse From(EstadoConfiguracaoPix estado) =>
+        new(estado.Dados is { } dados ? DadosPixResponse.From(dados) : null, estado.Revisao, estado.PedidosPendentes);
 }
 
 public sealed record InstrucoesPixPedidoResponse(string Situacao,
     [property: JsonNumberHandling(JsonNumberHandling.WriteAsString)] long ValorCentavos,
-    DateTimeOffset PrazoPagamentoEmUtc, DadosPixResponse? Pix);
+    DateTimeOffset PrazoPagamentoEmUtc, DadosPixResponse? Pix, bool Legado);

@@ -23,6 +23,7 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
             // Mant?m as leituras do cadastro e do cat?logo v?lidas at? o commit.
             await using var transaction = await _dbContext.Database
                 .BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken).ConfigureAwait(false);
+            await AdquirirLockAsync("configuracao-pix", cancellationToken, compartilhado: true).ConfigureAwait(false);
             await AdquirirLockAsync($"purchase-request:{input.ClienteId:D}:{input.ChaveIdempotencia:D}", cancellationToken)
                 .ConfigureAwait(false);
 
@@ -133,6 +134,8 @@ public sealed partial class EfEstoqueProdutoAcabadoRepository : ICriarPedidoComp
                 return new(CriarPedidoCompraStatus.LimiteMonetarioExcedido);
             }
 
+            var configuracaoPix = await EfPagamentoPixManual.LerParaPedidoAsync(_dbContext, cancellationToken);
+            _dbContext.Add(SnapshotPixPedido.Criar(pedido.Id, configuracaoPix));
             var registro = _dbContext.Pedidos.Add(pedido);
             registro.Property<Guid?>("ChaveIdempotencia").CurrentValue = input.ChaveIdempotencia;
             registro.Property(entity => entity.HashOfertaEntrega).CurrentValue =

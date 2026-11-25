@@ -140,6 +140,19 @@ public sealed class XaquiamuniDbContext
             tema.Property(t => t.Revisao).IsConcurrencyToken();
         });
 
+        builder.Entity<SnapshotPixPedido>(snapshot =>
+        {
+            snapshot.ToTable("SnapshotsPixPedidos");
+            snapshot.HasKey(p => p.PedidoId);
+            snapshot.HasOne<Pedido>().WithOne().HasForeignKey<SnapshotPixPedido>(p => p.PedidoId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+        builder.Entity<AlteracaoConfiguracaoPix>(alteracao =>
+        {
+            alteracao.ToTable("AlteracoesConfiguracaoPix");
+            alteracao.HasKey(p => new { p.AutorId, p.Chave });
+            alteracao.Property(p => p.Hash).HasMaxLength(64).IsUnicode(false);
+        });
         builder.Entity<ConfiguracaoPixManual>(pix =>
         {
             pix.ToTable("ConfiguracoesPixManual", tabela =>
@@ -148,6 +161,7 @@ public sealed class XaquiamuniDbContext
                 tabela.HasCheckConstraint("CK_ConfiguracoesPixManual_Tipo", "[TipoChave] IN (1, 2, 3, 4)");
             });
             pix.Property(p => p.Id).ValueGeneratedNever();
+            pix.Property(p => p.Revisao).IsConcurrencyToken().HasDefaultValue(1L);
             pix.Property(p => p.ChavePix).HasMaxLength(ConfiguracaoPixManual.ChaveMaxLength);
             pix.Property(p => p.NomeRecebedor).HasMaxLength(ConfiguracaoPixManual.NomeMaxLength);
             pix.Property(p => p.InstrucoesAdicionais).HasMaxLength(ConfiguracaoPixManual.InstrucoesMaxLength);
