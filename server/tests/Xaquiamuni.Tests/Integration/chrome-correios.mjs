@@ -183,11 +183,17 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     assert.equal(await c.ev("fetch('/api/pedidos').then(r=>r.json()).then(x=>x.totalItens)"), width === 375 ? 0 : 1);
 
     await a.ir('/admin/cotacoes-correios');
-    await texto(a, 'Aguardando análise');
+    await texto(a, 'Aguardando cotação');
     assert.ok(await campo(a, 'main select', 'AguardandoAnalise'));
     await waitFor(() => a.ev(`!!document.querySelector('a[href="${'/admin' + rota}"]')`), 'Cotação na lista filtrada');
     await a.ir('/admin' + rota);
     await texto(a, 'Rua de teste');
+    assert.equal(await a.ev("document.querySelector('main a[target=_blank]').href"),
+      'https://www2.correios.com.br/sistemas/precosprazos/');
+    await a.ev("Object.defineProperty(navigator, 'clipboard', { configurable:true, value:{ writeText:async texto => window.cepCopiado = texto } })");
+    await clicar(a, 'Copiar CEP');
+    await texto(a, 'CEP copiado.');
+    assert.equal(await a.ev('window.cepCopiado'), '95200000');
     const snapshot = await c.ev(`fetch(${JSON.stringify('/api' + rota)}).then(r=>r.json()).then(x=>x.endereco)`);
     assert.deepEqual([snapshot.cep, snapshot.uf, snapshot.cidade, snapshot.logradouro, snapshot.numero],
       ['95200000', 'RS', 'Vacaria', 'Rua de teste', String(width)]);
@@ -207,8 +213,10 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       }
     }
     await a.ev('window.confirm = mensagem => { window.previaPublicacao = mensagem; return true; }');
-    await clicar(a, 'Revisar e publicar proposta');
-    await texto(a, 'Proposta disponível');
+    await clicar(a, 'Consultar prévia');
+    await texto(a, 'Total da prévia:');
+    await clicar(a, 'Enviar proposta ao cliente');
+    await texto(a, 'Aguardando resposta do cliente');
     await texto(a, 'Volume 2');
     const primeira = await a.ev(`fetch('${'/api/admin' + rota}').then(r=>r.json()).then(x=>x.propostas[0])`);
     assert.equal(Date.parse(primeira.validaAteUtc) - Date.parse(primeira.publicadaEmUtc), 48 * 3600000);
@@ -216,11 +224,13 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     assert.equal(primeira.freteCentavos, '0');
     assert.equal(primeira.valores.totalCentavos, '1199');
     assert.equal(primeira.valores.descontoFrete.originalCentavos, '1290');
-    assert.match(await a.ev('window.previaPublicacao'), /Frete grátis/);
+    assert.match(await a.ev('window.previaPublicacao'), /Enviar esta proposta/);
     for (const [nome, valor] of Object.entries({ servico: 'PAC', frete: '12,90', prazo: '6', pesoTotal: '200' })) {
       assert.ok(await campo(a, 'input[name=' + nome + ']', valor));
     }
-    await clicar(a, 'Revisar e publicar proposta');
+    await clicar(a, 'Consultar prévia');
+    await texto(a, 'Total da prévia:');
+    await clicar(a, 'Enviar proposta ao cliente');
     await texto(a, 'Revisão 2');
     const historico = await a.ev(`fetch('${'/api/admin' + rota}').then(r=>r.json()).then(x=>x.propostas)`);
     assert.deepEqual(historico.find(p => p.revisao === primeira.revisao), primeira);
@@ -228,7 +238,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
     assert.ok(await largura(a));
 
     await c.ir(rota);
-    await texto(c, 'Proposta disponível');
+    await texto(c, 'Aguardando resposta do cliente');
     assert.ok(await c.ev("![...document.querySelectorAll('main a')].some(a => a.textContent.trim() === 'Ver meu pedido')"));
     await c.ev('window.confirm = () => true');
     await clicar(c, 'Aceitar proposta');
@@ -366,7 +376,7 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
       await c.ir(rota);
       await waitFor(() => c.ev("document.querySelector('app-store-layout')?.dataset.theme === " + JSON.stringify(chave)),
         'Cotação com tema ' + chave);
-      await texto(c, 'Convertida em pedido');
+      await texto(c, 'Solicitação convertida em pedido');
       await texto(c, 'Frete grátis');
       assert.ok(await largura(c));
       await c.ir(pedido);

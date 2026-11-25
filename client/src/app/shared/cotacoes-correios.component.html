@@ -7,11 +7,15 @@
 <ng-template #conteudo>
   <section class="painel grid gap-4" aria-labelledby="titulo-cotacoes">
     <h1 id="titulo-cotacoes">{{ admin ? 'Cotações dos Correios' : 'Minhas cotações' }}</h1>
+    @if (!id()) {
+      <p>{{ admin ? 'Analise as solicitações de envio, consulte os valores nos Correios e envie propostas aos clientes.'
+        : 'Acompanhe suas solicitações de frete e confira as propostas da loja.' }}</p>
+    }
     @if (id()) { <a [routerLink]="base">Voltar às cotações</a> }
     @if (carregando() || ocupado() || checkout.enviando()) { <p role="status">Aguarde…</p> }
     @if (sucesso()) { <p role="status">{{ sucesso() }}</p> }
     @if (erro()) {
-      <p role="alert">{{ erro() }}</p>
+      <p class="aviso" role="alert">{{ erro() }}</p>
       <button type="button" (click)="carregar()" [disabled]="ocupado() || carregando()">Atualizar situação</button>
     }
     @if (incerta()) {
@@ -29,10 +33,21 @@
       @if (pagina(); as dados) {
         <ul class="grid gap-2">
           @for (cotacao of dados.itens; track cotacao.id) {
-            <li class="cartao flex flex-wrap items-center justify-between gap-2">
-              <a [routerLink]="[base, cotacao.id]">Cotação de {{ cotacao.criadaEmUtc | date:'dd/MM/yyyy HH:mm' }}</a>
-              <strong>{{ estados[cotacao.situacao] }}</strong>
-              @if (!admin && cotacao.valores; as valores) {
+            <li class="cartao flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2>Cotação de {{ cotacao.criadaEmUtc | date:'dd/MM/yyyy HH:mm' }}</h2>
+                <span class="situacao">{{ estados[cotacao.situacao] }}</span>
+              </div>
+              <a class="secundaria" [routerLink]="[base, cotacao.id]">
+                @switch (cotacao.situacao) {
+                  @case ('AguardandoAnalise') { {{ admin ? 'Analisar solicitação' : 'Acompanhar solicitação' }} }
+                  @case ('PropostaDisponivel') { Ver proposta }
+                  @case ('ConvertidaEmPedido') { Acompanhar pedido }
+                  @default { Ver detalhes }
+                }
+              </a>
+              @if (cotacao.validaAteUtc) { <p class="basis-full">Validade da proposta: {{ cotacao.validaAteUtc | date:'dd/MM/yyyy HH:mm' }}</p> }
+              @if (cotacao.valores; as valores) {
                 <div class="basis-full">
                   <app-frete-pedido [frete]="valores.freteCentavos" [desconto]="valores.descontoFrete" />
                   @if (valores.totalCentavos !== null) { <p>Total publicado: <strong>{{ reais(valores.totalCentavos) }}</strong></p> }
@@ -51,42 +66,69 @@
     }
     @if (detalhe(); as dados) {
       @let situacao = dados.resumo.situacao;
-      <section class="cartao grid gap-2">
-        <h2>{{ estados[situacao] }}</h2>
+      <section class="cartao grid gap-2" aria-labelledby="situacao-cotacao">
+        <h2 id="situacao-cotacao">{{ estados[situacao] }}</h2>
         <p>Solicitada em {{ dados.resumo.criadaEmUtc | date:'dd/MM/yyyy HH:mm' }}</p>
-        <h3>Destino congelado</h3>
-        <p>{{ dados.endereco.logradouro }}, {{ dados.endereco.numero }} {{ dados.endereco.complemento }}
-          · {{ dados.endereco.bairro }} · {{ dados.endereco.cidade }}/{{ dados.endereco.uf }} · CEP {{ dados.endereco.cep }}</p>
-        <h3>Itens solicitados</h3>
-        <ul>
+        @if (!admin && situacao === 'AguardandoAnalise') {
+          <p>A loja está consultando o valor e o prazo de envio dos seus produtos.</p>
+        }
+        @if (situacao === 'ConvertidaEmPedido' && dados.pedidoConvertidoId; as pedido) {
+          <a [routerLink]="[admin ? '/admin/pedidos' : '/pedidos', pedido]">{{ admin ? 'Acompanhar pedido' : 'Ver meu pedido' }}</a>
+        }
+      </section>
+      <div class="ficha-grade">
+        <section class="cartao grid gap-2" aria-labelledby="itens-cotacao">
+        <h2 id="itens-cotacao">Produtos solicitados</h2>
+        <ul class="itens-cotacao">
           @for (item of dados.itens; track item.produtoVarianteId) {
-            <li>{{ item.nomeProduto }} · {{ item.nomeVariante }} × {{ item.quantidade }}</li>
+            <li><div><strong>{{ item.nomeProduto }}</strong><p>{{ item.nomeVariante }}</p></div><span>× {{ item.quantidade }}</span></li>
           }
         </ul>
-      </section>
-      <section class="cartao grid gap-3">
-        <h2>Propostas</h2>
-        @for (proposta of dados.propostas; track proposta.revisao) {
-          <article class="grid gap-1">
-            <h3 class="font-semibold">{{ proposta.servico }} · {{ proposta.revisao === dados.revisaoAceita ? 'Aceita' : 'Revisão ' + proposta.revisao }}</h3>
-            <app-frete-pedido [frete]="proposta.freteCentavos" [desconto]="proposta.valores?.descontoFrete" />
-            @if (proposta.valores?.totalCentavos; as totalPublicado) {
-              <p>Subtotal dos produtos: {{ reais(proposta.valores!.subtotalProdutosCentavos!) }}</p>
-              <p>Total publicado: <strong>{{ reais(totalPublicado) }}</strong></p>
-            }
-            <p>{{ proposta.prazoDias }} dia(s) de transporte</p>
-            <p>Válida até {{ proposta.validaAteUtc | date:'dd/MM/yyyy HH:mm' }}</p>
-            @if (admin) {
-              @if (proposta.pesoTotalGramas) { <p>Peso total: {{ proposta.pesoTotalGramas }} g</p> }
-              @for (volume of proposta.volumes; track $index) {
-                <p>Volume {{ $index + 1 }} · {{ volume.pesoGramas }} g
-                  @if (volume.comprimentoCm) { · {{ volume.comprimentoCm }} × {{ volume.larguraCm }} × {{ volume.alturaCm }} cm }
-                </p>
+        </section>
+        <section class="cartao grid gap-2" aria-labelledby="endereco-cotacao">
+          <h2 id="endereco-cotacao">Endereço de destino</h2>
+          <p>{{ dados.endereco.logradouro }}, {{ dados.endereco.numero }} {{ dados.endereco.complemento }}
+            · {{ dados.endereco.bairro }} · {{ dados.endereco.cidade }}/{{ dados.endereco.uf }} · CEP {{ dados.endereco.cep }}</p>
+          @if (admin) {
+            <div class="flex flex-wrap gap-2">
+              <button type="button" (click)="copiarEndereco(dados, true)">Copiar CEP</button>
+              <button type="button" (click)="copiarEndereco(dados, false)">Copiar endereço</button>
+            </div>
+            @if (avisoCopia()) { <p role="status">{{ avisoCopia() }}</p> }
+          }
+        </section>
+      </div>
+      <ng-template #historico>
+        <section class="cartao grid gap-3">
+          <h2>Histórico de propostas</h2>
+          @for (proposta of dados.propostas; track proposta.revisao) {
+            <article class="revisao grid gap-1">
+              <h3 class="font-semibold">{{ proposta.servico }} · Revisão {{ proposta.revisao }}</h3>
+              <p>Publicada em {{ proposta.publicadaEmUtc | date:'dd/MM/yyyy HH:mm' }}
+                @if (proposta.revisao === dados.revisaoAceita) { · Aceita }
+                @if (proposta.revisao === dados.resumo.revisao) { · {{ estados[situacao] }} }
+                @else { · Substituída }
+              </p>
+              <app-frete-pedido [frete]="proposta.freteCentavos" [desconto]="proposta.valores?.descontoFrete" />
+              @if (proposta.valores?.totalCentavos; as totalPublicado) {
+                <p>Subtotal dos produtos: {{ reais(proposta.valores!.subtotalProdutosCentavos!) }}</p>
+                <p>Total publicado: <strong>{{ reais(totalPublicado) }}</strong></p>
               }
-            }
-          </article>
-        } @empty { <p>A loja ainda não publicou uma proposta.</p> }
-      </section>
+              <p>Prazo estimado de transporte: {{ proposta.prazoDias }} dia(s)</p>
+              <p>Válida até {{ proposta.validaAteUtc | date:'dd/MM/yyyy HH:mm' }}</p>
+              @if (admin) {
+                @if (proposta.pesoTotalGramas) { <p>Peso total: {{ proposta.pesoTotalGramas }} g</p> }
+                @for (volume of proposta.volumes; track $index) {
+                  <p>Volume {{ $index + 1 }} · {{ volume.pesoGramas }} g
+                    @if (volume.comprimentoCm) { · {{ volume.comprimentoCm }} × {{ volume.larguraCm }} × {{ volume.alturaCm }} cm }
+                  </p>
+                }
+              }
+            </article>
+          } @empty { <p>A loja ainda não publicou uma proposta.</p> }
+        </section>
+      </ng-template>
+      @if (!admin) { <ng-container [ngTemplateOutlet]="historico" /> }
       @if (situacao === 'AguardandoAnalise' || situacao === 'PropostaDisponivel' || situacao === 'Aceita') {
         <fieldset class="cartao grid gap-3" [disabled]="ocupado() || carregando() || incerta()">
           <legend>Ações da cotação</legend>
@@ -97,7 +139,7 @@
           }
           <div class="flex flex-wrap gap-2">
             @if (!admin && situacao === 'PropostaDisponivel') {
-              <button type="button" (click)="decidir('aceitar', dados.resumo.revisao)">Aceitar proposta</button>
+              <button class="principal" type="button" (click)="decidir('aceitar', dados.resumo.revisao)">Aceitar proposta</button>
             }
             @if (situacao === 'PropostaDisponivel' || (admin && situacao === 'AguardandoAnalise')) {
               <button type="button" (click)="decidir('recusar', dados.resumo.revisao)">Recusar</button>
@@ -107,14 +149,11 @@
         </fieldset>
       }
       @if (admin && (situacao === 'AguardandoAnalise' || situacao === 'PropostaDisponivel')) {
-        <form class="cartao" (ngSubmit)="publicar()">
-          <fieldset class="grid gap-3" [disabled]="ocupado() || carregando() || incerta()">
+        <form class="ficha-grade" (input)="invalidarPrevia()" (ngSubmit)="consultarPrevia()">
+          <fieldset class="cartao grid gap-3" [disabled]="ocupado() || carregando() || incerta()">
             <legend>{{ situacao === 'PropostaDisponivel' ? 'Publicar nova revisão' : 'Nova proposta' }}</legend>
-            <label>Serviço postal <input name="servico" [(ngModel)]="proposta.servico" required maxlength="60" /></label>
-            <label>Frete original (R$) <input name="frete" [(ngModel)]="proposta.frete" required inputmode="decimal" /></label>
-            <label>Prazo estimado (dias) <input type="number" name="prazo" [(ngModel)]="proposta.prazoDias" required min="1" /></label>
-            <label>Válida até (opcional) <input type="datetime-local" name="validade" [(ngModel)]="proposta.validade" /></label>
-            <p>Se estiver em branco, a API aplica a validade padrão definida em Entregas e contato.</p>
+            <h2>Peso e dimensões</h2>
+            <p>Considere o peso dos produtos, da caixa e dos materiais de proteção utilizados no envio.</p>
             <label>Peso total (g, opcional) <input type="number" name="pesoTotal" min="1" [(ngModel)]="proposta.pesoTotalGramas" /></label>
             @for (volume of proposta.volumes; track volume; let i = $index) {
               <fieldset class="grid gap-2 sm:grid-cols-2">
@@ -123,18 +162,49 @@
                 <label>Comprimento (cm) <input type="number" [name]="'comprimento' + i" [(ngModel)]="volume.comprimentoCm" min="0.01" step="0.01" /></label>
                 <label>Largura (cm) <input type="number" [name]="'largura' + i" [(ngModel)]="volume.larguraCm" min="0.01" step="0.01" /></label>
                 <label>Altura (cm) <input type="number" [name]="'altura' + i" [(ngModel)]="volume.alturaCm" min="0.01" step="0.01" /></label>
-                <button type="button" (click)="proposta.volumes.splice(i, 1)">Remover volume {{ i + 1 }}</button>
+                <button type="button" (click)="removerVolume(i)">Remover volume {{ i + 1 }}</button>
               </fieldset>
             }
             <div class="flex flex-wrap gap-2">
               <button type="button" (click)="adicionarVolume()" [disabled]="proposta.volumes.length >= 20">Adicionar volume</button>
-              <button type="submit">Revisar e publicar proposta</button>
             </div>
+            <h2>Consulta de preço e prazo</h2>
+            <p>Use o CEP de destino, o peso e as dimensões para consultar o frete no site dos Correios. Depois, informe o resultado abaixo.</p>
+            <a [href]="siteCorreios" target="_blank" rel="noopener noreferrer">Consultar preços e prazos nos Correios (nova aba)</a>
+            <label>Serviço postal <input name="servico" [(ngModel)]="proposta.servico" required maxlength="60" /></label>
+            <label>Frete original (R$) <input name="frete" [(ngModel)]="proposta.frete" required inputmode="decimal" placeholder="12,90" /></label>
+            <label>Prazo estimado de transporte (dias) <input type="number" name="prazo" [(ngModel)]="proposta.prazoDias" required min="1" /></label>
+            <label>Válida até (opcional) <input type="datetime-local" name="validade" [(ngModel)]="proposta.validade" /></label>
+            <p>Em branco, vale o prazo padrão de Entregas e fretes.</p>
+            @if (erroProposta()) { <p role="alert" class="aviso">{{ erroProposta() }}</p> }
+            <button class="secundaria" type="submit">Consultar prévia</button>
           </fieldset>
+          <section class="cartao grid gap-2" aria-labelledby="previa-cotacao">
+            <h2 id="previa-cotacao">Prévia da proposta</h2>
+            @if (previa(); as simulacao) {
+              <p role="status">Confira o resumo antes de enviar. A proposta ficará disponível no acompanhamento da solicitação.</p>
+              <p>{{ simulacao.corpo.servico }} · {{ simulacao.corpo.prazoDias }} dia(s) de transporte</p>
+              @if (simulacao.validade) { <p>Validade: {{ simulacao.validade | date:'dd/MM/yyyy HH:mm' }}</p> }
+              @else { <p>Validade padrão aplicada na publicação.</p> }
+              @if (simulacao.valores.subtotalProdutosCentavos !== null) {
+                <p>Subtotal dos produtos: {{ reais(simulacao.valores.subtotalProdutosCentavos) }}</p>
+              }
+              <app-frete-pedido [frete]="simulacao.valores.freteCentavos" [desconto]="simulacao.valores.descontoFrete" />
+              @if (simulacao.valores.totalCentavos !== null) {
+                <p class="total-proposta">Total da prévia: <strong>{{ reais(simulacao.valores.totalCentavos) }}</strong></p>
+              }
+              <button class="principal" type="button" (click)="publicar()" [disabled]="ocupado() || carregando() || incerta()">
+                Enviar proposta ao cliente
+              </button>
+            } @else {
+              <p>Preencha os dados e consulte a prévia para conferir o frete, eventuais descontos e o total.</p>
+            }
+          </section>
         </form>
       }
+      @if (admin) { <ng-container [ngTemplateOutlet]="historico" /> }
       @if (!admin && situacao === 'Aceita' && !checkout.pendente() && !incerta()) {
-        <button type="button" (click)="revisar()" [disabled]="ocupado()">Continuar para pagamento</button>
+        <button class="principal" type="button" (click)="revisar()" [disabled]="ocupado()">Continuar para pagamento</button>
         @if (revisao(); as compra) {
           <section class="cartao grid gap-2">
             <h2>Confira o total do pedido</h2>
@@ -154,12 +224,8 @@
           </section>
         }
       }
-      @if (!admin && situacao === 'ConvertidaEmPedido') {
-        @if (dados.pedidoConvertidoId; as pedidoId) {
-          <a [routerLink]="['/pedidos', pedidoId]">Ver meu pedido</a>
-        } @else {
-          <a routerLink="/pedidos">Consultar pedido em Meus pedidos</a>
-        }
+      @if (!admin && situacao === 'ConvertidaEmPedido' && !dados.pedidoConvertidoId) {
+        <a routerLink="/pedidos">Consultar pedido em Meus pedidos</a>
       }
     }
     @if (!admin && checkout.pendente()?.postal?.cotacaoId === id() && id()) {

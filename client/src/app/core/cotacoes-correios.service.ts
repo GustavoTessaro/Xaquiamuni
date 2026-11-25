@@ -9,13 +9,13 @@ import { AuthService } from './auth/auth.service';
 import { CsrfService } from './security/csrf.service';
 
 export const estadosCotacao = {
-  AguardandoAnalise: 'Aguardando análise',
-  PropostaDisponivel: 'Proposta disponível',
-  Aceita: 'Aceita',
-  Recusada: 'Recusada',
-  Expirada: 'Expirada',
-  Cancelada: 'Cancelada',
-  ConvertidaEmPedido: 'Convertida em pedido',
+  AguardandoAnalise: 'Aguardando cotação',
+  PropostaDisponivel: 'Aguardando resposta do cliente',
+  Aceita: 'Proposta aceita',
+  Recusada: 'Proposta recusada',
+  Expirada: 'Proposta expirada',
+  Cancelada: 'Solicitação cancelada',
+  ConvertidaEmPedido: 'Solicitação convertida em pedido',
 };
 type Estado = keyof typeof estadosCotacao;
 export interface ValoresPropostaPostal {

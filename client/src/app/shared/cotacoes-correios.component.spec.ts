@@ -33,6 +33,7 @@ describe('atalho para o pedido convertido em Minhas cotações', () => {
         provideHttpClient(), provideHttpClientTesting(),
         provideRouter([
           { path: 'cotacoes-correios/:id', component: CotacoesCorreiosComponent },
+          { path: 'admin/cotacoes-correios/:id', component: CotacoesCorreiosComponent, data: { admin: true } },
           { path: 'pedidos/:id', component: DestinoTeste },
         ]),
         { provide: CheckoutService, useValue: {
@@ -108,5 +109,50 @@ describe('atalho para o pedido convertido em Minhas cotações', () => {
     harness.detectChanges();
     expect(link(harness)).toBeUndefined();
     expect(harness.routeNativeElement!.querySelector('[role="alert"]')?.textContent).toContain('Cotação indisponível');
+  });
+
+  it('separa a prévia do envio e exige nova prévia após editar o prazo', async () => {
+    const harness = await RouterTestingHarness.create('/admin' + caminho);
+    const endereco = '/api/admin' + caminho;
+    http.expectOne(endereco).flush({
+      ...detalhe, resumo: { ...detalhe.resumo, situacao: 'AguardandoAnalise' }, revisaoAceita: null,
+    }, { headers: { ETag: '"1"' } });
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    const tela = harness.routeNativeElement!;
+    const preencher = async (nome: string, valor: string) => {
+      const input = tela.querySelector<HTMLInputElement>(`input[name="${nome}"]`)!;
+      input.value = valor;
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      harness.detectChanges();
+      await harness.fixture.whenStable();
+      harness.detectChanges();
+    };
+    await preencher('servico', 'PAC');
+    await preencher('frete', '12,90');
+    await preencher('prazo', '3');
+    await preencher('pesoTotal', '200');
+    const botao = (titulo: string) => [...tela.querySelectorAll('button')].find(b => b.textContent.trim() === titulo);
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    tela.querySelector('main form.ficha-grade')!.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    harness.detectChanges();
+    expect(tela.querySelector('main [role="alert"]')?.textContent).toBeUndefined();
+    await vi.waitFor(() => http.expectOne('/api/auth/csrf').flush({ requestToken: 'csrf' }));
+    const previa = http.expectOne(endereco + '/propostas/previa');
+    expect(previa.request.headers.get('If-Match')).toBe('"1"');
+    expect(previa.request.body).toMatchObject({ freteCentavos: '1290', pesoTotalGramas: 200 });
+    previa.flush({ valores: { freteCentavos: '990', subtotalProdutosCentavos: '1000', totalCentavos: '1990',
+      descontoFrete: { nomeCampanha: 'Frete parcial', originalCentavos: '1290', descontoCentavos: '300' } } });
+    await harness.fixture.whenStable();
+    harness.detectChanges();
+    expect(tela.textContent).toContain('19,90');
+    expect(botao('Enviar proposta ao cliente')).toBeDefined();
+    http.expectNone(endereco + '/propostas');
+    await preencher('prazo', '4');
+    expect(botao('Enviar proposta ao cliente')).toBeUndefined();
+    expect(tela.querySelector('a[target="_blank"]')?.getAttribute('href')).toBe('https://www2.correios.com.br/sistemas/precosprazos/');
   });
 });

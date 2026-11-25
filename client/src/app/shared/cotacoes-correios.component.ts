@@ -6,7 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { AdminWorkspaceComponent } from '../admin/admin-workspace.component';
 import { tarifaEmCentavos } from '../admin/admin-atendimento.component';
-import { CotacoesCorreiosService, DetalheCotacao, erroPostal, estadosCotacao, PaginaCotacoes, RevisaoPostal, VolumePostal } from '../core/cotacoes-correios.service';
+import { CotacoesCorreiosService, DetalheCotacao, erroPostal, estadosCotacao, PaginaCotacoes, RevisaoPostal, ValoresPropostaPostal, VolumePostal } from '../core/cotacoes-correios.service';
 import { formatarCentavos } from '../public-store/carrinho.service';
 import { FretePedidoComponent } from './frete-pedido.component';
 import { CheckoutService } from '../public-store/checkout.service';
@@ -33,6 +33,17 @@ const novaProposta = () => ({
     .painel button:disabled { opacity: .65; }
     .painel a { color: var(--admin-action-text, var(--brand-link)); text-decoration: underline; text-underline-offset: .2em; }
     .painel :focus-visible { outline: 2px solid var(--admin-focus, var(--brand-focus, currentColor)); outline-offset: 3px; }
+    .ficha-grade { display: grid; gap: 1rem; align-items: start; min-width: 0; }
+    .ficha-grade fieldset { min-width: 0; }
+    .cartao legend { font-weight: 650; padding-inline: .25rem; }
+    .situacao { display: inline-block; border: 1px solid currentColor; border-radius: 1rem; padding: .15rem .55rem; font-size: .875rem; }
+    .itens-cotacao li { display: flex; justify-content: space-between; gap: .75rem; padding-block: .5rem; }
+    .revisao + .revisao, .total-proposta { border-top: 1px solid var(--admin-border, var(--brand-line)); padding-top: .65rem; }
+    .painel .principal { background: var(--admin-action, var(--brand-action)); color: var(--admin-action-ink, var(--brand-surface));
+      font-weight: 700; width: fit-content; }
+    .painel .secundaria { display: inline-flex; align-items: center; min-height: 2.75rem; width: fit-content; }
+    .aviso { color: var(--admin-error, var(--brand-error)); }
+    @media (min-width: 850px) { .ficha-grade { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); } }
   `,
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
@@ -55,6 +66,13 @@ export class CotacoesCorreiosComponent {
   protected readonly ocupado = signal(false);
   protected readonly carregando = signal(false);
   protected readonly incerta = signal(false);
+  protected readonly previa = signal<{
+    corpo: { servico: string; freteCentavos: string; prazoDias: number; validaAteUtc: string | null };
+    etag: string; valores: ValoresPropostaPostal; validade: string | null;
+  } | null>(null);
+  protected readonly avisoCopia = signal('');
+  protected readonly erroProposta = signal('');
+  protected readonly siteCorreios = 'https://www2.correios.com.br/sistemas/precosprazos/';
   protected filtro = '';
   protected motivo = '';
   protected proposta = novaProposta();
@@ -67,6 +85,8 @@ export class CotacoesCorreiosComponent {
       this.id.set(params.get('id'));
       this.detalhe.set(null);
       this.revisao.set(null);
+      this.invalidarPrevia();
+      this.avisoCopia.set('');
       this.proposta = novaProposta();
       this.motivo = '';
       this.sucesso.set('');
@@ -78,6 +98,7 @@ export class CotacoesCorreiosComponent {
   }
 
   protected async carregar(pagina = 1, manterErro = false) {
+    this.invalidarPrevia();
     const leitura = ++this.leitura;
     const id = this.id();
     this.carregando.set(true);
@@ -104,10 +125,37 @@ export class CotacoesCorreiosComponent {
   }
 
   protected adicionarVolume() {
+    this.invalidarPrevia();
     this.proposta.volumes.push({ pesoGramas: null, comprimentoCm: null, larguraCm: null, alturaCm: null });
   }
 
-  protected async publicar() {
+  protected invalidarPrevia(): void {
+    this.previa.set(null);
+    this.erroProposta.set('');
+  }
+
+  protected removerVolume(indice: number): void {
+    this.invalidarPrevia();
+    this.proposta.volumes.splice(indice, 1);
+  }
+
+  protected async copiarEndereco(dados: DetalheCotacao, somenteCep: boolean): Promise<void> {
+    const { cep, logradouro, numero, complemento, bairro, cidade, uf } = dados.endereco;
+    const endereco = [`${logradouro}, ${numero}`, complemento, bairro, `${cidade}/${uf}`, `CEP ${cep}`]
+      .filter(Boolean).join(' · ');
+    const id = this.id();
+    this.avisoCopia.set('');
+    try {
+      await navigator.clipboard.writeText(somenteCep ? cep : endereco);
+      if (this.id() === id) this.avisoCopia.set(somenteCep ? 'CEP copiado.' : 'Endereço copiado.');
+    } catch {
+      if (this.id() === id) this.avisoCopia.set('Não foi possível copiar. Selecione o texto do endereço para copiar.');
+    }
+  }
+
+  protected async consultarPrevia() {
+    if (this.ocupado() || this.carregando() || this.tentativa) return;
+    this.invalidarPrevia();
     const { servico, frete, prazoDias, validade, pesoTotalGramas, volumes } = this.proposta;
     const freteCentavos = tarifaEmCentavos(frete);
     const validaAte = validade ? new Date(validade) : null;
@@ -121,7 +169,7 @@ export class CotacoesCorreiosComponent {
           return v.pesoGramas === null || !Number.isInteger(v.pesoGramas) || v.pesoGramas < 1 ||
             (!dimensoes.every(x => x === null) && !dimensoes.every(x => x !== null && Number.isFinite(x) && x > 0));
         })) {
-      this.erro.set('Informe serviço, frete, prazo e peso total ou por volume. Se informar ambos, os pesos devem coincidir. Informe as três dimensões de cada volume ou deixe as três em branco.');
+      this.erroProposta.set('Informe serviço, frete, prazo e peso total ou por volume. Se informar ambos, os pesos devem coincidir. Informe as três dimensões de cada volume ou deixe as três em branco.');
       return;
     }
     const corpo = {
@@ -133,29 +181,33 @@ export class CotacoesCorreiosComponent {
     if (!id || !etag || this.ocupado() || this.tentativa) return;
     this.ocupado.set(true);
     this.erro.set('');
-    let confirmacao: string;
+    const rascunho = JSON.stringify(this.proposta);
     try {
       const previa = await firstValueFrom(this.api.preverProposta(id, corpo, etag).pipe(takeUntilDestroyed(this.destroy)));
-      if (this.id() !== id || this.etag !== etag) return;
+      if (this.id() !== id || this.etag !== etag || JSON.stringify(this.proposta) !== rascunho) return;
       const valores = previa.valores;
-      if (!valores || valores.totalCentavos === null) return;
-      const desconto = valores.descontoFrete;
-      const linhas = [
-        `Publicar ${servico.trim()} com prazo de ${prazoDias} dia(s)?`,
-        `Frete original: ${formatarCentavos(freteCentavos)}`,
-        ...(desconto ? [`Desconto: ${formatarCentavos(desconto.descontoCentavos)} · ${desconto.nomeCampanha}`] : []),
-        `Frete líquido: ${desconto && valores.freteCentavos === '0' ? 'Frete grátis' : formatarCentavos(valores.freteCentavos)}`,
-        `Total da prévia: ${formatarCentavos(valores.totalCentavos)}`,
-        'O servidor confirma os valores no momento da publicação.',
-      ];
-      confirmacao = linhas.join('\n');
+      if (!valores || valores.totalCentavos === null) {
+        this.erroProposta.set('A prévia está indisponível. Confira os dados e tente novamente.');
+        return;
+      }
+      this.previa.set({ corpo, etag, valores, validade: corpo.validaAteUtc });
     } catch (erro) {
-      if (this.id() === id) this.erro.set(erroPostal(erro));
+      if (this.id() === id && !this.destroy.destroyed) {
+        const mensagem = erroPostal(erro);
+        if ((erro as { status?: number }).status === 409) await this.carregar(1, true);
+        if (this.id() === id) this.erroProposta.set(mensagem);
+      }
       return;
     } finally {
       this.ocupado.set(false);
     }
-    await this.operar('propostas', corpo, confirmacao);
+  }
+
+  protected publicar(): void {
+    const previa = this.previa();
+    if (!previa || previa.etag !== this.etag || this.incerta()) return;
+    void this.operar('propostas', previa.corpo,
+      'Enviar esta proposta ao cliente? O servidor confirma os valores na publicação.');
   }
 
   protected decidir(acao: 'aceitar' | 'recusar' | 'cancelar', revisao: number | null) {
@@ -181,7 +233,7 @@ export class CotacoesCorreiosComponent {
       if (this.id() !== id || this.destroy.destroyed) return;
       this.tentativa = undefined;
       this.incerta.set(false);
-      this.sucesso.set('Cotação atualizada.');
+      this.sucesso.set(tentativa.acao === 'propostas' ? 'Proposta disponível para o cliente.' : 'Cotação atualizada.');
       this.revisao.set(null);
       this.proposta = novaProposta();
       await this.carregar();
