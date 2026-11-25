@@ -151,8 +151,8 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     return api(a, rotaAdmin(id) + '/' + acao, 'POST', JSON.stringify(dados));
   }
 
-  async function verificarPixInativo(id) {
-    await tem(c, 'O pagamento não está disponível para a situação atual do pedido.');
+  async function verificarPixInativo(id, mensagem = 'Pagamento confirmado pela loja.') {
+    await tem(c, mensagem);
     assert.equal(await c.ev('!document.querySelector("app-pedido-pix > section button")'), true);
     const r = await api(c, '/api/pedidos/' + id + '/pagamento');
     assert.equal(r.status, 200);
@@ -338,6 +338,11 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
         })()`);
         const { tipoChave, ...campos } = dados;
         await preencher(a, campos);
+        await pronto(a, `(() => {
+          const previa = document.querySelector('[aria-labelledby="pix-previa"]');
+          return previa?.textContent.includes('Alterações ainda não salvas.')
+            && previa.textContent.includes(${JSON.stringify(dados.chavePix)});
+        })()`, 'Prévia PIX ainda não salva');
         await clicar(a, 'Salvar configuração');
         await tem(a, 'Configuração PIX salva.');
         const persisted = semCache(await api(a, config), 200);
@@ -625,7 +630,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
       assert.equal(await baixar(a), arquivoCancelado.hash);
       assert.equal((await postAdmin(cancelado, 'cancelar', { motivo: 'Cancelamento sintético E2E' })).status, 200);
       await c.ir('/pedidos/' + cancelado);
-      await verificarPixInativo(cancelado);
+      await verificarPixInativo(cancelado, 'Pedido cancelado. Este pedido está encerrado para pagamento.');
       assert.equal(await baixar(c), arquivoCancelado.hash);
       assert.equal((await api(outro, '/api/pedidos/' + cancelado + '/comprovante-pix')).status, 404);
     }
@@ -646,7 +651,7 @@ export async function validarJornada({ abrir, waitFor, checkpoint, call, cliente
     assert.deepEqual([consulta.status, consulta.body?.situacao], [200, 'Expirado']);
     if (pixManual) {
       await c.ir('/pedidos/' + expirado);
-      await verificarPixInativo(expirado);
+      await verificarPixInativo(expirado, 'Prazo de pagamento encerrado.');
       console.log('PIX: pagamento confirmado, cancelamento, expiração e isolamento conferidos.');
     }
     await estoque(5, 2, 3);

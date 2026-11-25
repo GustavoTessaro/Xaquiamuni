@@ -1,10 +1,13 @@
 <app-admin-workspace activePage="pix">
   <section aria-labelledby="pix-titulo" class="grid min-w-0 gap-4 rounded-2xl bg-white p-4 sm:p-6">
-    <h1 id="pix-titulo" class="text-2xl font-bold text-emerald-950">PIX manual</h1>
-    <p>
-      Estes dados aparecem para clientes com pedidos aguardando pagamento. Confirme o recebimento no
-      banco antes de confirmar o pagamento no painel.
-    </p>
+    <h1 id="pix-titulo" class="text-2xl font-bold text-emerald-950">Pagamento via PIX</h1>
+    <p>Configure os dados que seus clientes utilizarão para pagar os pedidos da loja.</p>
+    <section class="atendimento-cartao" aria-labelledby="pix-conferencia">
+      <h2 id="pix-conferencia">Conferência manual</h2>
+      <p>Confira o recebimento na conta bancária da loja antes de confirmar o pagamento no painel de pedidos.
+        O sistema não consulta o banco. O comprovante ajuda na conferência, mas não garante que o dinheiro entrou na conta.</p>
+      <p>A confirmação registra o recebimento financeiro e libera o andamento do pedido.</p>
+    </section>
     @if (erro()) {
       <p role="alert" class="text-red-800">{{ erro() }}</p>
     }
@@ -12,6 +15,11 @@
       <a routerLink="/admin/login" class="underline">Entrar novamente</a>
     }
     <p role="status" [class.sr-only]="!sucesso()">{{ sucesso() }}</p>
+    @if (salvamentoIncerto() && estado() !== 'carregando' && !requerLogin()) {
+      <button type="button" class="admin-button justify-self-start" (click)="carregar()">
+        Consultar configuração salva
+      </button>
+    }
     @switch (estado()) {
       @case ('carregando') {
         <p role="status">Consultando configuração…</p>
@@ -31,15 +39,18 @@
         @if (estado() === 'nova') {
           <p role="status">A loja ainda não tem uma configuração PIX.</p>
         }
+        <div class="grid min-w-0 items-start gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <form
           [formGroup]="formulario"
           (ngSubmit)="salvar()"
           novalidate
-          class="grid w-full max-w-xl gap-4"
+          class="atendimento-cartao"
         >
-          <fieldset [disabled]="salvando() || requerLogin()" class="grid min-w-0 gap-4">
+          <h2>Dados da chave e do recebedor</h2>
+          <p>Use a chave da conta que recebe os pagamentos da loja. O formato é conferido ao salvar.</p>
+          <fieldset [disabled]="salvando() || salvamentoIncerto() || requerLogin()" class="campos">
             <div class="grid gap-1">
-              <label for="pix-tipo" class="font-semibold">Tipo de chave</label>
+              <label for="pix-tipo" class="font-semibold">Tipo de chave (obrigatório)</label>
               <select
                 id="pix-tipo"
                 formControlName="tipoChave"
@@ -62,7 +73,7 @@
               }
             </div>
             <div class="grid gap-1">
-              <label for="pix-chave" class="font-semibold">Chave PIX</label>
+              <label for="pix-chave" class="font-semibold">Chave PIX (obrigatória)</label>
               <input
                 id="pix-chave"
                 formControlName="chavePix"
@@ -106,7 +117,7 @@
               }
             </div>
             <div class="grid gap-1">
-              <label for="pix-recebedor" class="font-semibold">Nome do recebedor</label>
+              <label for="pix-recebedor" class="font-semibold">Nome do recebedor (obrigatório)</label>
               <input
                 id="pix-recebedor"
                 formControlName="nomeRecebedor"
@@ -158,6 +169,24 @@
             </button>
           </fieldset>
         </form>
+        <section class="atendimento-cartao" aria-labelledby="pix-previa">
+          <h2 id="pix-previa">Prévia para o cliente</h2>
+          <p role="status">{{ formulario.dirty ? 'Alterações ainda não salvas.' : estado() === 'existente' ? 'Configuração salva.' : 'Sem configuração salva.' }}</p>
+          @if (formulario.valid) {
+            <dl class="grid gap-2 wrap-anywhere">
+              <div><dt class="font-semibold">Tipo de chave</dt><dd>{{ tiposChave[formulario.controls.tipoChave.value || 'Email'] }}</dd></div>
+              <div><dt class="font-semibold">Chave PIX</dt><dd>{{ formulario.controls.chavePix.value.trim() }}</dd></div>
+              <div><dt class="font-semibold">Recebedor</dt><dd>{{ formulario.controls.nomeRecebedor.value.trim() }}</dd></div>
+              @if (formulario.controls.instrucoesAdicionais.value.trim(); as instrucoes) {
+                <div><dt class="font-semibold">Instruções adicionais</dt><dd class="whitespace-pre-wrap">{{ instrucoes }}</dd></div>
+              }
+            </dl>
+          } @else {
+            <p>Preencha os dados obrigatórios com um formato válido para visualizar a prévia.</p>
+          }
+          <p>A página do pedido exibe a configuração salva para pedidos que ainda aguardam pagamento, inclusive os criados antes de uma troca de chave.</p>
+        </section>
+        </div>
       }
     }
   </section>

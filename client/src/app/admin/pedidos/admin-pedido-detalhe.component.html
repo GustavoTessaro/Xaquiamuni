@@ -67,6 +67,10 @@
             <dd>{{ situacoes[pedido.situacao] }}</dd>
           </div>
           <div>
+            <dt class="font-semibold">Valor esperado</dt>
+            <dd>{{ formatarPreco(pedido.totalCentavos) }}</dd>
+          </div>
+          <div>
             <dt class="font-semibold">Criação</dt>
             <dd>
               <time [attr.datetime]="pedido.criadoEmUtc">{{
@@ -169,6 +173,10 @@
                     <p>{{ confirmacao.orientacao }}</p>
                   }
                   @if (pedido.numeroPublico; as numero) { <p>Pedido <strong>{{ numero }}</strong></p> }
+                  @if (atual === 'pagamento') {
+                    <p class="font-semibold">Valor a conferir: {{ formatarPreco(pedido.totalCentavos) }}</p>
+                    <p>Confira se o valor entrou na conta bancária da loja antes de registrar a confirmação.</p>
+                  }
                   @if (acao() === 'postagem') {
                     <label class="grid gap-1">Serviço postal utilizado
                       <input required maxlength="60" [readOnly]="operacaoPostalIncerta()" [value]="servicoPostal()" (input)="servicoPostal.set($any($event.target).value)" />

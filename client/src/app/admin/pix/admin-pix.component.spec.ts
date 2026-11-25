@@ -69,6 +69,9 @@ describe('AdminPixComponent', () => {
     preencher('#pix-tipo', 'Email', 'change');
     preencher('#pix-chave', dados.chavePix);
     preencher('#pix-recebedor', dados.nomeRecebedor);
+    fixture.detectChanges();
+    expect(view.querySelector('[aria-labelledby="pix-previa"]')?.textContent).toContain('Alterações ainda não salvas.');
+    expect(view.querySelector('[aria-labelledby="pix-previa"]')?.textContent).toContain(dados.chavePix);
     salvar();
     salvar();
     http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
@@ -90,6 +93,23 @@ describe('AdminPixComponent', () => {
       instrucoesAdicionais: 'Instrução de teste',
     });
     atualizacao.flush(atualizacao.request.body);
+  });
+
+  it('consulta o valor persistido após perder a resposta sem disparar outro PUT', () => {
+    const fixture = TestBed.createComponent(AdminPixComponent);
+    http.expectOne({ method: 'GET', url }).flush(dados);
+    fixture.detectChanges();
+    const view: HTMLElement = fixture.nativeElement;
+    view.querySelector('form')!.dispatchEvent(new Event('submit'));
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'token-teste' });
+    http.expectOne({ method: 'PUT', url }).error(new ProgressEvent('error'));
+    fixture.detectChanges();
+    view.querySelector('form')!.dispatchEvent(new Event('submit'));
+    http.expectNone({ method: 'PUT', url });
+    [...view.querySelectorAll('button')].find(item => item.textContent.includes('Consultar configuração salva'))!.click();
+    http.expectOne({ method: 'GET', url }).flush(dados);
+    fixture.detectChanges();
+    expect(view.textContent).toContain('Configuração atual carregada');
   });
 
   it('aceita CNPJ formatado, valida os dígitos e exibe a chave normalizada da API', () => {

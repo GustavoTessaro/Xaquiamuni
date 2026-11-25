@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { DatePipe } from '@angular/common';
 import {
   PagamentoPixPedido,
   PagamentoPixService,
@@ -17,24 +18,26 @@ import {
 } from '../core/pagamento-pix.service';
 import { ComprovantePixComponent } from '../shared/comprovante-pix/comprovante-pix.component';
 import { formatarCentavos } from './carrinho.service';
+import type { situacoesPedido } from './pedidos.service';
 
 @Component({
   selector: 'app-pedido-pix',
-  imports: [RouterLink, ComprovantePixComponent],
+  imports: [RouterLink, DatePipe, ComprovantePixComponent],
   templateUrl: './pedido-pix.component.html',
-  styleUrl: './compra.css',
+  styleUrls: ['./compra.css', './pedido-pix.component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class PedidoPixComponent {
   readonly pedidoId = input.required<string>();
   readonly aguardandoPagamento = input.required<boolean>();
+  readonly situacaoPedido = input<keyof typeof situacoesPedido>();
   readonly revalidarPedido = output<void>();
   protected readonly podeEnviarComprovante = computed(() => this.aguardandoPagamento() &&
     !this.vencido() && this.resposta() !== null && this.resposta()?.situacao !== 'pagamento_indisponivel');
   private readonly api = inject(PagamentoPixService);
   private readonly tentativa = signal(0);
   private readonly resposta = signal<PagamentoPixPedido | null>(null);
-  private readonly vencido = signal(false);
+  protected readonly vencido = signal(false);
   protected readonly pix = computed(() => {
     const pagamento = this.resposta();
     return this.aguardandoPagamento() && !this.vencido() && pagamento?.situacao === 'disponivel'

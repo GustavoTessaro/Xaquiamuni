@@ -1,0 +1,23 @@
+:host { display: grid; min-width: 0; gap: 1rem; }
+
+.pix-situacao { font-weight: 650; }
+
+.pix-resumo {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: .5rem 2rem;
+  padding-block: .75rem;
+  border-block: 1px solid var(--brand-line);
+}
+
+.pix-resumo strong { display: block; font-size: clamp(1.5rem, 5vw, 2rem); }
+.pix-dados { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .5rem 1rem; }
+.pix-dados dt, .pix-instrucoes h3 { font-weight: 650; }
+.pix-chave { overflow-wrap: anywhere; user-select: text; }
+.pix-instrucoes ol { list-style: decimal; padding-inline-start: 1.5rem; margin-top: .35rem; }
+
+@media (max-width: 450px) {
+  .pix-dados { grid-template-columns: minmax(0, 1fr); row-gap: .2rem; }
+  .pix-dados dd { margin-bottom: .5rem; }
+}

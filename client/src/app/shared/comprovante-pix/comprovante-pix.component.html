@@ -26,7 +26,7 @@
   }
 
   @if (podeSelecionar()) {
-    <p>Após pagar, você pode anexar o comprovante. O envio é opcional.</p>
+    <p>Após pagar, você pode anexar o comprovante. O envio é opcional e o pedido continua aguardando a conferência da loja.</p>
     <label>
       {{ comprovante() ? 'Selecionar arquivo para substituir' : 'Selecionar comprovante' }}
       <input type="file" accept=".pdf,.jpg,.jpeg,.png" [disabled]="enviando()" (change)="selecionar($event)" />

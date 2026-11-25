@@ -42,6 +42,7 @@ const formatos: Record<Exclude<DadosPix['tipoChave'], 'Cnpj'>, RegExp> = {
   selector: 'app-admin-pix',
   imports: [AdminWorkspaceComponent, ReactiveFormsModule, RouterLink],
   templateUrl: './admin-pix.component.html',
+  styleUrl: '../admin-atendimento.component.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AdminPixComponent {
@@ -53,7 +54,9 @@ export class AdminPixComponent {
   protected readonly requerLogin = signal(false);
   protected readonly sucesso = signal('');
   protected readonly enviado = signal(false);
+  protected readonly salvamentoIncerto = signal(false);
   protected readonly tipos = Object.entries(tiposChavePix);
+  protected readonly tiposChave = tiposChavePix;
   protected readonly formulario = new FormGroup(
     {
       tipoChave: new FormControl<DadosPix['tipoChave'] | ''>('', {
@@ -99,6 +102,7 @@ export class AdminPixComponent {
   }
 
   protected carregar() {
+    if (this.salvando()) return;
     this.estado.set('carregando');
     this.erro.set('');
     this.requerLogin.set(false);
@@ -106,10 +110,14 @@ export class AdminPixComponent {
       .consultarConfiguracao()
       .pipe(takeUntilDestroyed(this.destroy))
       .subscribe({
-        next: (dados) => this.aplicar(dados),
+        next: (dados) => {
+          if (this.salvamentoIncerto()) this.conferirSalvamento(dados);
+          else this.aplicar(dados);
+        },
         error: (erro: unknown) => {
           if (statusPix(erro) === 404) {
             this.estado.set('nova');
+            this.salvamentoIncerto.set(false);
           } else {
             this.estado.set('falha');
             this.tratarFalha(erro, false);
@@ -119,7 +127,7 @@ export class AdminPixComponent {
   }
 
   protected salvar() {
-    if (this.salvando() || this.requerLogin() || !['nova', 'existente'].includes(this.estado()))
+    if (this.salvando() || this.salvamentoIncerto() || this.requerLogin() || !['nova', 'existente'].includes(this.estado()))
       return;
     this.enviado.set(true);
     this.erro.set('');
@@ -158,6 +166,12 @@ export class AdminPixComponent {
     this.estado.set('existente');
   }
 
+  private conferirSalvamento(dados: DadosPix): void {
+    this.salvamentoIncerto.set(false);
+    this.aplicar(dados);
+    this.sucesso.set('Configuração atual carregada. Confira os dados antes de salvar outra alteração.');
+  }
+
   private tratarFalha(erro: unknown, salvamento: boolean) {
     switch (statusPix(erro)) {
       case 401:
@@ -174,10 +188,15 @@ export class AdminPixComponent {
             : 'A validação de segurança da solicitação falhou. Tente novamente.',
         );
         break;
+      case 409:
+        if (salvamento) this.salvamentoIncerto.set(true);
+        this.erro.set('A configuração pode ter mudado. Consulte os dados salvos antes de continuar.');
+        break;
       default:
+        if (salvamento) this.salvamentoIncerto.set(true);
         this.erro.set(
           salvamento
-            ? 'Não foi possível confirmar o salvamento. Tente novamente.'
+            ? 'Não foi possível confirmar o salvamento. Consulte a configuração salva antes de tentar novamente.'
             : 'Não foi possível consultar a configuração PIX. Tente novamente.',
         );
     }

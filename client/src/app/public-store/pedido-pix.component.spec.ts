@@ -58,6 +58,7 @@ describe('PedidoPixComponent', () => {
         expect(view.textContent).toContain('92.233.720.368.547.758,07');
         expect(view.textContent).toContain('Loja de teste');
         expect(view.textContent).toContain('manualmente');
+        expect(view.querySelector('time')?.getAttribute('datetime')).toBe((resposta as { prazoPagamentoEmUtc: string }).prazoPagamentoEmUtc);
         view.querySelector('button')!.click();
         await vi.waitFor(() => {
           fixture.detectChanges();
@@ -88,6 +89,19 @@ describe('PedidoPixComponent', () => {
     expect(view.textContent).toContain(mensagem);
     expect(view.textContent).not.toContain(pix.chavePix);
     expect(view.querySelector('button')).toBeNull();
+  });
+
+  it.each([
+    ['Cancelado', 'Pedido cancelado'],
+    ['Expirado', 'Prazo de pagamento encerrado'],
+    ['PagamentoConfirmado', 'Pagamento confirmado pela loja'],
+  ])('explica a situação %s e oculta a chave', (situacao, mensagem) => {
+    fixture.componentRef.setInput('situacaoPedido', situacao);
+    fixture.componentRef.setInput('aguardandoPagamento', false);
+    http.expectOne(url).flush({ ...resposta, situacao: 'pagamento_indisponivel', pix: null });
+    fixture.detectChanges();
+    expect(view.textContent).toContain(mensagem);
+    expect(view.textContent).not.toContain(pix.chavePix);
   });
 
   it.each([401, 403, 404])('trata HTTP %i sem mostrar dados PIX', (status) => {

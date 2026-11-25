@@ -27,21 +27,26 @@
       </button>
     }
   } @else if (pix(); as dados) {
-    <p>Faça o pagamento no aplicativo do seu banco. A loja confirma o recebimento manualmente.</p>
-    <dl>
-      <dt>Valor do PIX</dt>
-      <dd>
-        <strong>{{ reais(pagamento()!.valorCentavos) }}</strong>
-      </dd>
+    <p class="pix-situacao">Aguardando pagamento</p>
+    @if (pagamento(); as atual) {
+      <div class="pix-resumo">
+        <p>Valor exato a pagar <strong>{{ reais(atual.valorCentavos) }}</strong></p>
+        <p>Prazo para pagamento<br />
+          <time [attr.datetime]="atual.prazoPagamentoEmUtc">{{ atual.prazoPagamentoEmUtc | date:'dd/MM/yyyy HH:mm' }}</time>
+          (horário local)
+        </p>
+      </div>
+    }
+    <dl class="pix-dados">
       <dt>Tipo de chave</dt>
       <dd>{{ tipos[dados.tipoChave] }}</dd>
       <dt>Chave PIX</dt>
-      <dd>{{ dados.chavePix }}</dd>
+      <dd class="pix-chave">{{ dados.chavePix }}</dd>
       <dt>Recebedor</dt>
       <dd>{{ dados.nomeRecebedor }}</dd>
     </dl>
     @if (dados.instrucoesAdicionais) {
-      <p class="instrucoes-pix">{{ dados.instrucoesAdicionais }}</p>
+      <div><h3>Instruções da loja</h3><p class="instrucoes-pix">{{ dados.instrucoesAdicionais }}</p></div>
     }
     <button type="button" class="principal" [disabled]="copia() === 'pendente'" (click)="copiar()">
       Copiar chave PIX
@@ -54,8 +59,23 @@
         <p>Não foi possível copiar. Selecione e copie a chave manualmente.</p>
       }
     </div>
+    <div class="pix-instrucoes">
+      <h3>Como pagar</h3>
+      <ol>
+        <li>Abra o aplicativo do seu banco e escolha pagar por chave PIX.</li>
+        <li>Informe a chave e o valor exato exibidos nesta página.</li>
+        <li>Confira o nome do recebedor antes de confirmar no aplicativo.</li>
+        <li>Aguarde a confirmação. A loja confere manualmente se o pagamento foi recebido.</li>
+      </ol>
+    </div>
   } @else if (aguardandoPagamento() && pagamento()?.situacao === 'configuracao_ausente') {
     <p>A loja ainda não disponibilizou as instruções de pagamento.</p>
+  } @else if (situacaoPedido() === 'Cancelado') {
+    <p>Pedido cancelado. Este pedido está encerrado para pagamento.</p>
+  } @else if (situacaoPedido() === 'Expirado' || (aguardandoPagamento() && vencido())) {
+    <p>Prazo de pagamento encerrado. Este pedido já está indisponível para pagamento.</p>
+  } @else if (situacaoPedido() && !aguardandoPagamento()) {
+    <p>Pagamento confirmado pela loja. Você pode acompanhar as próximas etapas do pedido.</p>
   } @else {
     <p>O pagamento não está disponível para a situação atual do pedido.</p>
   }

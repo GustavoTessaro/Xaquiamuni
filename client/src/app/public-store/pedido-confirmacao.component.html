@@ -3,6 +3,9 @@
   @if (carregando()) {
     <p role="status">Consultando seu pedido…</p>
   } @else if (pedido(); as confirmado) {
+    @if (confirmado.situacao === 'AguardandoPagamento') {
+      <p>Pedido criado. Consulte abaixo as instruções e o prazo de pagamento.</p>
+    }
     <div class="grade">
       <ul class="painel linhas" aria-label="Itens do pedido">
         @for (item of confirmado.itens; track item.produtoVarianteId) {
@@ -51,13 +54,14 @@
             (horário local)
           </p>
         }
-        <app-pedido-pix
-          [pedidoId]="confirmado.id"
-          [aguardandoPagamento]="confirmado.situacao === 'AguardandoPagamento'"
-          (revalidarPedido)="tentarNovamente()"
-        />
       </section>
     </div>
+    <app-pedido-pix
+      [pedidoId]="confirmado.id"
+      [aguardandoPagamento]="confirmado.situacao === 'AguardandoPagamento'"
+      [situacaoPedido]="confirmado.situacao"
+      (revalidarPedido)="tentarNovamente()"
+    />
   } @else if (erro()) {
     <p role="alert" class="aviso">{{ erro() }}</p>
     @if (requerLogin()) {

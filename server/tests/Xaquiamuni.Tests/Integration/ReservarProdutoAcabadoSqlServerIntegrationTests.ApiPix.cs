@@ -87,12 +87,14 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
 
         using var criado = await SalvarPixAsync(admin, dto, token);
         Assert.Equal(HttpStatusCode.OK, criado.StatusCode);
+        var antes = await cliente.GetFromJsonAsync<System.Text.Json.JsonElement>(url);
+        Assert.Equal(dto.NomeRecebedor, antes.GetProperty("pix").GetProperty("nomeRecebedor").GetString());
         if (dto.TipoChave == "Cnpj")
         {
             using var criadoJson = await LerJsonPedidosAsync(criado);
             Assert.Equal("99999999999962", criadoJson.RootElement.GetProperty("chavePix").GetString());
         }
-        var versaoAtual = dto with { ChavePix = novaChave, InstrucoesAdicionais = "Confira o nome antes de pagar." };
+        var versaoAtual = dto with { ChavePix = novaChave, NomeRecebedor = "Loja de teste atualizada", InstrucoesAdicionais = "Confira o nome antes de pagar." };
         using var atualizado = await SalvarPixAsync(admin, versaoAtual, token);
         Assert.Equal(HttpStatusCode.OK, atualizado.StatusCode);
         Assert.True(atualizado.Headers.CacheControl?.NoStore);
@@ -115,6 +117,14 @@ public sealed partial class ReservarProdutoAcabadoSqlServerIntegrationTests
         Assert.Equal(versaoAtual.NomeRecebedor, pix.GetProperty("nomeRecebedor").GetString());
         Assert.Equal(versaoAtual.InstrucoesAdicionais, pix.GetProperty("instrucoesAdicionais").GetString());
         Assert.False(pix.TryGetProperty("id", out _));
+
+        var novo = Pedido.Criar(pedido.ClienteId, agora, [item]);
+        context.Pedidos.Add(novo);
+        await context.SaveChangesAsync();
+        var novoPix = await cliente.GetFromJsonAsync<System.Text.Json.JsonElement>($"/api/pedidos/{novo.Id:D}/pagamento");
+        Assert.Equal(chaveNormalizada, novoPix.GetProperty("pix").GetProperty("chavePix").GetString());
+        Assert.Equal(novo.TotalCentavos.ToString(), novoPix.GetProperty("valorCentavos").GetString());
+        Assert.Equal(novo.PrazoPagamentoEmUtc, novoPix.GetProperty("prazoPagamentoEmUtc").GetDateTimeOffset());
 
         foreach (var fechado in new[] { pago, cancelado, expirado, vencido, entregue })
         {
