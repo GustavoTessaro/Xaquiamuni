@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Xaquiamuni.Aplicacao.Pedidos;
 using Xaquiamuni.Aplicacao.Financeiro;
+using Xaquiamuni.Dominio.Entidades;
 using Xaquiamuni.Infraestrutura.Identidade;
 
 namespace Xaquiamuni.Tests.Integration;
@@ -91,6 +92,17 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         var vacaria = new SalvarCidade("4322509", "Vacaria", "rs", 1250, false);
         await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades", vacaria with { TarifaCentavos = -1 }, HttpStatusCode.BadRequest);
         await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades", vacaria with { Uf = "SC" }, HttpStatusCode.BadRequest);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades", vacaria with { Nome = "Porto Alegre" }, HttpStatusCode.BadRequest);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades", vacaria with { CodigoIbge = "4300000" }, HttpStatusCode.BadRequest);
+        var estados = await admin.Http.GetFromJsonAsync<JsonElement>(Atendimento + "/municipios");
+        Assert.Equal(27, estados.GetArrayLength());
+        var municipios = await admin.Http.GetFromJsonAsync<JsonElement>(Atendimento + "/municipios/rs");
+        Assert.Contains(municipios.EnumerateArray(), item => item.GetProperty("codigoIbge").GetString() == "4322509");
+        Assert.DoesNotContain(municipios.EnumerateArray(), item => item.GetProperty("codigoIbge").GetString() == "4209300");
+        using var ufInexistente = await admin.Http.GetAsync(Atendimento + "/municipios/ZZ");
+        Assert.Equal(HttpStatusCode.NotFound, ufInexistente.StatusCode);
+        using var consultaNegada = await cliente.Http.GetAsync(Atendimento + "/municipios");
+        Assert.Equal(HttpStatusCode.Forbidden, consultaNegada.StatusCode);
         var chaveCriacao = Guid.NewGuid();
         var criada = await EscreverAtendimentoAsync(admin, HttpMethod.Post, "/cidades", vacaria, HttpStatusCode.Created, chaveCriacao);
         Assert.Equal("1250", criada.GetProperty("tarifaCentavos").GetString());
@@ -141,6 +153,31 @@ public sealed partial class CadeiaFabricacaoSqlServerIntegrationTests
         Assert.Equal(caixaAntes, (await admin.Http.GetFromJsonAsync<PaginaMovimentacoesFinanceiras>(Movimentacoes))!.Itens);
         Assert.Equal(4, await db.Database.SqlQuery<int>(
             $"SELECT COUNT(*) AS [Value] FROM OperacoesAtendimento WHERE CidadeId = {id}").SingleAsync());
+    }
+
+    [SqlServerIntegrationFact]
+    public async Task Atendimento_CidadeLegadaPodeTerTarifaESituacaoEditadasSemTrocarIdentidade()
+    {
+        await using var ambiente = await Ambiente.CriarAsync();
+        using var admin = await Sessao.EntrarAsync(ambiente.Host, XaquiamuniRoles.Administrador);
+        await using var db = ambiente.Banco.CreateVerificationContext();
+        var legada = new CidadeEntregaPropria
+        {
+            CodigoIbge = "4322509", Nome = "Vacaria (cadastro antigo)", Uf = "RS",
+            TarifaCentavos = 1000, Revisao = 1, Ativa = true, CriadoEmUtc = DateTimeOffset.UtcNow
+        };
+        db.Add(legada);
+        await db.SaveChangesAsync();
+        var rota = $"/cidades/{legada.Id:D}";
+        var comando = new SalvarCidade(legada.CodigoIbge, legada.Nome, legada.Uf, 1350, false, 1);
+        await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota,
+            comando with { Nome = "Nome sem correspondência oficial" }, HttpStatusCode.BadRequest);
+        var atualizada = await EscreverAtendimentoAsync(admin, HttpMethod.Put, rota, comando, HttpStatusCode.OK);
+        Assert.Equal(legada.Id, atualizada.GetProperty("id").GetGuid());
+        Assert.Equal(legada.CodigoIbge, atualizada.GetProperty("codigoIbge").GetString());
+        Assert.Equal(legada.Nome, atualizada.GetProperty("nome").GetString());
+        Assert.Equal("1350", atualizada.GetProperty("tarifaCentavos").GetString());
+        Assert.False(atualizada.GetProperty("ativa").GetBoolean());
     }
 
     private static async Task<JsonElement> EscreverAtendimentoAsync(Sessao sessao, HttpMethod metodo, string rota,

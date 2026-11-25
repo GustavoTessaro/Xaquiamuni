@@ -114,18 +114,24 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
                 (id.HasValue ? !RevisaoValida(input.Revisao) : input.Revisao.HasValue))
                 return Invalido("Informe código IBGE compatível com a UF, nome, tarifa não negativa e situação. Edições exigem revisão.");
 
+            var municipio = CatalogoMunicipiosIbge.Resolver(codigo, uf, nome);
+            var nomePersistido = municipio?.Nome ?? nome;
             CidadeEntregaPropria cidade;
             if (id is { } existente)
             {
                 var atual = await Cidades.SingleOrDefaultAsync(c => c.Id == existente, ct);
                 if (atual is null) return Ausente();
                 if (atual.Revisao != input.Revisao) return RevisaoDivergente();
+                var mesmaIdentidade = atual.CodigoIbge == codigo && atual.Uf == uf && atual.Nome == nome;
+                if (!mesmaIdentidade && municipio is null) return MunicipioInvalido();
+                if (mesmaIdentidade) nomePersistido = atual.Nome;
                 if (atual.Ativa && !ativa && !await PermiteRemoverCidadeAtivaAsync(existente, ct))
                     return UltimaModalidade();
                 cidade = atual;
             }
             else
             {
+                if (municipio is null) return MunicipioInvalido();
                 cidade = new() { CriadoPor = autor, CriadoEmUtc = agora };
                 Cidades.Add(cidade);
             }
@@ -133,7 +139,7 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
             if (await Cidades.AnyAsync(c => c.CodigoIbge == codigo && c.Id != cidade.Id, ct))
                 return Conflito("Já existe uma cidade com este código IBGE.");
             cidade.CodigoIbge = codigo;
-            cidade.Nome = nome;
+            cidade.Nome = nomePersistido;
             cidade.Uf = uf!;
             cidade.TarifaCentavos = tarifa;
             cidade.Ativa = ativa;
@@ -259,6 +265,8 @@ public sealed partial class EfConfiguracoesAtendimento(XaquiamuniDbContext db, T
     private static ResultadoAtendimento Conflito(string erro, string? codigo = null) =>
         new(StatusAtendimento.Conflito, erro, Codigo: codigo);
     private static ResultadoAtendimento Ausente() => new(StatusAtendimento.Ausente);
+    private static ResultadoAtendimento MunicipioInvalido() =>
+        Invalido("Selecione um município que corresponda ao estado informado.");
     private static ResultadoAtendimento RevisaoDivergente() => Conflito("A revisão mudou. Consulte o estado atual.");
     private static ResultadoAtendimento UltimaModalidade() => Conflito("Mantenha ao menos uma modalidade operacional.");
 }

@@ -22,7 +22,7 @@ const grupos: readonly GrupoAdmin[] = [
     { pagina: 'shipping-promotions', nome: 'Promoções de frete', rota: '/admin/promocoes-frete' },
     { pagina: 'orders', nome: 'Pedidos', rota: '/admin/pedidos' },
     { pagina: 'pix', nome: 'PIX manual', rota: '/admin/configuracoes/pix-manual' },
-    { pagina: 'fulfillment', nome: 'Entregas e contato', rota: '/admin/configuracoes/atendimento' },
+    { pagina: 'fulfillment', nome: 'Entregas e fretes', rota: '/admin/configuracoes/atendimento' },
     { pagina: 'external-sales', nome: 'Vendas externas', rota: '/admin/vendas-externas' },
   ] },
   { titulo: 'Cat\u00e1logo', icone: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z', itens: [

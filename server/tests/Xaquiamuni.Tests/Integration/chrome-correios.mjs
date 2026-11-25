@@ -33,7 +33,8 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
   }), 201);
 
   await a.ir('/admin/configuracoes/atendimento');
-  await texto(a, 'Cotação manual dos Correios');
+  await texto(a, 'Envio pelos Correios');
+  await texto(a, 'Você pesa os produtos e a embalagem.');
   const modalidades = async () => c.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json())");
   const atendimento = async () => a.ev("fetch('/api/admin/loja/atendimento').then(r=>r.json())");
   const inicial = await modalidades();
@@ -42,9 +43,15 @@ export async function validarCorreios({ a, c, call, waitFor, dados, abrir, login
   assert.equal(await a.ev("document.querySelector('[name=validadeCorreios]').value"), '48');
   const revisaoInicial = (await atendimento()).revisao;
   await a.ev("window.confirm = () => true; document.querySelector('[name=correiosManual]').click()");
+  await campo(a, '[name=validadeCorreios]', '72');
   await clicar(a, 'Salvar cotação manual');
   await waitFor(() => c.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json()).then(x=>x.correiosCotacaoManual === true)"),
     'Modalidade publicada');
+  await a.ir('/admin/configuracoes/atendimento');
+  await texto(a, 'Envio pelos Correios');
+  assert.equal(await a.ev("document.querySelector('[name=validadeCorreios]').value"), '72');
+  await a.ev("document.querySelector('a[href=\"/admin/cotacoes-correios\"]').click()");
+  await waitFor(() => a.ev("location.pathname === '/admin/cotacoes-correios'"), 'atalho de Cotações Correios');
   const configurar = (habilitada, revisao) => escrever('/api/admin/loja/atendimento/correios-manual',
     'PUT', { habilitada, validadeHoras: 48, revisao });
   assert.equal(await configurar(false, revisaoInicial), 409);

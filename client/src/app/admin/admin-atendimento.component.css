@@ -1,0 +1,108 @@
+.atendimento-cartao {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+  padding: clamp(1rem, 2.5vw, 1.5rem);
+  border: 1px solid var(--admin-border);
+  border-radius: 1rem;
+  background: var(--admin-surface);
+}
+
+.atendimento-cartao h2 {
+  font-size: 1.125rem;
+  font-weight: 650;
+}
+
+.modalidade, .cidade-linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .625rem;
+}
+
+.modalidade svg {
+  width: 1.5rem;
+  height: 1.5rem;
+  fill: none;
+  stroke: var(--admin-action-text);
+  stroke-width: 1.5;
+  stroke-linejoin: round;
+}
+
+.situacao {
+  padding: .25rem .625rem;
+  background: var(--admin-action-soft);
+  color: var(--admin-action-text);
+  border-radius: 1rem;
+  font-size: .875rem;
+}
+
+.cidade-linha {
+  padding-block: .5rem;
+  border-bottom: 1px solid var(--admin-border);
+}
+
+.campos {
+  display: grid;
+  min-width: 0;
+  gap: .875rem;
+}
+
+.campos label {
+  display: grid;
+  min-width: 0;
+  gap: .25rem;
+  font-weight: 550;
+}
+
+.campos .opcao {
+  display: flex;
+  align-items: center;
+  gap: .625rem;
+  min-height: 2.75rem;
+}
+
+.campos input:not([type='checkbox']), .campos select, .campos textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  padding: .5rem .75rem;
+  border: 1px solid var(--admin-control);
+  border-radius: .5rem;
+  background: var(--admin-field);
+  color: var(--admin-text);
+}
+
+.campos input[type='checkbox'] {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex: none;
+  appearance: auto;
+  accent-color: var(--admin-action);
+}
+
+.campos :is(input, select, textarea):focus-visible {
+  outline: 2px solid var(--admin-focus);
+  outline-offset: 2px;
+}
+
+.campos :is(input, select, textarea, button):disabled {
+  opacity: .65;
+}
+
+.campos small {
+  color: var(--admin-muted);
+  font-weight: 400;
+}
+
+.feedback {
+  padding: .75rem 1rem;
+  border-radius: .75rem;
+}
+
+.erro { color: var(--admin-error); }
+.feedback.erro { background: var(--admin-error-bg); }
+.sucesso {
+  color: var(--admin-success);
+  background: var(--admin-success-bg);
+}

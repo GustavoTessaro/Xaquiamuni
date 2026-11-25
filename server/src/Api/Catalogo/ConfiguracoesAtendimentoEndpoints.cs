@@ -3,6 +3,7 @@ using Xaquiamuni.Api.Autenticacao;
 using Xaquiamuni.Api.Autorizacao;
 using Xaquiamuni.Api.Pedidos;
 using Xaquiamuni.Aplicacao.Pedidos;
+using Xaquiamuni.Infraestrutura.Persistencia;
 
 namespace Xaquiamuni.Api.Catalogo;
 
@@ -22,6 +23,12 @@ public static class ConfiguracoesAtendimentoEndpoints
             Results.Ok(await api.ConsultarAsync(ct)));
         admin.MapGet("/cidades", async (IConfiguracoesAtendimento api, CancellationToken ct) =>
             Results.Ok(await api.CidadesAsync(ct)));
+        admin.MapGet("/municipios", () =>
+            Results.Ok(CatalogoMunicipiosIbge.Estados.Select(estado => new { estado.Uf, estado.Nome })));
+        admin.MapGet("/municipios/{uf}", IResult (string uf) =>
+            CatalogoMunicipiosIbge.Estados.FirstOrDefault(estado =>
+                string.Equals(estado.Uf, uf, StringComparison.OrdinalIgnoreCase)) is { } estado
+                ? Results.Ok(estado.Municipios) : Results.NotFound());
         admin.MapGet("/cidades/{id:guid}", async Task<IResult> (Guid id, IConfiguracoesAtendimento api, CancellationToken ct) =>
             await api.CidadeAsync(id, ct) is { } cidade ? Results.Ok(cidade) : Results.NotFound());
 

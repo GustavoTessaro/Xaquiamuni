@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <EmbeddedResource Include="Persistencia/MunicipiosIbge.json" LogicalName="MunicipiosIbge.json" />
   </ItemGroup>
 
   <ItemGroup>

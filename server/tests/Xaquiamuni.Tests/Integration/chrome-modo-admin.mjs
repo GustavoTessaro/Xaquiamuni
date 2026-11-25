@@ -204,8 +204,19 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   await waitFor(() => a.ev("!!document.querySelector('input[name=tarifa]')"), 'Formulário de cidades');
   const modalidades = () => a.ev("fetch('/api/loja/modalidades-entrega').then(r=>r.json())");
   assert.deepEqual(await modalidades(), { retiradaLocal: true, entregaPropria: false, correios: false, freteRetiradaCentavos: '0' });
-  for (const [seletor, valor] of Object.entries({ cidade: 'Vacaria', uf: 'RS', ibge: '4322509', tarifa: '12,50' }))
-    await campo(a, `input[name=${seletor}]`, valor);
+  await campo(a, 'input[name=endereco]', 'Endereço fictício de retirada');
+  await campo(a, 'textarea[name=instrucoes]', 'Compareça com o número do pedido.');
+  await botaoTexto('Salvar modalidades', a);
+  await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Modalidades salvas.')"), 'retirada salva');
+  await abrirAdmin('/admin/configuracoes/atendimento');
+  await waitFor(() => a.ev("document.querySelector('[name=endereco]')?.value === 'Endereço fictício de retirada'"), 'endereço após recarga');
+  assert.equal(await a.ev("document.querySelector('[name=instrucoes]').value"), 'Compareça com o número do pedido.');
+  await waitFor(() => a.ev("!!document.querySelector('[name=uf] option[value=RS]')"), 'Estados carregados');
+  await campo(a, 'select[name=uf]', 'RS');
+  await waitFor(() => a.ev("!!document.querySelector('[name=cidade] option[value=\"4322509\"]')"), 'Municípios do RS');
+  await campo(a, 'select[name=cidade]', '4322509');
+  await campo(a, 'input[name=tarifa]', '12,50');
+  assert.equal(await a.ev("!!document.querySelector('[name=ibge]')"), false);
   await a.ev("document.querySelector('input[name=ativa]').click()");
   await botaoTexto('Salvar cidade', a);
   await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Vacaria/RS')"), 'Cidade gravada');
@@ -452,16 +463,31 @@ export async function validarModoAdmin({ a, c, call, waitFor, login, dados, admi
   assert.ok(cotacaoAntesDaInativacao.ofertaEntregaId);
   for (const [width, modo] of [[375, 'dark'], [1280, 'light']]) {
     await viewport(a, width);
-    const nome = 'Município descartável ' + width;
-    assert.equal(await escrever(atendimento + '/cidades', 'POST', {
-      codigoIbge: '4314902', nome, uf: 'RS', ativa: false, tarifaCentavos: '0',
-    }), 201);
+    const nome = 'Porto Alegre';
     await abrirAdmin(rotaAtendimento);
+    await waitFor(() => a.ev("!!document.querySelector('[name=uf] option[value=RS]')"), 'catálogo de estados');
+    await a.ev(`(() => {
+      const uf = document.querySelector('[name=uf]');
+      uf.value = 'RS';
+      uf.dispatchEvent(new Event('change', { bubbles: true }));
+    })()`);
+    await waitFor(() => a.ev("!!document.querySelector('[name=cidade] option[value=\"4314902\"]')"), 'municípios do RS');
+    await a.ev(`(() => {
+      const municipio = document.querySelector('[name=cidade]');
+      municipio.value = '4314902';
+      municipio.dispatchEvent(new Event('change', { bubbles: true }));
+      const tarifa = document.querySelector('[name=tarifa]');
+      tarifa.value = '12,50';
+      tarifa.dispatchEvent(new Event('input', { bubbles: true }));
+      document.querySelector('#form-cidade button[type=submit], #form-cidade button:not([type])').click();
+    })()`);
     await waitFor(() => a.ev(`document.querySelector('main').textContent.includes(${JSON.stringify(nome)})`), 'cidade descartável');
+    await waitFor(() => a.ev("document.querySelector('main').textContent.includes('Cidade salva.')"), 'cidade cadastrada');
+    assert.equal((await lerAtendimento('/cidades')).find(cidade => cidade.nome === nome)?.tarifaCentavos, '1250');
     if (await a.ev(tema) !== modo) await alternar(modo);
     assert.ok(await semEstouro(a));
     await a.ev(`[...document.querySelectorAll('main section span')].find(s => s.textContent.startsWith(${JSON.stringify(nome + '/RS')}))
-      .parentElement.querySelector('button').focus()`);
+      .parentElement.querySelector('button[aria-label^="Ativar"]').focus()`);
     await call('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
     await call('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Tab', code: 'Tab', windowsVirtualKeyCode: 9 }, a.sessionId);
     assert.ok(await a.ev("document.activeElement.textContent.trim() === 'Excluir' && document.activeElement.matches(':focus-visible')"));

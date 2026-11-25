@@ -52,6 +52,8 @@ export interface ConfiguracaoAtendimento {
 export interface CidadeEntrega {
   id: string; codigoIbge: string; nome: string; uf: string; tarifaCentavos: string; ativa: boolean; revisao: number;
 }
+export interface EstadoMunicipios { uf: string; nome: string }
+export interface MunicipioIbge { codigoIbge: string; nome: string }
 
 @Injectable({ providedIn: 'root' })
 export class AtendimentoService {
@@ -63,6 +65,10 @@ export class AtendimentoService {
   contato() { return this.http.get<{ whatsApp: string | null }>('/api/loja/contato').pipe(timeout(15_000)); }
   configuracao() { return this.http.get<ConfiguracaoAtendimento>(this.admin).pipe(timeout(15_000)); }
   cidades() { return this.http.get<CidadeEntrega[]>(this.admin + '/cidades').pipe(timeout(15_000)); }
+  estados() { return this.http.get<EstadoMunicipios[]>(this.admin + '/municipios').pipe(timeout(15_000)); }
+  municipios(uf: string) {
+    return this.http.get<MunicipioIbge[]>(this.admin + '/municipios/' + encodeURIComponent(uf)).pipe(timeout(15_000));
+  }
 
   cotar(itens: ItemCompra[], destino?: EnderecoEntrega | 'padrao') {
     const corpo = { itens, ...(destino === 'padrao' ? { usarEnderecoPadrao: true } : destino && { endereco: destino }) };
