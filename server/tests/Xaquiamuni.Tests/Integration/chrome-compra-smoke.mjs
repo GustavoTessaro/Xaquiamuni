@@ -1885,6 +1885,34 @@ try {
     await novo.ir(link.pathname + link.search + link.hash);
     await waitFor(() => novo.ev("document.querySelector('main')?.textContent.includes('E-mail confirmado')"),
       'Confirmação pelo e-mail capturado localmente');
+    if (!dados.pixCnpj) {
+      const resultado = await c.ev(`(async () => {
+        const modalidades = await fetch('/api/loja/modalidades-entrega').then(r => r.json());
+        const { endereco } = await fetch('/api/clientes/me/endereco-padrao').then(r => r.json());
+        const { requestToken } = await fetch('/api/auth/csrf').then(r => r.json());
+        const post = (rota, corpo) => fetch(rota, { method: 'POST', headers: {
+          'Content-Type': 'application/json', 'X-XSRF-TOKEN': requestToken, 'Idempotency-Key': crypto.randomUUID(),
+        }, body: JSON.stringify(corpo) });
+        const { produto, variante } = ${JSON.stringify(dados.produtoDemo)};
+        const itens = [{ produtoId: produto, produtoVarianteId: variante, quantidade: 1 }];
+        const entrega = await post('/api/checkout/cotacoes-entrega', { itens, usarEnderecoPadrao: true });
+        const ofertas = (await entrega.json()).ofertas?.map(o => [o.modalidade, o.freteCentavos]);
+        const { cep, uf, cidade, bairro, logradouro, numero, complemento } = endereco;
+        const postal = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade, bairro, logradouro, numero, complemento } });
+        const invalida = await post('/api/cotacoes-correios', { itens, endereco: { cep, uf, cidade: 'Outro município', bairro, logradouro, numero } });
+        const recuperacao = await post('/api/auth/forgot-password', { email: ${JSON.stringify(cliente.Email)} });
+        return { modalidades, cep, uf, cidade, ofertas, postal: postal.status, invalida: invalida.status, recuperacao: recuperacao.status };
+      })()`);
+      assert.deepEqual([resultado.cep, resultado.uf, resultado.cidade], ['95200000', 'RS', 'Vacaria']);
+      assert.ok(resultado.modalidades.retiradaLocal && resultado.modalidades.entregaPropria && resultado.modalidades.correiosCotacaoManual);
+      assert.deepEqual(resultado.ofertas, [['RetiradaLocal', '0'], ['EntregaPropria', '1250']]);
+      assert.deepEqual([resultado.postal, resultado.invalida, resultado.recuperacao], [201, 400, 202]);
+      const recuperacao = new URL(await checkpoint('recuperacao'));
+      assert.equal(recuperacao.origin, origin);
+      assert.equal(recuperacao.pathname, '/reset-password');
+      assert.ok(new URLSearchParams(recuperacao.hash.slice(1)).get('token'));
+      console.log('Demonstração: três modalidades, CEP determinístico e recuperação de senha local conferidos.');
+    }
     console.log('Demonstração: catálogo com imagens, painel, PIX sintético e confirmação de e-mail local conferidos.');
   }
 

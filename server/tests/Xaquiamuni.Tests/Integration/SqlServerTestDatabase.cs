@@ -289,7 +289,7 @@ public sealed class SqlServerTestDatabase : IAsyncDisposable
         await createCommand.ExecuteNonQueryAsync().ConfigureAwait(false);
     }
 
-    private static async Task ValidarInstanciaMasterAsync(SqlConnection connection)
+    internal static async Task ValidarInstanciaMasterAsync(SqlConnection connection)
     {
         await using var command = connection.CreateCommand();
         command.CommandText = """

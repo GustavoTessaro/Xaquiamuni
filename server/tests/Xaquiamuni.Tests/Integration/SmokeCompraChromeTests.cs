@@ -76,6 +76,21 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
     [Trait("Category", "SqlServerIntegration")]
     public Task DemonstracaoPixCnpjEHistoricoAteEntrega() => ExecutarDemonstracaoAsync(cnpj: true);
 
+    [ChromeCompraFact]
+    [Trait("Category", "SqlServerIntegration")]
+    public async Task DemonstracaoFalhaInicialPreservaInventarioEAreaTemporaria()
+    {
+        var inventario = await AmbienteDemonstracao.InventarioAsync();
+        var antes = Directory.GetDirectories(Path.GetTempPath(), "xaquiamuni-demo-*").Order().ToArray();
+        var inexistente = Path.Combine(Path.GetTempPath(), "angular-ausente-" + Guid.NewGuid().ToString("N"));
+        await Assert.ThrowsAnyAsync<Exception>(async () =>
+        {
+            await using var ambiente = await AmbienteDemonstracao.CriarAsync(inexistente, inventario);
+        });
+        Assert.Equal(inventario, await AmbienteDemonstracao.InventarioAsync());
+        Assert.Equal(antes, Directory.GetDirectories(Path.GetTempPath(), "xaquiamuni-demo-*").Order().ToArray());
+    }
+
     private async Task ExecutarDemonstracaoAsync(bool cnpj)
     {
         string nomeBanco;
@@ -88,6 +103,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
             conexaoMaster = new SqlConnectionStringBuilder(demo.ConexaoIsolada) { InitialCatalog = "master" }.ConnectionString;
             temporario = demo.Temporario;
             endereco = new Uri(demo.Host.Origin);
+            await DemonstracaoLocal.VerificarDisponibilidadeAsync(demo.Host, DemonstracaoLocal.CaminhoAngular(), CancellationToken.None);
             Assert.True(endereco.IsLoopback);
             Assert.Equal("https", endereco.Scheme);
             Assert.DoesNotContain(demo.Host.Services.GetServices<IHostedService>(), worker =>
@@ -107,7 +123,7 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
             {
                 origin = demo.Host.Origin, pinSpki = demo.Host.PinSpki, chromePath = DemonstracaoLocal.CaminhoChrome(),
                 profile = Path.Combine(temporario, "chrome-validacao"), cliente = demo.Cliente, admin = demo.Admin,
-                demonstracao = true, pixCnpj = cnpj, seed = cnpj ? demo.ProdutoPrincipal : null, outroCliente,
+                demonstracao = true, pixCnpj = cnpj, seed = cnpj ? demo.ProdutoPrincipal : null, produtoDemo = demo.ProdutoPrincipal, outroCliente,
             }, cnpj ? demo.Jornada : null, demo);
         }
 
@@ -321,6 +337,9 @@ public sealed partial class SmokeCompraChromeTests(ITestOutputHelper output)
                                 ?? throw new InvalidOperationException("Confirmação local não capturada.")
                             : await fluxo!.CapturarConfirmacaoAsync(limite.Token);
                     }
+                    else if (etapa == "recuperacao" && demo is not null)
+                        resposta = await demo.ProximaRecuperacaoAsync(limite.Token)
+                            ?? throw new InvalidOperationException("Recuperação local não capturada.");
                     else
                     {
                         await fluxo!.ConferirAsync(etapa, Guid.Parse(partes[2]), limite.Token);

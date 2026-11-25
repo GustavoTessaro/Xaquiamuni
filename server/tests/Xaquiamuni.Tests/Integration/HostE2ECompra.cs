@@ -113,6 +113,7 @@ internal sealed class HostE2ECompra : IAsyncDisposable
                     if (interceptor is not null) options.AddInterceptors(interceptor);
                 });
                 services.AddScoped<EmailConfirmationOutboxProcessor>();
+                services.AddScoped<PasswordResetOutboxProcessor>();
                 for (var i = services.Count - 1; i >= 0; i--)
                 {
                     var descriptor = services[i];
